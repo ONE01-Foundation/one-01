@@ -5,5 +5,5 @@ command = "npm install && npx expo export --platform web"
 output_directory = "dist"
 
 [build.environment]
-NODE_VERSION = "18"
+NODE_VERSION = "20"
 
