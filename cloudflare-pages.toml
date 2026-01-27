@@ -1,0 +1,9 @@
+# Cloudflare Pages Build Configuration for Expo Web
+
+[build]
+command = "npm install && npx expo export --platform web"
+output_directory = "dist"
+
+[build.environment]
+NODE_VERSION = "18"
+
