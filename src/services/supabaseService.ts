@@ -4,6 +4,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { Agent, Goal, ConversationMessage, Lens } from '../types';
 
 // These should be moved to environment variables
@@ -19,21 +20,27 @@ class SupabaseService {
       return;
     }
 
-    this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        storage: {
-          getItem: async (key: string) => {
-            return await SecureStore.getItemAsync(key);
-          },
-          setItem: async (key: string, value: string) => {
-            await SecureStore.setItemAsync(key, value);
-          },
-          removeItem: async (key: string) => {
-            await SecureStore.deleteItemAsync(key);
-          },
-        },
-      },
-    });
+    const options =
+      Platform.OS === 'web'
+        ? // On web, let Supabase use its default (localStorage-based) storage
+          {}
+        : {
+            auth: {
+              storage: {
+                getItem: async (key: string) => {
+                  return await SecureStore.getItemAsync(key);
+                },
+                setItem: async (key: string, value: string) => {
+                  await SecureStore.setItemAsync(key, value);
+                },
+                removeItem: async (key: string) => {
+                  await SecureStore.deleteItemAsync(key);
+                },
+              },
+            },
+          };
+
+    this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, options);
   }
 
   getClient(): SupabaseClient | null {

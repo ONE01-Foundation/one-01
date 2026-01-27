@@ -1,8 +1,6 @@
 /**
  * ONE Platform - Simplified Version
- * Phase 1: Basic Chat - Start simple, add complexity later
- * 
- * See ROADMAP.md for development phases
+ * Start simple, add complexity later
  */
 
 import React, { useState } from 'react';
@@ -40,11 +38,11 @@ export default function App() {
     setMessages((prev) => [...prev, userMessage]);
     setInputText('');
 
-    // Simulate agent response (Phase 1: simple, Phase 3: will use OpenAI)
+    // Simulate agent response (simple for now)
     setTimeout(() => {
       const agentMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: `You said: "${userMessage.text}". This is a simple response. We'll add real AI in Phase 3!`,
+        text: `You said: "${userMessage.text}". This is a simple response. We'll add AI later!`,
         sender: 'agent',
         timestamp: new Date(),
       };
@@ -59,7 +57,7 @@ export default function App() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>ONE Platform</Text>
-        <Text style={styles.headerSubtitle}>AI Assistant - Phase 1</Text>
+        <Text style={styles.headerSubtitle}>AI Assistant</Text>
       </View>
 
       {/* Messages */}
@@ -182,3 +180,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

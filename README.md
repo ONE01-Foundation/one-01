@@ -1,6 +1,15 @@
 # ONE Platform - AI Agent Operating System
 
-A React Native (Expo) application that functions as a "live screen-sharing conversation with an AI agent" - a personal AI operating system where users collaborate with their AI agent in real-time to accomplish life goals through dynamic, visual protocol execution.
+A React Native (Expo) application - a personal AI operating system where users collaborate with their AI agent in real-time.
+
+## 🚀 Quick Start
+
+```bash
+npm install
+npm start
+```
+
+See [ARCHITECTURE_EXPLAINED.md](./ARCHITECTURE_EXPLAINED.md) for setup details and roadmap.
 
 ## 🎯 Core Philosophy
 
