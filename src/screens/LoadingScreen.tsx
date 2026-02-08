@@ -4,7 +4,7 @@
  * Phase 1: Circle grows 0px → 72px (0-1.5s)
  * Phase 2: Circle breathing 72px ↔ 68px (1.5-3.5s)
  * Phase 3: Circle moves up (3.5-4.5s)
- * Phase 4: Text "Hello, i am your ONE" appears and disappears (4.5-6.5s)
+ * Phase 4: Text "Hello. I am your ONE" appears and disappears (4.5-6.5s)
  * Phase 5: Text "Agent-01" appears (6.5-8s)
  * Phase 6: Subtitle appears (8-10s)
  * Phase 7: Complete and transition (10s+)
@@ -158,25 +158,27 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
         />
       </Animated.View>
 
-      {/* Text Container */}
+      {/* Text Container — each block positioned so they don't overlap */}
       <View style={styles.textContainer}>
-        {/* First Text: "Hello, i am your ONE" */}
-        <Animated.View style={[styles.textWrapper, firstTextStyle]}>
-          <Text style={[styles.firstText, { color: colors.text }]}>
-            Hello, i am your ONE
-          </Text>
+        {/* First Text: "Hello. I am your ONE" — single line */}
+        <Animated.View style={[styles.textWrapper, styles.textWrapperFirst, firstTextStyle]}>
+          <View style={styles.firstTextRow}>
+            <Text style={[styles.firstText, { color: colors.text }]}>
+              Hello. I am your{' '}
+              <Text style={[styles.oneText, { color: colors.text }]}>ONE</Text>
+            </Text>
+          </View>
         </Animated.View>
 
-        {/* Agent Text: "Agent-01" */}
-        <Animated.View style={[styles.textWrapper, agentTextStyle]}>
-          <Text style={[styles.agentText, { color: colors.text }]}>
-            Agent-01
-          </Text>
+        {/* Agent Text: "Agent-" and "01" on two lines */}
+        <Animated.View style={[styles.textWrapper, styles.textWrapperAgent, agentTextStyle]}>
+          <Text style={[styles.agentLine, { color: colors.text }]}>Agent-</Text>
+          <Text style={[styles.agentLine, styles.agentLineSecond, { color: colors.text }]}>01</Text>
         </Animated.View>
 
-        {/* Subtitle */}
-        <Animated.View style={[styles.textWrapper, subtitleStyle]}>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+        {/* Subtitle: single readable block, below agent */}
+        <Animated.View style={[styles.textWrapper, styles.textWrapperSubtitle, subtitleStyle]}>
+          <Text style={[styles.subtitle, { color: colors.text }]}>
             I clear the noise and bring your vision to life
           </Text>
         </Animated.View>
@@ -200,33 +202,61 @@ const styles = StyleSheet.create({
     borderRadius: 36,
   },
   textContainer: {
-    marginTop: 200, // Space for circle above
+    marginTop: 200,
     alignItems: 'center',
-    minHeight: 150,
+    justifyContent: 'flex-start',
+    paddingHorizontal: 32,
+    minHeight: 220,
   },
   textWrapper: {
     position: 'absolute',
     alignItems: 'center',
+    justifyContent: 'center',
     width: '100%',
+    paddingHorizontal: 24,
+  },
+  textWrapperFirst: {
+    top: 0,
+  },
+  textWrapperAgent: {
+    top: 44,
+  },
+  textWrapperSubtitle: {
+    top: 148,
+  },
+  firstTextRow: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    justifyContent: 'center',
+    minWidth: 280,
   },
   firstText: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '400',
     textAlign: 'center',
+    lineHeight: 30,
   },
-  agentText: {
-    fontSize: 32,
+  oneText: {
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    fontSize: 26,
+    lineHeight: 30,
+  },
+  agentLine: {
+    fontSize: 36,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginTop: 20,
+    lineHeight: 42,
+  },
+  agentLineSecond: {
+    marginTop: 4,
   },
   subtitle: {
-    fontSize: 16,
-    fontWeight: '300',
+    fontSize: 18,
+    fontWeight: '400',
     textAlign: 'center',
-    marginTop: 60,
-    paddingHorizontal: 40,
-    lineHeight: 22,
+    lineHeight: 26,
+    maxWidth: 320,
   },
 });
 
