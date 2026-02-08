@@ -35,7 +35,7 @@ const webStorage = {
   },
 };
 
-const storage = {
+export const storage = {
   getItem: (key: string) =>
     isWeb ? webStorage.getItem(key) : SecureStore.getItemAsync(key),
   setItem: (key: string, value: string) =>

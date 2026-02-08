@@ -130,3 +130,4 @@ eas build --profile development --platform android
 
 Then wait for the build link, download, and install! 🎉
 
+

@@ -1,11 +1,12 @@
 /**
- * ONE Platform - Simplified Version
- * Start simple, add complexity later
+ * Main App - Simplified chat interface
+ * Phase 1: Basic Chat
  */
 
 import React, { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import { useThemeStore } from '../stores/themeStore';
 
 interface Message {
   id: string;
@@ -14,7 +15,8 @@ interface Message {
   timestamp: Date;
 }
 
-export default function App() {
+export const MainApp: React.FC = () => {
+  const { colors, theme } = useThemeStore();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -38,11 +40,11 @@ export default function App() {
     setMessages((prev) => [...prev, userMessage]);
     setInputText('');
 
-    // Simulate agent response (simple for now)
+    // Simulate agent response (Phase 1: simple, Phase 3: will use OpenAI)
     setTimeout(() => {
       const agentMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: `You said: "${userMessage.text}". This is a simple response. We'll add AI later!`,
+        text: `You said: "${userMessage.text}". This is a simple response. We'll add real AI in Phase 3!`,
         sender: 'agent',
         timestamp: new Date(),
       };
@@ -51,26 +53,31 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
       
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>ONE Platform</Text>
-        <Text style={styles.headerSubtitle}>AI Assistant</Text>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>ONE Platform</Text>
+        <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>AI Assistant - Phase 1</Text>
       </View>
 
       {/* Messages */}
-      <ScrollView style={styles.messagesContainer} contentContainerStyle={styles.messagesContent}>
+      <ScrollView 
+        style={styles.messagesContainer} 
+        contentContainerStyle={styles.messagesContent}
+      >
         {messages.map((message) => (
           <View
             key={message.id}
             style={[
               styles.messageBubble,
-              message.sender === 'user' ? styles.userBubble : styles.agentBubble,
+              message.sender === 'user' 
+                ? [styles.userBubble, { backgroundColor: colors.primary }]
+                : [styles.agentBubble, { backgroundColor: colors.surface, borderColor: colors.border }],
             ]}
           >
-            <Text style={message.sender === 'user' ? styles.userText : styles.agentText}>
+            <Text style={message.sender === 'user' ? styles.userText : [styles.agentText, { color: colors.text }]}>
               {message.text}
             </Text>
           </View>
@@ -78,42 +85,41 @@ export default function App() {
       </ScrollView>
 
       {/* Input */}
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { borderColor: colors.border, color: colors.text }]}
           value={inputText}
           onChangeText={setInputText}
           placeholder="Type a message..."
+          placeholderTextColor={colors.textSecondary}
           multiline
           onSubmitEditing={handleSend}
         />
-        <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+        <TouchableOpacity 
+          style={[styles.sendButton, { backgroundColor: colors.primary }]} 
+          onPress={handleSend}
+        >
           <Text style={styles.sendButtonText}>Send</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#fff',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#666',
     marginTop: 4,
   },
   messagesContainer: {
@@ -129,14 +135,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   userBubble: {
-    backgroundColor: '#007AFF',
     alignSelf: 'flex-end',
     borderBottomRightRadius: 4,
   },
   agentBubble: {
-    backgroundColor: '#fff',
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -146,23 +151,21 @@ const styles = StyleSheet.create({
   userText: {
     color: '#fff',
     fontSize: 15,
+    lineHeight: 22,
   },
   agentText: {
-    color: '#333',
     fontSize: 15,
+    lineHeight: 22,
   },
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
-    backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
     alignItems: 'center',
   },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -170,7 +173,6 @@ const styles = StyleSheet.create({
     maxHeight: 100,
   },
   sendButton: {
-    backgroundColor: '#007AFF',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
@@ -180,5 +182,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-
 

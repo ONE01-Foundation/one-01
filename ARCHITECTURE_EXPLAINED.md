@@ -123,3 +123,4 @@ OPENAI_API_KEY=your_key
 4. **Clean up docs** - Keep only essential
 5. **Test basic flow** - Chat → Response → Works!
 
+
