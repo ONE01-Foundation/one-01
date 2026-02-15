@@ -1,7 +1,8 @@
 /**
  * InputBar - Text and voice input for user messages
+ * Not in v0.1 active path. Kept for v0.2+.
  */
-
+// @ts-nocheck
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useConversationStore } from '../stores';

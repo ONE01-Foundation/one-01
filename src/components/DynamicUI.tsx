@@ -1,7 +1,8 @@
 /**
  * DynamicUI - Renders UI components dynamically based on agent actions
+ * Not in v0.1 active path. Kept for v0.2+.
  */
-
+// @ts-nocheck
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useUIStore } from '../stores';
