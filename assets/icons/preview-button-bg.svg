@@ -1,0 +1,15 @@
+<svg width="180" height="72" viewBox="0 0 180 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_15587_451)">
+<mask id="mask0_15587_451" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="6" y="16" width="168" height="63">
+<rect x="6" y="16" width="168" height="63" rx="31.5" fill="white"/>
+</mask>
+<g mask="url(#mask0_15587_451)">
+<circle cx="90.4995" cy="-91.315" r="147.5" fill="#333333"/>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_15587_451">
+<rect width="180" height="72" fill="white"/>
+</clipPath>
+</defs>
+</svg>

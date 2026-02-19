@@ -1,6 +1,5 @@
-export { WelcomeScreen } from './WelcomeScreen';
-export { NameScreen } from './NameScreen';
-export { StyleScreen } from './StyleScreen';
-export { LensScreen } from './LensScreen';
-export { DesireScreen } from './DesireScreen';
-export { ConfirmScreen } from './ConfirmScreen';
+export { BirthScreen } from './BirthScreen';
+export { WorldsScreen } from './WorldsScreen';
+export { DirectionScreen } from './DirectionScreen';
+export { NamingScreen } from './NamingScreen';
+export { LoginScreen } from './LoginScreen';

@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { HomePager } from './HomePager';
+import { OneScreen } from '../screens/OneScreen';
 import { ProcessScreen } from '../screens/ProcessScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { DiscoveryScreen } from '../screens/DiscoveryScreen';
@@ -18,7 +18,7 @@ const Stack = createNativeStackNavigator<AppShellParamList>();
 export function AppShell() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Home" component={HomePager} />
+      <Stack.Screen name="Home" component={OneScreen} />
       <Stack.Screen name="Process" component={ProcessScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Discovery" component={DiscoveryScreen} />

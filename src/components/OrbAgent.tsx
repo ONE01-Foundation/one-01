@@ -21,14 +21,23 @@ export interface OrbAgentProps {
   tappable?: boolean;
   /** Hat-based glow behind orb (e.g. health=green, finance=blue) */
   glowColor?: string;
+  /** Subtle typing effect for label text */
+  typingEffect?: boolean;
+  /** Show eyes and mouth that look around (living face) */
+  showFace?: boolean;
 }
 
-export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable, glowColor }: OrbAgentProps) {
+export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable, glowColor, typingEffect, showFace }: OrbAgentProps) {
   const { colors } = useThemeStore();
   const scale = useRef(new Animated.Value(1)).current;
   const breathe = useRef(new Animated.Value(0)).current;
   const bounce = useRef(new Animated.Value(0)).current;
   const labelOpacity = useRef(new Animated.Value(1)).current;
+  const lookVal = useRef(new Animated.Value(0.5)).current;
+  const [typedLine, setTypedLine] = React.useState('');
+  const typedIndexRef = useRef(0);
+  const lineIndexRef = useRef(0);
+  const fullLine = labelLines.length > 0 ? labelLines[0] : '';
 
   useEffect(() => {
     switch (state) {
@@ -122,6 +131,43 @@ export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable
     }
   }, [state, scale]);
 
+  // Typing effect for first label line
+  useEffect(() => {
+    if (!typingEffect || !fullLine) {
+      setTypedLine(fullLine);
+      return;
+    }
+    lineIndexRef.current = 0;
+    typedIndexRef.current = 0;
+    setTypedLine('');
+    const delay = 45;
+    const id = setInterval(() => {
+      typedIndexRef.current += 1;
+      if (typedIndexRef.current > fullLine.length) {
+        clearInterval(id);
+        setTypedLine(fullLine);
+        return;
+      }
+      setTypedLine(fullLine.slice(0, typedIndexRef.current));
+    }, delay);
+    return () => clearInterval(id);
+  }, [fullLine, typingEffect]);
+
+  // Face: eyes look left / right (only when showFace)
+  useEffect(() => {
+    if (!showFace || size < 40) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(lookVal, { toValue: 1, duration: 2200, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(lookVal, { toValue: 0.5, duration: 1800, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(lookVal, { toValue: 0, duration: 2200, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(lookVal, { toValue: 0.5, duration: 1800, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [showFace, size, lookVal]);
+
   const breatheScale = breathe.interpolate({
     inputRange: [0, 1],
     outputRange: [0.96, 1.04],
@@ -156,19 +202,47 @@ export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable
         ]}
       >
         {glowColor ? (
-          <View
-            style={[
-              styles.glow,
-              {
-                width: size * 1.6,
-                height: size * 1.6,
-                borderRadius: (size * 1.6) / 2,
-                backgroundColor: glowColor,
-                opacity: 0.25,
-              },
-            ]}
-            pointerEvents="none"
-          />
+          <>
+            <View
+              style={[
+                styles.glow,
+                {
+                  width: size * 2.8,
+                  height: size * 2.8,
+                  borderRadius: (size * 2.8) / 2,
+                  backgroundColor: glowColor,
+                  opacity: 0.04,
+                },
+              ]}
+              pointerEvents="none"
+            />
+            <View
+              style={[
+                styles.glow,
+                {
+                  width: size * 2.2,
+                  height: size * 2.2,
+                  borderRadius: (size * 2.2) / 2,
+                  backgroundColor: glowColor,
+                  opacity: 0.08,
+                },
+              ]}
+              pointerEvents="none"
+            />
+            <View
+              style={[
+                styles.glow,
+                {
+                  width: size * 1.6,
+                  height: size * 1.6,
+                  borderRadius: (size * 1.6) / 2,
+                  backgroundColor: glowColor,
+                  opacity: 0.12,
+                },
+              ]}
+              pointerEvents="none"
+            />
+          </>
         ) : null}
         <View
           style={[
@@ -181,6 +255,25 @@ export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable
             },
           ]}
         />
+        {showFace && size >= 40 && (() => {
+          const eyeSize = Math.max(4, size * 0.1);
+          const eyeY = size * 0.38;
+          const eyeOffsetX = size * 0.22;
+          const mouthWidth = size * 0.28;
+          const mouthY = size * 0.62;
+          const lookX = lookVal.interpolate({ inputRange: [0, 0.5, 1], outputRange: [-2, 0, 2] });
+          return (
+            <View style={[styles.face, { width: size, height: size }]} pointerEvents="none">
+              <Animated.View style={[styles.eyeWrap, { left: eyeOffsetX - eyeSize / 2, top: eyeY - eyeSize / 2, width: eyeSize, height: eyeSize, transform: [{ translateX: lookX }] }]}>
+                <View style={[styles.eye, { width: eyeSize, height: eyeSize, borderRadius: eyeSize / 2, backgroundColor: colors.background }]} />
+              </Animated.View>
+              <Animated.View style={[styles.eyeWrap, { right: eyeOffsetX - eyeSize / 2, top: eyeY - eyeSize / 2, width: eyeSize, height: eyeSize, transform: [{ translateX: lookX }] }]}>
+                <View style={[styles.eye, { width: eyeSize, height: eyeSize, borderRadius: eyeSize / 2, backgroundColor: colors.background }]} />
+              </Animated.View>
+              <View style={[styles.mouth, { width: mouthWidth, left: (size - mouthWidth) / 2, top: mouthY, height: 2, borderRadius: 1, backgroundColor: colors.background }]} />
+            </View>
+          );
+        })()}
         {state === 'speaking' && (
           <View style={[styles.dots, { bottom: -size * 0.3 }]} pointerEvents="none">
             {[0, 1, 2].map((i) => (
@@ -203,11 +296,18 @@ export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable
       </Animated.View>
       {labelLines.length > 0 && (
         <Animated.View style={[styles.labels, { opacity: labelOpacity }]}>
-          {labelLines.slice(0, 2).map((line, i) => (
-            <Text key={i} style={[styles.labelLine, { color: colors.textSecondary }]} numberOfLines={1}>
-              {line}
+          {typingEffect && fullLine ? (
+            <Text style={[styles.labelLine, { color: colors.textSecondary }]} numberOfLines={1}>
+              {typedLine}
+              {typedLine.length < fullLine.length ? <Text style={{ opacity: 0.5 }}>|</Text> : null}
             </Text>
-          ))}
+          ) : (
+            labelLines.slice(0, 2).map((line, i) => (
+              <Text key={i} style={[styles.labelLine, { color: colors.textSecondary }]} numberOfLines={1}>
+                {line}
+              </Text>
+            ))
+          )}
         </Animated.View>
       )}
     </Wrapper>
@@ -227,6 +327,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   orb: {},
+  face: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyeWrap: {
+    position: 'absolute',
+  },
+  eye: {},
+  mouth: {
+    position: 'absolute',
+  },
   dots: {
     position: 'absolute',
     flexDirection: 'row',

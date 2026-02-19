@@ -20,7 +20,7 @@ import { storage } from '../utils/session';
 const ONE_USER_KEY = 'one_user';
 
 const initialOnboarding: OnboardingState = {
-  step: 'welcome',
+  step: 'birth',
   name: '',
   persona: null,
   lenses: [],
@@ -58,7 +58,7 @@ function reducer(state: State, action: Action): State {
     case 'SET_DESIRE':
       return { ...state, onboarding: { ...state.onboarding, desire: action.payload } };
     case 'NEXT_STEP': {
-      const steps: OnboardingState['step'][] = ['welcome', 'name', 'style', 'lens', 'desire', 'confirm'];
+      const steps: OnboardingState['step'][] = ['birth', 'worlds', 'direction', 'naming', 'login'];
       const i = steps.indexOf(state.onboarding.step);
       const step = action.payload ?? (i < steps.length - 1 ? steps[i + 1] : state.onboarding.step);
       return { ...state, onboarding: { ...state.onboarding, step } };
@@ -133,9 +133,9 @@ function buildUserFromOnboarding(o: OnboardingState): OneUser {
   const desire = o.desire.trim() || 'My first goal';
   const agent: OneAgent = {
     id: aid,
-    name: 'Nobody',
-    persona: o.persona!,
-    hats: ['base'],
+    name: o.name.trim() || 'ONE',
+    persona: o.persona ?? 'neutral',
+    hats: ['base', ...o.lenses],
   };
 
   const firstProcess: OneProcess = {
@@ -152,7 +152,7 @@ function buildUserFromOnboarding(o: OnboardingState): OneUser {
 
   return {
     id: uid,
-    name: o.name.trim(),
+    name: o.name.trim() || 'Guest',
     lenses: o.lenses,
     agent,
     processes: [firstProcess],
@@ -204,7 +204,7 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
 
   const completeOnboarding = useCallback(async () => {
     const o = state.onboarding;
-    if (!o.name.trim() || !o.persona || o.lenses.length === 0) return;
+    if (o.lenses.length === 0 || !o.desire.trim()) return;
     const user = buildUserFromOnboarding(o);
     await storage.setItem(ONE_USER_KEY, JSON.stringify(user));
     dispatch({ type: 'COMPLETE', payload: user });

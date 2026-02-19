@@ -1,5 +1,5 @@
 /**
- * ProcessesPreview – Bottom of vertical OS. Next 2 processes, swipe up to continue.
+ * ProcessesPreview – Bottom of vertical OS. Swipe up to see what's next (Timeline comes to you).
  */
 
 import React, { useMemo } from 'react';
@@ -9,12 +9,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useOne } from '../core/OneContext';
-import { OrbAgent } from '../components/OrbAgent';
 import { LENS_LABELS } from '../core/types';
 import type { AppShellParamList } from '../navigation/types';
 import type { OneProcess } from '../core/types';
 
 type Nav = NativeStackNavigationProp<AppShellParamList, 'Home'>;
+
+const CONTENT_TOP = 56 + 72 + 24 + 16;
 
 export function ProcessesPreviewScreen() {
   const { height } = useWindowDimensions();
@@ -34,9 +35,8 @@ export function ProcessesPreviewScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, minHeight: height }]}>
-      <View style={[styles.content, { paddingTop: insets.top + 24 }]}>
-        <OrbAgent size={32} state="idle" mode="process" labelLines={['Timeline', 'Swipe up to continue']} />
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Next up</Text>
+      <View style={[styles.content, { paddingTop: insets.top + CONTENT_TOP }]}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>NEXT UP</Text>
         {nextProcesses.map((p) => (
           <TouchableOpacity
             key={p.id}

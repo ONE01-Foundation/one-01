@@ -10,18 +10,29 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../stores/themeStore';
 import { useOne } from '../core/OneContext';
 import { OrbAgent } from '../components/OrbAgent';
-import { LENS_LABELS, PERSONA_LABELS } from '../core/types';
+import { LENS_LABELS, PERSONA_LABELS, HAT_LABELS, getHatColor } from '../core/types';
+import type { Hat } from '../core/types';
 import type { AppShellParamList } from '../navigation/types';
+
+const TOGGLEABLE_HATS: Hat[] = ['health', 'finance', 'knowledge', 'business', 'provider'];
 
 type Nav = NativeStackNavigationProp<AppShellParamList, 'Profile'>;
 
 export function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useThemeStore();
-  const { user, clearUser } = useOne();
+  const { user, clearUser, updateAgentHats } = useOne();
   const navigation = useNavigation<Nav>();
 
   if (!user) return null;
+
+  const currentHats = user.agent.hats ?? ['base'];
+  const toggleHat = (hat: Hat) => {
+    const next = currentHats.includes(hat)
+      ? currentHats.filter((h) => h !== hat)
+      : [...currentHats, hat];
+    updateAgentHats(next);
+  };
 
   const activeCount = user.processes.filter((p) => p.status === 'active').length;
   const doneCount = user.processes.filter((p) => p.status === 'done').length;
@@ -70,9 +81,22 @@ export function ProfileScreen() {
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Agent</Text>
           <Text style={[styles.cardValue, { color: colors.text }]}>{user.agent.name} · {PERSONA_LABELS[user.agent.persona]}</Text>
-          <Text style={[styles.hatsSummary, { color: colors.textSecondary }]}>
-            Hats: {(user.agent.hats ?? []).join(', ')}
-          </Text>
+        </View>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Hats</Text>
+        <View style={styles.hatsRow}>
+          {TOGGLEABLE_HATS.map((hat) => (
+            <TouchableOpacity
+              key={hat}
+              style={[
+                styles.hatChip,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+                currentHats.includes(hat) && { borderColor: getHatColor(hat), borderWidth: 2 },
+              ]}
+              onPress={() => toggleHat(hat)}
+            >
+              <Text style={[styles.hatChipText, { color: colors.text }]}>{HAT_LABELS[hat]}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Lenses</Text>
@@ -127,7 +151,10 @@ const styles = StyleSheet.create({
   card: { padding: 18, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
   cardLabel: { fontSize: 12, marginBottom: 4, textTransform: 'uppercase' },
   cardValue: { fontSize: 16 },
-  hatsSummary: { fontSize: 14, marginTop: 6 },
+  sectionTitle: { fontSize: 12, marginBottom: 10, textTransform: 'uppercase' },
+  hatsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  hatChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
+  hatChipText: { fontSize: 14, fontWeight: '500' },
   statsRow: { flexDirection: 'row', paddingVertical: 20, borderBottomWidth: 1, marginBottom: 20 },
   stat: { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 28, fontWeight: '700' },

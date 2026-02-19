@@ -2,7 +2,7 @@
  * HomeScreen – NOW Sphere, My Agent modal, Create Process FAB + sheet.
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,17 +12,19 @@ import {
   Modal,
   Pressable,
   TextInput,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
+  PanResponder,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../stores/themeStore';
 import { useOne } from '../core/OneContext';
-import { OrbAgent } from '../components/OrbAgent';
-import { UnitsBadge } from '../components/UnitsBadge';
 import { AgentBroadcast } from '../components/AgentBroadcast';
+import { useHomePagerScroll } from '../navigation/HomePager';
 import { LENS_LABELS, PERSONA_LABELS, HAT_LABELS, getHatColor } from '../core/types';
 import type { LifeLens, Hat } from '../core/types';
 import type { OneProcess } from '../core/types';
@@ -42,8 +44,7 @@ export function HomeScreen() {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [createLens, setCreateLens] = useState<LifeLens | null>(null);
   const [createTitle, setCreateTitle] = useState('');
-  const [showScrollHint, setShowScrollHint] = useState(true);
-
+  const [nowInputValue, setNowInputValue] = useState('');
   const processes = useMemo(() => {
     if (!user) return [];
     const list = user.processes.filter((p) => p.status === 'active');
@@ -85,198 +86,214 @@ export function HomeScreen() {
 
   const hasProviderHat = currentHats.includes('provider');
 
-  const rotatingLines = useMemo(() => {
-    const lines: string[] = [user.name, 'What are we building today?'];
-    const active = user.processes.filter((p) => p.status === 'active');
-    if (active.length > 0)
-      lines.push(`Process active: ${active[0].title}`);
-    return lines;
-  }, [user.name, user.processes]);
+  const lensOptions: (LifeLens | null)[] = useMemo(() => [null, ...lensesToShow], [lensesToShow]);
+  const currentLensIndex = selectedLens === null ? 0 : lensOptions.indexOf(selectedLens);
 
-  const [labelIndex, setLabelIndex] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setLabelIndex((i) => (i + 1) % Math.max(1, rotatingLines.length));
-    }, 3000);
-    return () => clearInterval(id);
-  }, [rotatingLines.length]);
-
-  const orbLabelLines = useMemo(() => {
-    if (agentStatusText) return [agentStatusText];
-    return rotatingLines.length ? [rotatingLines[labelIndex]] : [];
-  }, [agentStatusText, rotatingLines, labelIndex]);
-
-  const primaryHat = currentHats.filter((h) => h !== 'base')[0] ?? 'base';
-  const orbGlow = getHatColor(primaryHat);
-
-  const activeCount = user.processes.filter((p) => p.status === 'active').length;
-  const today = new Date().toDateString();
-  const notesToday = useMemo(() => {
-    return user.processes.reduce((sum, p) => {
-      return sum + p.messages.filter((m) => m.sender === 'user' && new Date(m.createdAt).toDateString() === today).length;
-    }, 0);
-  }, [user.processes, today]);
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const compilesThisWeek = useMemo(() => {
-    return user.processes.reduce((sum, p) => {
-      return sum + (p.timeline?.filter((e) => e.type === 'compile' && new Date(e.at).getTime() >= weekAgo).length ?? 0);
-    }, 0);
-  }, [user.processes]);
-
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = e.nativeEvent.contentOffset.y;
-    if (y > 60) setShowScrollHint(false);
-    else setShowScrollHint(true);
+  const onLensFilterPress = (lens: LifeLens | null) => {
+    setSelectedLens(lens);
+    if (lens) {
+      const next: Hat[] = Array.from(new Set(['base', ...currentHats.filter((h) => h !== 'base'), lens])) as Hat[];
+      updateAgentHats(next);
+    }
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => navigation.navigate('Discovery')} style={styles.headerBtn}>
-          <Text style={[styles.headerBtnText, { color: colors.primary }]}>Discovery</Text>
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>NOW</Text>
-        <View style={styles.headerRight}>
-          <UnitsBadge />
-          <TouchableOpacity onPress={() => setAgentModalVisible(true)} style={styles.headerBtn}>
-            <Text style={[styles.headerBtnText, { color: colors.primary }]}>Agent</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.headerBtn}>
-            <Text style={[styles.headerBtnText, { color: colors.primary }]}>Profile</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+  const goToPrevHat = () => {
+    const opts = lensOptions;
+    const idx = currentLensIndex;
+    const nextIndex = (idx - 1 + opts.length) % opts.length;
+    onLensFilterPress(opts[nextIndex]);
+  };
 
+  const goToNextHat = () => {
+    const opts = lensOptions;
+    const idx = currentLensIndex;
+    const nextIndex = (idx + 1) % opts.length;
+    onLensFilterPress(opts[nextIndex]);
+  };
+
+  const lensOptionsRef = useRef(lensOptions);
+  const currentLensIndexRef = useRef(currentLensIndex);
+  const onLensFilterPressRef = useRef(onLensFilterPress);
+  lensOptionsRef.current = lensOptions;
+  currentLensIndexRef.current = currentLensIndex;
+  onLensFilterPressRef.current = onLensFilterPress;
+
+  useEffect(() => {
+    const opts = lensOptionsRef.current;
+    const currentIndex = currentLensIndexRef.current;
+    const t = setTimeout(() => {
+      const nextIndex = (currentIndex + 1) % opts.length;
+      onLensFilterPressRef.current(opts[nextIndex]);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [selectedLens]);
+
+  const swipeThreshold = 50;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 30 && Math.abs(g.dx) > Math.abs(g.dy) * 1.2,
+      onPanResponderRelease: (_, g) => {
+        const opts = lensOptionsRef.current;
+        const idx = currentLensIndexRef.current;
+        if (g.dx < -swipeThreshold) {
+          const nextIndex = (idx + 1) % opts.length;
+          onLensFilterPressRef.current(opts[nextIndex]);
+        } else if (g.dx > swipeThreshold) {
+          const nextIndex = (idx - 1 + opts.length) % opts.length;
+          onLensFilterPressRef.current(opts[nextIndex]);
+        }
+      },
+    })
+  ).current;
+
+  const pagerScroll = useHomePagerScroll();
+  const { height: windowHeight } = useWindowDimensions();
+  const scrollContentPaddingTop = insets.top + 56 + 72 + 24 + 16;
+  const topOffsetForCenter = Math.max(0, (windowHeight - 320) / 2 - 80);
+
+  React.useEffect(() => {
+    pagerScroll?.registerAgentModalTrigger?.(() => setAgentModalVisible(true));
+    return () => {
+      pagerScroll?.registerAgentModalTrigger?.(null);
+    };
+  }, [pagerScroll]);
+
+  const hatTintColor = getHatColor(selectedLens ?? 'base');
+  const isMainHat = selectedLens === null;
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      <View style={styles.containerInner} {...panResponder.panHandlers}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: scrollContentPaddingTop + topOffsetForCenter,
+            paddingBottom: insets.bottom + 24,
+            flexGrow: 1,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={32}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        {/* Agent Face */}
-        <View style={[styles.sphereWrap, { backgroundColor: colors.surface }]}>
-          <OrbAgent
-            size={72}
-            state="idle"
-            mode="home"
-            labelLines={orbLabelLines}
-            onPress={() => setAgentModalVisible(true)}
-            tappable
-            glowColor={orbGlow}
-          />
+        {/* Hat switcher: arrows (loop) + current hat label */}
+        <View style={styles.hatSwitcherRow}>
+          <TouchableOpacity style={styles.arrowBtn} onPress={goToPrevHat} activeOpacity={0.8}>
+            <Svg width={28} height={28} viewBox="0 0 32 32" fill="none">
+              <Path
+                fill={colors.text}
+                d="M17.9621 15.5L11.1461 8.75094C10.9513 8.55809 10.9513 8.24541 11.1461 8.05255L12.063 7.14464C12.2578 6.95179 12.5735 6.95179 12.7683 7.14464L20.8539 15.1508C21.0487 15.3437 21.0487 15.6563 20.8539 15.8492L12.7683 23.8554C12.5735 24.0482 12.2578 24.0482 12.063 23.8554L11.1461 22.9474C10.9513 22.7546 10.9513 22.4419 11.1461 22.2491L17.9621 15.5Z"
+              />
+            </Svg>
+          </TouchableOpacity>
+          <View style={styles.hatLabelWrap}>
+            <View style={[styles.hatLabelDot, { backgroundColor: hatTintColor }]} />
+            <Text style={[styles.hatLabelText, { color: colors.text }]}>
+              {isMainHat ? 'One Agent' : selectedLens ? LENS_LABELS[selectedLens] : 'One Agent'}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.arrowBtn} onPress={goToNextHat} activeOpacity={0.8}>
+            <View style={styles.arrowRightFlip}>
+              <Svg width={28} height={28} viewBox="0 0 32 32" fill="none">
+                <Path
+                  fill={colors.text}
+                  d="M17.9621 15.5L11.1461 8.75094C10.9513 8.55809 10.9513 8.24541 11.1461 8.05255L12.063 7.14464C12.2578 6.95179 12.5735 6.95179 12.7683 7.14464L20.8539 15.1508C21.0487 15.3437 21.0487 15.6563 20.8539 15.8492L12.7683 23.8554C12.5735 24.0482 12.2578 24.0482 12.063 23.8554L11.1461 22.9474C10.9513 22.7546 10.9513 22.4419 11.1461 22.2491L17.9621 15.5Z"
+                />
+              </Svg>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Broadcast */}
         <AgentBroadcast />
 
-        {/* Stats – real metrics */}
-        <View style={[styles.statsRow, { borderBottomColor: colors.border }]}>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: colors.text }]}>{activeCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: colors.text }]}>{notesToday}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Notes Today</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: colors.text }]}>{compilesThisWeek}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Compiles This Week</Text>
-          </View>
+        {/* Now? input bar – oval, light gray, higher up (Fix layout) */}
+        <View style={[styles.nowBar, styles.nowBarOval]}>
+          <TouchableOpacity style={styles.nowBarBtn} onPress={openCreateSheet} activeOpacity={0.8}>
+            <Svg width={24} height={24} viewBox="0 0 46 46" fill="none">
+              <Path fill={colors.text} d="M20 11h6v14h-6zM11 20h14v6H11z" />
+            </Svg>
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.nowInput, { color: colors.text }]}
+            value={nowInputValue}
+            onChangeText={setNowInputValue}
+            placeholder="Now?"
+            placeholderTextColor={colors.textSecondary}
+            returnKeyType="done"
+            multiline
+            numberOfLines={1}
+            blurOnSubmit
+          />
+          <TouchableOpacity style={styles.nowBarBtn} onPress={() => {}} activeOpacity={0.8}>
+            <Svg width={24} height={24} viewBox="0 0 26 26" fill="none">
+              <Path
+                fill={colors.textSecondary}
+                d="M13.12 17.43c1.07 0 2.1-.46 2.86-1.27.76-.81 1.19-1.91 1.19-3.06V6.59c0-1.15-.43-2.25-1.19-3.07-.76-.81-1.79-1.27-2.86-1.27-1.07 0-2.1.46-2.86 1.27-.76.82-1.19 1.92-1.19 3.07v6.5c0 1.15.43 2.25 1.19 3.06.76.82 1.79 1.27 2.86 1.27z"
+              />
+              <Path
+                fill={colors.textSecondary}
+                d="M19.33 13.19c-.27 0-.53.1-.72.28-.19.18-.31.42-.31.67 0 1.25-.54 2.45-1.5 3.33-.96.88-2.26 1.38-3.62 1.38-1.36 0-2.66-.5-3.62-1.38-.96-.88-1.5-2.08-1.5-3.33 0-.25-.12-.49-.31-.67-.19-.18-.45-.28-.72-.28-.27 0-.53.1-.72.28-.19.18-.31.42-.31.67 0 1.75.75 3.43 2.1 4.66 1.34 1.24 3.16 1.93 5.06 1.93 1.9 0 3.72-.69 5.06-1.93 1.34-1.23 2.1-2.91 2.1-4.66 0-.25-.12-.49-.31-.67-.19-.18-.45-.28-.72-.28z"
+              />
+              <Path
+                fill={colors.textSecondary}
+                d="M16.16 21.76h-6.08c-.27 0-.53.11-.72.32-.19.2-.31.48-.31.76 0 .29.11.56.31.77.19.2.45.32.72.32h6.08c.27 0 .53-.11.72-.32.19-.2.31-.48.31-.77 0-.29-.11-.56-.31-.76-.19-.21-.45-.32-.72-.32z"
+              />
+            </Svg>
+          </TouchableOpacity>
         </View>
 
-        {/* Hats – agent capabilities */}
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Hats</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.lensRow}
-          contentContainerStyle={styles.lensRowContent}
-        >
-          {TOGGLEABLE_HATS.map((hat) => (
-            <TouchableOpacity
-              key={hat}
-              style={[
-                styles.lensChip,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-                currentHats.includes(hat) && { borderColor: getHatColor(hat), borderWidth: 2 },
-              ]}
-              onPress={() => toggleHat(hat)}
-            >
-              <Text style={[styles.lensChipText, { color: colors.text }]}>{HAT_LABELS[hat]}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Persona */}
-        <Text style={[styles.personaLine, { color: colors.textSecondary }]}>{PERSONA_LABELS[agent.persona]}</Text>
-
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Active processes</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.lensRow}
-          contentContainerStyle={styles.lensRowContent}
-        >
-          <TouchableOpacity
-            style={[
-              styles.lensChip,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              selectedLens === null && { borderColor: colors.primary, borderWidth: 2 },
-            ]}
-            onPress={() => setSelectedLens(null)}
-          >
-            <Text style={[styles.lensChipText, { color: colors.text }]}>All</Text>
+        {/* Arrows + bullets bar (preview-button-bg style) */}
+        <View style={styles.bulletsBar}>
+          <TouchableOpacity style={styles.arrowBtn} onPress={goToPrevHat} activeOpacity={0.8}>
+            <Svg width={24} height={24} viewBox="0 0 32 32" fill="none">
+              <Path
+                fill={colors.textSecondary}
+                d="M17.9621 15.5L11.1461 8.75094C10.9513 8.55809 10.9513 8.24541 11.1461 8.05255L12.063 7.14464C12.2578 6.95179 12.5735 6.95179 12.7683 7.14464L20.8539 15.1508C21.0487 15.3437 21.0487 15.6563 20.8539 15.8492L12.7683 23.8554C12.5735 24.0482 12.2578 24.0482 12.063 23.8554L11.1461 22.9474C10.9513 22.7546 10.9513 22.4419 11.1461 22.2491L17.9621 15.5Z"
+              />
+            </Svg>
           </TouchableOpacity>
-          {lensesToShow.map((lens) => (
-            <TouchableOpacity
-              key={lens}
-              style={[
-                styles.lensChip,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-                selectedLens === lens && { borderColor: colors.primary, borderWidth: 2 },
-              ]}
-              onPress={() => setSelectedLens(lens)}
-            >
-              <Text style={[styles.lensChipText, { color: colors.text }]}>{LENS_LABELS[lens]}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        {processes.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => onProcessPress(item)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.cardTitle, { color: colors.text }]}>{item.title}</Text>
-            <Text style={[styles.cardMeta, { color: colors.textSecondary }]}>
-              {LENS_LABELS[item.lens]} · {item.status}
-            </Text>
+          <View style={styles.bulletsRow}>
+            {lensOptions.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.bullet,
+                  { backgroundColor: i === currentLensIndex ? colors.primary : colors.textSecondary },
+                ]}
+              />
+            ))}
+          </View>
+          <TouchableOpacity style={styles.arrowBtn} onPress={goToNextHat} activeOpacity={0.8}>
+            <View style={styles.arrowRightFlip}>
+              <Svg width={24} height={24} viewBox="0 0 32 32" fill="none">
+                <Path
+                  fill={colors.textSecondary}
+                  d="M17.9621 15.5L11.1461 8.75094C10.9513 8.55809 10.9513 8.24541 11.1461 8.05255L12.063 7.14464C12.2578 6.95179 12.5735 6.95179 12.7683 7.14464L20.8539 15.1508C21.0487 15.3437 21.0487 15.6563 20.8539 15.8492L12.7683 23.8554C12.5735 24.0482 12.2578 24.0482 12.063 23.8554L11.1461 22.9474C10.9513 22.7546 10.9513 22.4419 11.1461 22.2491L17.9621 15.5Z"
+                />
+              </Svg>
+            </View>
           </TouchableOpacity>
-        ))}
+        </View>
+
+        {/* Scroll indicator */}
+        <View style={styles.scrollIndicatorWrap}>
+          <Svg width={20} height={20} viewBox="0 0 32 32" fill="none" style={styles.chevronDown}>
+            <Path
+              fill={colors.textSecondary}
+              d="M17.9621 15.5L11.1461 8.75094C10.9513 8.55809 10.9513 8.24541 11.1461 8.05255L12.063 7.14464C12.2578 6.95179 12.5735 6.95179 12.7683 7.14464L20.8539 15.1508C21.0487 15.3437 21.0487 15.6563 20.8539 15.8492L12.7683 23.8554C12.5735 24.0482 12.2578 24.0482 12.063 23.8554L11.1461 22.9474C10.9513 22.7546 10.9513 22.4419 11.1461 22.2491L17.9621 15.5Z"
+            />
+          </Svg>
+        </View>
       </ScrollView>
-
-      {/* Scroll hint – microdots */}
-      {showScrollHint && (
-        <View style={styles.microdotsWrap} pointerEvents="none">
-          <View style={styles.microdots}>
-            <View style={[styles.microdot, { backgroundColor: colors.textSecondary }]} />
-            <View style={[styles.microdot, styles.microdotCenter, { backgroundColor: colors.text }]} />
-            <View style={[styles.microdot, { backgroundColor: colors.textSecondary }]} />
-          </View>
-        </View>
-      )}
-
-      {/* FAB */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-        onPress={openCreateSheet}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
 
       {/* My Agent modal */}
       <Modal visible={agentModalVisible} transparent animationType="fade">
@@ -306,6 +323,12 @@ export function HomeScreen() {
                 <Text style={[styles.comingSoonText, { color: colors.textSecondary }]}>Create Public Profile (coming soon)</Text>
               </View>
             )}
+            <TouchableOpacity style={[styles.modalBtn, { borderColor: colors.border }]} onPress={() => { setAgentModalVisible(false); openCreateSheet(); }}>
+              <Text style={[styles.modalBtnText, { color: colors.text }]}>Add process</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.modalBtn, { borderColor: colors.border }]} onPress={() => { setAgentModalVisible(false); navigation.navigate('Profile'); }}>
+              <Text style={[styles.modalBtnText, { color: colors.text }]}>Profile</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.modalClose, { backgroundColor: colors.primary }]} onPress={() => setAgentModalVisible(false)}>
               <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
@@ -374,43 +397,103 @@ export function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  headerBtn: { padding: 4 },
-  headerBtnText: { fontSize: 15, fontWeight: '600' },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  headerRight: { flexDirection: 'row', gap: 12 },
+  containerInner: { flex: 1 },
   scroll: { flex: 1 },
-  scrollContent: { padding: 24, paddingBottom: 120 },
-  microdotsWrap: { position: 'absolute', bottom: 48, left: 0, right: 0, alignItems: 'center' },
-  microdots: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  microdot: { width: 6, height: 6, borderRadius: 3 },
-  microdotCenter: { width: 8, height: 8, borderRadius: 4 },
-  sphereWrap: {
-    alignSelf: 'center',
-    marginTop: 16,
-    marginBottom: 8,
-    paddingVertical: 8,
+  scrollContent: { padding: 24, paddingBottom: 140 },
+  nowBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: '#333',
+    borderRadius: 24,
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  nowBarOval: {
+    backgroundColor: '#3A3A3C',
+    borderRadius: 28,
+    marginHorizontal: 24,
+  },
+  bulletsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: '#333',
+    borderRadius: 36,
+    minHeight: 56,
+    marginHorizontal: 24,
+  },
+  nowBarBtn: {
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  statsRow: { flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 8, borderBottomWidth: 1, marginBottom: 16 },
-  stat: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 22, fontWeight: '700' },
-  statLabel: { fontSize: 11, marginTop: 4, textTransform: 'uppercase' },
-  personaLine: { fontSize: 13, textAlign: 'center', marginBottom: 16 },
+  nowInput: {
+    flex: 1,
+    fontSize: 16,
+    textAlign: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  hatSwitcherRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  arrowBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrowRightFlip: {
+    transform: [{ scaleX: -1 }],
+  },
+  hatLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  hatLabelDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  hatLabelText: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  bulletsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bullet: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  scrollIndicatorWrap: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  chevronDown: {
+    transform: [{ rotate: '90deg' }],
+  },
   lensRow: { marginHorizontal: -24, marginBottom: 16 },
   lensRowContent: { paddingHorizontal: 24 },
   lensChip: {
@@ -453,7 +536,9 @@ const styles = StyleSheet.create({
   hatToggle: { fontSize: 14, fontWeight: '600' },
   comingSoon: { marginTop: 12, padding: 12, borderRadius: 8 },
   comingSoonText: { fontSize: 13 },
-  modalClose: { marginTop: 24, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  modalBtn: { marginTop: 12, paddingVertical: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
+  modalBtnText: { fontSize: 16, fontWeight: '600' },
+  modalClose: { marginTop: 12, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   modalCloseText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },

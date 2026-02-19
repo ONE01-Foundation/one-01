@@ -57,6 +57,25 @@ export interface OneAgent {
   hats: Hat[];
 }
 
+/** שלב בתהליך – לפרוגרס ולהצגה */
+export interface ProcessStep {
+  id: string;
+  title: string;
+  completed: boolean;
+  order: number;
+}
+
+/** צפי vs מציאות – מה נדרש (כסף, זמן, משאבים); משתמש יכול "להתווכח" (מחיר/זמן אחר) */
+export interface ProcessReality {
+  estimatedCostNis?: number;
+  estimatedTimeDays?: number;
+  estimatedTimeMinutes?: number;
+  resources?: string[];
+  /** משא ומתן: יעד משתמש (למשל מחיר נמוך יותר, זמן קצר יותר) */
+  targetCostNis?: number;
+  targetTimeDays?: number;
+}
+
 /** Card fields compiled from notes (rule-based in v0.1.1) */
 export type ProcessFields = {
   goal?: string;
@@ -88,6 +107,8 @@ export interface OneProcess {
   messages: ProcessMessage[];
   fields: ProcessFields;
   timeline: ProcessEvent[];
+  steps?: ProcessStep[];
+  reality?: ProcessReality;
 }
 
 export interface ProcessMessage {
@@ -106,9 +127,9 @@ export interface OneUser {
   processes: OneProcess[];
 }
 
-/** Onboarding draft (before Create My ONE) */
+/** Onboarding: birth → worlds (hats) → direction (first process) → naming → login */
 export interface OnboardingState {
-  step: 'welcome' | 'name' | 'style' | 'lens' | 'desire' | 'confirm';
+  step: 'birth' | 'worlds' | 'direction' | 'naming' | 'login';
   name: string;
   persona: AgentPersona | null;
   lenses: LifeLens[];
