@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "one-01",
+    "name": "ONE System for Life",
     "slug": "one-01",
     "version": "1.0.0",
+    "description": "ONE is a modular AI system that converts goals, services, and workflows into structured, living processes — all managed in one place.",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
