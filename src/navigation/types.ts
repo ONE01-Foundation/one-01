@@ -9,6 +9,7 @@ export type AppShellParamList = {
   ProviderProfile: { providerId: string };
   ShareCard: { processId: string };
   Units: undefined;
+  Settings: undefined;
 };
 
 export type AppShellScreenProps<T extends keyof AppShellParamList> = NativeStackScreenProps<

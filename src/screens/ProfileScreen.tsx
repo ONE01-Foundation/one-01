@@ -1,5 +1,6 @@
 /**
- * ProfileScreen – Origin / My Identity. Stats, export placeholder, reset demo.
+ * ProfileScreen – פרופיל Origin (Root Identity).
+ * סטייט חי מההיררכיה: Origin = Container תפעולי, מדדים מלאים ב־one01/profileHierarchy.
  */
 
 import React from 'react';
@@ -13,6 +14,7 @@ import { OrbAgent } from '../components/OrbAgent';
 import { LENS_LABELS, PERSONA_LABELS, HAT_LABELS, getHatColor } from '../core/types';
 import type { Hat } from '../core/types';
 import type { AppShellParamList } from '../navigation/types';
+import { getOriginProfileFromUser } from '../one01/profileHierarchy';
 
 const TOGGLEABLE_HATS: Hat[] = ['health', 'finance', 'knowledge', 'business', 'provider'];
 
@@ -34,6 +36,7 @@ export function ProfileScreen() {
     updateAgentHats(next);
   };
 
+  const originProfile = getOriginProfileFromUser(user);
   const activeCount = user.processes.filter((p) => p.status === 'active').length;
   const doneCount = user.processes.filter((p) => p.status === 'done').length;
   const totalNotes = user.processes.reduce((sum, p) => sum + p.messages.length, 0);
@@ -104,6 +107,15 @@ export function ProfileScreen() {
             {user.lenses.map((l) => LENS_LABELS[l]).join(', ')}
           </Text>
         </View>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Origin Metrics</Text>
+        <View style={[styles.metricsRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {originProfile.metrics.slice(0, 4).map((m) => (
+            <View key={m.id} style={styles.metricItem}>
+              <Text style={[styles.metricValue, { color: colors.text }]}>{m.value}</Text>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{m.label}</Text>
+            </View>
+          ))}
+        </View>
         <View style={[styles.statsRow, { borderBottomColor: colors.border }]}>
           <View style={styles.stat}>
             <Text style={[styles.statValue, { color: colors.text }]}>{activeCount}</Text>
@@ -152,6 +164,10 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 12, marginBottom: 4, textTransform: 'uppercase' },
   cardValue: { fontSize: 16 },
   sectionTitle: { fontSize: 12, marginBottom: 10, textTransform: 'uppercase' },
+  metricsRow: { flexDirection: 'row', flexWrap: 'wrap', padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 16, gap: 12 },
+  metricItem: { minWidth: 72 },
+  metricValue: { fontSize: 20, fontWeight: '700' },
+  metricLabel: { fontSize: 11, marginTop: 2, textTransform: 'uppercase' },
   hatsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
   hatChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
   hatChipText: { fontSize: 14, fontWeight: '500' },

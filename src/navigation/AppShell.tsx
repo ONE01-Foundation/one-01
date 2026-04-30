@@ -11,6 +11,7 @@ import { DiscoveryScreen } from '../screens/DiscoveryScreen';
 import { ProviderProfileScreen } from '../screens/ProviderProfileScreen';
 import { ShareCardScreen } from '../screens/ShareCardScreen';
 import { UnitsScreen } from '../screens/UnitsScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import type { AppShellParamList } from './types';
 
 const Stack = createNativeStackNavigator<AppShellParamList>();
@@ -25,6 +26,14 @@ export function AppShell() {
       <Stack.Screen name="ProviderProfile" component={ProviderProfileScreen} />
       <Stack.Screen name="ShareCard" component={ShareCardScreen} />
       <Stack.Screen name="Units" component={UnitsScreen} />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+        }}
+      />
     </Stack.Navigator>
   );
 }

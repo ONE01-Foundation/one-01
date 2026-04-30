@@ -17,12 +17,16 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 const BAR_HEIGHT = 72;
-const GRADIENT_STOPS: number[] = [0, 0.25, 0.5, 0.75, 1];
-const ALPHAS = [1, 0.85, 0.5, 0.2, 0];
+const GRADIENT_STOPS = [0, 0.25, 0.5, 0.75, 1] as const;
+const ALPHAS = [1, 0.85, 0.5, 0.2, 0] as const;
 
 export function EdgeGradientBars() {
   const { colors } = useThemeStore();
-  const gradientColors = GRADIENT_STOPS.map((_, i) => hexToRgba(colors.background, ALPHAS[i]));
+  const gradientColors = GRADIENT_STOPS.map((_, i) => hexToRgba(colors.background, ALPHAS[i])) as [
+    string,
+    string,
+    ...string[]
+  ];
 
   return (
     <>

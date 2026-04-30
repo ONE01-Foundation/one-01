@@ -152,7 +152,7 @@ function buildUserFromOnboarding(o: OnboardingState): OneUser {
 
   return {
     id: uid,
-    name: o.name.trim() || 'Guest',
+    name: o.name.trim() || 'אורח',
     lenses: o.lenses,
     agent,
     processes: [firstProcess],
@@ -185,6 +185,7 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
         if (!hats.includes('base')) hats.unshift('base');
         user = {
           ...user,
+          name: user.name?.trim().toLowerCase() === 'guest' ? 'אורח' : user.name,
           agent: {
             ...user.agent,
             hats,

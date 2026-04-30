@@ -8,24 +8,24 @@ import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useThemeStore } from './src/stores/themeStore';
+import { useLocaleStore } from './src/stores/localeStore';
 import { useLoadingStore } from './src/stores/loadingStore';
-import { LoadingScreen } from './src/screens/LoadingScreen';
 import { OneProvider } from './src/core/OneContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 
 export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
-  const [showLoading, setShowLoading] = useState(true);
 
   const { initialize: initTheme, updateTheme, colors, theme } = useThemeStore();
-  const { initialize: initLoading, hasSeenLoading, markLoadingComplete } = useLoadingStore();
+  const { initialize: initLocale, layoutDirection } = useLocaleStore();
+  const { initialize: initLoading } = useLoadingStore();
 
   useEffect(() => {
     const init = async () => {
       await initTheme();
+      await initLocale();
       await initLoading();
       setIsInitialized(true);
-      setShowLoading(!hasSeenLoading);
     };
     init();
   }, []);
@@ -35,25 +35,18 @@ export default function App() {
     return () => clearInterval(interval);
   }, [updateTheme]);
 
-  const handleLoadingComplete = async () => {
-    await markLoadingComplete();
-    setShowLoading(false);
-  };
-
   if (!isInitialized) {
     return <View style={[styles.container, { backgroundColor: colors.background }]} />;
   }
 
   return (
     <SafeAreaProvider>
-      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      {showLoading ? (
-        <LoadingScreen onComplete={handleLoadingComplete} />
-      ) : (
+      <View style={{ flex: 1, direction: layoutDirection === 'rtl' ? 'rtl' : 'ltr' }}>
+        <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
         <OneProvider>
           <AppNavigator />
         </OneProvider>
-      )}
+      </View>
     </SafeAreaProvider>
   );
 }

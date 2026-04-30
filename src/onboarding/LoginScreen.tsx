@@ -31,14 +31,14 @@ export function LoginScreen() {
         />
       </View>
       <Text style={[styles.title, { color: colors.text }]}>
-        Guest first, login later.
+        אורח עכשיו, התחברות אחר כך.
       </Text>
       <TouchableOpacity
         style={[styles.btn, { backgroundColor: colors.primary }]}
         onPress={onGuest}
         activeOpacity={0.8}
       >
-        <Text style={styles.btnText}>Continue as Guest</Text>
+        <Text style={styles.btnText}>המשך כאורח</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.btnSecondary, { borderColor: colors.border }]}
