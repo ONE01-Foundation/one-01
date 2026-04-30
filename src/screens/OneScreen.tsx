@@ -25,13 +25,17 @@ import {
   Easing,
   BackHandler,
   Share,
+  Alert,
+  StatusBar,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Path, Rect, G, ClipPath, Mask } from 'react-native-svg';
 import { useThemeStore } from '../stores/themeStore';
 import { useLocaleStore } from '../stores/localeStore';
@@ -47,14 +51,16 @@ import type { ViewMode, CardContext } from '../one01/viewState';
 import { getProcessStepsData, getProgress } from '../data/processSteps';
 import type { AppShellParamList } from '../navigation/types';
 import { useOne } from '../core/OneContext';
-import { UnitChatProfile, type UnitChatProfileModel } from '../components/UnitChatProfile';
+import { UnitChatProfile, type AgentChatProfileModel, type UnitChatProfileModel } from '../components/UnitChatProfile';
+import { HAT_LABELS, PERSONA_LABELS, type Hat } from '../core/types';
+import { AttachActionSheet, type AttachActionId } from '../components/AttachActionSheet';
 
 const MAX_CONTENT_WIDTH = 428;
 const INACTIVITY_HIDE_MS = 3000;
-/** פתיחת צ׳אט: הקומפוזר מתחיל מעט מתחת למסך, אחרי הקלף והמקלדת עולה למקום */
-/** מרחק התחלתי קצר — פחות “דיליי” ויזואלי לפני הצמדה למקלדת */
-const CHAT_COMPOSER_OPEN_SLIDE_PX = 72;
-
+/** כדור יחידה: אחרי חוסר תזוזה – שורת מצב + כדורים שכנים (fade משותף) */
+const UNIT_ORB_STATUS_BAR_IDLE_MS = 4000;
+/** משך fade לכדורים שכנים ולסנכרון עם אנימציית שורת המצב */
+const IDLE_CHROME_FADE_MS = 280;
 type ChatStatusPhase = 'agent' | 'thinking' | 'planning' | 'ready';
 
 const CHAT_PHASE_KEY: Record<ChatStatusPhase, ChatChromeKey> = {
@@ -74,7 +80,7 @@ const CHAT_MENU_ROWS: { id: 'Share' | 'Profile' | 'History' | 'Settings'; labelK
 /** פריט אחד בגלגל – תהליך עם אימוג'י, כותרת, תת־כותרת */
 export type OrbItem = { id: string; emoji: string; title: string; subtitle: string };
 type ChatLine = { id: string; sender: 'user' | 'one'; text: string };
-type FlowUnit = UnitChatProfileModel & { messages: ChatLine[] };
+type FlowUnit = UnitChatProfileModel & { messages: ChatLine[]; worldId: string };
 
 /** עולמות – רק בכדור הראשון אפשר לדפדף ביניהם; לכל עולם צבע */
 const WORLDS: { id: string; label: string; color: string }[] = [
@@ -245,6 +251,7 @@ function FadeBroadcastBlock({
   titleColor,
   subtitleColor,
   fixedTitle,
+  onBroadcastLoopComplete,
 }: {
   messages: BroadcastMessage[];
   visible: boolean;
@@ -252,9 +259,13 @@ function FadeBroadcastBlock({
   subtitleColor: string;
   /** כשמוגדר: כותרת קבועה (לא מתחלפת), רק המשנה מתחלפת */
   fixedTitle?: string;
+  /** אחרי הצגת כל ההודעות וחזרה לראשית – למשל מעבר לעולם הבא בכדור הסוכן */
+  onBroadcastLoopComplete?: () => void;
 }) {
   const [msgIndex, setMsgIndex] = useState(0);
   const opacity = useRef(new Animated.Value(1)).current;
+  const loopCompleteRef = useRef(onBroadcastLoopComplete);
+  loopCompleteRef.current = onBroadcastLoopComplete;
 
   useEffect(() => {
     setMsgIndex(0);
@@ -272,7 +283,14 @@ function FadeBroadcastBlock({
     const t = setTimeout(() => {
       Animated.timing(opacity, { toValue: 0, duration, useNativeDriver: true }).start(({ finished }) => {
         if (!finished) return;
-        setMsgIndex((i) => (i + 1) % messages.length);
+        setMsgIndex((i) => {
+          const n = messages.length;
+          const next = (i + 1) % n;
+          if (n > 1 && i === n - 1) {
+            loopCompleteRef.current?.();
+          }
+          return next;
+        });
         opacity.setValue(0);
         Animated.timing(opacity, { toValue: 1, duration, useNativeDriver: true }).start();
       });
@@ -296,7 +314,7 @@ function FadeBroadcastBlock({
 }
 
 /** עיניים ונשימה – סוכן חי רק בעולם ראשי (בית) */
-function AgentEyes() {
+function AgentEyes({ compact = false }: { compact?: boolean }) {
   const breath = useRef(new Animated.Value(1)).current;
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -320,9 +338,15 @@ function AgentEyes() {
     };
   }, [breath, pulse]);
   return (
-    <Animated.View style={[styles.agentEyesRow, { transform: [{ scale: Animated.multiply(breath, pulse) }] }]}>
-      <View style={styles.agentEye} />
-      <View style={styles.agentEye} />
+    <Animated.View
+      style={[
+        styles.agentEyesRow,
+        compact && styles.agentEyesRowCompact,
+        { transform: [{ scale: Animated.multiply(breath, pulse) }] },
+      ]}
+    >
+      <View style={[styles.agentEye, compact && styles.agentEyeCompact]} />
+      <View style={[styles.agentEye, compact && styles.agentEyeCompact]} />
     </Animated.View>
   );
 }
@@ -367,6 +391,18 @@ function FinanceIconSvg({ size, color }: { size: number; color: string }) {
 }
 
 const WORLD_ICON_SIZE = 46;
+
+function WorldMiniIcon({ worldId, color, size }: { worldId: string; color: string; size: number }) {
+  if (worldId === 'business') return <BusinessIconSvg size={size} color={color} />;
+  if (worldId === 'health') return <HealthIconSvg size={size} color={color} />;
+  if (worldId === 'finance') return <FinanceIconSvg size={size} color={color} />;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
+      <Circle cx={12} cy={12} r={3.2} fill={color} />
+    </Svg>
+  );
+}
 
 /** אייקון כניסה – חץ/פליי, צבע לפי עולם (בכפתור כדור התהליך) */
 function EnterIconSvg({ size, color }: { size: number; color: string }) {
@@ -419,10 +455,16 @@ export function OneScreen() {
   /** מסך אחד – מחליף מצבים: orb | card | global */
   const [viewMode, setViewMode] = useState<ViewMode>('orb');
   const [cardContext, setCardContext] = useState<CardContext | null>(null);
-  const [smallOrbsVisible, setSmallOrbsVisible] = useState(true);
+  /** כדור יחידה בבית: אחרי idle – מסתירים שורת מצב; תזוזה מחזירה */
+  const [unitOrbSystemBarVisible, setUnitOrbSystemBarVisible] = useState(true);
   const [showBottomActions, setShowBottomActions] = useState(false);
   const [showChatSheet, setShowChatSheet] = useState(false);
+  const showChatSheetRef = useRef(showChatSheet);
+  useEffect(() => {
+    showChatSheetRef.current = showChatSheet;
+  }, [showChatSheet]);
   const [showCredits, setShowCredits] = useState(false);
+  const [showAttachSheet, setShowAttachSheet] = useState(false);
   const [showAgentCard, setShowAgentCard] = useState(false);
   const [agentCardWorldIndex, setAgentCardWorldIndex] = useState(0);
   const [unitsBalance, setUnitsBalance] = useState(1800);
@@ -436,6 +478,7 @@ export function OneScreen() {
   const [flowUnits, setFlowUnits] = useState<FlowUnit[]>([
     {
       id: 'license',
+      worldId: 'personal',
       title: 'רישיון נהיגה',
       subtitle: 'תיאוריה · שיעורים במוסד · מבחן מעשי',
       emoji: '🚗',
@@ -470,6 +513,11 @@ export function OneScreen() {
   const [intakeState, setIntakeState] = useState<{ intent: string; questionIndex: number; answers: string[] } | null>(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showChatProfile, setShowChatProfile] = useState(false);
+  const [chatProfileEditMode, setChatProfileEditMode] = useState(false);
+  const [chatOpenedFromOrbProfileShortcut, setChatOpenedFromOrbProfileShortcut] = useState(false);
+  /** בפרופיל יחידה: אחרי גלילה — כותרת ואימוג׳י מוצגים בסרגל העליון (כמו בצ׳אט) */
+  const [chatProfileHeaderCompact, setChatProfileHeaderCompact] = useState(false);
+  const chatProfileCompactScrollRef = useRef(false);
   /** בצ׳אט ONE: רשימת יחידות מוסתרת עד לחיצה על «היסטוריה» */
   const [oneChatUnitHistoryOpen, setOneChatUnitHistoryOpen] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -499,22 +547,14 @@ export function OneScreen() {
   /** עד סיום שלב הקלף+המקלדת — לא מיישמים padding למקלדת על הקומפוזר */
   const suppressKeyboardForChatLayoutRef = useRef(false);
   const pendingKeyboardInsetRef = useRef(0);
-  const closeChatSheetRef = useRef<() => void>(() => {});
+  const closeChatSheetRef = useRef<(opts?: { gestureDx?: number }) => void>(() => {});
   const lastHomeTapAtRef = useRef(0);
   const lastHomeTapYRef = useRef(0);
-  const chatDismissPan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_e, g) =>
-        Math.abs(g.dx) > 22 && Math.abs(g.dx) > Math.abs(g.dy) + 12,
-      onPanResponderRelease: (_e, g) => {
-        if (Math.abs(g.dx) > 88 && Math.abs(g.dx) > Math.abs(g.dy)) closeChatSheetRef.current();
-      },
-    })
-  ).current;
   /** ref לכדור הסוכן בגלגל (פריט 0) – למדידת מיקום ל־Smart Animate */
   const wheelOrbRef = useRef<View>(null);
   const agentCardScrollRef = useRef<ScrollView>(null);
   const inactivityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusBarIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
   const lastScrollYRef = useRef(0);
   /** מעבר חלק בין תווית העולם לאייקון Enter בכפתור הכדור; בחזרה ל־orb 0 מופיע מיד */
@@ -523,9 +563,16 @@ export function OneScreen() {
   const nowQuestionPulse = useRef(new Animated.Value(1)).current;
   const chatBackdropOpacity = useRef(new Animated.Value(0)).current;
   const chatSheetTranslateY = useRef(new Animated.Value(1200)).current;
+  const chatSheetTranslateX = useRef(new Animated.Value(0)).current;
+  /** פרופיל יחידה: החלקה לצד בחזרה לצ׳אט */
+  const profileDismissSlideX = useRef(new Animated.Value(0)).current;
   const chatComposerTranslateY = useRef(new Animated.Value(0)).current;
+  /** כדורים שכנים (לא במרכז): fade מסונכרן עם שורת המצב בכדור יחידה */
+  const peripheralOrbsOpacity = useRef(new Animated.Value(1)).current;
+  const chatActionBreath = useRef(new Animated.Value(1)).current;
 
   const currentWorldId = WORLDS[worldIndex]?.id ?? 'personal';
+  const currentWorld = WORLDS[worldIndex] ?? WORLDS[0];
   const currentOrbData = currentWorldId === 'personal' ? personalOrbs : (ORB_DATA_BY_WORLD[currentWorldId] ?? ORB_DATA_BY_WORLD.personal);
   const currentWorldColor = WORLDS[worldIndex]?.color ?? WORLDS[0].color;
   const rawFirstName = user?.name?.trim()?.split(/\s+/)[0] || 'אריאל';
@@ -533,8 +580,9 @@ export function OneScreen() {
   const personalGreeting = getTimeGreeting(new Date().getHours(), firstName);
   const nowInputHasText = nowValue.trim().length > 0;
   const nowInputIsRtl = /[\u0590-\u08FF]/.test(nowValue);
-  const nowInputTextAlign: 'left' | 'right' = nowInputHasText ? (nowInputIsRtl ? 'right' : 'left') : 'right';
-  const nowInputWritingDirection: 'ltr' | 'rtl' = nowInputHasText ? (nowInputIsRtl ? 'rtl' : 'ltr') : 'rtl';
+  const nowInputTextAlign: 'left' | 'right' = nowInputHasText ? (nowInputIsRtl ? 'right' : 'left') : 'left';
+  const nowInputWritingDirection: 'ltr' | 'rtl' = nowInputHasText ? (nowInputIsRtl ? 'rtl' : 'ltr') : 'ltr';
+  const isChatSystemWorking = chatStatusPhase === 'thinking' || chatStatusPhase === 'planning';
   const activeUnit = activeUnitId ? flowUnits.find((unit) => unit.id === activeUnitId) ?? null : null;
   const isDark = theme === 'dark';
   const chatSheetBg = isDark ? '#121212' : colors.background;
@@ -545,6 +593,137 @@ export function OneScreen() {
   const unitProgressPct = activeUnit ? Math.min(100, Math.max(0, activeUnit.progress)) / 100 : 0;
   const unitStepsDone = activeUnit ? Math.max(0, Math.round((activeUnit.progress / 100) * activeUnit.steps)) : 0;
   const profileAccent = currentWorldColor;
+  const chatAgentAvatarBg = theme === 'light' ? '#000000' : '#1f1f1f';
+  const generalWorldLabel = language === 'he' ? 'כללי' : 'General';
+  const activeWorldChatLabel = currentWorldId === 'personal' ? generalWorldLabel : currentWorld.label;
+  const historyUnitsForWorld = useMemo(() => {
+    if (currentWorldId === 'personal') return flowUnits;
+    return flowUnits.filter((unit) => unit.worldId === currentWorldId);
+  }, [flowUnits, currentWorldId]);
+
+  const agentChatProfileModel = useMemo((): AgentChatProfileModel => {
+    const he = language === 'he';
+    const agent = user?.agent;
+    const name = agent?.name?.trim() || 'ONE';
+    const personaKey = agent?.persona ?? 'friendly';
+    const personaLine = `${he ? 'סגנון שיחה' : 'Persona'}: ${PERSONA_LABELS[personaKey]}`;
+    const hats = (agent?.hats ?? ['base']).filter((h: Hat) => h !== 'base');
+    const hatLabels = hats.length
+      ? hats.map((h: Hat) => `${HAT_LABELS[h]} — ${he ? 'הקשר פעיל לפי הצורך' : 'context when relevant'}`)
+      : [he ? 'מצב כללי — ללא כובע ממוקד' : 'General mode — no focused hat'];
+    const worldLabelsEn: Record<string, string> = {
+      personal: 'General',
+      business: 'Business',
+      health: 'Health',
+      finance: 'Finance',
+    };
+    const worlds = WORLDS.map((w) => ({
+      id: w.id,
+      label: he ? w.label : worldLabelsEn[w.id] ?? w.label,
+      color: w.color,
+      active: w.id === currentWorldId,
+      detail:
+        w.id === 'personal'
+          ? he
+            ? 'כל היחידות והיסטוריה — ללא סינון מרחב.'
+            : 'All units and history — no world filter.'
+          : he
+            ? `יחידות מתויגות לעולם «${w.label}» והקשר ${w.label} לסוכן.`
+            : `Units tagged to «${worldLabelsEn[w.id] ?? w.label}» and matching context.`,
+    }));
+    const activeUnits = flowUnits.filter((u) => u.status !== 'done').length;
+    const msgCount = chatSheetMessages.length;
+    const stats: AgentChatProfileModel['stats'] = he
+      ? [
+          { label: 'יחידות במעקב', value: String(flowUnits.length), hint: `${activeUnits} פתוחות, ${flowUnits.length - activeUnits} אחרות` },
+          { label: 'הודעות בשיחה', value: String(msgCount), hint: 'בצ׳אט ONE הנוכחי' },
+          { label: 'מרחבים זמינים', value: String(WORLDS.length), hint: 'כללי, עסקים, בריאות, כלכלה' },
+        ]
+      : [
+          { label: 'Units tracked', value: String(flowUnits.length), hint: `${activeUnits} open` },
+          { label: 'Messages (chat)', value: String(msgCount), hint: 'In this ONE chat' },
+          { label: 'Worlds', value: String(WORLDS.length), hint: 'General + 3 life lenses' },
+        ];
+    const permissions: AgentChatProfileModel['permissions'] = he
+      ? [
+          { label: 'התראות ועדכונים', state: 'on', note: 'תזכורות ליחידות וסטטוס סוכן.' },
+          { label: 'גלריה / מצלמה', state: 'limited', note: 'רק אחרי שתאשרו בבחירת קובץ.' },
+          { label: 'מיקרופון (הקלטה)', state: 'limited', note: 'לשימוש בצ׳אט כשתפעילו הקלטה.' },
+          { label: 'אנשי קשר מהמכשיר', state: 'off', note: 'מתוכנן — שיתוף אנשי קשר בבחירה מפורשת.' },
+          { label: 'מיקום', state: 'off', note: 'לא נאסף אוטומטית בגרסה זו.' },
+        ]
+      : [
+          { label: 'Notifications', state: 'on', note: 'Unit reminders and agent status.' },
+          { label: 'Gallery / camera', state: 'limited', note: 'Only after you approve a picker flow.' },
+          { label: 'Microphone', state: 'limited', note: 'When you start voice capture in chat.' },
+          { label: 'Device contacts', state: 'off', note: 'Planned — explicit sharing only.' },
+          { label: 'Location', state: 'off', note: 'Not collected automatically in this build.' },
+        ];
+    const userDisplay = user?.name?.trim() || (he ? 'את/ה' : 'You');
+    const contacts: AgentChatProfileModel['contacts'] = he
+      ? [
+          { role: 'בעלים של החשבון', name: userDisplay, note: 'העדפות, שפה ומראה נשמרים אצלך במכשיר ובחשבון.' },
+          { role: 'סוכן אישי', name, note: 'מנוע אחד — כובעים שונים לפי מרחב.' },
+          { role: 'ספקים חיצוניים', name: he ? 'לפי יחידה' : 'Per unit', note: he ? 'יופיעו כשתחברו שירות או איש קשר לתהליך.' : 'Appear when you link a service or person to a unit.' },
+        ]
+      : [
+          { role: 'Account owner', name: userDisplay, note: 'Preferences, language, appearance.' },
+          { role: 'Personal agent', name, note: 'One engine — different hats per world.' },
+          { role: 'External parties', name: 'Per unit', note: 'Shown when you attach providers to a process.' },
+        ];
+    const dataRows: AgentChatProfileModel['dataRows'] = he
+      ? [
+          { label: 'יחידות במערכת', value: String(flowUnits.length) },
+          { label: 'מרחב נוכחי בצ׳אט', value: activeWorldChatLabel },
+          { label: 'כובעים פעילים', value: hats.map((h: Hat) => HAT_LABELS[h]).join(', ') || HAT_LABELS.base },
+          { label: 'זיכרון שיחה', value: 'שמירת הקשר בתוך היחידה' },
+        ]
+      : [
+          { label: 'Units in workspace', value: String(flowUnits.length) },
+          { label: 'Current chat world', value: activeWorldChatLabel },
+          { label: 'Active hats', value: hats.map((h: Hat) => HAT_LABELS[h]).join(', ') || HAT_LABELS.base },
+          { label: 'Conversation memory', value: 'Context is kept per unit' },
+        ];
+    return {
+      name,
+      tagline: he
+        ? 'מנהל אישי אחד — מסונכרן בין מרחבים, יחידות והרשאות.'
+        : 'One personal manager — synced across worlds, units, and permissions.',
+      personaLine,
+      worlds,
+      hatsIntro: he
+        ? 'הכובעים מצמצמים את ההקשר: אותו סוכן, פרשנות שונה לפי חיים / עבודה / בריאות / כספים.'
+        : 'Hats narrow context: same agent, different emphasis per life area.',
+      hatLabels,
+      permissions,
+      contacts,
+      dataRows,
+      stats,
+      privacyLead: he
+        ? 'המידע משמש לתאם משימות ולהציג לך סיכומים. לא מוכרים פרופילים לצד שלישי לצורכי פרסום.'
+        : 'Data is used to coordinate tasks and show you summaries. No ad-profile resale.',
+      opsBullets: he
+        ? [
+            'מודל שפה בענן — תוכן השיחה נשלח לעיבוד לפי בקשתך.',
+            'גיבויים: חשבון ONE וסנכרון מכשיר לפי ההגדרות שלך.',
+            'מפתחות API ואינטגרציות — יופיעו כאן כשיתווספו.',
+          ]
+        : [
+            'Language model in the cloud — chat content is sent when you ask.',
+            'Backups: ONE account and device sync per your settings.',
+            'API keys & integrations — will appear here when connected.',
+          ],
+      nextHint: he
+        ? 'פתחו יחידה מהגלגל או חברו איש קשר לתהליך — הסוכן יעדכן כאן הרשאות ונתונים לפי הצורך.'
+        : 'Open a unit from the wheel or attach a contact — permissions and data update as you go.',
+      summary: he
+        ? 'זהו כרטיס בית לסוכן: איפה הוא עובד, מה מותר לו, מי מחובר, ומה נמדד. השאר נבנה מתוך השיחה והיחידות.'
+        : 'Home card for your agent: where it works, what is allowed, who is involved, and what we measure — grown from chat and units.',
+      metaFoot: he
+        ? 'נתונים מינימליים — שקיפות מקסימלית. לשינוי הרשאות: הגדרות המערכת והנחיות בצ׳אט.'
+        : 'Minimal data — maximal clarity. Change permissions via system settings and chat.',
+    };
+  }, [language, user, currentWorldId, activeWorldChatLabel, flowUnits, chatSheetMessages]);
 
 
   /** מעבר חלק בכפתור כדור: לכדור אחר – פייד; חזרה לראשי – פייד־אין קצר (בלי קפיצה) */
@@ -569,6 +748,21 @@ export function OneScreen() {
     loop.start();
     return () => loop.stop();
   }, [nowQuestionPulse, showChatSheet]);
+
+  useEffect(() => {
+    if (!showChatSheet || !isChatSystemWorking) {
+      chatActionBreath.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(chatActionBreath, { toValue: 0.72, duration: 520, useNativeDriver: true }),
+        Animated.timing(chatActionBreath, { toValue: 1, duration: 520, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [showChatSheet, isChatSystemWorking, chatActionBreath]);
 
   /** אנימציית חלון ארנק – נכנס מלמעלה למטה */
   useEffect(() => {
@@ -678,6 +872,7 @@ export function OneScreen() {
   }, [walletSlideAnim, windowHeight]);
 
   const openChatSheet = useCallback(() => {
+    setShowAttachSheet(false);
     setShowCredits(false);
     setShowChatMenu(false);
     const selectedOrb = currentOrbData[orbIndex];
@@ -687,6 +882,7 @@ export function OneScreen() {
         const isLicenseOrb = selectedOrb.id === 'license';
         target = {
           id: selectedOrb.id,
+          worldId: currentWorldId,
           title: selectedOrb.title,
           subtitle: selectedOrb.subtitle || 'תהליך עם ליווי ONE',
           emoji: selectedOrb.emoji || '🧩',
@@ -724,74 +920,89 @@ export function OneScreen() {
     chatBackdropOpacity.setValue(0);
     chatSheetTranslateY.setValue(windowHeight);
     setShowChatSheet(true);
-  }, [currentOrbData, orbIndex, flowUnits, windowHeight, chatBackdropOpacity, chatSheetTranslateY]);
+  }, [currentOrbData, orbIndex, flowUnits, windowHeight, chatBackdropOpacity, chatSheetTranslateY, currentWorldId]);
 
-  const openChatSheetFromPlus = useCallback(() => {
-    shouldRefocusComposerAfterChatOpenRef.current = false;
-    openChatSheet();
-  }, [openChatSheet]);
+  const closeAttachSheet = useCallback(() => {
+    setShowAttachSheet(false);
+  }, []);
 
-  const closeChatSheet = useCallback(() => {
-    chatOpenAnimGenerationRef.current += 1;
+  const openAttachSheet = useCallback(() => {
     shouldRefocusComposerAfterChatOpenRef.current = false;
-    suppressKeyboardForChatLayoutRef.current = false;
-    homeNowInputRef.current?.blur();
-    chatComposerInputRef.current?.blur();
-    setIsChatInputFocused(false);
-    setIsInputFocused(false);
-    pendingKeyboardInsetRef.current = 0;
-    setKeyboardOffset(0);
+    setShowCredits(false);
     Keyboard.dismiss();
-    Animated.sequence([
-      Animated.timing(chatComposerTranslateY, {
-        toValue: Math.min(72, Math.round(windowHeight * 0.09)),
-        duration: 100,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
+    setShowAttachSheet(true);
+  }, []);
+
+  const closeChatSheet = useCallback(
+    (opts?: { gestureDx?: number }) => {
+      setShowAttachSheet(false);
+      chatOpenAnimGenerationRef.current += 1;
+      shouldRefocusComposerAfterChatOpenRef.current = false;
+      suppressKeyboardForChatLayoutRef.current = false;
+      homeNowInputRef.current?.blur();
+      chatComposerInputRef.current?.blur();
+      setIsChatInputFocused(false);
+      setIsInputFocused(false);
+      pendingKeyboardInsetRef.current = 0;
+      setKeyboardOffset(0);
+      Keyboard.dismiss();
+      chatComposerTranslateY.setValue(0);
+      const dir =
+        opts?.gestureDx != null && Math.abs(opts.gestureDx) > 8
+          ? Math.sign(opts.gestureDx)
+          : isRtlLayout
+            ? 1
+            : -1;
+      /** יציאה לצד בלבד — בלי ירידה למטה (פתיחה נשארת מלמטה) */
+      const exitX = dir * Math.min(windowWidth * 1.12, windowWidth + 48);
       Animated.parallel([
-        Animated.timing(chatComposerTranslateY, {
-          toValue: windowHeight,
-          duration: 200,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(chatSheetTranslateY, {
-          toValue: windowHeight,
-          duration: 220,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
         Animated.timing(chatBackdropOpacity, {
           toValue: 0,
-          duration: 240,
+          duration: 260,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-      ]),
-    ]).start(({ finished }) => {
-      if (!finished) return;
-      chatSheetTranslateY.setValue(windowHeight);
-      chatComposerTranslateY.setValue(0);
-      setShowChatSheet(false);
-      setShowChatMenu(false);
-      setShowChatProfile(false);
-      setShowCredits(false);
-      /** אחרי שהקלף נסגר — לא לפני, כדי שלא יבזק מסך «My One» בזמן האנימציה */
-      setActiveUnitId(null);
-    });
-  }, [windowHeight, chatBackdropOpacity, chatSheetTranslateY, chatComposerTranslateY]);
+        Animated.timing(chatSheetTranslateX, {
+          toValue: exitX,
+          duration: 300,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (!finished) return;
+        chatSheetTranslateX.setValue(0);
+        chatSheetTranslateY.setValue(windowHeight);
+        chatComposerTranslateY.setValue(0);
+        setShowChatSheet(false);
+        setShowChatMenu(false);
+        setShowChatProfile(false);
+        setChatProfileEditMode(false);
+      setChatOpenedFromOrbProfileShortcut(false);
+        setShowCredits(false);
+        /** אחרי שהקלף נסגר — לא לפני, כדי שלא יבזק מסך «My One» בזמן האנימציה */
+        setActiveUnitId(null);
+      });
+    },
+    [windowWidth, isRtlLayout, chatBackdropOpacity, chatSheetTranslateY, chatSheetTranslateX, chatComposerTranslateY]
+  );
 
   closeChatSheetRef.current = closeChatSheet;
 
   useEffect(() => {
-    if (!showChatSheet) return undefined;
+    if (!showAttachSheet && !showChatSheet) return undefined;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      closeChatSheet();
-      return true;
+      if (showAttachSheet) {
+        setShowAttachSheet(false);
+        return true;
+      }
+      if (showChatSheet) {
+        closeChatSheet();
+        return true;
+      }
+      return false;
     });
     return () => sub.remove();
-  }, [showChatSheet, closeChatSheet]);
+  }, [showAttachSheet, showChatSheet, closeChatSheet]);
 
   useEffect(() => {
     if (!showChatSheet) {
@@ -799,6 +1010,7 @@ export function OneScreen() {
       pendingKeyboardInsetRef.current = 0;
       setKeyboardOffset(0);
       chatComposerTranslateY.setValue(0);
+      chatSheetTranslateX.setValue(0);
       return;
     }
     let cancelled = false;
@@ -808,7 +1020,8 @@ export function OneScreen() {
     setKeyboardOffset(0);
     chatBackdropOpacity.setValue(0);
     chatSheetTranslateY.setValue(windowHeight);
-    chatComposerTranslateY.setValue(CHAT_COMPOSER_OPEN_SLIDE_PX);
+    chatSheetTranslateX.setValue(0);
+    chatComposerTranslateY.setValue(0);
 
     const wantKeyboard = shouldRefocusComposerAfterChatOpenRef.current;
     if (wantKeyboard) {
@@ -817,32 +1030,21 @@ export function OneScreen() {
     }
     suppressKeyboardForChatLayoutRef.current = false;
     setKeyboardOffset(pendingKeyboardInsetRef.current);
-    if (wantKeyboard) {
-      Animated.spring(chatComposerTranslateY, {
-        toValue: 0,
-        damping: 26,
-        stiffness: 420,
-        mass: 0.85,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      chatComposerTranslateY.setValue(0);
-    }
 
     const frame = requestAnimationFrame(() => {
       if (cancelled || animGen !== chatOpenAnimGenerationRef.current) return;
+      /** בלי spring overshoot — נכנס מלמטה ישר למקום (בלי “קופץ מעל ואז נמתח למטה”) */
       Animated.parallel([
         Animated.timing(chatBackdropOpacity, {
           toValue: 1,
-          duration: 70,
+          duration: 220,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.spring(chatSheetTranslateY, {
+        Animated.timing(chatSheetTranslateY, {
           toValue: 0,
-          damping: 26,
-          stiffness: 440,
-          mass: 0.85,
+          duration: 340,
+          easing: Easing.bezier(0.22, 1, 0.36, 1),
           useNativeDriver: true,
         }),
       ]).start();
@@ -853,13 +1055,78 @@ export function OneScreen() {
       suppressKeyboardForChatLayoutRef.current = false;
       chatOpenAnimGenerationRef.current += 1;
     };
-  }, [showChatSheet, windowHeight, chatBackdropOpacity, chatSheetTranslateY, chatComposerTranslateY]);
+  }, [showChatSheet, windowHeight, chatBackdropOpacity, chatSheetTranslateY, chatSheetTranslateX, chatComposerTranslateY]);
+
+  const collapseProfileToChat = useCallback(() => {
+    if (chatOpenedFromOrbProfileShortcut) {
+      closeChatSheetRef.current?.();
+      return;
+    }
+    const exitW = Math.min(260, windowWidth * 0.38);
+    const toX = isRtlLayout ? exitW : -exitW;
+    Animated.timing(profileDismissSlideX, {
+      toValue: toX,
+      duration: 210,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        profileDismissSlideX.setValue(0);
+        setShowChatProfile(false);
+        setChatProfileEditMode(false);
+      }
+    });
+  }, [chatOpenedFromOrbProfileShortcut, isRtlLayout, windowWidth, profileDismissSlideX]);
+
+  const chatSheetEdgePan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_e, g) =>
+          Math.abs(g.dx) > 22 && Math.abs(g.dx) > Math.abs(g.dy) + 12,
+        onPanResponderRelease: (_e, g) => {
+          if (Math.abs(g.dx) <= 88 || Math.abs(g.dx) <= Math.abs(g.dy)) return;
+          if (showChatProfile) {
+            if (chatOpenedFromOrbProfileShortcut) {
+              closeChatSheetRef.current?.({ gestureDx: g.dx });
+              return;
+            }
+            const exitW = Math.min(260, windowWidth * 0.38);
+            const toX = g.dx > 0 ? exitW : -exitW;
+            Animated.timing(profileDismissSlideX, {
+              toValue: toX,
+              duration: 210,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: true,
+            }).start(({ finished }) => {
+              if (finished) {
+                profileDismissSlideX.setValue(0);
+                setShowChatProfile(false);
+                setChatProfileEditMode(false);
+              }
+            });
+          } else {
+            closeChatSheetRef.current?.({ gestureDx: g.dx });
+          }
+        },
+      }),
+    [showChatProfile, chatOpenedFromOrbProfileShortcut, windowWidth, profileDismissSlideX]
+  );
 
   const openChatProfile = useCallback(() => {
     Keyboard.dismiss();
     setShowChatMenu(false);
+    setChatProfileEditMode(false);
+    profileDismissSlideX.setValue(isRtlLayout ? -56 : 56);
     setShowChatProfile(true);
-  }, []);
+    requestAnimationFrame(() => {
+      Animated.spring(profileDismissSlideX, {
+        toValue: 0,
+        stiffness: 420,
+        damping: 32,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [isRtlLayout, profileDismissSlideX]);
 
   const shareChatUnitProfile = useCallback(async () => {
     try {
@@ -888,6 +1155,29 @@ export function OneScreen() {
     const t = setTimeout(() => chatScrollRef.current?.scrollTo({ y: 0, animated: false }), 60);
     return () => clearTimeout(t);
   }, [showChatProfile, showChatSheet]);
+
+  useEffect(() => {
+    if (!showChatProfile) {
+      chatProfileCompactScrollRef.current = false;
+      setChatProfileHeaderCompact(false);
+      profileDismissSlideX.setValue(0);
+    }
+  }, [showChatProfile, profileDismissSlideX]);
+
+  const CHAT_PROFILE_COMPACT_SCROLL_Y = 128;
+
+  const onChatProfileScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!showChatProfile) return;
+      const y = e.nativeEvent.contentOffset.y;
+      const compact = y > CHAT_PROFILE_COMPACT_SCROLL_Y;
+      if (compact !== chatProfileCompactScrollRef.current) {
+        chatProfileCompactScrollRef.current = compact;
+        setChatProfileHeaderCompact(compact);
+      }
+    },
+    [showChatProfile]
+  );
 
   /** ONE chat: גלילה לסוף כשההיסטוריה סגורה; פתיחת היסטוריה — גלילה לראש הרשימה */
   useEffect(() => {
@@ -964,6 +1254,7 @@ export function OneScreen() {
             : 8;
         const newUnit: FlowUnit = {
           id: newUnitId,
+          worldId: currentWorldId,
           title: isLicense ? 'רישיון נהיגה' : intakeState.intent.slice(0, 28),
           subtitle: isLicense ? 'תיאוריה · שיעורים · מבחן מעשי' : 'יחידה חדשה שנוצרה מהשיחה',
           emoji: isLicense ? '🚗' : '🧩',
@@ -1043,17 +1334,140 @@ export function OneScreen() {
     setTimeout(() => setChatStatusPhase('planning'), 900);
     setTimeout(() => setChatStatusPhase('ready'), 1800);
     setTimeout(() => setChatStatusPhase('agent'), 3200);
-  }, [nowValue, activeUnitId, intakeState, flowUnits]);
+  }, [nowValue, activeUnitId, intakeState, flowUnits, currentWorldId]);
+
+  const appendUserAttachmentMessage = useCallback(
+    (text: string) => {
+      setChatStatusPhase('thinking');
+      const uid = Date.now();
+      const userLine: ChatLine = { id: `u_${uid}`, sender: 'user', text };
+      const oneLine: ChatLine = {
+        id: `o_${uid + 1}`,
+        sender: 'one',
+        text:
+          language === 'he'
+            ? 'קיבלתי את הצירוף — נשתמש בו בעדכון הצעדים.'
+            : 'Attachment noted — we will fold it into the next step update.',
+      };
+      if (activeUnitId) {
+        setFlowUnits((prev) =>
+          prev.map((u) => (u.id === activeUnitId ? { ...u, messages: [...u.messages, userLine, oneLine] } : u))
+        );
+      } else {
+        setChatSheetMessages((prev) => [...prev, userLine, oneLine]);
+      }
+      setTimeout(() => setChatStatusPhase('planning'), 700);
+      setTimeout(() => setChatStatusPhase('ready'), 1400);
+      setTimeout(() => setChatStatusPhase('agent'), 2600);
+    },
+    [activeUnitId, language]
+  );
+
+  const renameActiveUnit = useCallback((nextTitle: string) => {
+    if (!activeUnitId) return;
+    const trimmed = nextTitle.trim();
+    if (!trimmed) return;
+    setFlowUnits((prev) => prev.map((u) => (u.id === activeUnitId ? { ...u, title: trimmed } : u)));
+    setPersonalOrbs((prev) => prev.map((o) => (o.id === activeUnitId ? { ...o, title: trimmed } : o)));
+  }, [activeUnitId]);
+
+  const handleAttachPick = useCallback(
+    (id: AttachActionId) => {
+      const he = language === 'he';
+      const runAfterChatOpen = (fn: () => void) => {
+        if (!showChatSheetRef.current) {
+          openChatSheet();
+          setTimeout(fn, 380);
+        } else {
+          fn();
+        }
+      };
+
+      void (async () => {
+        switch (id) {
+          case 'wallet':
+            setShowAttachSheet(false);
+            setShowCredits(true);
+            return;
+          case 'chat':
+            setShowAttachSheet(false);
+            openChatSheet();
+            return;
+          case 'gallery':
+          case 'camera': {
+            setShowAttachSheet(false);
+            if (Platform.OS === 'web') {
+              Alert.alert(
+                he ? 'לא זמין בדפדפן' : 'Not available on web',
+                he ? 'באפליקציה ניתן לבחור תמונה מהמכשיר.' : 'Use the mobile app to pick photos from the device.'
+              );
+              return;
+            }
+            const perm =
+              id === 'camera'
+                ? await ImagePicker.requestCameraPermissionsAsync()
+                : await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) {
+              Alert.alert(
+                he ? 'אין הרשאה' : 'Permission needed',
+                he ? 'נדרשת גישה לגלריה או למצלמה.' : 'Allow library or camera access in Settings.'
+              );
+              return;
+            }
+            const result =
+              id === 'camera'
+                ? await ImagePicker.launchCameraAsync({ quality: 0.85, allowsEditing: true })
+                : await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    quality: 0.85,
+                    allowsEditing: true,
+                  });
+            if (result.canceled || !result.assets?.length) return;
+            const asset = result.assets[0];
+            const label = he
+              ? `📷 תמונה (${asset.width}×${asset.height})`
+              : `📷 Photo (${asset.width}×${asset.height})`;
+            runAfterChatOpen(() => appendUserAttachmentMessage(label));
+            return;
+          }
+          case 'clipboard': {
+            setShowAttachSheet(false);
+            try {
+              const Clipboard = await import('expo-clipboard');
+              const pasted = await Clipboard.getStringAsync();
+              if (!pasted?.trim()) {
+                Alert.alert(he ? 'הלוח ריק' : 'Clipboard empty', he ? 'אין טקסט להדבקה.' : 'No text to paste.');
+                return;
+              }
+              const snippet = pasted.length > 600 ? `${pasted.slice(0, 600)}…` : pasted;
+              runAfterChatOpen(() =>
+                appendUserAttachmentMessage(he ? `📋 מהלוח:\n${snippet}` : `📋 From clipboard:\n${snippet}`)
+              );
+            } catch {
+              Alert.alert(he ? 'שגיאה' : 'Error', he ? 'לא הצלחנו לקרוא את הלוח.' : 'Could not read the clipboard.');
+            }
+            return;
+          }
+          case 'contact':
+          case 'document':
+          case 'location':
+            setShowAttachSheet(false);
+            Alert.alert(
+              he ? 'בקרוב' : 'Coming soon',
+              he ? 'איש קשר, קבצים ומיקום יתווספו בגרסה הבאה.' : 'Contacts, files, and location sharing are planned next.'
+            );
+            return;
+          default:
+            setShowAttachSheet(false);
+        }
+      })();
+    },
+    [language, openChatSheet, appendUserAttachmentMessage]
+  );
 
   const topBarHeight = insets.top + BAR_EXTRA;
   const bottomBarHeight = insets.bottom + BAR_EXTRA;
   const paddingVertical = (windowHeight - WHEEL_ITEM_HEIGHT) / 2;
-
-  const onOrbScrollEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = e.nativeEvent.contentOffset.y;
-    const index = Math.round(y / WHEEL_ITEM_HEIGHT);
-    setOrbIndex(Math.max(0, Math.min(index, currentOrbData.length - 1)));
-  }, [currentOrbData.length]);
 
   const largeOrbSize = Math.min(contentWidth, windowHeight) * ORB_SIZE_RATIO;
   const smallOrbSize = largeOrbSize * SMALL_ORB_RATIO;
@@ -1064,16 +1478,72 @@ export function OneScreen() {
   const wheelSnapOffsets = currentOrbData.map((_, i) => i * WHEEL_ITEM_HEIGHT);
   const agentCircleColor = theme === 'dark' ? EMOJI_CIRCLE_DARK : EMOJI_CIRCLE_LIGHT;
 
-  const resetInactivityTimer = useCallback(() => {
-    setSmallOrbsVisible(true);
-    if (inactivityRef.current) clearTimeout(inactivityRef.current);
-    inactivityRef.current = setTimeout(() => setSmallOrbsVisible(false), INACTIVITY_HIDE_MS);
-  }, []);
+  const resetInactivityTimer = useCallback(
+    (ctx?: { orbIndex?: number }) => {
+      const effectiveOrb = ctx?.orbIndex ?? orbIndex;
+      peripheralOrbsOpacity.stopAnimation();
+      peripheralOrbsOpacity.setValue(1);
+
+      if (inactivityRef.current) {
+        clearTimeout(inactivityRef.current);
+        inactivityRef.current = null;
+      }
+      if (statusBarIdleRef.current) {
+        clearTimeout(statusBarIdleRef.current);
+        statusBarIdleRef.current = null;
+      }
+
+      const overlaysOpen = showChatSheet || showCredits || showAttachSheet || showAgentCard;
+      const onOrbHome = viewMode === 'orb' && !overlaysOpen;
+
+      const fadeNeighborsOut = () => {
+        /** JS driver: לא לשלב עם multiply מול width/height אנימטיביים (orbSize) — Native Animated דוחה */
+        Animated.timing(peripheralOrbsOpacity, {
+          toValue: 0,
+          duration: IDLE_CHROME_FADE_MS,
+          useNativeDriver: false,
+        }).start();
+      };
+
+      if (!onOrbHome) {
+        setUnitOrbSystemBarVisible(true);
+        return;
+      }
+
+      if (effectiveOrb > 0) {
+        setUnitOrbSystemBarVisible(true);
+        statusBarIdleRef.current = setTimeout(() => {
+          fadeNeighborsOut();
+          setUnitOrbSystemBarVisible(false);
+          statusBarIdleRef.current = null;
+        }, UNIT_ORB_STATUS_BAR_IDLE_MS);
+      } else {
+        inactivityRef.current = setTimeout(() => {
+          fadeNeighborsOut();
+          inactivityRef.current = null;
+        }, INACTIVITY_HIDE_MS);
+      }
+    },
+    [orbIndex, viewMode, showChatSheet, showCredits, showAttachSheet, showAgentCard, peripheralOrbsOpacity]
+  );
 
   useEffect(() => {
     resetInactivityTimer();
-    return () => { if (inactivityRef.current) clearTimeout(inactivityRef.current); };
+    return () => {
+      if (inactivityRef.current) clearTimeout(inactivityRef.current);
+      if (statusBarIdleRef.current) clearTimeout(statusBarIdleRef.current);
+    };
   }, [resetInactivityTimer]);
+
+  const onOrbScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      const index = Math.max(0, Math.min(Math.round(y / WHEEL_ITEM_HEIGHT), currentOrbData.length - 1));
+      setOrbIndex(index);
+      resetInactivityTimer({ orbIndex: index });
+    },
+    [currentOrbData.length, resetInactivityTimer]
+  );
 
   const renderOrbContent = useCallback((item: OrbItem, isSmall: boolean) => {
     if (isSmall) {
@@ -1112,20 +1582,28 @@ export function OneScreen() {
     scrollRef.current?.scrollTo({ y: index * WHEEL_ITEM_HEIGHT, animated: true });
   }, []);
 
-  const handleHomeDoubleTap = useCallback((tapY: number) => {
-    const now = Date.now();
-    const deltaMs = now - lastHomeTapAtRef.current;
-    const deltaY = Math.abs(tapY - lastHomeTapYRef.current);
-    if (orbIndex > 0 && deltaMs > 40 && deltaMs < 320 && deltaY < 56) {
-      scrollToOrb(0);
-    }
-    lastHomeTapAtRef.current = now;
-    lastHomeTapYRef.current = tapY;
-  }, [orbIndex, scrollToOrb]);
+  const handleHomeDoubleTap = useCallback(
+    (tapY: number) => {
+      const now = Date.now();
+      const deltaMs = now - lastHomeTapAtRef.current;
+      const deltaY = Math.abs(tapY - lastHomeTapYRef.current);
+      const goingToAgentOrb = orbIndex > 0 && deltaMs > 40 && deltaMs < 320 && deltaY < 56;
+      if (goingToAgentOrb) {
+        scrollToOrb(0);
+        resetInactivityTimer({ orbIndex: 0 });
+      } else {
+        resetInactivityTimer();
+      }
+      lastHomeTapAtRef.current = now;
+      lastHomeTapYRef.current = tapY;
+    },
+    [orbIndex, resetInactivityTimer, scrollToOrb]
+  );
 
   /** במחשב: גלילה עם גלגלת העכבר מעבירה כדור אחד בכל פעם */
   const handleWheel = useCallback((e: { preventDefault?: () => void; nativeEvent?: { deltaY: number }; deltaY?: number }) => {
     if (Platform.OS !== 'web') return;
+    resetInactivityTimer();
     e.preventDefault?.();
     const deltaY = e.nativeEvent?.deltaY ?? (e as { deltaY: number }).deltaY ?? 0;
     const y = lastScrollYRef.current;
@@ -1133,7 +1611,7 @@ export function OneScreen() {
     const maxIndex = currentOrbData.length - 1;
     const next = deltaY > 0 ? Math.min(i + 1, maxIndex) : Math.max(i - 1, 0);
     if (next !== i) scrollRef.current?.scrollTo({ y: next * WHEEL_ITEM_HEIGHT, animated: true });
-  }, [currentOrbData.length]);
+  }, [currentOrbData.length, resetInactivityTimer]);
 
   /** פריט אחד בגלגל: גודל כדור + opacity טקסט מונפשים לפי scroll (מעבר מהיר וחלק, בלי קפיצה). */
   const renderWheelItem = useCallback((item: OrbItem, index: number) => {
@@ -1167,12 +1645,18 @@ export function OneScreen() {
     /** כדור הסוכן מוגבה מעל לכותרת – רווח ביניהם כשממורכז */
     const emojiMarginTop = scrollY.interpolate({
       inputRange: sizeRange,
-      outputRange: [0, 0, -135, 0, 0],
+      outputRange: [0, 0, index === 0 ? -142 : -135, 0, 0],
       extrapolate: 'clamp',
     });
     const textBlockMarginTop = scrollY.interpolate({
       inputRange: sizeRange,
       outputRange: [0, 0, -10, 0, 0],
+      extrapolate: 'clamp',
+    });
+    /** מעלה תוכן רק בכדור המרכזי (בלי לחתוך את הכדורים הקטנים) */
+    const centerContentLift = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: [0, 0, -25, 0, 0],
       extrapolate: 'clamp',
     });
     /** הכדור הממורכז (ראש הסוכן) מוגבה 15px למעלה */
@@ -1181,8 +1665,14 @@ export function OneScreen() {
       outputRange: [0, 0, -25, 0, 0],
       extrapolate: 'clamp',
     });
-    /** אחרי כמה שניות בלי תזוזה – הכדורים הקטנים נעלמים; תזוזה/גלילה מחזירה */
-    const rowOpacity = smallOrbsVisible ? opacity : (index === orbIndex ? 1 : 0);
+    /** כדורים שכנים (למעלה/למטה) יורדים מעט למטה לפי הבקשה; המרכז נשאר במקום */
+    const neighborDownShift = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: [24, 16, 0, 16, 24],
+      extrapolate: 'clamp',
+    });
+    /** שכבה כפולה: opacity מהגלילה × fade שכנים — בלי Animated.multiply (לא תואם width/height אנימטיביים ב־native driver) */
+    const neighborFadeOpacity = index === orbIndex ? 1 : peripheralOrbsOpacity;
     const debugOutline = SHOW_ORB_DEBUG_OUTLINE ? styles.orbDebugOutline : undefined;
     /** רקע עיגול הסוכן רק בכדור הראשון – צבע לפי מצב כהה/בהיר */
     const emojiCircleBg = index === 0 ? agentCircleColor : 'transparent';
@@ -1197,7 +1687,10 @@ export function OneScreen() {
       <TouchableOpacity
         key={item.id}
         activeOpacity={1}
-        onPress={() => scrollToOrb(index)}
+        onPress={() => {
+          resetInactivityTimer({ orbIndex: index });
+          scrollToOrb(index);
+        }}
         style={styles.wheelItemTouch}
       >
         <Animated.View
@@ -1205,25 +1698,26 @@ export function OneScreen() {
             styles.wheelItemWrap,
             {
               height: H,
-              opacity: rowOpacity,
-              transform: [{ scale }, { translateY: orbTranslateY }],
+              opacity,
+              transform: [{ scale }, { translateY: Animated.add(orbTranslateY, neighborDownShift) }],
             },
           ]}
         >
-          <Animated.View
-            style={[
-              styles.orb,
-              styles.wheelOrb,
-              debugOutline,
-              {
-                width: orbSize,
-                height: orbSize,
-                borderRadius: 999,
-              },
-            ]}
-          >
+          <Animated.View style={{ flex: 1, opacity: neighborFadeOpacity }}>
+            <Animated.View
+              style={[
+                styles.orb,
+                styles.wheelOrb,
+                debugOutline,
+                {
+                  width: orbSize,
+                  height: orbSize,
+                  borderRadius: 999,
+                },
+              ]}
+            >
             <View style={styles.wheelOrbInner}>
-              <Animated.View style={{ marginTop: emojiMarginTop }}>
+              <Animated.View style={{ marginTop: Animated.add(emojiMarginTop, centerContentLift) }}>
                 <View
                   ref={index === 0 ? wheelOrbRef : undefined}
                   style={[
@@ -1253,7 +1747,10 @@ export function OneScreen() {
                   )}
                 </View>
               </Animated.View>
-              <Animated.View style={[styles.wheelOrbTextBlock, { opacity: textOpacity, marginTop: textBlockMarginTop }]} pointerEvents="none">
+              <Animated.View
+                style={[styles.wheelOrbTextBlock, { opacity: textOpacity, marginTop: Animated.add(textBlockMarginTop, centerContentLift) }]}
+                pointerEvents="none"
+              >
                 {index === 0 ? (
                   <FadeBroadcastBlock
                     messages={BROADCAST_BY_WORLD[currentWorldId] ?? []}
@@ -1261,6 +1758,7 @@ export function OneScreen() {
                     titleColor={theme === 'dark' ? '#ffffff' : colors.text}
                     subtitleColor={colors.textSecondary}
                     fixedTitle={currentWorldId === 'personal' ? personalGreeting : (WORLDS[worldIndex]?.label ?? '')}
+                    onBroadcastLoopComplete={() => setWorldIndex((wi) => (wi + 1) % WORLDS.length)}
                   />
                 ) : (
                   <FadeBroadcastBlock
@@ -1274,6 +1772,7 @@ export function OneScreen() {
               </Animated.View>
             </View>
           </Animated.View>
+          </Animated.View>
         </Animated.View>
       </TouchableOpacity>
     );
@@ -1284,7 +1783,7 @@ export function OneScreen() {
     scrollToOrb,
     colors,
     theme,
-    smallOrbsVisible,
+    peripheralOrbsOpacity,
     orbIndex,
     currentOrbData,
     agentCircleColor,
@@ -1292,6 +1791,9 @@ export function OneScreen() {
     currentWorldColor,
     wheelOrbRef,
     flowUnits,
+    resetInactivityTimer,
+    scrollToOrb,
+    setWorldIndex,
   ]);
 
   const wheelContentHeight = paddingVertical * 2 + currentOrbData.length * WHEEL_ITEM_HEIGHT;
@@ -1348,8 +1850,40 @@ export function OneScreen() {
   const ORB_BUTTON_HEIGHT = 74;
   const orbButtonFill = agentCircleColor;
 
+  /** מעל קלף צ׳אט (כולל פרופיל): אייקונים בהירים כמו מעל ה־scrim; בבית בהיר → כהים */
+  const chatOverlayStatusBarStyle = !showChatSheet
+    ? theme === 'dark'
+      ? 'light'
+      : 'dark'
+    : 'light';
+
+  /** בדף הבית על כדור הסוכן בלבד – ללא שורת מצב */
+  const hideStatusBarForAgentOrbHome =
+    Platform.OS !== 'web' &&
+    viewMode === 'orb' &&
+    orbIndex === 0 &&
+    !showChatSheet &&
+    !showCredits &&
+    !showAttachSheet &&
+    !showAgentCard;
+
+  /** כדור יחידה בבית: אחרי idle בלי תזוזה – שורת מצב נעלמת; תזוזה מחזירה (לא חל על סוכן) */
+  const hideStatusBarForUnitOrbIdle =
+    Platform.OS !== 'web' &&
+    viewMode === 'orb' &&
+    orbIndex > 0 &&
+    !unitOrbSystemBarVisible &&
+    !showChatSheet &&
+    !showCredits &&
+    !showAttachSheet &&
+    !showAgentCard;
+
+  const systemStatusBarHidden = hideStatusBarForAgentOrbHome || hideStatusBarForUnitOrbIdle;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar hidden={systemStatusBarHidden} animated showHideTransition="fade" />
+      <ExpoStatusBar style={chatOverlayStatusBarStyle} />
       <View
         style={[
           styles.contentWrap,
@@ -1404,6 +1938,7 @@ export function OneScreen() {
       {viewMode === 'orb' && (
         <View
           style={styles.orbPagerWrap}
+          onTouchStart={() => resetInactivityTimer()}
           {...(orbIndex === 0 ? worldSwipeResponder.panHandlers : null)}
           onTouchEnd={(e) => handleHomeDoubleTap(e.nativeEvent.locationY)}
           {...(Platform.OS === 'web' && {
@@ -1418,7 +1953,7 @@ export function OneScreen() {
               paddingBottom: paddingVertical,
               minHeight: wheelContentHeight,
             }}
-            onTouchStart={resetInactivityTimer}
+            onTouchStart={() => resetInactivityTimer()}
             showsVerticalScrollIndicator={false}
             snapToOffsets={wheelSnapOffsets}
             snapToAlignment="start"
@@ -1521,7 +2056,7 @@ export function OneScreen() {
                 <TouchableOpacity
                   style={[styles.plusInInputCircle, { backgroundColor: colors.background }]}
                   activeOpacity={0.8}
-                  onPress={() => setShowCredits(true)}
+                  onPress={openAttachSheet}
                 >
                   <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
                     <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
@@ -1663,6 +2198,23 @@ export function OneScreen() {
         </View>
       </Modal>
 
+      <AttachActionSheet
+        visible={showAttachSheet}
+        onClose={closeAttachSheet}
+        language={language}
+        isRtl={isRtlLayout}
+        colors={{
+          background: colors.background,
+          surface: colors.surface,
+          text: colors.text,
+          textSecondary: colors.textSecondary,
+          border: colors.border,
+        }}
+        bottomInset={insets.bottom}
+        hideChatRow={showChatSheet}
+        onPick={handleAttachPick}
+      />
+
       {/* Agent / Orbit profile popup – במחשב: קלף ממורכז; במובייל: כמעט מלא */}
       <Modal visible={showAgentCard} transparent animationType="fade" onRequestClose={() => setShowAgentCard(false)}>
         <View style={[
@@ -1786,7 +2338,7 @@ export function OneScreen() {
               <TouchableOpacity
                 style={[styles.plusInInputCircle, { backgroundColor: colors.background }]}
                 activeOpacity={0.8}
-                onPress={() => setShowCredits(true)}
+                onPress={openAttachSheet}
               >
                 <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
                     <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
@@ -1885,7 +2437,10 @@ export function OneScreen() {
             pointerEvents={showChatSheet ? 'none' : 'box-none'}
             style={[StyleSheet.absoluteFillObject, styles.fixedCenterWrap, { zIndex: 2 }]}
           >
-            <View style={[styles.fixedCenterInner, Platform.OS !== 'web' && styles.fixedCenterInnerMobile]}>
+            <View
+              style={[styles.fixedCenterInner, Platform.OS !== 'web' && styles.fixedCenterInnerMobile]}
+              onTouchStart={() => resetInactivityTimer()}
+            >
               <View style={styles.nowInputWrap}>
                 <NowInputBarRow
                   isRtl={isRtlLayout}
@@ -1894,7 +2449,7 @@ export function OneScreen() {
                     <TouchableOpacity
                       style={[styles.plusInInputCircle, { backgroundColor: colors.background }]}
                       activeOpacity={0.8}
-                      onPress={openChatSheetFromPlus}
+                      onPress={openAttachSheet}
                     >
                       <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
                         <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
@@ -1971,12 +2526,16 @@ export function OneScreen() {
                   style={[styles.orbButton, { width: ORB_BUTTON_WIDTH, height: ORB_BUTTON_HEIGHT, marginTop: -5 }]}
                   activeOpacity={0.8}
                   onPress={() => {
+                    resetInactivityTimer();
                     if (orbIndex === 0) {
                       setAgentCardWorldIndex(worldIndex);
                       setShowAgentCard(true);
                     } else {
-                      setCardContext({ worldId: currentWorldId, orbId: currentOrbData[orbIndex]?.id ?? '' });
-                      setViewMode('card');
+                      openChatSheet();
+                      setChatOpenedFromOrbProfileShortcut(true);
+                      requestAnimationFrame(() => {
+                        openChatProfile();
+                      });
                     }
                   }}
                 >
@@ -2055,13 +2614,13 @@ export function OneScreen() {
             >
               {showChatSheet && (
                 <Animated.View
-                  {...(!showChatProfile ? chatDismissPan.panHandlers : {})}
+                  {...chatSheetEdgePan.panHandlers}
                   style={{
                     flex: 1,
                     minHeight: 0,
                     width: isNarrow ? '100%' : Math.min(contentWidth, 460),
                     alignSelf: isNarrow ? 'stretch' : 'center',
-                    transform: [{ translateY: chatSheetTranslateY }],
+                    transform: [{ translateY: chatSheetTranslateY }, { translateX: chatSheetTranslateX }],
                     zIndex: 5,
                   }}
                 >
@@ -2083,23 +2642,91 @@ export function OneScreen() {
                   ]}
                 >
                   {showChatProfile ? (
-                    <View style={[styles.chatProfileToolbar, { borderBottomColor: colors.border }]}>
+                    <View style={[styles.chatSheetTopBar, { borderBottomColor: colors.border }]}>
                       <TouchableOpacity
                         style={styles.chatModalIconBtn}
-                        onPress={() => setShowChatProfile(false)}
+                        onPress={collapseProfileToChat}
                         hitSlop={8}
                         activeOpacity={0.7}
                       >
                         <Text style={[styles.chatModalBackIcon, { color: colors.textSecondary }]}>{chatBackGlyph}</Text>
                       </TouchableOpacity>
-                      <View style={styles.chatProfileToolbarSpacer} />
+                      {chatProfileHeaderCompact ? (
+                        <TouchableOpacity
+                          style={styles.chatProfileToolbarCompactCenter}
+                          activeOpacity={0.85}
+                          onPress={() => {
+                            chatScrollRef.current?.scrollTo({ y: 0, animated: true });
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={language === 'he' ? 'גלול לראש הפרופיל' : 'Scroll profile to top'}
+                        >
+                          <View
+                            style={[
+                              styles.chatModalAvatar,
+                              { backgroundColor: activeUnit ? colors.surface : chatAgentAvatarBg },
+                            ]}
+                          >
+                            {activeUnit ? (
+                              <Text style={styles.chatModalUnitEmoji}>{activeUnit.emoji}</Text>
+                            ) : (
+                              <AgentEyes compact />
+                            )}
+                          </View>
+                          <View style={styles.chatProfileToolbarCompactText}>
+                            <Text
+                              style={[
+                                styles.chatProfileToolbarTitle,
+                                {
+                                  color: colors.text,
+                                  textAlign: isRtlLayout ? 'right' : 'left',
+                                  writingDirection: isRtlLayout ? 'rtl' : 'ltr',
+                                },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {activeUnit
+                                ? embedLatinRunsForRtlDisplay(activeUnit.title, language)
+                                : translate(language, 'chat_title_default')}
+                            </Text>
+                            {activeUnit ? (
+                              <Text
+                                style={[
+                                  styles.chatProfileToolbarSubtitle,
+                                  {
+                                    color: colors.textSecondary,
+                                    textAlign: isRtlLayout ? 'right' : 'left',
+                                    writingDirection: isRtlLayout ? 'rtl' : 'ltr',
+                                  },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {formatChatUnitProgressLine(language, activeUnit.progress, activeUnit.steps)}
+                              </Text>
+                            ) : (
+                              <View style={styles.chatAgentWorldRow}>
+                                <Text style={[styles.chatProfileToolbarSubtitle, { color: colors.textSecondary }]}>
+                                  {chatAgentStatusLabel}
+                                </Text>
+                                <Text style={[styles.chatProfileToolbarSubtitle, { color: colors.textSecondary }]}> · </Text>
+                                <WorldMiniIcon worldId={currentWorldId} color={currentWorldColor} size={14} />
+                                <Text style={[styles.chatProfileToolbarSubtitle, { color: currentWorldColor }]}>
+                                  {activeWorldChatLabel}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.chatProfileToolbarSpacer} />
+                      )}
                       <TouchableOpacity
-                        style={styles.chatProfileToolbarIconBtn}
+                        style={styles.chatSheetHeaderShareBtn}
                         hitSlop={8}
                         activeOpacity={0.7}
                         onPress={shareChatUnitProfile}
                       >
-                        <Text style={[styles.chatProfileToolbarGlyph, { color: colors.textSecondary }]}>{chatShareGlyph}</Text>
+                        <Text style={[styles.chatSheetHeaderShareGlyph, { color: colors.textSecondary }]}>{chatShareGlyph}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.chatModalMenuBtn}
@@ -2113,7 +2740,7 @@ export function OneScreen() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <View style={[styles.chatModalHeader, { borderBottomColor: colors.border }]}>
+                    <View style={[styles.chatSheetTopBar, { borderBottomColor: colors.border }]}>
                       <TouchableOpacity
                         style={styles.chatModalIconBtn}
                         onPress={() => {
@@ -2125,11 +2752,16 @@ export function OneScreen() {
                         <Text style={[styles.chatModalBackIcon, { color: colors.textSecondary }]}>{chatBackGlyph}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.chatHeaderProfileBtn} activeOpacity={0.75} onPress={openChatProfile}>
-                        <View style={[styles.chatModalAvatar, { backgroundColor: colors.surface }]}>
+                        <View
+                          style={[
+                            styles.chatModalAvatar,
+                            { backgroundColor: activeUnit ? colors.surface : chatAgentAvatarBg },
+                          ]}
+                        >
                           {activeUnit ? (
                             <Text style={styles.chatModalUnitEmoji}>{activeUnit.emoji}</Text>
                           ) : (
-                            <AgentEyes />
+                            <AgentEyes compact />
                           )}
                         </View>
                         <View style={styles.chatModalHeaderText}>
@@ -2149,22 +2781,29 @@ export function OneScreen() {
                               ? embedLatinRunsForRtlDisplay(activeUnit.title, language)
                               : translate(language, 'chat_title_default')}
                           </Text>
-                          <Text
-                            style={[
-                              styles.chatModalSubtitle,
-                              {
-                                color: colors.textSecondary,
-                                textAlign: isRtlLayout ? 'right' : 'left',
-                                writingDirection: isRtlLayout ? 'rtl' : 'ltr',
-                                alignSelf: 'stretch',
-                                width: '100%',
-                              },
-                            ]}
-                          >
-                            {activeUnit
-                              ? formatChatUnitProgressLine(language, activeUnit.progress, activeUnit.steps)
-                              : chatAgentStatusLabel}
-                          </Text>
+                          {activeUnit ? (
+                            <Text
+                              style={[
+                                styles.chatModalSubtitle,
+                                {
+                                  color: colors.textSecondary,
+                                  textAlign: isRtlLayout ? 'right' : 'left',
+                                  writingDirection: isRtlLayout ? 'rtl' : 'ltr',
+                                  alignSelf: 'stretch',
+                                  width: '100%',
+                                },
+                              ]}
+                            >
+                              {formatChatUnitProgressLine(language, activeUnit.progress, activeUnit.steps)}
+                            </Text>
+                          ) : (
+                            <View style={styles.chatAgentWorldRow}>
+                              <Text style={[styles.chatModalSubtitle, { color: colors.textSecondary }]}>{chatAgentStatusLabel}</Text>
+                              <Text style={[styles.chatModalSubtitle, { color: colors.textSecondary }]}> · </Text>
+                              <WorldMiniIcon worldId={currentWorldId} color={currentWorldColor} size={14} />
+                              <Text style={[styles.chatModalSubtitle, { color: currentWorldColor }]}>{activeWorldChatLabel}</Text>
+                            </View>
+                          )}
                         </View>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -2217,55 +2856,91 @@ export function OneScreen() {
                     ]}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
+                    scrollEventThrottle={16}
+                    onScroll={showChatProfile ? onChatProfileScroll : undefined}
                   >
                     {showChatProfile && (
-                      <UnitChatProfile
-                        visible={showChatProfile}
-                        unit={activeUnit}
-                        chatAgentStatus={chatAgentStatusLabel}
-                        colors={colors}
-                        isDark={isDark}
-                        profileAccent={profileAccent}
-                        profileRingR={profileRingR}
-                        profileRingC={profileRingC}
-                        unitProgressPct={unitProgressPct}
-                        unitStepsDone={unitStepsDone}
-                        centerContent={
-                          activeUnit ? (
-                            <Text style={styles.chatProfileRingEmoji}>{activeUnit.emoji}</Text>
-                          ) : (
-                            <AgentEyes />
-                          )
-                        }
-                        onPressOpenUnits={() => {
-                          setShowChatProfile(false);
-                          closeChatSheet();
-                          navigation.navigate('Units');
-                        }}
-                      />
+                      <Animated.View style={{ transform: [{ translateX: profileDismissSlideX }] }}>
+                        <UnitChatProfile
+                          visible={showChatProfile}
+                          unit={activeUnit}
+                          agentProfile={agentChatProfileModel}
+                          chatAgentStatus={`${chatAgentStatusLabel} · ${activeWorldChatLabel}`}
+                          colors={colors}
+                          isDark={isDark}
+                          profileAccent={profileAccent}
+                          profileRingR={profileRingR}
+                          profileRingC={profileRingC}
+                          unitProgressPct={activeUnit ? unitProgressPct : 0.9}
+                          unitStepsDone={unitStepsDone}
+                          editMode={!!activeUnit && chatProfileEditMode}
+                          onRenameUnit={renameActiveUnit}
+                          centerContent={
+                            activeUnit ? (
+                              <Text style={styles.chatProfileRingEmoji}>{activeUnit.emoji}</Text>
+                            ) : (
+                              <View style={[styles.chatProfileAgentCore, { backgroundColor: chatAgentAvatarBg }]}>
+                                <AgentEyes compact />
+                              </View>
+                            )
+                          }
+                          onPressOpenUnits={() => {
+                            setShowChatProfile(false);
+                            closeChatSheet();
+                            navigation.navigate('Units');
+                          }}
+                        />
+                      </Animated.View>
                     )}
                     {!showChatProfile && (
                       <>
                         {!activeUnit && (
                           <>
                             {oneChatUnitHistoryOpen &&
-                              flowUnits.map((unit) => (
-                                <TouchableOpacity
-                                  key={`log_${unit.id}`}
-                                  style={styles.unitLogCard}
-                                  activeOpacity={0.8}
-                                  onPress={() => {
-                                    setActiveUnitId(unit.id);
-                                    setOneChatUnitHistoryOpen(false);
-                                  }}
-                                >
+                              (historyUnitsForWorld.length === 0 ? (
+                                <View style={styles.unitLogCard}>
                                   <Text style={[styles.unitLogTitle, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
-                                    {unit.emoji} {embedLatinRunsForRtlDisplay(unit.title, language)}
+                                    {language === 'he' ? 'אין היסטוריה לעולם הזה עדיין' : 'No history in this world yet'}
                                   </Text>
-                                  <Text style={[styles.unitLogMeta, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
-                                    {unit.status} · {unit.progress}% · {unit.steps} steps
-                                  </Text>
-                                </TouchableOpacity>
+                                </View>
+                              ) : (
+                                historyUnitsForWorld.map((unit) => (
+                                  <TouchableOpacity
+                                    key={`log_${unit.id}`}
+                                    style={styles.unitLogCard}
+                                    activeOpacity={0.8}
+                                    onPress={() => {
+                                      setActiveUnitId(unit.id);
+                                      setOneChatUnitHistoryOpen(false);
+                                    }}
+                                  >
+                                    <Text style={[styles.unitLogTitle, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
+                                      {unit.emoji} {embedLatinRunsForRtlDisplay(unit.title, language)}
+                                    </Text>
+                                    <Text style={[styles.unitLogMeta, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
+                                      {unit.status} · {unit.progress}% · {unit.steps} steps
+                                    </Text>
+                                    {currentWorldId === 'personal' && (
+                                      <View style={styles.unitLogWorldTag}>
+                                        <WorldMiniIcon
+                                          worldId={unit.worldId}
+                                          color={(WORLDS.find((w) => w.id === unit.worldId)?.color ?? colors.textSecondary)}
+                                          size={12}
+                                        />
+                                        <Text
+                                          style={[
+                                            styles.unitLogWorldTagText,
+                                            { color: WORLDS.find((w) => w.id === unit.worldId)?.color ?? colors.textSecondary },
+                                          ]}
+                                        >
+                                          {unit.worldId === 'personal'
+                                            ? generalWorldLabel
+                                            : (WORLDS.find((w) => w.id === unit.worldId)?.label ?? unit.worldId)}
+                                        </Text>
+                                      </View>
+                                    )}
+                                  </TouchableOpacity>
+                                ))
                               ))}
                             <View style={styles.historyHintWrap}>
                               <TouchableOpacity
@@ -2315,7 +2990,10 @@ export function OneScreen() {
               )}
               {showChatSheet && (
               <Animated.View
-                style={{ transform: [{ translateY: chatComposerTranslateY }], zIndex: 6 }}
+                style={{
+                  transform: [{ translateY: chatComposerTranslateY }, { translateX: chatSheetTranslateX }],
+                  zIndex: 6,
+                }}
               >
               <View
                 style={[
@@ -2338,7 +3016,7 @@ export function OneScreen() {
                     <TouchableOpacity
                       style={[styles.plusInInputCircle, { backgroundColor: colors.background }]}
                       activeOpacity={0.8}
-                      onPress={() => setShowCredits(true)}
+                      onPress={openAttachSheet}
                     >
                       <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
                         <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
@@ -2362,6 +3040,12 @@ export function OneScreen() {
                         onChangeText={setNowValue}
                         showSoftInputOnFocus
                         onFocus={(e: any) => {
+                          if (showChatProfile) {
+                            setShowChatProfile(false);
+                            setChatProfileEditMode(false);
+                            setChatOpenedFromOrbProfileShortcut(false);
+                            setTimeout(scrollOneChatToBottom, 100);
+                          }
                           setIsChatInputFocused(true);
                           if (Platform.OS === 'web') {
                             const t = e?.target;
@@ -2398,25 +3082,7 @@ export function OneScreen() {
                     </View>
                   }
                   trailing={
-                    nowValue.trim() ? (
-                      <TouchableOpacity
-                        style={[styles.chatSendBtn, { backgroundColor: theme === 'dark' ? '#ffffff' : '#111111' }]}
-                        activeOpacity={0.8}
-                        hitSlop={6}
-                        onPress={submitNowValue}
-                      >
-                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                          <Path
-                            d="M12 20V6M12 6L6.75 11.25M12 6L17.25 11.25"
-                            fill="none"
-                            stroke={theme === 'dark' ? '#111111' : '#ffffff'}
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </Svg>
-                      </TouchableOpacity>
-                    ) : (
+                    <View style={styles.chatComposerTrailingRow}>
                       <TouchableOpacity style={styles.micButton} activeOpacity={0.7} hitSlop={6}>
                         <Svg width={20} height={20} viewBox="0 0 26 26" fill="none">
                           <Path d="M13.1181 17.4274C14.1924 17.4274 15.2227 16.9709 15.9824 16.1582C16.7421 15.3455 17.1688 14.2433 17.1688 13.0941V6.59408C17.1688 5.4448 16.7421 4.3426 15.9824 3.52995C15.2227 2.71729 14.1924 2.26074 13.1181 2.26074C12.0438 2.26074 11.0135 2.71729 10.2538 3.52995C9.49415 4.3426 9.06738 5.4448 9.06738 6.59408V13.0941C9.06738 14.2433 9.49415 15.3455 10.2538 16.1582C11.0135 16.9709 12.0438 17.4274 13.1181 17.4274Z" fill={colors.textSecondary} />
@@ -2424,7 +3090,79 @@ export function OneScreen() {
                           <Path d="M16.1562 21.7607H10.0801C9.81148 21.7607 9.5539 21.8749 9.36399 22.078C9.17408 22.2812 9.06738 22.5568 9.06738 22.8441C9.06738 23.1314 9.17408 23.4069 9.36399 23.6101C9.5539 23.8133 9.81148 23.9274 10.0801 23.9274H16.1562C16.4247 23.9274 16.6823 23.8133 16.8722 23.6101C17.0621 23.4069 17.1688 23.1314 17.1688 22.8441C17.1688 22.5568 17.0621 22.2812 16.8722 22.078C16.6823 21.8749 16.4247 21.7607 16.1562 21.7607Z" fill={colors.textSecondary} />
                         </Svg>
                       </TouchableOpacity>
-                    )
+                      {isChatSystemWorking ? (
+                        <View style={[styles.chatSendBtn, { backgroundColor: theme === 'dark' ? '#ffffff' : '#111111' }]}>
+                          <Animated.View
+                            style={[
+                              styles.chatWorkingSquare,
+                              {
+                                backgroundColor: theme === 'dark' ? '#111111' : '#ffffff',
+                                opacity: chatActionBreath,
+                                transform: [{ scale: chatActionBreath }],
+                              },
+                            ]}
+                          />
+                        </View>
+                      ) : nowValue.trim() ? (
+                        <TouchableOpacity
+                          style={[styles.chatSendBtn, { backgroundColor: theme === 'dark' ? '#ffffff' : '#111111' }]}
+                          activeOpacity={0.8}
+                          hitSlop={6}
+                          onPress={submitNowValue}
+                        >
+                          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                            <Path
+                              d="M12 20V6M12 6L6.75 11.25M12 6L17.25 11.25"
+                              fill="none"
+                              stroke={theme === 'dark' ? '#111111' : '#ffffff'}
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </Svg>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.chatSendBtn, { backgroundColor: theme === 'dark' ? '#ffffff' : '#111111' }]}
+                          activeOpacity={0.8}
+                          hitSlop={6}
+                          onPress={() => {
+                            if (showChatProfile && activeUnit) setChatProfileEditMode((v) => !v);
+                            else openChatProfile();
+                          }}
+                        >
+                          {showChatProfile ? (
+                            activeUnit && chatProfileEditMode ? (
+                              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                                <Path
+                                  d="M6 12.5L10.5 17L18 8"
+                                  stroke="#22c55e"
+                                  strokeWidth={2.6}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  fill="none"
+                                />
+                              </Svg>
+                            ) : activeUnit ? (
+                              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                <Path d="M5 16.75V19H7.25L16.6 9.65L14.35 7.4L5 16.75Z" stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={1.8} fill="none" />
+                                <Path d="M13.75 8L16 10.25" stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={1.8} strokeLinecap="round" />
+                              </Svg>
+                            ) : (
+                              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                <Rect x={5.25} y={4.5} width={13.5} height={15} rx={2.5} stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={2} />
+                                <Path d="M8.5 10H15.5M8.5 13.5H13.5" stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={2} strokeLinecap="round" />
+                              </Svg>
+                            )
+                          ) : (
+                            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                              <Rect x={5.25} y={4.5} width={13.5} height={15} rx={2.5} stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={2} />
+                              <Path d="M8.5 10H15.5M8.5 13.5H13.5" stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={2} strokeLinecap="round" />
+                            </Svg>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   }
                 />
               </View>
@@ -2698,11 +3436,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
   },
+  agentEyesRowCompact: {
+    gap: 9,
+  },
   agentEye: {
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: '#ffffff',
+  },
+  agentEyeCompact: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   /** כותרת ראשית + משנית – מתחת לכדור הסוכן, קרוב יותר לכדור */
   wheelOrbTextBlock: {
@@ -3192,7 +3938,8 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-  chatModalHeader: {
+  /** סרגל עליון אחיד — צ׳אט ופרופיל יחידה */
+  chatSheetTopBar: {
     minHeight: 56,
     borderBottomWidth: 1,
     flexDirection: 'row',
@@ -3200,6 +3947,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 10,
     paddingVertical: 6,
+  },
+  chatSheetHeaderShareBtn: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatSheetHeaderShareGlyph: {
+    fontSize: 18,
+    fontWeight: '600',
   },
   chatModalIconBtn: {
     width: 26,
@@ -3240,6 +3996,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  chatAgentWorldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'stretch',
+    width: '100%',
+  },
   chatModalMenuBtn: {
     width: 22,
     alignItems: 'center',
@@ -3262,7 +4025,7 @@ const styles = StyleSheet.create({
   chatMenuCard: {
     position: 'absolute',
     zIndex: 2,
-    top: 62,
+    top: 58,
     end: 14,
     width: 190,
     borderRadius: 18,
@@ -3282,30 +4045,42 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  chatProfileToolbar: {
-    minHeight: 52,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    gap: 6,
-  },
   chatProfileToolbarSpacer: {
     flex: 1,
   },
-  chatProfileToolbarIconBtn: {
-    width: 36,
-    height: 36,
+  chatProfileToolbarCompactCenter: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  chatProfileToolbarCompactText: {
+    flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
   },
-  chatProfileToolbarGlyph: {
-    fontSize: 20,
+  chatProfileToolbarTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  chatProfileToolbarSubtitle: {
+    fontSize: 12,
+    marginTop: 1,
     fontWeight: '600',
   },
   /** גודל אימוג'י במרכז טבעת הפרופיל (UnitChatProfile) */
   chatProfileRingEmoji: {
     fontSize: 34,
+  },
+  chatProfileAgentCore: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chatModalScroll: {
     flex: 1,
@@ -3362,6 +4137,17 @@ const styles = StyleSheet.create({
     marginTop: 3,
     color: '#a1a1aa',
   },
+  unitLogWorldTag: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+  },
+  unitLogWorldTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
   historyHintWrap: {
     alignItems: 'center',
     marginTop: 8,
@@ -3406,6 +4192,16 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  chatComposerTrailingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  chatWorkingSquare: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
   },
   chatSendBtnText: {
     color: '#ffffff',
