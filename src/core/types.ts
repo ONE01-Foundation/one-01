@@ -135,3 +135,13 @@ export interface OnboardingState {
   lenses: LifeLens[];
   desire: string;
 }
+
+/** זרימת מוצר: ספלאש → שיחה → יחידה ראשונה → שמירה */
+export interface ProductOnboardingPayload {
+  userName: string;
+  agentName: string;
+  persona: AgentPersona;
+  firstUnitTitle: string;
+  firstUnitSummary: string;
+  lens: LifeLens;
+}

@@ -71,6 +71,8 @@ const CHAT_ROW: { id: AttachActionId; emoji: string; he: string; en: string } = 
 const OFFSCREEN_PAD = 48;
 const CLOSE_DRAG_PX = 96;
 const CLOSE_VELOCITY = 0.85;
+const EXPAND_UP_PX = 240;
+const BACKDROP_BOOST = 0.5;
 
 /** רקע קבוצה — ניגוד עדין מול ה־sheet (surface) */
 function groupChromeBg(colors: ThemeColors): string {
@@ -171,27 +173,46 @@ export function AttachActionSheet({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6 && g.dy > Math.abs(g.dx) * 0.6,
+        onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           translateY.stopAnimation((v) => {
             dragStartY.current = typeof v === 'number' ? v : 0;
           });
         },
         onPanResponderMove: (_, g) => {
-          const y = Math.max(0, dragStartY.current + g.dy);
+          const y = Math.max(-EXPAND_UP_PX, dragStartY.current + g.dy);
           translateY.setValue(y);
+          if (y < 0) {
+            const ratio = Math.min(1, Math.abs(y) / EXPAND_UP_PX);
+            backdrop.setValue(1 + ratio * BACKDROP_BOOST);
+          } else {
+            backdrop.setValue(1);
+          }
         },
         onPanResponderRelease: (_, g) => {
-          const y = Math.max(0, dragStartY.current + g.dy);
+          const y = Math.max(-EXPAND_UP_PX, dragStartY.current + g.dy);
           if (y > CLOSE_DRAG_PX || g.vy > CLOSE_VELOCITY) {
             runClose(onClose);
           } else {
-            Animated.spring(translateY, {
-              toValue: 0,
-              stiffness: 520,
-              damping: 38,
-              useNativeDriver: true,
-            }).start();
+            const shouldStayExpanded = y < -EXPAND_UP_PX * 0.45;
+            const targetY = shouldStayExpanded ? -EXPAND_UP_PX : 0;
+            const targetBackdrop = shouldStayExpanded ? 1 + BACKDROP_BOOST : 1;
+            Animated.parallel([
+              Animated.spring(translateY, {
+                toValue: targetY,
+                stiffness: 520,
+                damping: 38,
+                useNativeDriver: true,
+              }),
+              Animated.timing(backdrop, {
+                toValue: targetBackdrop,
+                duration: 170,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+              }),
+            ]).start();
           }
         },
       }),
@@ -199,8 +220,9 @@ export function AttachActionSheet({
   );
 
   const scrimOpacity = backdrop.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 0.42],
+    inputRange: [0, 1, 1 + BACKDROP_BOOST],
+    outputRange: [0, 0.42, 0.62],
+    extrapolate: 'clamp',
   });
 
   const groupBg = groupChromeBg(colors);
@@ -221,6 +243,7 @@ export function AttachActionSheet({
           <Animated.View style={[styles.scrimFill, { opacity: scrimOpacity }]} />
         </Pressable>
         <Animated.View
+          {...panResponder.panHandlers}
           style={[
             styles.sheetLift,
             {
@@ -244,7 +267,7 @@ export function AttachActionSheet({
             ]}
             onLayout={onSheetLayout}
           >
-            <View {...panResponder.panHandlers} style={styles.dragZone}>
+            <View style={styles.dragZone}>
               <View style={[styles.handle, { backgroundColor: colors.textSecondary }]} />
               <Text style={[styles.title, { color: colors.textSecondary }]}>
                 {language === 'he' ? 'מה לצרף?' : 'Attach'}

@@ -1,0 +1,17 @@
+/**
+ * Vector from assets/icons/icon-arrow-(left).svg — LTR: חץ שמאלה; ב־RTL משקפים לכיוון «חזור».
+ */
+import Svg, { G, Path } from 'react-native-svg';
+
+export function ChatBackArrowIcon({ color, size = 24, rtl }: { color: string; size?: number; rtl: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <G transform={rtl ? 'translate(32,0) scale(-1,1)' : undefined}>
+        <Path
+          d="M23.6223 5.28353C24.3734 4.53238 24.3734 3.31452 23.6223 2.56337C22.8711 1.81221 21.6533 1.81221 20.9021 2.56337L8.56337 14.9021C7.81221 15.6533 7.81221 16.8711 8.56337 17.6223L20.9021 29.961C21.6533 30.7122 22.8711 30.7122 23.6223 29.961C24.3734 29.2099 24.3734 27.992 23.6223 27.2409L12.6436 16.2622L23.6223 5.28353Z"
+          fill={color}
+        />
+      </G>
+    </Svg>
+  );
+}

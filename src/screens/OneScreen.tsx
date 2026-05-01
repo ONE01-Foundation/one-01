@@ -40,9 +40,9 @@ import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Path, Rec
 import { useThemeStore } from '../stores/themeStore';
 import { useLocaleStore } from '../stores/localeStore';
 import { useLoadingStore } from '../stores/loadingStore';
+import { useDevModeStore, type DevPreviewProfile } from '../stores/devModeStore';
 import {
   translate,
-  formatChatUnitProgressLine,
   embedLatinRunsForRtlDisplay,
   type SettingsStringKey,
   type ChatChromeKey,
@@ -51,9 +51,18 @@ import type { ViewMode, CardContext } from '../one01/viewState';
 import { getProcessStepsData, getProgress } from '../data/processSteps';
 import type { AppShellParamList } from '../navigation/types';
 import { useOne } from '../core/OneContext';
-import { UnitChatProfile, type AgentChatProfileModel, type UnitChatProfileModel } from '../components/UnitChatProfile';
+import {
+  UnitChatProfile,
+  type AgentChatProfileModel,
+  type UnitChatProfileModel,
+  type UnitProfilePerson,
+} from '../components/UnitChatProfile';
 import { HAT_LABELS, PERSONA_LABELS, type Hat } from '../core/types';
 import { AttachActionSheet, type AttachActionId } from '../components/AttachActionSheet';
+import { AddContactIcon } from '../components/icons/AddContactIcon';
+import { ShareIcon } from '../components/icons/ShareIcon';
+import { ChatBackArrowIcon } from '../components/icons/ChatBackArrowIcon';
+import { SettingsIcon } from '../components/icons/SettingsIcon';
 
 const MAX_CONTENT_WIDTH = 428;
 const INACTIVITY_HIDE_MS = 3000;
@@ -77,9 +86,48 @@ const CHAT_MENU_ROWS: { id: 'Share' | 'Profile' | 'History' | 'Settings'; labelK
   { id: 'Settings', labelKey: 'menu_settings' },
 ];
 
+/** צ׳אט סוכן: גלילה למעלה (לכיוון הודעות/תוכן קודם, y קטן) אחרי שכבר גללת למטה — פותחת היסטוריה מעל */
 /** פריט אחד בגלגל – תהליך עם אימוג'י, כותרת, תת־כותרת */
 export type OrbItem = { id: string; emoji: string; title: string; subtitle: string };
-type ChatLine = { id: string; sender: 'user' | 'one'; text: string };
+type ChatLine = { id: string; sender: 'user' | 'one'; text: string; sentAt?: number };
+
+function startOfLocalDayMs(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function inferMessageSentAt(line: ChatLine, index: number, total: number): number {
+  if (line.sentAt != null) return line.sentAt;
+  const daysBack = Math.max(0, total - 1 - index);
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - daysBack);
+  return d.getTime();
+}
+
+function formatChatDayStickyLabel(sentAt: number, he: boolean): string {
+  const now = Date.now();
+  const sodNow = startOfLocalDayMs(now);
+  const sodMsg = startOfLocalDayMs(sentAt);
+  const diffDays = Math.round((sodNow - sodMsg) / 86400000);
+  if (diffDays === 0) return he ? 'היום' : 'Today';
+  if (diffDays === 1) return he ? 'אתמול' : 'Yesterday';
+  if (diffDays === 2) return he ? 'שלשום' : '2 days ago';
+  if (he) {
+    return new Date(sentAt).toLocaleDateString('he-IL', {
+      day: 'numeric',
+      month: 'short',
+      ...(new Date(sentAt).getFullYear() !== new Date(now).getFullYear() ? { year: 'numeric' } : {}),
+    });
+  }
+  return new Date(sentAt).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(new Date(sentAt).getFullYear() !== new Date(now).getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
 type FlowUnit = UnitChatProfileModel & { messages: ChatLine[]; worldId: string };
 
 /** עולמות – רק בכדור הראשון אפשר לדפדף ביניהם; לכל עולם צבע */
@@ -88,6 +136,9 @@ const WORLDS: { id: string; label: string; color: string }[] = [
   { id: 'business', label: 'עסקים', color: '#0ea5e9' },
   { id: 'health', label: 'בריאות', color: '#22c55e' },
   { id: 'finance', label: 'כלכלה', color: '#eab308' },
+  { id: 'knowledge', label: 'לימודים', color: '#a855f7' },
+  { id: 'leisure', label: 'פנאי', color: '#fde047' },
+  { id: 'relations', label: 'קשרים', color: '#f472b6' },
 ];
 
 /** ברודקאסט – שורה ראשית: סוג (עדכון/הודעה/תזכורת), שורה משנית: התוכן */
@@ -144,6 +195,30 @@ const BROADCAST_BY_WORLD: Record<string, BroadcastMessage[]> = {
     { type: 'תזכורת', body: 'חשבון עובר ושב נמוך' },
     { type: 'עדכון', body: 'דיבידנד התקבל' },
   ],
+  knowledge: [
+    { type: 'עדכון', body: 'התווסף יעד לימוד חדש' },
+    { type: 'תזכורת', body: 'זמן לתרגול של 20 דקות' },
+    { type: 'הודעה', body: 'שיעור חדש זמין' },
+    { type: 'עדכון', body: 'סיכום שיעור נשמר' },
+    { type: 'תזכורת', body: 'חזרה לפני מבחן' },
+    { type: 'עדכון', body: 'התקדמות הלמידה עודכנה' },
+  ],
+  leisure: [
+    { type: 'תזכורת', body: 'סרט מחר ב־20:00 — כרטיסים ברשימה' },
+    { type: 'עדכון', body: 'נוספה המלצה לטיול קצר' },
+    { type: 'הודעה', body: 'חברים אישרו פגישה בסופ״ש' },
+    { type: 'תזכורת', body: 'זמן לסגור רשימת ציוד לקמפינג' },
+    { type: 'עדכון', body: 'מוזיקה חדשה בפלייליסט הפנאי' },
+    { type: 'הודעה', body: 'אירוע בשכונה בסוף השבוע' },
+  ],
+  relations: [
+    { type: 'תזכורת', body: 'יום הולדת לסבתא בשבוע הבא — לבחור מתנה' },
+    { type: 'הודעה', body: 'חבר שאל מתי ניפגשים' },
+    { type: 'עדכון', body: 'נוספה הערה לפגישה עם המשפחה' },
+    { type: 'תזכורת', body: 'להחזיר שיחה לדני מהשבוע שעבר' },
+    { type: 'עדכון', body: 'רשימת אורחים לערב עודכנה' },
+    { type: 'הודעה', body: 'הוזמנתם לאירוע ביום שישי' },
+  ],
 };
 
 /** תהליכים לכל עולם – הכדורים שנגלילים למטה (דוגמאות רחבות) */
@@ -172,6 +247,141 @@ const ORB_DATA_BY_WORLD: Record<string, OrbItem[]> = {
     { id: 'f2', emoji: '🧾', title: 'החזרי מס', subtitle: 'טפסים, הגשה, מעקב' },
     { id: 'f3', emoji: '🚗', title: 'חיסכון לרכב', subtitle: 'יעד, תקציב חודשי, אסטרטגיה' },
   ],
+  knowledge: [
+    { id: 'origin', emoji: '📚', title: 'לימודים', subtitle: '' },
+    { id: 'k1', emoji: '🧠', title: 'תוכנית למידה', subtitle: 'נושאים, תרגול, מבחן' },
+    { id: 'k2', emoji: '📝', title: 'הכנה למבחן', subtitle: 'סילבוס, תרגול, חזרות' },
+    { id: 'k3', emoji: '🎓', title: 'קורס מקצועי', subtitle: 'מערכים, משימות, מעקב' },
+  ],
+  leisure: [
+    { id: 'origin', emoji: '😊', title: 'פנאי', subtitle: '' },
+    { id: 'l1', emoji: '🎬', title: 'ערב קולנוע', subtitle: 'כרטיסים, הגעה, ביקורת קצרה' },
+    { id: 'l2', emoji: '🏕️', title: 'קמפינג משפחתי', subtitle: 'ציוד, מסלול, תזכורות' },
+    { id: 'l3', emoji: '🎮', title: 'גיימינג עם חברים', subtitle: 'זמן, משחק, סיכום חוויה' },
+  ],
+  relations: [
+    { id: 'origin', emoji: '💕', title: 'קשרים', subtitle: '' },
+    { id: 'r1', emoji: '🎂', title: 'יום הולדת במשפחה', subtitle: 'מתנה, הזמנה, תזכורת לאורחים' },
+    { id: 'r2', emoji: '☕', title: 'פגישה עם חברים', subtitle: 'מקום, שעה, אישור הגעה' },
+    { id: 'r3', emoji: '💌', title: 'מעקב אחר קשרים', subtitle: 'שיחות, תאריכים חשובים, הערות' },
+  ],
+};
+
+function createSeedUnit(
+  id: string,
+  worldId: string,
+  title: string,
+  subtitle: string,
+  emoji: string,
+  progress: number,
+  steps: number,
+  nextAction: string
+): FlowUnit {
+  return {
+    id,
+    worldId,
+    title,
+    subtitle,
+    emoji,
+    status: 'active',
+    progress,
+    steps,
+    messages: [
+      {
+        id: `m_${id}`,
+        sender: 'one',
+        text: `היחידה «${title}» מוכנה להמשך. נתקדם לפי ה־TODO.`,
+        sentAt: Date.now() - 86400000,
+      },
+    ],
+    goal: `להשלים את ${title} בצורה מסודרת.`,
+    city: 'ישראל',
+    etaWeeks: 6,
+    peopleRoles: [
+      { id: `p1_${id}`, role: 'סוכן', name: 'ONE' },
+      { id: `p2_${id}`, role: 'אחראי/ת', name: 'את/ה' },
+    ],
+    milestones: [
+      { id: `ms1_${id}`, title: 'הגדרת יעד', done: true },
+      { id: `ms2_${id}`, title: 'TODO ראשון', done: progress >= 35 },
+      { id: `ms3_${id}`, title: 'בדיקת סטטוס', done: progress >= 70 },
+    ],
+    nextAction,
+    lastUpdatedLabel: 'עודכן עכשיו',
+    blockCount: 5,
+  };
+}
+
+const DEV_PROFILE_PRESETS: Record<DevPreviewProfile, { personalOrbs: OrbItem[]; flowUnits: FlowUnit[]; planTier: 'FREE' | 'PRO' | 'MAX' }> = {
+  new_user: {
+    personalOrbs: [{ id: 'origin', emoji: '👤', title: 'ראשי', subtitle: '' }],
+    flowUnits: [],
+    planTier: 'FREE',
+  },
+  consumer: {
+    personalOrbs: [
+      { id: 'origin', emoji: '👤', title: 'ראשי', subtitle: '' },
+      { id: 'license', emoji: '🚗', title: 'רישיון נהיגה', subtitle: 'תיאוריה, שיעורים, מבחן' },
+    ],
+    flowUnits: [
+      createSeedUnit('license', 'personal', 'רישיון נהיגה', 'תיאוריה · שיעורים · מבחן מעשי', '🚗', 32, 25, 'להשלים 2 שיעורים השבוע'),
+    ],
+    planTier: 'FREE',
+  },
+  student: {
+    personalOrbs: [
+      { id: 'origin', emoji: '👤', title: 'ראשי', subtitle: '' },
+      { id: 'study_plan', emoji: '📚', title: 'תוכנית למידה', subtitle: 'נושאים, תרגול, מבחן' },
+      { id: 'exam', emoji: '📝', title: 'הכנה למבחן', subtitle: 'סילבוס, תרגול, חזרות' },
+    ],
+    flowUnits: [
+      createSeedUnit('study_plan', 'personal', 'תוכנית למידה', 'חלוקה לנושאים שבועיים', '📚', 46, 12, 'לסגור TODO יומי לשבוע הקרוב'),
+    ],
+    planTier: 'FREE',
+  },
+  creator: {
+    personalOrbs: [
+      { id: 'origin', emoji: '👤', title: 'ראשי', subtitle: '' },
+      { id: 'content', emoji: '🎬', title: 'הפקת תוכן', subtitle: 'רעיון, צילום, עריכה' },
+      { id: 'launch', emoji: '🚀', title: 'השקה', subtitle: 'עמוד נחיתה, פרסום, מדידה' },
+    ],
+    flowUnits: [
+      createSeedUnit('content', 'business', 'הפקת תוכן', 'תכנון סדרת פוסטים', '🎬', 38, 10, 'לנעול 3 רעיונות ולעדכן סטטוס'),
+    ],
+    planTier: 'FREE',
+  },
+  teacher_business: {
+    personalOrbs: [
+      { id: 'origin', emoji: '👤', title: 'ראשי', subtitle: '' },
+      { id: 'class_plan', emoji: '👩‍🏫', title: 'מערך שיעור', subtitle: 'מבנה, משימות, משוב' },
+      { id: 'business_ops', emoji: '💼', title: 'תפעול עסק', subtitle: 'לקוחות, גביה, מעקב' },
+    ],
+    flowUnits: [
+      createSeedUnit('class_plan', 'personal', 'מערך שיעור', 'מטרות שיעור + משימות', '👩‍🏫', 54, 14, 'לבנות TODO לשיעור הבא'),
+      createSeedUnit('business_ops', 'business', 'תפעול עסק', 'משימות לקוחות ושיווק', '💼', 27, 16, 'לעדכן TODO יומי לצוות'),
+    ],
+    planTier: 'PRO',
+  },
+  pro_user: {
+    personalOrbs: ORB_DATA_BY_WORLD.personal,
+    flowUnits: [
+      createSeedUnit('license', 'personal', 'רישיון נהיגה', 'תיאוריה · שיעורים · מבחן מעשי', '🚗', 62, 25, 'לתאם תאריך מבחן מעשי'),
+      createSeedUnit('b2', 'business', 'דוח רווח והפסד', 'איסוף נתונים וסיכום', '📊', 41, 10, 'לעדכן דוח חודשי'),
+    ],
+    planTier: 'PRO',
+  },
+  max_user: {
+    personalOrbs: ORB_DATA_BY_WORLD.personal,
+    flowUnits: [
+      createSeedUnit('license', 'personal', 'רישיון נהיגה', 'תיאוריה · שיעורים · מבחן מעשי', '🚗', 88, 25, 'לסגור checklist סופי'),
+      createSeedUnit('b1', 'business', 'הקמת עסק', 'רישום, בנק, מוצרים והפעלה', '📋', 72, 18, 'לסיים TODO רישום סופי'),
+      createSeedUnit('h1', 'health', 'תור לרופא', 'תיאום, הגעה, סיכום', '🩺', 59, 8, 'להעלות סיכום ביקור'),
+      createSeedUnit('f1', 'finance', 'השקעות', 'מטרה, פלטפורמה, פיזור נכסים', '📈', 65, 12, 'לאשר TODO איזון תיק'),
+      createSeedUnit('l_cinema', 'leisure', 'ערב קולנוע', 'כרטיסים · הגעה · חוויה', '🎬', 35, 8, 'לבחור סרט ולהזמין מקומות'),
+      createSeedUnit('r_bday', 'relations', 'יום הולדת לאמא', 'מתנה · הזמנה · מקום', '🎂', 40, 5, 'לבחור תאריך ולהזמין מסעדה'),
+    ],
+    planTier: 'MAX',
+  },
 };
 /** כמו Background-Ovarly: עיגול r=160.5 ב-viewBox 375 → קוטר 321/375 של המסך */
 const ORB_SIZE_RATIO = 321 / 375;
@@ -238,6 +448,26 @@ function NowInputBarRow({
   );
 }
 
+function VoiceTrayButton({
+  label,
+  onPress,
+  active = false,
+}: {
+  label: string;
+  onPress?: () => void;
+  active?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.voiceTrayBtn, active && styles.voiceTrayBtnActive]}
+      activeOpacity={0.8}
+      onPress={onPress}
+    >
+      <Text style={[styles.voiceTrayBtnLabel, active && styles.voiceTrayBtnLabelActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 /** גובה נוסף מעבר ל-safe area – שטח תפריט מורחב כלפי מרכז המסך */
 const BAR_EXTRA = 96;
 /** כמו bar-bg.svg: צבע מלא דומיננטי, מעבר לשקוף רק בקצה. מלא (1) נשמר על ~40% מהבר, אז המעבר רך אבל הצבע המלא בולט. */
@@ -251,6 +481,9 @@ function FadeBroadcastBlock({
   titleColor,
   subtitleColor,
   fixedTitle,
+  titleProgressPct,
+  titleProgressColor,
+  titleProgressTrackColor,
   onBroadcastLoopComplete,
 }: {
   messages: BroadcastMessage[];
@@ -259,6 +492,10 @@ function FadeBroadcastBlock({
   subtitleColor: string;
   /** כשמוגדר: כותרת קבועה (לא מתחלפת), רק המשנה מתחלפת */
   fixedTitle?: string;
+  /** פס התקדמות קטן מתחת לכותרת הראשית (לכדור יחידה) */
+  titleProgressPct?: number | null;
+  titleProgressColor?: string;
+  titleProgressTrackColor?: string;
   /** אחרי הצגת כל ההודעות וחזרה לראשית – למשל מעבר לעולם הבא בכדור הסוכן */
   onBroadcastLoopComplete?: () => void;
 }) {
@@ -306,6 +543,16 @@ function FadeBroadcastBlock({
       <Text style={[styles.wheelOrbTitle, { color: titleColor }]} numberOfLines={1}>
         {fixedTitle ?? msg.type}
       </Text>
+      {titleProgressPct != null ? (
+        <View style={[styles.wheelOrbTitleProgressTrack, { backgroundColor: titleProgressTrackColor ?? 'rgba(127,127,127,0.25)' }]}>
+          <View
+            style={[
+              styles.wheelOrbTitleProgressFill,
+              { width: `${Math.max(6, titleProgressPct * 100)}%`, backgroundColor: titleProgressColor ?? '#22c55e' },
+            ]}
+          />
+        </View>
+      ) : null}
       <Animated.View style={{ opacity }}>
         <Text style={[styles.wheelOrbSubtitle, { color: subtitleColor }]} numberOfLines={2}>{msg.body}</Text>
       </Animated.View>
@@ -351,6 +598,34 @@ function AgentEyes({ compact = false }: { compact?: boolean }) {
   );
 }
 
+/** חץ מטה בסגנון קלף — מסובב מ־assets/icons/icon-arrow-(left).svg; רמז גלילה בכדור מתחת לסוכן */
+function OrbScrollDownHintSvg({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <G transform="rotate(-90 16 16)">
+        <Path
+          d="M23.6223 5.28353C24.3734 4.53238 24.3734 3.31452 23.6223 2.56337C22.8711 1.81221 21.6533 1.81221 20.9021 2.56337L8.56337 14.9021C7.81221 15.6533 7.81221 16.8711 8.56337 17.6223L20.9021 29.961C21.6533 30.7122 22.8711 30.7122 23.6223 29.961C24.3734 29.2099 24.3734 27.992 23.6223 27.2409L12.6436 16.2622L23.6223 5.28353Z"
+          fill={color}
+        />
+      </G>
+    </Svg>
+  );
+}
+
+/** חץ למעלה — אותו path, סיבוב הפוך; רמז חזרה לכדור הסוכן */
+function OrbScrollUpHintSvg({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <G transform="rotate(90 16 16)">
+        <Path
+          d="M23.6223 5.28353C24.3734 4.53238 24.3734 3.31452 23.6223 2.56337C22.8711 1.81221 21.6533 1.81221 20.9021 2.56337L8.56337 14.9021C7.81221 15.6533 7.81221 16.8711 8.56337 17.6223L20.9021 29.961C21.6533 30.7122 22.8711 30.7122 23.6223 29.961C24.3734 29.2099 24.3734 27.992 23.6223 27.2409L12.6436 16.2622L23.6223 5.28353Z"
+          fill={color}
+        />
+      </G>
+    </Svg>
+  );
+}
+
 /** אייקון עסקים – צבע לפי עולם */
 function BusinessIconSvg({ size, color }: { size: number; color: string }) {
   return (
@@ -361,11 +636,14 @@ function BusinessIconSvg({ size, color }: { size: number; color: string }) {
   );
 }
 
-/** אייקון בריאות – צבע לפי עולם */
+/** אייקון בריאות — מבוסס על assets/icons/Health-icon.svg */
 function HealthIconSvg({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <Path d="M16.4065 24.905C16.1506 25.0317 15.8494 25.0317 15.5935 24.905L15.5899 24.9032L15.583 24.8997L15.5595 24.8879C15.5397 24.8779 15.5115 24.8635 15.4754 24.8447C15.4032 24.8071 15.2995 24.7524 15.1691 24.6809C14.9083 24.5379 14.5391 24.3277 14.0977 24.0546C13.2169 23.5096 12.0385 22.7081 10.8559 21.6836C10.2058 21.1204 9.5399 20.4772 8.91782 19.7603C8.83014 19.6593 8.70275 19.6 8.56819 19.6H6.90909C6.40702 19.6 6 19.1971 6 18.7C6 18.2029 6.40702 17.8 6.90909 17.8H10.5455C10.9172 17.8 11.2515 17.5759 11.3895 17.2343L12.1948 15.2411C12.2558 15.0903 12.4715 15.0903 12.5325 15.2411L14.2468 19.4843C14.3849 19.8259 14.7192 20.05 15.0909 20.05C15.4626 20.05 15.7969 19.8259 15.935 19.4843L16.9221 17.0411C16.9831 16.8903 17.1987 16.8903 17.2597 17.0411L17.3377 17.2343C17.4758 17.5759 17.8101 17.8 18.1818 17.8H19.6364C20.1385 17.8 20.5455 17.3971 20.5455 16.9C20.5455 16.4029 20.1385 16 19.6364 16H18.9204C18.8461 16 18.7792 15.9552 18.7515 15.8869L17.935 13.8657C17.7969 13.5241 17.4626 13.3 17.0909 13.3C16.7192 13.3 16.3849 13.5241 16.2468 13.8657L15.2597 16.3089C15.1987 16.4597 14.9831 16.4597 14.9221 16.3089L13.2077 12.0657C13.0696 11.7241 12.7354 11.5 12.3636 11.5C11.9919 11.5 11.6576 11.7241 11.5196 12.0657L9.92997 16H6.90774C6.71829 16 6.54773 15.884 6.48683 15.7064C6.17949 14.8101 6 13.8562 6 12.85C6 11.563 6.38641 10.1239 7.26649 8.98454C8.16917 7.81592 9.56763 7 11.4546 7C13.3298 7 14.6765 7.8023 15.5371 8.58868C15.7101 8.74677 15.8642 8.90474 16 9.05632C16.1358 8.90474 16.2899 8.74677 16.4629 8.58868C17.3235 7.8023 18.6703 7 20.5455 7C22.4324 7 23.8308 7.81592 24.7335 8.98454C25.6135 10.1239 26 11.563 26 12.85C26 16.6268 23.4711 19.6678 21.1441 21.6836C19.9615 22.708 18.7832 23.5096 17.9023 24.0546C17.4609 24.3277 17.0918 24.5379 16.8309 24.6809C16.7005 24.7524 16.5968 24.8071 16.5246 24.8447C16.4885 24.8635 16.4604 24.8779 16.4405 24.8879L16.417 24.8997L16.4102 24.9032L16.4065 24.905Z" fill={color} />
+      <Path
+        d="M23.8339 12.509C21.5387 9.09084 18.727 9.84482 16.8666 10.3438C16.6705 10.3963 16.4785 10.4479 16.2968 10.4917C16.5307 8.39324 17.6032 6.76139 19.5563 5.52216L18.7813 4.1835C17.7485 4.83877 16.9133 5.60381 16.276 6.47367C16.0389 5.68369 15.6683 5.02055 15.1637 4.49231C14.1923 3.47532 12.7466 2.97343 10.8673 3.00108L10.1404 3.01172L10.1302 3.77274C10.1039 5.74036 10.5832 7.25372 11.5547 8.27076C12.3544 9.10799 13.4764 9.59451 14.8962 9.72562C14.8503 9.98244 14.8156 10.2449 14.7917 10.5127C14.5843 10.4647 14.3616 10.4051 14.1333 10.3438C12.2728 9.84496 9.4612 9.09093 7.16602 12.5091C6.06918 14.1426 5.73771 16.3534 6.20749 18.9026C6.76229 21.9136 8.43027 25.0354 10.0874 26.1644C12.1071 27.5405 13.8112 26.8906 14.8293 26.5023C15.0761 26.4082 15.3832 26.2911 15.5001 26.2911C15.617 26.2911 15.924 26.4082 16.1708 26.5023C16.7225 26.7127 17.4757 27 18.3714 27C19.1285 27 19.9875 26.7947 20.9127 26.1644C22.5699 25.0354 24.2378 21.9135 24.7926 18.9026C25.2622 16.3534 24.9307 14.1425 23.8339 12.509Z"
+        fill={color}
+      />
     </Svg>
   );
 }
@@ -390,17 +668,167 @@ function FinanceIconSvg({ size, color }: { size: number; color: string }) {
   );
 }
 
+/** אייקון קשרים — מבוסס על assets/icons/relations-icon.svg */
+function RelationsIconSvg({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <Path
+        d="M24.9043 18.6278C23.8799 19.8697 19.3745 23.5864 17.0312 25.4901C16.1972 26.17 15.0051 26.17 14.1711 25.4901C11.8278 23.5864 7.32691 19.8697 6.29802 18.6278C4.72975 16.7377 4 14.9382 4 12.9802C4 11.0674 4.65269 9.30878 5.84023 8.02153C7.04589 6.72068 8.69122 6 10.4816 6C11.8232 6 13.047 6.42606 14.1258 7.26006C14.6878 7.69972 15.1864 8.21643 15.5989 8.80113C16.0159 8.22096 16.5099 7.69972 17.072 7.26006C18.1507 6.42153 19.379 6 20.7207 6C22.5156 6 24.1609 6.72068 25.362 8.02153C26.545 9.30878 27.2023 11.0629 27.2023 12.9802C27.2068 14.9382 26.4771 16.7377 24.9043 18.6278Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+/** אייקון פנאי — מבוסס על assets/icons/leisure-icon.svg */
+function LeisureIconSvg({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M15.75 5C21.683 5 26.5 9.817 26.5 15.75C26.5 21.683 21.683 26.5 15.75 26.5C9.817 26.5 5 21.683 5 15.75C5 9.817 9.817 5 15.75 5ZM10.25 16C9.836 16 9.5 16.336 9.5 16.75C9.5 20.199 12.301 23 15.75 23C19.199 23 22 20.199 22 16.75C22 16.336 21.664 16 21.25 16H10.25ZM18.701 13.35C18.993 13.13 19.356 13 19.75 13C20.144 13 20.507 13.13 20.799 13.35C21.13 13.599 21.601 13.532 21.85 13.201C22.098 12.87 22.032 12.4 21.701 12.151C21.157 11.742 20.482 11.5 19.75 11.5C19.018 11.5 18.343 11.742 17.799 12.151C17.468 12.4 17.402 12.87 17.65 13.201C17.899 13.532 18.37 13.599 18.701 13.35ZM10.701 13.35C10.993 13.13 11.356 13 11.75 13C12.144 13 12.507 13.13 12.799 13.35C13.13 13.599 13.601 13.532 13.85 13.201C14.098 12.87 14.032 12.4 13.701 12.151C13.157 11.742 12.482 11.5 11.75 11.5C11.018 11.5 10.343 11.742 9.799 12.151C9.468 12.4 9.402 12.87 9.65 13.201C9.899 13.532 10.37 13.599 10.701 13.35Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+function KnowledgeIconSvg({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <Path fillRule="evenodd" clipRule="evenodd" d="M10.716 9.84401L8.97601 8.10406C8.73569 7.86375 8.34633 7.86375 8.10602 8.10406C7.8657 8.34437 7.8657 8.73372 8.10602 8.97403L9.846 10.714C10.0863 10.9543 10.4757 10.9543 10.716 10.714C10.9563 10.4737 10.9563 10.0843 10.716 9.84401Z" fill={color} />
+      <Path fillRule="evenodd" clipRule="evenodd" d="M8.11722 14.8848H5.61524C5.27518 14.8848 5 15.1599 5 15.5C5 15.84 5.27518 16.1152 5.61524 16.1152H8.11722C8.45728 16.1152 8.73246 15.84 8.73246 15.5C8.73246 15.1599 8.45728 14.8848 8.11722 14.8848Z" fill={color} />
+      <Path fillRule="evenodd" clipRule="evenodd" d="M25.3868 14.8848H22.8848C22.5447 14.8848 22.2695 15.1599 22.2695 15.5C22.2695 15.84 22.5447 16.1152 22.8848 16.1152H25.3868C25.7268 16.1152 26.002 15.84 26.002 15.5C26.002 15.1599 25.7268 14.8848 25.3868 14.8848Z" fill={color} />
+      <Path fillRule="evenodd" clipRule="evenodd" d="M22.8957 8.10406C22.6554 7.86375 22.266 7.86375 22.0257 8.10406L20.2857 9.84401C20.0454 10.0843 20.0454 10.4737 20.2857 10.714C20.526 10.9543 20.9154 10.9543 21.1557 10.714L22.8957 8.97403C23.136 8.73372 23.136 8.34441 22.8957 8.10406Z" fill={color} />
+      <Path fillRule="evenodd" clipRule="evenodd" d="M15.502 5C15.1619 5 14.8867 5.27517 14.8867 5.61523V8.11715C14.8867 8.45721 15.1619 8.73239 15.502 8.73239C15.842 8.73239 16.1172 8.45721 16.1172 8.11715V5.61523C16.1172 5.27517 15.842 5 15.502 5Z" fill={color} />
+      <Path d="M18.9444 11.1564C17.6032 10.0982 15.8682 9.7168 14.1701 10.1229C12.2014 10.5781 10.6141 12.1408 10.1342 14.0972C9.65428 16.0659 10.208 18.0592 11.623 19.4497C12.1275 19.9542 12.4229 20.7458 12.4229 21.5579V21.6932C12.4229 22.0377 12.6935 22.3085 13.0381 22.3085H17.96C18.3046 22.3085 18.5753 22.0377 18.5753 21.6932V21.5579C18.5753 20.758 18.8829 19.9419 19.4243 19.4127C20.458 18.3669 21.0363 16.9765 21.0363 15.4999C21.0363 13.8019 20.2733 12.2146 18.9444 11.1564ZM15.4988 13.6543C14.5706 13.6543 13.8949 14.2699 13.718 14.9827C13.6375 15.3068 13.3113 15.5137 12.9724 15.4321C12.6431 15.3504 12.4418 15.0163 12.5236 14.6871C12.8284 13.4566 13.9841 12.4238 15.4988 12.4238C15.8389 12.4238 16.114 12.699 16.114 13.039C16.114 13.3791 15.8389 13.6543 15.4988 13.6543Z" fill={color} />
+      <Path fillRule="evenodd" clipRule="evenodd" d="M13.0391 23.5391V24.1543C13.0391 25.172 13.867 26 14.8848 26H16.1153C17.133 26 17.961 25.172 17.961 24.1543V23.5391H13.0391Z" fill={color} />
+    </Svg>
+  );
+}
+
 const WORLD_ICON_SIZE = 46;
 
 function WorldMiniIcon({ worldId, color, size }: { worldId: string; color: string; size: number }) {
   if (worldId === 'business') return <BusinessIconSvg size={size} color={color} />;
   if (worldId === 'health') return <HealthIconSvg size={size} color={color} />;
   if (worldId === 'finance') return <FinanceIconSvg size={size} color={color} />;
+  if (worldId === 'knowledge') return <KnowledgeIconSvg size={size} color={color} />;
+  if (worldId === 'leisure') return <LeisureIconSvg size={size} color={color} />;
+  if (worldId === 'relations') return <RelationsIconSvg size={size} color={color} />;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
       <Circle cx={12} cy={12} r={3.2} fill={color} />
     </Svg>
+  );
+}
+
+function contactInitials(name: string): string {
+  const t = name.trim();
+  if (!t) return '?';
+  const parts = t.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const a = parts[0][0] ?? '';
+    const b = parts[1][0] ?? '';
+    return `${a}${b}`.toUpperCase();
+  }
+  return t.slice(0, Math.min(2, t.length)).toUpperCase();
+}
+
+function filterUnitChatParticipants(roles: UnitProfilePerson[] | undefined): UnitProfilePerson[] {
+  if (!roles?.length) return [];
+  return roles.filter((p) => {
+    const rawName = (p.name ?? '').trim();
+    const name = rawName.toLowerCase();
+    const role = (p.role ?? '').trim().toLowerCase();
+    if (role === 'סוכן' || role === 'agent') {
+      if (name === 'one') return false;
+    }
+    /** מציין משתמש בתכנון — לא "איש קשר" חיצוני; כפתור ההדר משתמש ב־add-contact-icon.svg */
+    if (rawName === 'את/ה' || name === 'you') return false;
+    return true;
+  });
+}
+
+function UnitChatHeaderContacts({
+  participants,
+  ringColor,
+  surfaceTint,
+  textColor,
+  language,
+  onPress,
+}: {
+  participants: UnitProfilePerson[];
+  ringColor: string;
+  surfaceTint: string;
+  textColor: string;
+  language: 'he' | 'en';
+  onPress: () => void;
+}) {
+  const addLabel = language === 'he' ? 'הוסף איש קשר' : 'Add contact';
+  if (participants.length === 0) {
+    return (
+      <TouchableOpacity
+        style={styles.chatUnitContactsSlot}
+        activeOpacity={0.78}
+        onPress={onPress}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={addLabel}
+      >
+        <AddContactIcon color={textColor} size={28} />
+      </TouchableOpacity>
+    );
+  }
+  const maxShown = 2;
+  const useOverflowBadge = participants.length > maxShown;
+  const faces = useOverflowBadge ? participants.slice(0, maxShown) : participants;
+  const overflow = useOverflowBadge ? participants.length - maxShown : 0;
+  const groupLabel =
+    language === 'he'
+      ? `${participants.length} אנשי קשר ביחידה`
+      : `${participants.length} contacts in unit`;
+  return (
+    <TouchableOpacity
+      style={styles.chatUnitContactsSlot}
+      activeOpacity={0.82}
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={groupLabel}
+    >
+      <View style={styles.chatUnitContactsStack}>
+        {faces.map((p, i) => (
+          <View
+            key={p.id}
+            style={[
+              styles.chatUnitContactAvatar,
+              {
+                marginStart: i > 0 ? -10 : 0,
+                zIndex: 20 - i,
+                borderColor: ringColor,
+                backgroundColor: surfaceTint,
+              },
+            ]}
+          >
+            <Text style={[styles.chatUnitContactInitials, { color: textColor }]}>{contactInitials(p.name)}</Text>
+          </View>
+        ))}
+        {overflow > 0 ? (
+          <View
+            style={[
+              styles.chatUnitContactAvatar,
+              styles.chatUnitContactOverflow,
+              { marginStart: -10, zIndex: 30, borderColor: ringColor, backgroundColor: surfaceTint },
+            ]}
+          >
+            <Text style={[styles.chatUnitContactOverflowText, { color: textColor }]}>{`+${overflow}`}</Text>
+          </View>
+        ) : null}
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -414,11 +842,21 @@ function EnterIconSvg({ size, color }: { size: number; color: string }) {
 }
 
 const ORB_BUTTON_ENTER_ICON_SIZE = 28;
+const COMPOSER_LINE_HEIGHT = 20;
+const COMPOSER_MIN_LINES = 1;
+const COMPOSER_MAX_LINES = 8;
 
 function getTimeGreeting(hour: number, name: string): string {
   if (hour >= 5 && hour < 12) return `בוקר טוב, ${name}`;
   if (hour >= 12 && hour < 18) return `צהריים טובים, ${name}`;
   return `ערב טוב, ${name}`;
+}
+
+function progressColorByPct(pct: number, isDark: boolean): string {
+  if (pct < 0.15) return isDark ? '#71717a' : '#a1a1aa';
+  if (pct < 0.4) return '#f97316';
+  if (pct < 0.7) return '#eab308';
+  return '#22c55e';
 }
 
 type Nav = NativeStackNavigationProp<AppShellParamList, 'Home'>;
@@ -427,9 +865,8 @@ export function OneScreen() {
   const { colors, theme } = useThemeStore();
   const language = useLocaleStore((s) => s.language);
   const layoutDirection = useLocaleStore((s) => s.layoutDirection);
+  const previewProfile = useDevModeStore((s) => s.previewProfile);
   const isRtlLayout = layoutDirection === 'rtl';
-  const chatBackGlyph = isRtlLayout ? '›' : '‹';
-  const chatShareGlyph = isRtlLayout ? '↖' : '↗';
   const chatMenuRows = useMemo(
     () => CHAT_MENU_ROWS.map((row) => ({ ...row, label: translate(language, row.labelKey) })),
     [language]
@@ -471,55 +908,29 @@ export function OneScreen() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isChatInputFocused, setIsChatInputFocused] = useState(false);
   const [nowValue, setNowValue] = useState('');
+  const [chatComposerMeasuredHeight, setChatComposerMeasuredHeight] = useState(COMPOSER_LINE_HEIGHT);
+  const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+  const [isVoiceTrayOpen, setIsVoiceTrayOpen] = useState(false);
+  const [isMicHoldActive, setIsMicHoldActive] = useState(false);
   const [chatSheetMessages, setChatSheetMessages] = useState<ChatLine[]>([
-    { id: 'seed_1', sender: 'one', text: 'שלום! ספר במשפט מה המטרה — ונמשיך משם.' },
+    { id: 'seed_1', sender: 'one', text: 'שלום! ספר במשפט מה המטרה — ונמשיך משם.', sentAt: Date.now() },
   ]);
-  const [personalOrbs, setPersonalOrbs] = useState<OrbItem[]>(ORB_DATA_BY_WORLD.personal);
-  const [flowUnits, setFlowUnits] = useState<FlowUnit[]>([
-    {
-      id: 'license',
-      worldId: 'personal',
-      title: 'רישיון נהיגה',
-      subtitle: 'תיאוריה · שיעורים במוסד · מבחן מעשי',
-      emoji: '🚗',
-      status: 'active',
-      progress: 32,
-      steps: 25,
-      messages: [{ id: 'm1', sender: 'one', text: 'היחידה פעילה. אפשר להמשיך מהצעד הנוכחי או לפתוח כאן את הפרטים.' }],
-      goal: 'לעבור תיאוריה, לסיים את שיעורי הנהיגה הנדרשים, ולעבור מבחן מעשי לרישיון סוג B.',
-      city: 'מרכז · תל אביב–יפו',
-      budgetMinIls: 4800,
-      budgetMaxIls: 7200,
-      etaWeeks: 8,
-      peopleRoles: [
-        { id: 'p1', role: 'סוכן', name: 'ONE' },
-        { id: 'p2', role: 'נוהג/ת', name: 'את/ה' },
-        { id: 'p3', role: 'מורה נהיגה', name: 'בהמתנה לבחירה' },
-        { id: 'p4', role: 'מוסד לימוד', name: 'יוצע אחרי העדפות' },
-      ],
-      milestones: [
-        { id: 'm0', title: 'תו רפואי וצילום ת.ז.', done: true },
-        { id: 'm1', title: 'מבחן תיאוריה במשרד הרישוי', done: true },
-        { id: 'm2', title: 'שיעורי נהיגה (בהתקדמות)', done: false },
-        { id: 'm3', title: 'מבחן מעשי', done: false },
-        { id: 'm4', title: 'הנפקת הרישיון', done: false },
-      ],
-      nextAction: 'לתאם עוד שני שיעורים ולבדוק תאריך פנוי למבחן מעשי.',
-      lastUpdatedLabel: 'עודכן לפני יומיים',
-      blockCount: 6,
-    },
-  ]);
+  const [personalOrbs, setPersonalOrbs] = useState<OrbItem[]>(DEV_PROFILE_PRESETS[previewProfile].personalOrbs);
+  const [flowUnits, setFlowUnits] = useState<FlowUnit[]>(DEV_PROFILE_PRESETS[previewProfile].flowUnits);
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
   const [intakeState, setIntakeState] = useState<{ intent: string; questionIndex: number; answers: string[] } | null>(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showChatProfile, setShowChatProfile] = useState(false);
   const [chatProfileEditMode, setChatProfileEditMode] = useState(false);
+  const [chatPinnedWorldId, setChatPinnedWorldId] = useState<string>('personal');
   const [chatOpenedFromOrbProfileShortcut, setChatOpenedFromOrbProfileShortcut] = useState(false);
   /** בפרופיל יחידה: אחרי גלילה — כותרת ואימוג׳י מוצגים בסרגל העליון (כמו בצ׳אט) */
   const [chatProfileHeaderCompact, setChatProfileHeaderCompact] = useState(false);
   const chatProfileCompactScrollRef = useRef(false);
-  /** בצ׳אט ONE: רשימת יחידות מוסתרת עד לחיצה על «היסטוריה» */
-  const [oneChatUnitHistoryOpen, setOneChatUnitHistoryOpen] = useState(false);
+  /** תווית תאריך צפה (כמו iMessage) — מתעדכנת לפי גלילה */
+  const [chatStickyDateLabel, setChatStickyDateLabel] = useState(() =>
+    formatChatDayStickyLabel(Date.now(), language === 'he')
+  );
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [creditsHistory, setCreditsHistory] = useState<{ id: string; label: string; time: string; change: number; icon: 'globe' | 'brand' | 'gift' | 'buy' }[]>([
     { id: '1', label: 'One Site', time: '5:01 PM', change: -650, icon: 'globe' },
@@ -538,16 +949,20 @@ export function OneScreen() {
   const splashOverlayOpacity = useRef(new Animated.Value(1)).current;
   const scrollRef = useRef<ScrollView>(null);
   const chatScrollRef = useRef<ScrollView>(null);
+  const chatMessageBubbleYRef = useRef<Map<string, number>>(new Map());
+  const chatStickyLabelLastRef = useRef<string>('');
+  const lastChatScrollYRef = useRef(0);
   const homeNowInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const chatComposerInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
   /** פתיחת צ׳אט ממיקוד בשדה — אחרי הלייאאוט מפעילים focus שוב כדי שהמקלדת תיפתח */
   const shouldRefocusComposerAfterChatOpenRef = useRef(false);
   /** מבטל timeouts של פתיחת צ׳אט (סגירה באמצע / unmount) */
   const chatOpenAnimGenerationRef = useRef(0);
+  const micLongPressTriggeredRef = useRef(false);
   /** עד סיום שלב הקלף+המקלדת — לא מיישמים padding למקלדת על הקומפוזר */
   const suppressKeyboardForChatLayoutRef = useRef(false);
   const pendingKeyboardInsetRef = useRef(0);
-  const closeChatSheetRef = useRef<(opts?: { gestureDx?: number }) => void>(() => {});
+  const closeChatSheetRef = useRef<(opts?: { gestureDx?: number; gestureDy?: number; direction?: 'side' | 'down' }) => void>(() => {});
   const lastHomeTapAtRef = useRef(0);
   const lastHomeTapYRef = useRef(0);
   /** ref לכדור הסוכן בגלגל (פריט 0) – למדידת מיקום ל־Smart Animate */
@@ -566,6 +981,9 @@ export function OneScreen() {
   const chatSheetTranslateX = useRef(new Animated.Value(0)).current;
   /** פרופיל יחידה: החלקה לצד בחזרה לצ׳אט */
   const profileDismissSlideX = useRef(new Animated.Value(0)).current;
+  /** פרופיל סוכן מצומצם: כפתור שדרג/תוכנית — מרחף מלמטה */
+  const profileUpgradeFabTranslateY = useRef(new Animated.Value(96)).current;
+  const profileUpgradeFabOpacity = useRef(new Animated.Value(0)).current;
   const chatComposerTranslateY = useRef(new Animated.Value(0)).current;
   /** כדורים שכנים (לא במרכז): fade מסונכרן עם שורת המצב בכדור יחידה */
   const peripheralOrbsOpacity = useRef(new Animated.Value(1)).current;
@@ -575,6 +993,9 @@ export function OneScreen() {
   const currentWorld = WORLDS[worldIndex] ?? WORLDS[0];
   const currentOrbData = currentWorldId === 'personal' ? personalOrbs : (ORB_DATA_BY_WORLD[currentWorldId] ?? ORB_DATA_BY_WORLD.personal);
   const currentWorldColor = WORLDS[worldIndex]?.color ?? WORLDS[0].color;
+  const effectiveChatWorldId = showChatSheet ? chatPinnedWorldId : currentWorldId;
+  const effectiveChatWorld = WORLDS.find((w) => w.id === effectiveChatWorldId) ?? WORLDS[0];
+  const effectiveChatWorldColor = effectiveChatWorld.color;
   const rawFirstName = user?.name?.trim()?.split(/\s+/)[0] || 'אריאל';
   const firstName = rawFirstName.toLowerCase() === 'guest' ? 'אורח' : rawFirstName;
   const personalGreeting = getTimeGreeting(new Date().getHours(), firstName);
@@ -583,23 +1004,166 @@ export function OneScreen() {
   const nowInputTextAlign: 'left' | 'right' = nowInputHasText ? (nowInputIsRtl ? 'right' : 'left') : 'left';
   const nowInputWritingDirection: 'ltr' | 'rtl' = nowInputHasText ? (nowInputIsRtl ? 'rtl' : 'ltr') : 'ltr';
   const isChatSystemWorking = chatStatusPhase === 'thinking' || chatStatusPhase === 'planning';
+  const chatComposerMaxHeight = COMPOSER_MAX_LINES * COMPOSER_LINE_HEIGHT;
+  const chatComposerVisibleHeight = Math.max(
+    COMPOSER_MIN_LINES * COMPOSER_LINE_HEIGHT,
+    Math.min(chatComposerMaxHeight, chatComposerMeasuredHeight)
+  );
+  const chatComposerLineCount = Math.max(COMPOSER_MIN_LINES, Math.round(chatComposerVisibleHeight / COMPOSER_LINE_HEIGHT));
+  const chatComposerCanExpand = chatComposerMeasuredHeight > chatComposerMaxHeight + 2;
   const activeUnit = activeUnitId ? flowUnits.find((unit) => unit.id === activeUnitId) ?? null : null;
   const isDark = theme === 'dark';
   const chatSheetBg = isDark ? '#121212' : colors.background;
   const chatCardBg = isDark ? '#121317' : colors.surface;
   const chatOneBubbleBg = isDark ? '#ECEDEE' : '#f0f0f0';
+  const chatActionButtonBg = isDark ? '#ffffff' : '#000000';
+  const chatActionIconColor = isDark ? '#111111' : '#ffffff';
   const profileRingR = 36;
   const profileRingC = 2 * Math.PI * profileRingR;
   const unitProgressPct = activeUnit ? Math.min(100, Math.max(0, activeUnit.progress)) / 100 : 0;
   const unitStepsDone = activeUnit ? Math.max(0, Math.round((activeUnit.progress / 100) * activeUnit.steps)) : 0;
-  const profileAccent = currentWorldColor;
+  const profileAccent = effectiveChatWorldColor;
   const chatAgentAvatarBg = theme === 'light' ? '#000000' : '#1f1f1f';
   const generalWorldLabel = language === 'he' ? 'כללי' : 'General';
-  const activeWorldChatLabel = currentWorldId === 'personal' ? generalWorldLabel : currentWorld.label;
+  const activeWorldChatLabel = effectiveChatWorldId === 'personal' ? generalWorldLabel : effectiveChatWorld.label;
+  const agentHeaderSubtitle = language === 'he' ? 'סוכן' : 'Agent';
+  /** בצ׳אט סוכן — כותרת ההדר היא שם הסוכן (לא «ONE שלי» קבוע) */
+  const chatAgentHeaderTitle = useMemo(() => {
+    const name = user?.agent?.name?.trim();
+    if (name) return embedLatinRunsForRtlDisplay(name, language);
+    return translate(language, 'chat_title_default');
+  }, [user?.agent?.name, language]);
+  const buildWorldAgentWelcome = useCallback(
+    (worldId: string): string => {
+      const he = language === 'he';
+      if (worldId === 'business') {
+        return he
+          ? 'שלום! מצב עסקים: כתבו יעד אחד, ואני אכין TODO מסודר + עדכון התקדמות ראשון.'
+          : 'Business mode is on. Share one goal and I will build a focused TODO list with a first progress update.';
+      }
+      if (worldId === 'health') {
+        return he
+          ? 'שלום! מצב בריאות: כתבו מטרה אחת, ואני אכין TODO יומי + עדכון התקדמות.'
+          : 'Health mode is on. Share one target and I will prepare a daily TODO flow with progress updates.';
+      }
+      if (worldId === 'finance') {
+        return he
+          ? 'שלום! מצב כלכלה: כתבו מה רוצים לשפר, ואני אבנה TODO כספי + עדכון מצב.'
+          : 'Finance mode is on. Tell me what you want to improve and I will build a money TODO plan with status updates.';
+      }
+      if (worldId === 'knowledge') {
+        return he
+          ? 'שלום! מצב לימודים: כתבו נושא או מבחן, ואני אבנה TODO לימודי + עדכון התקדמות.'
+          : 'Knowledge mode is on. Share a subject or exam and I will build a study TODO flow with progress updates.';
+      }
+      if (worldId === 'leisure') {
+        return he
+          ? 'שלום! מצב פנאי: כתבו מה בא לכם לעשות בזמן הפנוי — ואני אבנה רשימת TODO + תזכורות עדינות.'
+          : 'Leisure mode is on. Tell me what you want to do in your free time and I will build a light TODO list with gentle reminders.';
+      }
+      if (worldId === 'relations') {
+        return he
+          ? 'שלום! מצב קשרים: ספרו על אדם או אירוע שחשוב לכם — ואני אעזור לסדר TODO, תזכורות ומעקב נעים.'
+          : 'Relationships mode is on. Tell me about a person or event that matters and I will help with TODOs, reminders, and gentle follow-ups.';
+      }
+      return he
+        ? 'שלום! מצב כללי: ספרו מה המטרה, ואני אתחיל TODO ראשוני + עדכון התקדמות.'
+        : 'General mode is on. Tell me the goal and I will start with initial TODOs and a progress update.';
+    },
+    [language]
+  );
+  const userPlanTier = useMemo<'FREE' | 'PRO' | 'MAX'>(() => {
+    const presetTier = DEV_PROFILE_PRESETS[previewProfile].planTier;
+    if (presetTier === 'PRO' || presetTier === 'MAX') return presetTier;
+    const rawTier = String(
+      (user as any)?.planTier ??
+      (user as any)?.tier ??
+      (user as any)?.subscriptionTier ??
+      (user as any)?.subscription?.tier ??
+      'FREE'
+    ).toUpperCase();
+    if (rawTier === 'PRO' || rawTier === 'MAX') return rawTier;
+    return 'FREE';
+  }, [user, previewProfile]);
+  const chatHeaderPlanLabel = userPlanTier === 'FREE'
+    ? (language === 'he' ? 'שדרג' : 'Upgrade')
+    : userPlanTier;
+  const headerProgressPct = activeUnit ? Math.max(0, Math.min(100, activeUnit.progress)) / 100 : 0;
+  const headerProgressColor = progressColorByPct(headerProgressPct, isDark);
+  const unitChatParticipants = useMemo(
+    () => (activeUnit ? filterUnitChatParticipants(activeUnit.peopleRoles) : []),
+    [activeUnit?.id, activeUnit?.peopleRoles]
+  );
+  const chatProfileHeaderLabel = activeUnit
+    ? (language === 'he' ? 'פרופיל יחידה' : 'Unit Profile')
+    : (language === 'he' ? 'פרופיל סוכן' : 'Agent Profile');
+  const chatContextSuggestions = useMemo(() => {
+    const he = language === 'he';
+    if (activeUnit) {
+      const nextStepLabel = activeUnit.nextAction?.trim() || (he ? 'מה הצעד הבא?' : 'What is the next step?');
+      if (activeUnit.worldId === 'health') {
+        return he
+          ? ['קבע תור', 'תזכורת יומית', nextStepLabel]
+          : ['Schedule appointment', 'Daily reminder', nextStepLabel];
+      }
+      if (activeUnit.worldId === 'finance') {
+        return he
+          ? ['בדיקת תקציב', 'עדכון הוצאות', nextStepLabel]
+          : ['Budget check', 'Update expenses', nextStepLabel];
+      }
+      if (activeUnit.worldId === 'knowledge') {
+        return he
+          ? ['תרגול יומי', 'סיכום חומר', nextStepLabel]
+          : ['Daily practice', 'Study summary', nextStepLabel];
+      }
+      if (activeUnit.worldId === 'business') {
+        return he
+          ? ['משימת לקוח', 'עדכון סטטוס', nextStepLabel]
+          : ['Client task', 'Status update', nextStepLabel];
+      }
+      if (activeUnit.worldId === 'leisure') {
+        return he
+          ? ['רעיון לסופ״ש', 'רשימת ציוד', nextStepLabel]
+          : ['Weekend idea', 'Packing list', nextStepLabel];
+      }
+      if (activeUnit.worldId === 'relations') {
+        return he
+          ? ['תזכורת לפגישה', 'רשימת אורחים', nextStepLabel]
+          : ['Meet-up reminder', 'Guest list', nextStepLabel];
+      }
+      if (/רישיון|license/i.test(activeUnit.title)) {
+        return he
+          ? ['קבע שיעור', 'תרגול תיאוריה', nextStepLabel]
+          : ['Schedule lesson', 'Theory practice', nextStepLabel];
+      }
+      return he
+        ? ['עדכן TODO', 'מה סטטוס היחידה?', nextStepLabel]
+        : ['Update TODO', 'What is unit status?', nextStepLabel];
+    }
+    if (effectiveChatWorldId === 'business') {
+      return he ? ['פתח TODO לעסק', 'עדכון לקוחות', 'מה הכי דחוף היום?'] : ['Open business TODO', 'Client update', 'Top priority today?'];
+    }
+    if (effectiveChatWorldId === 'health') {
+      return he ? ['TODO בריאות יומי', 'מעקב בדיקות', 'תזכורת תרופה'] : ['Daily health TODO', 'Track tests', 'Medication reminder'];
+    }
+    if (effectiveChatWorldId === 'finance') {
+      return he ? ['TODO כלכלי', 'עדכון הוצאות', 'יעד חיסכון חודשי'] : ['Finance TODO', 'Update expenses', 'Monthly savings target'];
+    }
+    if (effectiveChatWorldId === 'knowledge') {
+      return he ? ['TODO לימודים', 'תרגול יומי', 'סיכום שיעור'] : ['Study TODO', 'Daily practice', 'Lesson summary'];
+    }
+    if (effectiveChatWorldId === 'leisure') {
+      return he ? ['תכנון סופ״ש', 'רשימת ציוד', 'תזכורת לאירוע'] : ['Weekend plan', 'Gear checklist', 'Event reminder'];
+    }
+    if (effectiveChatWorldId === 'relations') {
+      return he ? ['TODO למשפחה', 'תזכורת ליום הולדת', 'מעקב אחר חברים'] : ['Family TODO', 'Birthday reminder', 'Friends check-in'];
+    }
+    return he ? ['פתח יחידה חדשה', 'הראה היסטוריה', 'מה עושים עכשיו?'] : ['Open new unit', 'Show history', 'What now?'];
+  }, [activeUnit, effectiveChatWorldId, language]);
   const historyUnitsForWorld = useMemo(() => {
-    if (currentWorldId === 'personal') return flowUnits;
-    return flowUnits.filter((unit) => unit.worldId === currentWorldId);
-  }, [flowUnits, currentWorldId]);
+    if (effectiveChatWorldId === 'personal') return flowUnits;
+    return flowUnits.filter((unit) => unit.worldId === effectiveChatWorldId);
+  }, [flowUnits, effectiveChatWorldId]);
 
   const agentChatProfileModel = useMemo((): AgentChatProfileModel => {
     const he = language === 'he';
@@ -616,12 +1180,15 @@ export function OneScreen() {
       business: 'Business',
       health: 'Health',
       finance: 'Finance',
+      knowledge: 'Knowledge',
+      leisure: 'Leisure',
+      relations: 'Relations',
     };
     const worlds = WORLDS.map((w) => ({
       id: w.id,
       label: he ? w.label : worldLabelsEn[w.id] ?? w.label,
       color: w.color,
-      active: w.id === currentWorldId,
+      active: w.id === effectiveChatWorldId,
       detail:
         w.id === 'personal'
           ? he
@@ -631,18 +1198,46 @@ export function OneScreen() {
             ? `יחידות מתויגות לעולם «${w.label}» והקשר ${w.label} לסוכן.`
             : `Units tagged to «${worldLabelsEn[w.id] ?? w.label}» and matching context.`,
     }));
-    const activeUnits = flowUnits.filter((u) => u.status !== 'done').length;
+    const worldUnitsList =
+      effectiveChatWorldId === 'personal' ? flowUnits : flowUnits.filter((u) => u.worldId === effectiveChatWorldId);
+    const activeUnitsInWorld = worldUnitsList.filter((u) => u.status !== 'done').length;
+    const worldNameHe = WORLDS.find((w) => w.id === effectiveChatWorldId)?.label ?? 'כללי';
+    const worldNameEn = worldLabelsEn[effectiveChatWorldId] ?? 'General';
+    const broadcastPrimary = he
+      ? effectiveChatWorldId === 'personal'
+        ? `יש לך ${activeUnitsInWorld} יחידות פעילות במרחב הכללי.`
+        : `יש לך ${activeUnitsInWorld} יחידות פעילות במרחב «${worldNameHe}».`
+      : effectiveChatWorldId === 'personal'
+        ? `You have ${activeUnitsInWorld} active units in General.`
+        : `You have ${activeUnitsInWorld} active units in «${worldNameEn}».`;
+    const broadcastSecondary = he ? 'המשך מה שפתחת או התחל משהו חדש.' : 'Continue what you started or begin something new.';
     const msgCount = chatSheetMessages.length;
     const stats: AgentChatProfileModel['stats'] = he
       ? [
-          { label: 'יחידות במעקב', value: String(flowUnits.length), hint: `${activeUnits} פתוחות, ${flowUnits.length - activeUnits} אחרות` },
-          { label: 'הודעות בשיחה', value: String(msgCount), hint: 'בצ׳אט ONE הנוכחי' },
-          { label: 'מרחבים זמינים', value: String(WORLDS.length), hint: 'כללי, עסקים, בריאות, כלכלה' },
+          {
+            label: 'יחידות במעקב',
+            value: String(worldUnitsList.length),
+            hint: `${activeUnitsInWorld} פתוחות, ${worldUnitsList.length - activeUnitsInWorld} אחרות`,
+          },
+          {
+            label: 'הודעות בשיחה',
+            value: String(msgCount),
+            hint: effectiveChatWorldId === 'personal' ? 'בצ׳אט ONE הנוכחי' : `מיקוד: «${worldNameHe}»`,
+          },
+          { label: 'מרחבים זמינים', value: String(WORLDS.length), hint: 'כללי, עסקים, בריאות, כלכלה, לימודים, פנאי, קשרים' },
         ]
       : [
-          { label: 'Units tracked', value: String(flowUnits.length), hint: `${activeUnits} open` },
-          { label: 'Messages (chat)', value: String(msgCount), hint: 'In this ONE chat' },
-          { label: 'Worlds', value: String(WORLDS.length), hint: 'General + 3 life lenses' },
+          {
+            label: 'Units tracked',
+            value: String(worldUnitsList.length),
+            hint: `${activeUnitsInWorld} open, ${worldUnitsList.length - activeUnitsInWorld} other`,
+          },
+          {
+            label: 'Messages (chat)',
+            value: String(msgCount),
+            hint: effectiveChatWorldId === 'personal' ? 'In this ONE chat' : `Focus: «${worldNameEn}»`,
+          },
+          { label: 'Worlds', value: String(WORLDS.length), hint: 'General + 6 life lenses' },
         ];
     const permissions: AgentChatProfileModel['permissions'] = he
       ? [
@@ -673,13 +1268,13 @@ export function OneScreen() {
         ];
     const dataRows: AgentChatProfileModel['dataRows'] = he
       ? [
-          { label: 'יחידות במערכת', value: String(flowUnits.length) },
+          { label: 'יחידות במערכת', value: String(worldUnitsList.length) },
           { label: 'מרחב נוכחי בצ׳אט', value: activeWorldChatLabel },
           { label: 'כובעים פעילים', value: hats.map((h: Hat) => HAT_LABELS[h]).join(', ') || HAT_LABELS.base },
           { label: 'זיכרון שיחה', value: 'שמירת הקשר בתוך היחידה' },
         ]
       : [
-          { label: 'Units in workspace', value: String(flowUnits.length) },
+          { label: 'Units in workspace', value: String(worldUnitsList.length) },
           { label: 'Current chat world', value: activeWorldChatLabel },
           { label: 'Active hats', value: hats.map((h: Hat) => HAT_LABELS[h]).join(', ') || HAT_LABELS.base },
           { label: 'Conversation memory', value: 'Context is kept per unit' },
@@ -690,6 +1285,8 @@ export function OneScreen() {
         ? 'מנהל אישי אחד — מסונכרן בין מרחבים, יחידות והרשאות.'
         : 'One personal manager — synced across worlds, units, and permissions.',
       personaLine,
+      broadcastPrimary,
+      broadcastSecondary,
       worlds,
       hatsIntro: he
         ? 'הכובעים מצמצמים את ההקשר: אותו סוכן, פרשנות שונה לפי חיים / עבודה / בריאות / כספים.'
@@ -723,7 +1320,7 @@ export function OneScreen() {
         ? 'נתונים מינימליים — שקיפות מקסימלית. לשינוי הרשאות: הגדרות המערכת והנחיות בצ׳אט.'
         : 'Minimal data — maximal clarity. Change permissions via system settings and chat.',
     };
-  }, [language, user, currentWorldId, activeWorldChatLabel, flowUnits, chatSheetMessages]);
+  }, [language, user, effectiveChatWorldId, activeWorldChatLabel, flowUnits, chatSheetMessages]);
 
 
   /** מעבר חלק בכפתור כדור: לכדור אחר – פייד; חזרה לראשי – פייד־אין קצר (בלי קפיצה) */
@@ -875,6 +1472,7 @@ export function OneScreen() {
     setShowAttachSheet(false);
     setShowCredits(false);
     setShowChatMenu(false);
+    setChatPinnedWorldId(currentWorldId);
     const selectedOrb = currentOrbData[orbIndex];
     if (selectedOrb && selectedOrb.id !== 'origin') {
       let target = flowUnits.find((u) => u.id === selectedOrb.id);
@@ -882,7 +1480,7 @@ export function OneScreen() {
         const isLicenseOrb = selectedOrb.id === 'license';
         target = {
           id: selectedOrb.id,
-          worldId: currentWorldId,
+          worldId: effectiveChatWorldId,
           title: selectedOrb.title,
           subtitle: selectedOrb.subtitle || 'תהליך עם ליווי ONE',
           emoji: selectedOrb.emoji || '🧩',
@@ -912,15 +1510,16 @@ export function OneScreen() {
         setFlowUnits((prev) => [target!, ...prev.filter((u) => u.id !== target!.id)]);
       }
       setActiveUnitId(target.id);
-      setOneChatUnitHistoryOpen(false);
     } else {
       setActiveUnitId(null);
-      setOneChatUnitHistoryOpen(false);
+      setChatSheetMessages([
+        { id: `seed_${Date.now()}`, sender: 'one', text: buildWorldAgentWelcome(currentWorldId), sentAt: Date.now() },
+      ]);
     }
     chatBackdropOpacity.setValue(0);
-    chatSheetTranslateY.setValue(windowHeight);
+    chatSheetTranslateY.setValue(windowHeight + 180);
     setShowChatSheet(true);
-  }, [currentOrbData, orbIndex, flowUnits, windowHeight, chatBackdropOpacity, chatSheetTranslateY, currentWorldId]);
+  }, [currentOrbData, orbIndex, flowUnits, windowHeight, chatBackdropOpacity, chatSheetTranslateY, currentWorldId, buildWorldAgentWelcome]);
 
   const closeAttachSheet = useCallback(() => {
     setShowAttachSheet(false);
@@ -934,7 +1533,7 @@ export function OneScreen() {
   }, []);
 
   const closeChatSheet = useCallback(
-    (opts?: { gestureDx?: number }) => {
+    (opts?: { gestureDx?: number; gestureDy?: number; direction?: 'side' | 'down' }) => {
       setShowAttachSheet(false);
       chatOpenAnimGenerationRef.current += 1;
       shouldRefocusComposerAfterChatOpenRef.current = false;
@@ -947,27 +1546,46 @@ export function OneScreen() {
       setKeyboardOffset(0);
       Keyboard.dismiss();
       chatComposerTranslateY.setValue(0);
+      const closeDown =
+        opts?.direction === 'down' || (opts?.gestureDy != null && opts.gestureDy > 42 && (!opts?.gestureDx || Math.abs(opts.gestureDy) > Math.abs(opts.gestureDx)));
+      if (closeDown) {
+        const startY = Math.max(0, opts?.gestureDy ?? 0);
+        chatSheetTranslateY.setValue(startY);
+      }
       const dir =
         opts?.gestureDx != null && Math.abs(opts.gestureDx) > 8
           ? Math.sign(opts.gestureDx)
           : isRtlLayout
             ? 1
             : -1;
-      /** יציאה לצד בלבד — בלי ירידה למטה (פתיחה נשארת מלמטה) */
       const exitX = dir * Math.min(windowWidth * 1.12, windowWidth + 48);
+      const composerExitY = windowHeight + 48;
       Animated.parallel([
         Animated.timing(chatBackdropOpacity, {
           toValue: 0,
-          duration: 260,
+          duration: closeDown ? 220 : 260,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(chatSheetTranslateX, {
-          toValue: exitX,
-          duration: 300,
+        Animated.timing(chatComposerTranslateY, {
+          toValue: composerExitY,
+          duration: closeDown ? 240 : 280,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
+        closeDown
+          ? Animated.timing(chatSheetTranslateY, {
+              toValue: windowHeight,
+              duration: 280,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: true,
+            })
+          : Animated.timing(chatSheetTranslateX, {
+              toValue: exitX,
+              duration: 300,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: true,
+            }),
       ]).start(({ finished }) => {
         if (!finished) return;
         chatSheetTranslateX.setValue(0);
@@ -977,6 +1595,8 @@ export function OneScreen() {
         setShowChatMenu(false);
         setShowChatProfile(false);
         setChatProfileEditMode(false);
+      setIsVoiceTrayOpen(false);
+      setIsMicHoldActive(false);
       setChatOpenedFromOrbProfileShortcut(false);
         setShowCredits(false);
         /** אחרי שהקלף נסגר — לא לפני, כדי שלא יבזק מסך «My One» בזמן האנימציה */
@@ -1011,6 +1631,8 @@ export function OneScreen() {
       setKeyboardOffset(0);
       chatComposerTranslateY.setValue(0);
       chatSheetTranslateX.setValue(0);
+      setChatComposerMeasuredHeight(COMPOSER_LINE_HEIGHT);
+      setIsComposerExpanded(false);
       return;
     }
     let cancelled = false;
@@ -1019,9 +1641,9 @@ export function OneScreen() {
     pendingKeyboardInsetRef.current = 0;
     setKeyboardOffset(0);
     chatBackdropOpacity.setValue(0);
-    chatSheetTranslateY.setValue(windowHeight);
+    chatSheetTranslateY.setValue(windowHeight + 180);
     chatSheetTranslateX.setValue(0);
-    chatComposerTranslateY.setValue(0);
+    chatComposerTranslateY.setValue(windowHeight + 96);
 
     const wantKeyboard = shouldRefocusComposerAfterChatOpenRef.current;
     if (wantKeyboard) {
@@ -1043,7 +1665,13 @@ export function OneScreen() {
         }),
         Animated.timing(chatSheetTranslateY, {
           toValue: 0,
-          duration: 340,
+          duration: 380,
+          easing: Easing.bezier(0.22, 1, 0.36, 1),
+          useNativeDriver: true,
+        }),
+        Animated.timing(chatComposerTranslateY, {
+          toValue: 0,
+          duration: 360,
           easing: Easing.bezier(0.22, 1, 0.36, 1),
           useNativeDriver: true,
         }),
@@ -1057,9 +1685,24 @@ export function OneScreen() {
     };
   }, [showChatSheet, windowHeight, chatBackdropOpacity, chatSheetTranslateY, chatSheetTranslateX, chatComposerTranslateY]);
 
+  useEffect(() => {
+    if (!nowValue.trim()) {
+      setChatComposerMeasuredHeight(COMPOSER_LINE_HEIGHT);
+      setIsComposerExpanded(false);
+    }
+  }, [nowValue]);
+
+  useEffect(() => {
+    const preset = DEV_PROFILE_PRESETS[previewProfile];
+    setPersonalOrbs(preset.personalOrbs);
+    setFlowUnits(preset.flowUnits);
+    setActiveUnitId(null);
+    setShowChatProfile(false);
+  }, [previewProfile]);
+
   const collapseProfileToChat = useCallback(() => {
     if (chatOpenedFromOrbProfileShortcut) {
-      closeChatSheetRef.current?.();
+      closeChatSheetRef.current?.({ direction: 'down' });
       return;
     }
     const exitW = Math.min(260, windowWidth * 0.38);
@@ -1112,6 +1755,43 @@ export function OneScreen() {
     [showChatProfile, chatOpenedFromOrbProfileShortcut, windowWidth, profileDismissSlideX]
   );
 
+  const chatSheetHeaderDownPan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_e, g) =>
+          g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx) + 4,
+        onPanResponderMove: (_e, g) => {
+          const pull = Math.max(0, g.dy);
+          chatSheetTranslateY.setValue(pull);
+          const fade = 1 - Math.min(0.55, pull / Math.max(220, windowHeight * 0.45));
+          chatBackdropOpacity.setValue(fade);
+        },
+        onPanResponderRelease: (_e, g) => {
+          const shouldClose = g.dy > 110 || g.vy > 1.05;
+          if (shouldClose) {
+            closeChatSheetRef.current?.({ direction: 'down', gestureDy: g.dy, gestureDx: g.dx });
+            return;
+          }
+          Animated.parallel([
+            Animated.spring(chatSheetTranslateY, {
+              toValue: 0,
+              stiffness: 420,
+              damping: 34,
+              mass: 0.85,
+              useNativeDriver: true,
+            }),
+            Animated.timing(chatBackdropOpacity, {
+              toValue: 1,
+              duration: 180,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]).start();
+        },
+      }),
+    [chatSheetTranslateY, chatBackdropOpacity, windowHeight]
+  );
+
   const openChatProfile = useCallback(() => {
     Keyboard.dismiss();
     setShowChatMenu(false);
@@ -1147,10 +1827,6 @@ export function OneScreen() {
   }, []);
 
   useEffect(() => {
-    if (!showChatSheet) setOneChatUnitHistoryOpen(false);
-  }, [showChatSheet]);
-
-  useEffect(() => {
     if (!showChatSheet || !showChatProfile) return;
     const t = setTimeout(() => chatScrollRef.current?.scrollTo({ y: 0, animated: false }), 60);
     return () => clearTimeout(t);
@@ -1161,8 +1837,10 @@ export function OneScreen() {
       chatProfileCompactScrollRef.current = false;
       setChatProfileHeaderCompact(false);
       profileDismissSlideX.setValue(0);
+      profileUpgradeFabTranslateY.setValue(96);
+      profileUpgradeFabOpacity.setValue(0);
     }
-  }, [showChatProfile, profileDismissSlideX]);
+  }, [showChatProfile, profileDismissSlideX, profileUpgradeFabOpacity, profileUpgradeFabTranslateY]);
 
   const CHAT_PROFILE_COMPACT_SCROLL_Y = 128;
 
@@ -1179,34 +1857,123 @@ export function OneScreen() {
     [showChatProfile]
   );
 
-  /** ONE chat: גלילה לסוף כשההיסטוריה סגורה; פתיחת היסטוריה — גלילה לראש הרשימה */
+  const profileUpgradeFabVisible = showChatProfile && !activeUnit && chatProfileHeaderCompact;
+  useEffect(() => {
+    if (profileUpgradeFabVisible) {
+      Animated.parallel([
+        Animated.spring(profileUpgradeFabTranslateY, {
+          toValue: 0,
+          stiffness: 420,
+          damping: 30,
+          mass: 0.85,
+          useNativeDriver: true,
+        }),
+        Animated.timing(profileUpgradeFabOpacity, {
+          toValue: 1,
+          duration: 200,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(profileUpgradeFabTranslateY, {
+          toValue: 96,
+          duration: 160,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(profileUpgradeFabOpacity, {
+          toValue: 0,
+          duration: 140,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [
+    profileUpgradeFabVisible,
+    profileUpgradeFabOpacity,
+    profileUpgradeFabTranslateY,
+  ]);
+
+  const onMainChatThreadMessageLayout = useCallback((messageId: string, y: number) => {
+    chatMessageBubbleYRef.current.set(messageId, y);
+  }, []);
+
+  const recomputeChatStickyDateLabel = useCallback(
+    (scrollY: number) => {
+      const list = activeUnit?.messages ?? chatSheetMessages;
+      const he = language === 'he';
+      if (!list.length) {
+        const d = formatChatDayStickyLabel(Date.now(), he);
+        if (d !== chatStickyLabelLastRef.current) {
+          chatStickyLabelLastRef.current = d;
+          setChatStickyDateLabel(d);
+        }
+        return;
+      }
+      const STICKY_TOP = 44;
+      const cut = scrollY + STICKY_TOP;
+      let pickedIdx = 0;
+      const tops = chatMessageBubbleYRef.current;
+      for (let i = 0; i < list.length; i++) {
+        const ty = tops.get(list[i].id);
+        if (ty != null && ty <= cut) pickedIdx = i;
+      }
+      const ts = inferMessageSentAt(list[pickedIdx], pickedIdx, list.length);
+      const label = formatChatDayStickyLabel(ts, he);
+      if (label !== chatStickyLabelLastRef.current) {
+        chatStickyLabelLastRef.current = label;
+        setChatStickyDateLabel(label);
+      }
+    },
+    [activeUnit, chatSheetMessages, language]
+  );
+
+  useEffect(() => {
+    chatStickyLabelLastRef.current = '';
+    chatMessageBubbleYRef.current.clear();
+  }, [activeUnit?.id, effectiveChatWorldId]);
+
+  useEffect(() => {
+    requestAnimationFrame(() => recomputeChatStickyDateLabel(lastChatScrollYRef.current));
+  }, [chatSheetMessages.length, activeUnit?.messages?.length, language, recomputeChatStickyDateLabel]);
+
+  const onCombinedChatScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (showChatProfile) {
+        onChatProfileScroll(e);
+        return;
+      }
+      const y = e.nativeEvent.contentOffset.y;
+      lastChatScrollYRef.current = y;
+      recomputeChatStickyDateLabel(y);
+    },
+    [showChatProfile, onChatProfileScroll, recomputeChatStickyDateLabel]
+  );
+
+  /** לא מציגים «היום» בדיפולט — רק אחרי גלילה אחורה ליום קודם או תאריך מלא */
+  const chatStickyDatePillVisible =
+    chatStickyDateLabel !== formatChatDayStickyLabel(Date.now(), language === 'he');
+
+  /** צ׳אט סוכן: פוקוס על הודעות אחרונות (היסטוריית יחידות נשארת למעלה בגלילה) */
   useEffect(() => {
     if (!showChatSheet || activeUnitId) return;
-    if (oneChatUnitHistoryOpen) {
-      const t = setTimeout(() => chatScrollRef.current?.scrollTo({ y: 0, animated: false }), 50);
-      return () => clearTimeout(t);
-    }
     const t = setTimeout(scrollOneChatToBottom, 40);
     const t2 = setTimeout(scrollOneChatToBottom, 120);
     return () => {
       clearTimeout(t);
       clearTimeout(t2);
     };
-  }, [
-    showChatSheet,
-    activeUnitId,
-    oneChatUnitHistoryOpen,
-    flowUnits.length,
-    chatSheetMessages.length,
-    scrollOneChatToBottom,
-  ]);
+  }, [showChatSheet, activeUnitId, flowUnits.length, chatSheetMessages.length, scrollOneChatToBottom]);
 
   const submitNowValue = useCallback(() => {
     const text = nowValue.trim();
     if (!text) return;
     setChatStatusPhase('thinking');
 
-    const userLine: ChatLine = { id: `u_${Date.now()}`, sender: 'user', text };
+    const userLine: ChatLine = { id: `u_${Date.now()}`, sender: 'user', text, sentAt: Date.now() };
 
     if (activeUnitId) {
       setFlowUnits((prev) =>
@@ -1217,7 +1984,12 @@ export function OneScreen() {
                 messages: [
                   ...unit.messages,
                   userLine,
-                  { id: `o_${Date.now() + 1}`, sender: 'one', text: 'Updated. I logged this in your unit and adjusted the next steps.' },
+                  {
+                    id: `o_${Date.now() + 1}`,
+                    sender: 'one',
+                    text: 'Updated. I logged this in your unit and adjusted the next steps.',
+                    sentAt: Date.now(),
+                  },
                 ],
               }
             : unit
@@ -1242,7 +2014,10 @@ export function OneScreen() {
       setChatSheetMessages((prev) => [...prev, userLine]);
       if (nextIndex < intakeQuestions.length) {
         setIntakeState({ ...intakeState, questionIndex: nextIndex, answers: nextAnswers });
-        setChatSheetMessages((prev) => [...prev, { id: `q_${Date.now()}`, sender: 'one', text: intakeQuestions[nextIndex] }]);
+        setChatSheetMessages((prev) => [
+          ...prev,
+          { id: `q_${Date.now()}`, sender: 'one', text: intakeQuestions[nextIndex], sentAt: Date.now() },
+        ]);
       } else {
         const intent = intakeState.intent.toLowerCase();
         const isLicense = intent.includes('license') || intent.includes('רישיון');
@@ -1254,7 +2029,7 @@ export function OneScreen() {
             : 8;
         const newUnit: FlowUnit = {
           id: newUnitId,
-          worldId: currentWorldId,
+          worldId: effectiveChatWorldId,
           title: isLicense ? 'רישיון נהיגה' : intakeState.intent.slice(0, 28),
           subtitle: isLicense ? 'תיאוריה · שיעורים · מבחן מעשי' : 'יחידה חדשה שנוצרה מהשיחה',
           emoji: isLicense ? '🚗' : '🧩',
@@ -1268,6 +2043,7 @@ export function OneScreen() {
               text: isLicense
                 ? 'היחידה נוצרה. נתחיל מהמסמכים והרשמה לתיאוריה — כתוב אם כבר יש לך תואם רפואי.'
                 : 'היחידה נוצרה. נפרק את המטרה לשלוש משימות ראשונות — מה הכי דחוף בשבילך?',
+              sentAt: Date.now(),
             },
           ],
           goal: isLicense
@@ -1298,6 +2074,7 @@ export function OneScreen() {
             id: `createdlog_${Date.now()}`,
             sender: 'one',
             text: `Created new unit: ${newUnit.title} (${newUnit.status})`,
+            sentAt: Date.now(),
           },
         ]);
         setIntakeState(null);
@@ -1318,15 +2095,25 @@ export function OneScreen() {
       setChatSheetMessages((prev) => [
         ...prev,
         userLine,
-        { id: `open_${Date.now()}`, sender: 'one', text: `Opening existing unit: ${matched.title}` },
+        {
+          id: `open_${Date.now()}`,
+          sender: 'one',
+          text: `Opening existing unit: ${matched.title}`,
+          sentAt: Date.now(),
+        },
       ]);
       setActiveUnitId(matched.id);
     } else {
       setChatSheetMessages((prev) => [
         ...prev,
         userLine,
-        { id: `start_${Date.now()}`, sender: 'one', text: 'I need a few details before creating your unit.' },
-        { id: `q0_${Date.now()}`, sender: 'one', text: intakeQuestions[0] },
+        {
+          id: `start_${Date.now()}`,
+          sender: 'one',
+          text: 'I need a few details before creating your unit.',
+          sentAt: Date.now(),
+        },
+        { id: `q0_${Date.now()}`, sender: 'one', text: intakeQuestions[0], sentAt: Date.now() },
       ]);
       setIntakeState({ intent: text, questionIndex: 0, answers: [] });
     }
@@ -1334,13 +2121,13 @@ export function OneScreen() {
     setTimeout(() => setChatStatusPhase('planning'), 900);
     setTimeout(() => setChatStatusPhase('ready'), 1800);
     setTimeout(() => setChatStatusPhase('agent'), 3200);
-  }, [nowValue, activeUnitId, intakeState, flowUnits, currentWorldId]);
+  }, [nowValue, activeUnitId, intakeState, flowUnits, effectiveChatWorldId]);
 
   const appendUserAttachmentMessage = useCallback(
     (text: string) => {
       setChatStatusPhase('thinking');
       const uid = Date.now();
-      const userLine: ChatLine = { id: `u_${uid}`, sender: 'user', text };
+      const userLine: ChatLine = { id: `u_${uid}`, sender: 'user', text, sentAt: uid };
       const oneLine: ChatLine = {
         id: `o_${uid + 1}`,
         sender: 'one',
@@ -1348,6 +2135,7 @@ export function OneScreen() {
           language === 'he'
             ? 'קיבלתי את הצירוף — נשתמש בו בעדכון הצעדים.'
             : 'Attachment noted — we will fold it into the next step update.',
+        sentAt: uid + 1,
       };
       if (activeUnitId) {
         setFlowUnits((prev) =>
@@ -1475,7 +2263,12 @@ export function OneScreen() {
   const wheelOrbSize = Math.min(contentWidth * 0.32, windowHeight * 0.16, 100);
   /** בגלגל: גודל במרכז – כדור גדול כשממורכז (אימוג'י + כותרת + תת־כותרת) */
   const centerOrbSize = Math.min(largeOrbSize * 0.92, WHEEL_ITEM_HEIGHT * 1.4, 380);
-  const wheelSnapOffsets = currentOrbData.map((_, i) => i * WHEEL_ITEM_HEIGHT);
+  /** שורה נוספת אחרי האורבים: ממורכזת או לחיצה → גלילה מיידית לכדור הסוכן */
+  const wheelSlotCount = currentOrbData.length + 1;
+  const wheelSnapOffsets = useMemo(
+    () => Array.from({ length: wheelSlotCount }, (_, i) => i * WHEEL_ITEM_HEIGHT),
+    [wheelSlotCount]
+  );
   const agentCircleColor = theme === 'dark' ? EMOJI_CIRCLE_DARK : EMOJI_CIRCLE_LIGHT;
 
   const resetInactivityTimer = useCallback(
@@ -1535,14 +2328,26 @@ export function OneScreen() {
     };
   }, [resetInactivityTimer]);
 
+  const jumpWheelToAgentOrb = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    setOrbIndex(0);
+    resetInactivityTimer({ orbIndex: 0 });
+  }, [resetInactivityTimer]);
+
   const onOrbScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const y = e.nativeEvent.contentOffset.y;
-      const index = Math.max(0, Math.min(Math.round(y / WHEEL_ITEM_HEIGHT), currentOrbData.length - 1));
+      const H = WHEEL_ITEM_HEIGHT;
+      const raw = Math.round(y / H);
+      if (raw >= currentOrbData.length) {
+        jumpWheelToAgentOrb();
+        return;
+      }
+      const index = Math.max(0, Math.min(raw, currentOrbData.length - 1));
       setOrbIndex(index);
       resetInactivityTimer({ orbIndex: index });
     },
-    [currentOrbData.length, resetInactivityTimer]
+    [currentOrbData.length, jumpWheelToAgentOrb, resetInactivityTimer]
   );
 
   const renderOrbContent = useCallback((item: OrbItem, isSmall: boolean) => {
@@ -1608,7 +2413,7 @@ export function OneScreen() {
     const deltaY = e.nativeEvent?.deltaY ?? (e as { deltaY: number }).deltaY ?? 0;
     const y = lastScrollYRef.current;
     const i = Math.round(y / WHEEL_ITEM_HEIGHT);
-    const maxIndex = currentOrbData.length - 1;
+    const maxIndex = currentOrbData.length;
     const next = deltaY > 0 ? Math.min(i + 1, maxIndex) : Math.max(i - 1, 0);
     if (next !== i) scrollRef.current?.scrollTo({ y: next * WHEEL_ITEM_HEIGHT, animated: true });
   }, [currentOrbData.length, resetInactivityTimer]);
@@ -1656,7 +2461,7 @@ export function OneScreen() {
     /** מעלה תוכן רק בכדור המרכזי (בלי לחתוך את הכדורים הקטנים) */
     const centerContentLift = scrollY.interpolate({
       inputRange: sizeRange,
-      outputRange: [0, 0, -25, 0, 0],
+      outputRange: [0, 0, -33, 0, 0],
       extrapolate: 'clamp',
     });
     /** הכדור הממורכז (ראש הסוכן) מוגבה 15px למעלה */
@@ -1683,6 +2488,27 @@ export function OneScreen() {
     const agentIconSize = index === 0 && currentWorldId !== 'personal'
       ? Math.round(WORLD_ICON_SIZE * AGENT_CIRCLE_SIZE_OTHER_WORLDS / EMOJI_CIRCLE_SIZE)
       : WORLD_ICON_SIZE;
+    const unitProgress = index === 0 ? null : flowUnits.find((u) => u.id === item.id)?.progress;
+    const unitProgressPct = unitProgress != null ? Math.max(0, Math.min(100, unitProgress)) / 100 : null;
+    const unitProgressColor = progressColorByPct(unitProgressPct ?? 0, isDark);
+    /** כדור ראשון מתחת לסוכן: כשהוא קטן — חץ מטה; כשמתקרב למרכז — חזרה לאימוג'י */
+    const firstNeighborScrollHintArrowOpacity =
+      index === 1
+        ? scrollY.interpolate({
+            inputRange: [0, H * 0.38, H * 0.72],
+            outputRange: [1, 0.22, 0],
+            extrapolate: 'clamp',
+          })
+        : null;
+    const firstNeighborScrollHintEmojiOpacity =
+      index === 1
+        ? scrollY.interpolate({
+            inputRange: [0, H * 0.34, H * 0.72],
+            outputRange: [0, 0.72, 1],
+            extrapolate: 'clamp',
+          })
+        : null;
+    const scrollHintArrowSize = Math.max(20, Math.round(agentCircleSize * 0.44));
     return (
       <TouchableOpacity
         key={item.id}
@@ -1717,7 +2543,7 @@ export function OneScreen() {
               ]}
             >
             <View style={styles.wheelOrbInner}>
-              <Animated.View style={{ marginTop: Animated.add(emojiMarginTop, centerContentLift) }}>
+              <Animated.View style={{ marginTop: Animated.add(emojiMarginTop, centerContentLift), transform: [{ translateY: -10 }] }}>
                 <View
                   ref={index === 0 ? wheelOrbRef : undefined}
                   style={[
@@ -1741,12 +2567,48 @@ export function OneScreen() {
                       <HealthIconSvg size={agentIconSize} color={currentWorldColor} />
                     ) : currentWorldId === 'finance' ? (
                       <FinanceIconSvg size={agentIconSize} color={currentWorldColor} />
+                    ) : currentWorldId === 'knowledge' ? (
+                      <KnowledgeIconSvg size={agentIconSize} color={currentWorldColor} />
+                    ) : currentWorldId === 'leisure' ? (
+                      <LeisureIconSvg size={agentIconSize} color={currentWorldColor} />
+                    ) : currentWorldId === 'relations' ? (
+                      <RelationsIconSvg size={agentIconSize} color={currentWorldColor} />
                     ) : null
+                  ) : index === 1 && firstNeighborScrollHintArrowOpacity && firstNeighborScrollHintEmojiOpacity ? (
+                    <View
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        height: '100%',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          StyleSheet.absoluteFillObject,
+                          { justifyContent: 'center', alignItems: 'center', opacity: firstNeighborScrollHintArrowOpacity },
+                        ]}
+                      >
+                        <OrbScrollDownHintSvg size={scrollHintArrowSize} color={colors.text} />
+                      </Animated.View>
+                      <Animated.View
+                        style={{
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          opacity: firstNeighborScrollHintEmojiOpacity,
+                        }}
+                      >
+                        <Text style={styles.wheelOrbEmoji}>{item.emoji}</Text>
+                      </Animated.View>
+                    </View>
                   ) : (
                     <Text style={styles.wheelOrbEmoji}>{item.emoji}</Text>
                   )}
                 </View>
               </Animated.View>
+              {index !== 0 ? <View pointerEvents="none" style={styles.wheelOrbBottomSafeArea} /> : null}
               <Animated.View
                 style={[styles.wheelOrbTextBlock, { opacity: textOpacity, marginTop: Animated.add(textBlockMarginTop, centerContentLift) }]}
                 pointerEvents="none"
@@ -1758,7 +2620,10 @@ export function OneScreen() {
                     titleColor={theme === 'dark' ? '#ffffff' : colors.text}
                     subtitleColor={colors.textSecondary}
                     fixedTitle={currentWorldId === 'personal' ? personalGreeting : (WORLDS[worldIndex]?.label ?? '')}
-                    onBroadcastLoopComplete={() => setWorldIndex((wi) => (wi + 1) % WORLDS.length)}
+                    onBroadcastLoopComplete={() => {
+                      if (showChatSheetRef.current) return;
+                      setWorldIndex((wi) => (wi + 1) % WORLDS.length);
+                    }}
                   />
                 ) : (
                   <FadeBroadcastBlock
@@ -1767,6 +2632,9 @@ export function OneScreen() {
                     titleColor={colors.text}
                     subtitleColor={colors.textSecondary}
                     fixedTitle={item.title}
+                    titleProgressPct={orbIndex === index ? unitProgressPct : null}
+                    titleProgressColor={unitProgressColor}
+                    titleProgressTrackColor={hexToRgba(colors.textSecondary, isDark ? 0.34 : 0.18)}
                   />
                 )}
               </Animated.View>
@@ -1783,6 +2651,7 @@ export function OneScreen() {
     scrollToOrb,
     colors,
     theme,
+    isDark,
     peripheralOrbsOpacity,
     orbIndex,
     currentOrbData,
@@ -1792,11 +2661,143 @@ export function OneScreen() {
     wheelOrbRef,
     flowUnits,
     resetInactivityTimer,
-    scrollToOrb,
     setWorldIndex,
   ]);
 
-  const wheelContentHeight = paddingVertical * 2 + currentOrbData.length * WHEEL_ITEM_HEIGHT;
+  /** כדור־שליח אחרי האורב האחרון: ממורכז או לחיצה → קפיצה לכדור הסוכן */
+  const renderWheelTopSentinel = useCallback(() => {
+    const H = WHEEL_ITEM_HEIGHT;
+    const i = currentOrbData.length;
+    const inputRange = [i - 2, i - 1, i, i + 1, i + 2].map((x) => x * H);
+    const scale = scrollY.interpolate({
+      inputRange,
+      outputRange: [0.28, 0.55, 1, 0.55, 0.28],
+      extrapolate: 'clamp',
+    });
+    const opacity = scrollY.interpolate({
+      inputRange,
+      outputRange: [0.35, 0.7, 1, 0.7, 0.35],
+      extrapolate: 'clamp',
+    });
+    const sizeRange = [(i - 1) * H, (i - 0.25) * H, i * H, (i + 0.25) * H, (i + 1) * H];
+    const orbSize = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: [wheelOrbSize, wheelOrbSize, centerOrbSize, wheelOrbSize, wheelOrbSize],
+      extrapolate: 'clamp',
+    });
+    const textOpacityRange = [(i - 0.5) * H, (i - 0.28) * H, (i + 0.28) * H, (i + 0.5) * H];
+    const textOpacity = scrollY.interpolate({
+      inputRange: textOpacityRange,
+      outputRange: [0, 1, 1, 0],
+      extrapolate: 'clamp',
+    });
+    const emojiMarginTop = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: [0, 0, -135, 0, 0],
+      extrapolate: 'clamp',
+    });
+    const textBlockMarginTop = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: [0, 0, -10, 0, 0],
+      extrapolate: 'clamp',
+    });
+    const centerContentLift = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: [0, 0, -33, 0, 0],
+      extrapolate: 'clamp',
+    });
+    const orbTranslateY = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: [0, 0, -25, 0, 0],
+      extrapolate: 'clamp',
+    });
+    const neighborDownShift = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: [24, 16, 0, 16, 24],
+      extrapolate: 'clamp',
+    });
+    const neighborFadeOpacity = 1;
+    const debugOutline = SHOW_ORB_DEBUG_OUTLINE ? styles.orbDebugOutline : undefined;
+    const circleSize = EMOJI_CIRCLE_SIZE;
+    const hintSize = Math.max(20, Math.round(circleSize * 0.44));
+    const sentinelLabel = language === 'he' ? 'חזרה לסוכן' : 'Back to agent';
+
+    return (
+      <TouchableOpacity
+        key="__wheel_top_sentinel__"
+        activeOpacity={1}
+        onPress={jumpWheelToAgentOrb}
+        style={styles.wheelItemTouch}
+      >
+        <Animated.View
+          style={[
+            styles.wheelItemWrap,
+            {
+              height: H,
+              opacity,
+              transform: [{ scale }, { translateY: Animated.add(orbTranslateY, neighborDownShift) }],
+            },
+          ]}
+        >
+          <Animated.View style={{ flex: 1, opacity: neighborFadeOpacity }}>
+            <Animated.View
+              style={[
+                styles.orb,
+                styles.wheelOrb,
+                debugOutline,
+                {
+                  width: orbSize,
+                  height: orbSize,
+                  borderRadius: 999,
+                },
+              ]}
+            >
+              <View style={styles.wheelOrbInner}>
+                <Animated.View style={{ marginTop: Animated.add(emojiMarginTop, centerContentLift), transform: [{ translateY: -10 }] }}>
+                  <View
+                    style={[
+                      styles.wheelOrbEmojiCircle,
+                      {
+                        width: circleSize,
+                        height: circleSize,
+                        borderRadius: circleSize / 2,
+                        borderWidth: EMOJI_CIRCLE_BORDER_WIDTH,
+                        borderColor: EMOJI_CIRCLE_BORDER_COLOR,
+                        backgroundColor: 'transparent',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      },
+                    ]}
+                  >
+                    <OrbScrollUpHintSvg size={hintSize} color={colors.text} />
+                  </View>
+                </Animated.View>
+                <View pointerEvents="none" style={styles.wheelOrbBottomSafeArea} />
+                <Animated.View
+                  style={[styles.wheelOrbTextBlock, { opacity: textOpacity, marginTop: Animated.add(textBlockMarginTop, centerContentLift) }]}
+                  pointerEvents="none"
+                >
+                  <Text style={[styles.wheelOrbSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {sentinelLabel}
+                  </Text>
+                </Animated.View>
+              </View>
+            </Animated.View>
+          </Animated.View>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  }, [
+    scrollY,
+    wheelOrbSize,
+    centerOrbSize,
+    colors,
+    jumpWheelToAgentOrb,
+    currentOrbData.length,
+    language,
+  ]);
+
+  const wheelContentHeight = paddingVertical * 2 + wheelSlotCount * WHEEL_ITEM_HEIGHT;
 
   /** החלפת עולם – גלילה חזרה לכדור הראשון */
   useEffect(() => {
@@ -1969,6 +2970,7 @@ export function OneScreen() {
             scrollEventThrottle={16}
           >
             {currentOrbData.map((item, i) => renderWheelItem(item, i))}
+            {renderWheelTopSentinel()}
           </ScrollView>
         </View>
       )}
@@ -2472,9 +3474,11 @@ export function OneScreen() {
                         placeholderTextColor={hexToRgba(colors.textSecondary, 0.5)}
                         value={nowValue}
                         onChangeText={setNowValue}
-                        showSoftInputOnFocus={!showChatSheet}
+                        showSoftInputOnFocus={false}
                         onFocus={(e: any) => {
                           if (showChatSheet) return;
+                          homeNowInputRef.current?.blur();
+                          Keyboard.dismiss();
                           shouldRefocusComposerAfterChatOpenRef.current = true;
                           openChatSheet();
                           if (Platform.OS === 'web') {
@@ -2642,14 +3646,23 @@ export function OneScreen() {
                   ]}
                 >
                   {showChatProfile ? (
-                    <View style={[styles.chatSheetTopBar, { borderBottomColor: colors.border }]}>
+                    <View
+                      {...chatSheetHeaderDownPan.panHandlers}
+                      style={[
+                        styles.chatSheetTopBar,
+                        {
+                          borderBottomColor: colors.border,
+                          borderBottomWidth: activeUnit ? 0 : StyleSheet.hairlineWidth,
+                        },
+                      ]}
+                    >
                       <TouchableOpacity
                         style={styles.chatModalIconBtn}
                         onPress={collapseProfileToChat}
                         hitSlop={8}
                         activeOpacity={0.7}
                       >
-                        <Text style={[styles.chatModalBackIcon, { color: colors.textSecondary }]}>{chatBackGlyph}</Text>
+                        <ChatBackArrowIcon color={colors.textSecondary} rtl={isRtlLayout} size={24} />
                       </TouchableOpacity>
                       {chatProfileHeaderCompact ? (
                         <TouchableOpacity
@@ -2687,7 +3700,7 @@ export function OneScreen() {
                             >
                               {activeUnit
                                 ? embedLatinRunsForRtlDisplay(activeUnit.title, language)
-                                : translate(language, 'chat_title_default')}
+                                : chatAgentHeaderTitle}
                             </Text>
                             {activeUnit ? (
                               <Text
@@ -2701,33 +3714,55 @@ export function OneScreen() {
                                 ]}
                                 numberOfLines={1}
                               >
-                                {formatChatUnitProgressLine(language, activeUnit.progress, activeUnit.steps)}
+                                <Text style={{ color: headerProgressColor }}>{`${activeUnit.progress}%`}</Text>
+                                <Text style={{ color: colors.textSecondary }}>
+                                  {language === 'he' ? ` · ${activeUnit.steps} צעדים` : ` · ${activeUnit.steps} Steps`}
+                                </Text>
                               </Text>
                             ) : (
-                              <View style={styles.chatAgentWorldRow}>
-                                <Text style={[styles.chatProfileToolbarSubtitle, { color: colors.textSecondary }]}>
-                                  {chatAgentStatusLabel}
-                                </Text>
-                                <Text style={[styles.chatProfileToolbarSubtitle, { color: colors.textSecondary }]}> · </Text>
-                                <WorldMiniIcon worldId={currentWorldId} color={currentWorldColor} size={14} />
-                                <Text style={[styles.chatProfileToolbarSubtitle, { color: currentWorldColor }]}>
-                                  {activeWorldChatLabel}
-                                </Text>
-                              </View>
+                              <Text style={[styles.chatProfileToolbarSubtitle, { color: colors.textSecondary }]}>
+                                {agentHeaderSubtitle}
+                              </Text>
                             )}
                           </View>
                         </TouchableOpacity>
                       ) : (
                         <View style={styles.chatProfileToolbarSpacer} />
                       )}
-                      <TouchableOpacity
-                        style={styles.chatSheetHeaderShareBtn}
-                        hitSlop={8}
-                        activeOpacity={0.7}
-                        onPress={shareChatUnitProfile}
-                      >
-                        <Text style={[styles.chatSheetHeaderShareGlyph, { color: colors.textSecondary }]}>{chatShareGlyph}</Text>
-                      </TouchableOpacity>
+                      {!chatProfileHeaderCompact ? (
+                        <View pointerEvents="none" style={styles.chatProfileHeaderAbsoluteLabelWrap}>
+                          <Text style={[styles.chatProfileHeaderLabel, { color: colors.text }]}>
+                            {chatProfileHeaderLabel}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {activeUnit ? (
+                        <TouchableOpacity
+                          style={styles.chatSheetHeaderShareBtn}
+                          hitSlop={8}
+                          activeOpacity={0.7}
+                          onPress={shareChatUnitProfile}
+                          accessibilityRole="button"
+                          accessibilityLabel={language === 'he' ? 'שתף' : 'Share'}
+                        >
+                          <ShareIcon color={colors.text} size={26} />
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.chatSheetHeaderShareBtn}
+                          hitSlop={8}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setShowChatMenu(false);
+                            closeChatSheet();
+                            navigation.navigate('Settings');
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={language === 'he' ? 'הגדרות' : 'Settings'}
+                        >
+                          <SettingsIcon color={colors.text} size={26} />
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
                         style={styles.chatModalMenuBtn}
                         hitSlop={8}
@@ -2740,16 +3775,25 @@ export function OneScreen() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <View style={[styles.chatSheetTopBar, { borderBottomColor: colors.border }]}>
+                    <View
+                      {...chatSheetHeaderDownPan.panHandlers}
+                      style={[
+                        styles.chatSheetTopBar,
+                        {
+                          borderBottomColor: colors.border,
+                          borderBottomWidth: activeUnit ? 0 : StyleSheet.hairlineWidth,
+                        },
+                      ]}
+                    >
                       <TouchableOpacity
                         style={styles.chatModalIconBtn}
                         onPress={() => {
-                          closeChatSheet();
+                          closeChatSheet({ direction: 'down' });
                         }}
                         hitSlop={8}
                         activeOpacity={0.7}
                       >
-                        <Text style={[styles.chatModalBackIcon, { color: colors.textSecondary }]}>{chatBackGlyph}</Text>
+                        <ChatBackArrowIcon color={colors.textSecondary} rtl={isRtlLayout} size={24} />
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.chatHeaderProfileBtn} activeOpacity={0.75} onPress={openChatProfile}>
                         <View
@@ -2779,7 +3823,7 @@ export function OneScreen() {
                           >
                             {activeUnit
                               ? embedLatinRunsForRtlDisplay(activeUnit.title, language)
-                              : translate(language, 'chat_title_default')}
+                              : chatAgentHeaderTitle}
                           </Text>
                           {activeUnit ? (
                             <Text
@@ -2794,18 +3838,45 @@ export function OneScreen() {
                                 },
                               ]}
                             >
-                              {formatChatUnitProgressLine(language, activeUnit.progress, activeUnit.steps)}
+                              <Text style={{ color: headerProgressColor }}>{`${activeUnit.progress}%`}</Text>
+                              <Text style={{ color: colors.textSecondary }}>
+                                {language === 'he' ? ` · ${activeUnit.steps} צעדים` : ` · ${activeUnit.steps} Steps`}
+                              </Text>
                             </Text>
                           ) : (
-                            <View style={styles.chatAgentWorldRow}>
-                              <Text style={[styles.chatModalSubtitle, { color: colors.textSecondary }]}>{chatAgentStatusLabel}</Text>
-                              <Text style={[styles.chatModalSubtitle, { color: colors.textSecondary }]}> · </Text>
-                              <WorldMiniIcon worldId={currentWorldId} color={currentWorldColor} size={14} />
-                              <Text style={[styles.chatModalSubtitle, { color: currentWorldColor }]}>{activeWorldChatLabel}</Text>
-                            </View>
+                            <Text style={[styles.chatModalSubtitle, { color: colors.textSecondary }]}>{agentHeaderSubtitle}</Text>
                           )}
                         </View>
                       </TouchableOpacity>
+                      {!activeUnit ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.chatHeaderUpgradeBtn,
+                            userPlanTier !== 'FREE' ? styles.chatHeaderPlanBadge : null,
+                          ]}
+                          activeOpacity={0.82}
+                          onPress={() => setShowCredits(true)}
+                        >
+                          <Text
+                            style={[
+                              styles.chatHeaderUpgradeBtnText,
+                              userPlanTier !== 'FREE' ? styles.chatHeaderPlanBadgeText : null,
+                            ]}
+                          >
+                            {chatHeaderPlanLabel}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {activeUnit ? (
+                        <UnitChatHeaderContacts
+                          participants={unitChatParticipants}
+                          ringColor={chatSheetBg}
+                          surfaceTint={colors.surface}
+                          textColor={colors.text}
+                          language={language}
+                          onPress={openAttachSheet}
+                        />
+                      ) : null}
                       <TouchableOpacity
                         style={styles.chatModalMenuBtn}
                         hitSlop={8}
@@ -2818,6 +3889,11 @@ export function OneScreen() {
                       </TouchableOpacity>
                     </View>
                   )}
+                  {activeUnit ? (
+                    <View style={[styles.chatHeaderProgressTrack, { backgroundColor: hexToRgba(colors.textSecondary, isDark ? 0.24 : 0.16) }]}>
+                      <View style={[styles.chatHeaderProgressFill, { width: `${Math.max(2, headerProgressPct * 100)}%`, backgroundColor: headerProgressColor }]} />
+                    </View>
+                  ) : null}
                   {showChatMenu && (
                     <View style={styles.chatMenuOverlay}>
                       <TouchableOpacity
@@ -2833,7 +3909,11 @@ export function OneScreen() {
                             activeOpacity={0.75}
                             onPress={() => {
                               setShowChatMenu(false);
-                              if (row.id === 'History' && !activeUnitId) setOneChatUnitHistoryOpen(true);
+                              if (row.id === 'History' && !activeUnitId) {
+                                requestAnimationFrame(() => {
+                                  chatScrollRef.current?.scrollTo({ y: 0, animated: true });
+                                });
+                              }
                               if (row.id === 'Profile') openChatProfile();
                               if (row.id === 'Settings') {
                                 closeChatSheet();
@@ -2847,6 +3927,7 @@ export function OneScreen() {
                       </View>
                     </View>
                   )}
+                  <View style={styles.chatThreadScrollWrap}>
                   <ScrollView
                     ref={chatScrollRef}
                     style={styles.chatModalScroll}
@@ -2857,7 +3938,10 @@ export function OneScreen() {
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
                     scrollEventThrottle={16}
-                    onScroll={showChatProfile ? onChatProfileScroll : undefined}
+                    onScroll={onCombinedChatScroll}
+                    onContentSizeChange={() => {
+                      requestAnimationFrame(() => recomputeChatStickyDateLabel(lastChatScrollYRef.current));
+                    }}
                   >
                     {showChatProfile && (
                       <Animated.View style={{ transform: [{ translateX: profileDismissSlideX }] }}>
@@ -2875,12 +3959,21 @@ export function OneScreen() {
                           unitStepsDone={unitStepsDone}
                           editMode={!!activeUnit && chatProfileEditMode}
                           onRenameUnit={renameActiveUnit}
+                          agentPlanBadgeLabel={chatHeaderPlanLabel}
+                          agentPlanBadgePaid={userPlanTier !== 'FREE'}
+                          onPressAgentPlanBadge={() => setShowCredits(true)}
+                          profileWorldId={effectiveChatWorldId}
+                          onProfileWorldChange={(worldId) => {
+                            setChatPinnedWorldId(worldId);
+                            const wi = WORLDS.findIndex((w) => w.id === worldId);
+                            if (wi >= 0) setWorldIndex(wi);
+                          }}
                           centerContent={
                             activeUnit ? (
                               <Text style={styles.chatProfileRingEmoji}>{activeUnit.emoji}</Text>
                             ) : (
-                              <View style={[styles.chatProfileAgentCore, { backgroundColor: chatAgentAvatarBg }]}>
-                                <AgentEyes compact />
+                              <View style={[styles.chatProfileAgentHeroOrb, { backgroundColor: chatAgentAvatarBg }]}>
+                                <AgentEyes />
                               </View>
                             )
                           }
@@ -2896,8 +3989,8 @@ export function OneScreen() {
                       <>
                         {!activeUnit && (
                           <>
-                            {oneChatUnitHistoryOpen &&
-                              (historyUnitsForWorld.length === 0 ? (
+                            <View style={styles.chatAgentHistorySection}>
+                              {historyUnitsForWorld.length === 0 ? (
                                 <View style={styles.unitLogCard}>
                                   <Text style={[styles.unitLogTitle, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
                                     {language === 'he' ? 'אין היסטוריה לעולם הזה עדיין' : 'No history in this world yet'}
@@ -2911,7 +4004,6 @@ export function OneScreen() {
                                     activeOpacity={0.8}
                                     onPress={() => {
                                       setActiveUnitId(unit.id);
-                                      setOneChatUnitHistoryOpen(false);
                                     }}
                                   >
                                     <Text style={[styles.unitLogTitle, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
@@ -2920,7 +4012,7 @@ export function OneScreen() {
                                     <Text style={[styles.unitLogMeta, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
                                       {unit.status} · {unit.progress}% · {unit.steps} steps
                                     </Text>
-                                    {currentWorldId === 'personal' && (
+                                    {effectiveChatWorldId === 'personal' && (
                                       <View style={styles.unitLogWorldTag}>
                                         <WorldMiniIcon
                                           worldId={unit.worldId}
@@ -2941,50 +4033,126 @@ export function OneScreen() {
                                     )}
                                   </TouchableOpacity>
                                 ))
-                              ))}
-                            <View style={styles.historyHintWrap}>
-                              <TouchableOpacity
-                                style={[styles.historyToggleBtn, { backgroundColor: '#000000' }]}
-                                activeOpacity={0.75}
-                                onPress={() => setOneChatUnitHistoryOpen((v) => !v)}
-                              >
-                                <Text style={[styles.historyToggleLabel, { color: '#ffffff' }]}>
-                                  {oneChatUnitHistoryOpen ? 'סגור היסטוריה' : 'היסטוריה'}
-                                </Text>
-                                <Text style={[styles.historyToggleChevron, { color: '#a3a3a3' }]}>
-                                  {oneChatUnitHistoryOpen ? '⌃' : '⌄'}
-                                </Text>
-                              </TouchableOpacity>
+                              )}
                             </View>
-                            <View style={styles.historyAboveMessagesFlex} />
+                            <View style={styles.chatHistoryMessagesSpacer} />
                           </>
                         )}
-                        {(activeUnit ? activeUnit.messages : chatSheetMessages).map((message) => (
-                          <View
-                            key={message.id}
-                            style={[
-                              styles.chatModalBubble,
-                              message.sender === 'user' ? styles.chatModalBubbleUser : styles.chatModalBubbleOne,
-                              message.sender === 'one' ? { backgroundColor: chatOneBubbleBg } : null,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.chatModalBubbleText,
-                                message.sender === 'user' ? styles.chatModalBubbleTextUser : styles.chatModalBubbleTextOne,
-                                {
-                                  writingDirection: isRtlLayout ? 'rtl' : 'ltr',
-                                  textAlign: isRtlLayout ? 'right' : 'left',
-                                },
-                              ]}
+                        {(activeUnit ? activeUnit.messages : chatSheetMessages).map((message, idx) => {
+                          const thread = activeUnit ? activeUnit.messages : chatSheetMessages;
+                          return (
+                            <View
+                              key={message.id}
+                              collapsable={false}
+                              onLayout={(ev) => {
+                                onMainChatThreadMessageLayout(message.id, ev.nativeEvent.layout.y);
+                                if (idx === thread.length - 1) {
+                                  requestAnimationFrame(() =>
+                                    recomputeChatStickyDateLabel(lastChatScrollYRef.current)
+                                  );
+                                }
+                              }}
                             >
-                              {message.text}
-                            </Text>
+                              <View
+                                style={[
+                                  styles.chatModalBubble,
+                                  message.sender === 'user' ? styles.chatModalBubbleUser : styles.chatModalBubbleOne,
+                                  message.sender === 'one' ? { backgroundColor: chatOneBubbleBg } : null,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.chatModalBubbleText,
+                                    message.sender === 'user' ? styles.chatModalBubbleTextUser : styles.chatModalBubbleTextOne,
+                                    {
+                                      writingDirection: isRtlLayout ? 'rtl' : 'ltr',
+                                      textAlign: isRtlLayout ? 'right' : 'left',
+                                    },
+                                  ]}
+                                >
+                                  {message.text}
+                                </Text>
+                              </View>
+                            </View>
+                          );
+                        })}
+                        {!nowInputHasText ? (
+                          <View style={styles.chatSuggestionsInThreadWrap}>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                              contentContainerStyle={styles.chatSuggestionsRow}
+                              style={styles.chatSuggestionsScroller}
+                            >
+                              {chatContextSuggestions.map((label) => (
+                                <TouchableOpacity
+                                  key={label}
+                                  style={[styles.chatSuggestionChip, { borderColor: colors.border, backgroundColor: hexToRgba(colors.surface, theme === 'dark' ? 0.48 : 0.92) }]}
+                                  activeOpacity={0.8}
+                                  onPress={() => {
+                                    setNowValue(label);
+                                    setTimeout(() => chatComposerInputRef.current?.focus(), 0);
+                                  }}
+                                >
+                                  <Text style={[styles.chatSuggestionChipLabel, { color: colors.text }]}>
+                                    {label}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
                           </View>
-                        ))}
+                        ) : null}
                       </>
                     )}
                   </ScrollView>
+                  {!showChatProfile && chatStickyDatePillVisible ? (
+                    <View style={styles.chatStickyDateOverlay} pointerEvents="none">
+                      <View
+                        style={[
+                          styles.chatStickyDatePill,
+                          {
+                            backgroundColor: isDark ? 'rgba(36,36,38,0.94)' : 'rgba(255,255,255,0.92)',
+                            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.chatStickyDateText, { color: colors.textSecondary }]}>{chatStickyDateLabel}</Text>
+                      </View>
+                    </View>
+                  ) : null}
+                  </View>
+                  {showChatProfile && !activeUnit ? (
+                    <View style={styles.profileUpgradeFabWrap} pointerEvents="box-none">
+                      <Animated.View
+                        pointerEvents={profileUpgradeFabVisible ? 'auto' : 'none'}
+                        style={{
+                          opacity: profileUpgradeFabOpacity,
+                          transform: [{ translateY: profileUpgradeFabTranslateY }],
+                        }}
+                      >
+                        <TouchableOpacity
+                          style={[
+                            styles.chatHeaderUpgradeBtn,
+                            userPlanTier !== 'FREE' ? styles.chatHeaderPlanBadge : null,
+                            styles.profileUpgradeFabBtn,
+                          ]}
+                          activeOpacity={0.82}
+                          onPress={() => setShowCredits(true)}
+                          accessibilityRole="button"
+                          accessibilityLabel={chatHeaderPlanLabel}
+                        >
+                          <Text
+                            style={[
+                              styles.chatHeaderUpgradeBtnText,
+                              userPlanTier !== 'FREE' ? styles.chatHeaderPlanBadgeText : null,
+                            ]}
+                          >
+                            {chatHeaderPlanLabel}
+                          </Text>
+                        </TouchableOpacity>
+                      </Animated.View>
+                    </View>
+                  ) : null}
                 </View>
                 </Animated.View>
               )}
@@ -2995,6 +4163,46 @@ export function OneScreen() {
                   zIndex: 6,
                 }}
               >
+              {isComposerExpanded ? (
+                <View
+                  style={[
+                    styles.chatExpandedComposerPanel,
+                    {
+                      width: isNarrow ? '100%' : Math.min(contentWidth, 460),
+                      alignSelf: isNarrow ? 'stretch' : 'center',
+                      bottom: (insets.bottom || 6) + keyboardOffset + 68,
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.chatExpandedComposerCollapseBtn}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setIsComposerExpanded(false);
+                      setChatComposerMeasuredHeight(COMPOSER_LINE_HEIGHT);
+                    }}
+                  >
+                    <Text style={[styles.chatExpandedComposerCollapseGlyph, { color: colors.textSecondary }]}>↙</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[
+                      styles.chatExpandedComposerInput,
+                      { color: colors.text, writingDirection: nowInputWritingDirection, textAlign: nowInputTextAlign },
+                    ]}
+                    value={nowValue}
+                    onChangeText={setNowValue}
+                    multiline
+                    autoFocus
+                    placeholder=""
+                    placeholderTextColor={hexToRgba(colors.textSecondary, 0.5)}
+                    onContentSizeChange={() => {
+                      // Expanded textarea should not control compact composer height.
+                    }}
+                  />
+                </View>
+              ) : null}
               <View
                 style={[
                   styles.nowInputWrap,
@@ -3006,29 +4214,52 @@ export function OneScreen() {
                     paddingBottom: (insets.bottom || 6) + 6 + keyboardOffset,
                     marginBottom: 0,
                     backgroundColor: chatSheetBg,
+                    borderTopWidth: StyleSheet.hairlineWidth,
+                    borderTopColor: colors.border,
                   },
                 ]}
               >
+                <View style={styles.chatComposerExpandedRow}>
+                  <TouchableOpacity
+                    style={[styles.plusInInputCircle, styles.chatComposerOuterPlus, { backgroundColor: 'transparent' }]}
+                    activeOpacity={0.8}
+                    onPress={openAttachSheet}
+                  >
+                    <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
+                      <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
+                    </Svg>
+                  </TouchableOpacity>
                 <NowInputBarRow
                   isRtl={isRtlLayout}
-                  style={[styles.chatModalInputRow, { backgroundColor: colors.surface }]}
-                  plus={
-                    <TouchableOpacity
-                      style={[styles.plusInInputCircle, { backgroundColor: colors.background }]}
-                      activeOpacity={0.8}
-                      onPress={openAttachSheet}
-                    >
-                      <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
-                        <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
-                      </Svg>
-                    </TouchableOpacity>
-                  }
+                  style={[
+                    styles.chatModalInputRow,
+                    styles.chatComposerInputRowExpanded,
+                    {
+                      backgroundColor: colors.surface,
+                      height: 52,
+                    },
+                  ]}
+                  plus={null}
                   field={
+                    isVoiceTrayOpen ? (
+                      <View style={styles.chatVoiceTrayRow}>
+                        <VoiceTrayButton label="◼" />
+                        <VoiceTrayButton label=")))" />
+                        <VoiceTrayButton label="2x" />
+                        <VoiceTrayButton label="🎤" active={isMicHoldActive} />
+                      </View>
+                    ) : (
                     <View style={styles.nowInputFieldSlot}>
                       <TextInput
                         ref={chatComposerInputRef}
                         style={[
                           styles.nowInputField,
+                          chatComposerLineCount <= 1 ? styles.nowInputFieldSingleLine : styles.nowInputFieldMultiLine,
+                          {
+                            minHeight: COMPOSER_LINE_HEIGHT + 18,
+                            maxHeight: chatComposerMaxHeight + 8,
+                            height: chatComposerVisibleHeight + 8,
+                          },
                           { color: colors.text, textAlign: nowInputTextAlign, writingDirection: nowInputWritingDirection },
                           Platform.OS === 'web'
                             ? ({ outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none', borderWidth: 0, borderColor: 'transparent' } as any)
@@ -3038,6 +4269,23 @@ export function OneScreen() {
                         placeholderTextColor={hexToRgba(colors.textSecondary, 0.5)}
                         value={nowValue}
                         onChangeText={setNowValue}
+                        multiline
+                        onContentSizeChange={(e) => {
+                          if (isComposerExpanded) return;
+                          if (!nowValue.trim()) {
+                            if (chatComposerMeasuredHeight !== COMPOSER_LINE_HEIGHT) {
+                              setChatComposerMeasuredHeight(COMPOSER_LINE_HEIGHT);
+                            }
+                            return;
+                          }
+                          const h = e?.nativeEvent?.contentSize?.height ?? COMPOSER_LINE_HEIGHT;
+                          const snapped = Math.max(
+                            COMPOSER_LINE_HEIGHT,
+                            Math.min(chatComposerMaxHeight, Math.round(h / COMPOSER_LINE_HEIGHT) * COMPOSER_LINE_HEIGHT)
+                          );
+                          if (Math.abs(snapped - chatComposerMeasuredHeight) >= 2) setChatComposerMeasuredHeight(snapped);
+                        }}
+                        scrollEnabled={chatComposerCanExpand}
                         showSoftInputOnFocus
                         onFocus={(e: any) => {
                           if (showChatProfile) {
@@ -3046,6 +4294,7 @@ export function OneScreen() {
                             setChatOpenedFromOrbProfileShortcut(false);
                             setTimeout(scrollOneChatToBottom, 100);
                           }
+                          setIsVoiceTrayOpen(false);
                           setIsChatInputFocused(true);
                           if (Platform.OS === 'web') {
                             const t = e?.target;
@@ -3057,9 +4306,8 @@ export function OneScreen() {
                           }
                         }}
                         onBlur={() => setIsChatInputFocused(false)}
-                        onSubmitEditing={submitNowValue}
-                        returnKeyType="done"
-                        blurOnSubmit
+                        returnKeyType="default"
+                        blurOnSubmit={false}
                       />
                       {!nowInputHasText && !isChatInputFocused && (
                         <View style={styles.nowPlaceholderOverlay} pointerEvents="none">
@@ -3079,92 +4327,134 @@ export function OneScreen() {
                           </Animated.Text>
                         </View>
                       )}
+                      {chatComposerCanExpand && !isComposerExpanded ? (
+                        <TouchableOpacity
+                          style={styles.chatComposerExpandBtn}
+                          activeOpacity={0.8}
+                          onPress={() => setIsComposerExpanded(true)}
+                        >
+                          <Text style={[styles.chatComposerExpandGlyph, { color: colors.textSecondary }]}>↗</Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
+                    )
                   }
                   trailing={
                     <View style={styles.chatComposerTrailingRow}>
-                      <TouchableOpacity style={styles.micButton} activeOpacity={0.7} hitSlop={6}>
-                        <Svg width={20} height={20} viewBox="0 0 26 26" fill="none">
-                          <Path d="M13.1181 17.4274C14.1924 17.4274 15.2227 16.9709 15.9824 16.1582C16.7421 15.3455 17.1688 14.2433 17.1688 13.0941V6.59408C17.1688 5.4448 16.7421 4.3426 15.9824 3.52995C15.2227 2.71729 14.1924 2.26074 13.1181 2.26074C12.0438 2.26074 11.0135 2.71729 10.2538 3.52995C9.49415 4.3426 9.06738 5.4448 9.06738 6.59408V13.0941C9.06738 14.2433 9.49415 15.3455 10.2538 16.1582C11.0135 16.9709 12.0438 17.4274 13.1181 17.4274Z" fill={colors.textSecondary} />
-                          <Path d="M19.3254 13.1882C19.0541 13.1882 18.794 13.2875 18.6022 13.4641C18.4103 13.6408 18.3026 13.8804 18.3026 14.1303C18.3026 15.3795 17.7638 16.5775 16.8048 17.4608C15.8457 18.3442 14.545 18.8404 13.1887 18.8404C11.8324 18.8404 10.5317 18.3442 9.57266 17.4608C8.61363 16.5775 8.07485 15.3795 8.07485 14.1303C8.07485 13.8804 7.96709 13.6408 7.77528 13.4641C7.58347 13.2875 7.32333 13.1882 7.05207 13.1882C6.78081 13.1882 6.52067 13.2875 6.32886 13.4641C6.13705 13.6408 6.0293 13.8804 6.0293 14.1303C6.0293 15.8792 6.78359 17.5564 8.12624 18.7931C9.46889 20.0297 11.2899 20.7245 13.1887 20.7245C15.0875 20.7245 16.9085 20.0297 18.2512 18.7931C19.5938 17.5564 20.3481 15.8792 20.3481 14.1303C20.3481 13.8804 20.2404 13.6408 20.0486 13.4641C19.8568 13.2875 19.5966 13.1882 19.3254 13.1882Z" fill={colors.textSecondary} />
-                          <Path d="M16.1562 21.7607H10.0801C9.81148 21.7607 9.5539 21.8749 9.36399 22.078C9.17408 22.2812 9.06738 22.5568 9.06738 22.8441C9.06738 23.1314 9.17408 23.4069 9.36399 23.6101C9.5539 23.8133 9.81148 23.9274 10.0801 23.9274H16.1562C16.4247 23.9274 16.6823 23.8133 16.8722 23.6101C17.0621 23.4069 17.1688 23.1314 17.1688 22.8441C17.1688 22.5568 17.0621 22.2812 16.8722 22.078C16.6823 21.8749 16.4247 21.7607 16.1562 21.7607Z" fill={colors.textSecondary} />
-                        </Svg>
-                      </TouchableOpacity>
-                      {isChatSystemWorking ? (
-                        <View style={[styles.chatSendBtn, { backgroundColor: theme === 'dark' ? '#ffffff' : '#111111' }]}>
-                          <Animated.View
-                            style={[
-                              styles.chatWorkingSquare,
-                              {
-                                backgroundColor: theme === 'dark' ? '#111111' : '#ffffff',
-                                opacity: chatActionBreath,
-                                transform: [{ scale: chatActionBreath }],
-                              },
-                            ]}
-                          />
-                        </View>
-                      ) : nowValue.trim() ? (
+                      {nowValue.trim() ? (
                         <TouchableOpacity
-                          style={[styles.chatSendBtn, { backgroundColor: theme === 'dark' ? '#ffffff' : '#111111' }]}
+                          style={[styles.chatSendBtn, { backgroundColor: chatActionButtonBg }]}
                           activeOpacity={0.8}
                           hitSlop={6}
                           onPress={submitNowValue}
                         >
-                          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
                             <Path
                               d="M12 20V6M12 6L6.75 11.25M12 6L17.25 11.25"
                               fill="none"
-                              stroke={theme === 'dark' ? '#111111' : '#ffffff'}
+                              stroke={chatActionIconColor}
                               strokeWidth={2}
                               strokeLinecap="round"
                               strokeLinejoin="round"
                             />
                           </Svg>
                         </TouchableOpacity>
-                      ) : (
+                      ) : isVoiceTrayOpen ? (
                         <TouchableOpacity
-                          style={[styles.chatSendBtn, { backgroundColor: theme === 'dark' ? '#ffffff' : '#111111' }]}
-                          activeOpacity={0.8}
+                          style={styles.micButton}
+                          activeOpacity={0.7}
                           hitSlop={6}
                           onPress={() => {
-                            if (showChatProfile && activeUnit) setChatProfileEditMode((v) => !v);
-                            else openChatProfile();
+                            setIsVoiceTrayOpen(false);
+                            setIsMicHoldActive(false);
                           }}
                         >
-                          {showChatProfile ? (
-                            activeUnit && chatProfileEditMode ? (
-                              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                                <Path
-                                  d="M6 12.5L10.5 17L18 8"
-                                  stroke="#22c55e"
-                                  strokeWidth={2.6}
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  fill="none"
-                                />
-                              </Svg>
-                            ) : activeUnit ? (
-                              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                                <Path d="M5 16.75V19H7.25L16.6 9.65L14.35 7.4L5 16.75Z" stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={1.8} fill="none" />
-                                <Path d="M13.75 8L16 10.25" stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={1.8} strokeLinecap="round" />
-                              </Svg>
-                            ) : (
-                              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                                <Rect x={5.25} y={4.5} width={13.5} height={15} rx={2.5} stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={2} />
-                                <Path d="M8.5 10H15.5M8.5 13.5H13.5" stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={2} strokeLinecap="round" />
-                              </Svg>
-                            )
-                          ) : (
-                            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                              <Rect x={5.25} y={4.5} width={13.5} height={15} rx={2.5} stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={2} />
-                              <Path d="M8.5 10H15.5M8.5 13.5H13.5" stroke={theme === 'dark' ? '#111111' : '#ffffff'} strokeWidth={2} strokeLinecap="round" />
-                            </Svg>
-                          )}
+                          <Text style={styles.voiceTrayCloseGlyph}>✕</Text>
                         </TouchableOpacity>
-                      )}
+                      ) : !nowValue.trim() ? (
+                        <TouchableOpacity
+                          style={styles.micButton}
+                          activeOpacity={0.7}
+                          hitSlop={6}
+                          delayLongPress={220}
+                          onLongPress={() => {
+                            micLongPressTriggeredRef.current = true;
+                            setIsMicHoldActive(true);
+                          }}
+                          onPressOut={() => {
+                            setIsMicHoldActive(false);
+                          }}
+                          onPress={() => {
+                            if (micLongPressTriggeredRef.current) {
+                              micLongPressTriggeredRef.current = false;
+                              return;
+                            }
+                            setIsVoiceTrayOpen(true);
+                          }}
+                        >
+                          <Svg width={20} height={20} viewBox="0 0 26 26" fill="none">
+                            <Path d="M13.1181 17.4274C14.1924 17.4274 15.2227 16.9709 15.9824 16.1582C16.7421 15.3455 17.1688 14.2433 17.1688 13.0941V6.59408C17.1688 5.4448 16.7421 4.3426 15.9824 3.52995C15.2227 2.71729 14.1924 2.26074 13.1181 2.26074C12.0438 2.26074 11.0135 2.71729 10.2538 3.52995C9.49415 4.3426 9.06738 5.4448 9.06738 6.59408V13.0941C9.06738 14.2433 9.49415 15.3455 10.2538 16.1582C11.0135 16.9709 12.0438 17.4274 13.1181 17.4274Z" fill={isMicHoldActive ? '#22c55e' : colors.textSecondary} />
+                            <Path d="M19.3254 13.1882C19.0541 13.1882 18.794 13.2875 18.6022 13.4641C18.4103 13.6408 18.3026 13.8804 18.3026 14.1303C18.3026 15.3795 17.7638 16.5775 16.8048 17.4608C15.8457 18.3442 14.545 18.8404 13.1887 18.8404C11.8324 18.8404 10.5317 18.3442 9.57266 17.4608C8.61363 16.5775 8.07485 15.3795 8.07485 14.1303C8.07485 13.8804 7.96709 13.6408 7.77528 13.4641C7.58347 13.2875 7.32333 13.1882 7.05207 13.1882C6.78081 13.1882 6.52067 13.2875 6.32886 13.4641C6.13705 13.6408 6.0293 13.8804 6.0293 14.1303C6.0293 15.8792 6.78359 17.5564 8.12624 18.7931C9.46889 20.0297 11.2899 20.7245 13.1887 20.7245C15.0875 20.7245 16.9085 20.0297 18.2512 18.7931C19.5938 17.5564 20.3481 15.8792 20.3481 14.1303C20.3481 13.8804 20.2404 13.6408 20.0486 13.4641C19.8568 13.2875 19.5966 13.1882 19.3254 13.1882Z" fill={isMicHoldActive ? '#22c55e' : colors.textSecondary} />
+                            <Path d="M16.1562 21.7607H10.0801C9.81148 21.7607 9.5539 21.8749 9.36399 22.078C9.17408 22.2812 9.06738 22.5568 9.06738 22.8441C9.06738 23.1314 9.17408 23.4069 9.36399 23.6101C9.5539 23.8133 9.81148 23.9274 10.0801 23.9274H16.1562C16.4247 23.9274 16.6823 23.8133 16.8722 23.6101C17.0621 23.4069 17.1688 23.1314 17.1688 22.8441C17.1688 22.5568 17.0621 22.2812 16.8722 22.078C16.6823 21.8749 16.4247 21.7607 16.1562 21.7607Z" fill={isMicHoldActive ? '#22c55e' : colors.textSecondary} />
+                          </Svg>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                   }
                 />
+                {!nowValue.trim() ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.plusInInputCircle,
+                      styles.chatComposerOuterPlus,
+                      { backgroundColor: chatActionButtonBg },
+                    ]}
+                    activeOpacity={0.8}
+                    hitSlop={6}
+                    onPress={() => {
+                      if (isChatSystemWorking) return;
+                      if (showChatProfile) setChatProfileEditMode((v) => !v);
+                      else openChatProfile();
+                    }}
+                  >
+                    {isChatSystemWorking ? (
+                      <Animated.View
+                        style={[
+                          styles.chatWorkingSquare,
+                          {
+                            backgroundColor: chatActionIconColor,
+                            opacity: chatActionBreath,
+                            transform: [{ scale: chatActionBreath }],
+                          },
+                        ]}
+                      />
+                    ) : showChatProfile ? (
+                      chatProfileEditMode ? (
+                        <Svg width={21} height={21} viewBox="0 0 24 24" fill="none">
+                          <Path
+                            d="M6 12.5L10.5 17L18 8"
+                            stroke={chatActionIconColor}
+                            strokeWidth={2.6}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            fill="none"
+                          />
+                        </Svg>
+                      ) : (
+                        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                          <Path d="M5 16.75V19H7.25L16.6 9.65L14.35 7.4L5 16.75Z" stroke={chatActionIconColor} strokeWidth={1.8} fill="none" />
+                          <Path d="M13.75 8L16 10.25" stroke={chatActionIconColor} strokeWidth={1.8} strokeLinecap="round" />
+                        </Svg>
+                      )
+                    ) : (
+                      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                        <Rect x={5.25} y={4.5} width={13.5} height={15} rx={2.5} stroke={chatActionIconColor} strokeWidth={2} />
+                        <Path d="M8.5 10H15.5M8.5 13.5H13.5" stroke={chatActionIconColor} strokeWidth={2} strokeLinecap="round" />
+                      </Svg>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+                </View>
               </View>
               </Animated.View>
               )}
@@ -3262,6 +4552,20 @@ const styles = StyleSheet.create({
     minWidth: 0,
     position: 'relative',
   },
+  chatComposerExpandBtn: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  chatComposerExpandGlyph: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
   nowInputRowCollapsed: {
     width: 150,
     minHeight: 40,
@@ -3276,9 +4580,19 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 0,
     textAlign: 'left',
     minWidth: 0,
+    textAlignVertical: 'center',
+    lineHeight: 20,
+  },
+  nowInputFieldSingleLine: {
+    paddingTop: 9,
+    paddingBottom: 9,
+  },
+  nowInputFieldMultiLine: {
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   nowPlaceholderOverlay: {
     position: 'absolute',
@@ -3430,6 +4744,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  wheelOrbTitleProgressTrack: {
+    width: 82,
+    height: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginTop: 6,
+    marginBottom: 8,
+    alignSelf: 'center',
+  },
+  wheelOrbTitleProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
   agentEyesRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3455,7 +4782,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 10,
     right: 10,
-    top: '45%',
+    top: '43%',
+    bottom: 74,
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
@@ -3469,8 +4797,18 @@ const styles = StyleSheet.create({
   wheelOrbSubtitle: {
     fontSize: 15,
     textAlign: 'center',
-    marginTop: 7,
+    marginTop: 6,
     paddingHorizontal: 6,
+  },
+  /** אזור בטוח שקוף מעל תיבת הטקסט — שומר שלא נניח תוכן נמוך מדי בתוך הכדור */
+  wheelOrbBottomSafeArea: {
+    position: 'absolute',
+    left: '12%',
+    right: '12%',
+    bottom: 52,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: 'transparent',
   },
   /** קווי מיתר לדיבוג – כבה עם SHOW_ORB_DEBUG_OUTLINE = false */
   orbDebugOutline: {
@@ -3948,23 +5286,26 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 6,
   },
+  chatHeaderProgressTrack: {
+    width: '100%',
+    height: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginTop: -1,
+  },
+  chatHeaderProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
   chatSheetHeaderShareBtn: {
     width: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chatSheetHeaderShareGlyph: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
   chatModalIconBtn: {
     width: 26,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  chatModalBackIcon: {
-    fontSize: 32,
-    marginTop: -6,
   },
   chatModalAvatar: {
     width: 36,
@@ -4003,6 +5344,32 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     width: '100%',
   },
+  chatHeaderUpgradeBtn: {
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#e6bf3f',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 5,
+    flexShrink: 0,
+  },
+  chatHeaderUpgradeBtnText: {
+    color: '#111111',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  chatHeaderPlanBadge: {
+    backgroundColor: '#111111',
+    borderWidth: 1,
+    borderColor: '#2b2b2b',
+  },
+  chatHeaderPlanBadgeText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    letterSpacing: 0.25,
+  },
   chatModalMenuBtn: {
     width: 22,
     alignItems: 'center',
@@ -4013,6 +5380,36 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
+  },
+  chatUnitContactsSlot: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 32,
+    paddingHorizontal: 2,
+  },
+  chatUnitContactsStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chatUnitContactAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatUnitContactInitials: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  chatUnitContactOverflow: {
+    minWidth: 30,
+    paddingHorizontal: 2,
+  },
+  chatUnitContactOverflowText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   chatMenuOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -4048,6 +5445,21 @@ const styles = StyleSheet.create({
   chatProfileToolbarSpacer: {
     flex: 1,
   },
+  chatProfileHeaderAbsoluteLabelWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** כמו chatModalTitle בהדר הצ׳אט */
+  chatProfileHeaderLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   chatProfileToolbarCompactCenter: {
     flex: 1,
     minWidth: 0,
@@ -4081,6 +5493,33 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  /** כדור סוכן בפרופיל — AgentEyes ללא compact, קצת קטן מהגרסה הקודמת */
+  chatProfileAgentHeroOrb: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileUpgradeFabWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 22,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  profileUpgradeFabBtn: {
+    minWidth: 120,
+    paddingHorizontal: 22,
+    height: 44,
+    borderRadius: 22,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 10,
   },
   chatModalScroll: {
     flex: 1,
@@ -4148,31 +5587,72 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  historyHintWrap: {
+  chatThreadScrollWrap: {
+    flex: 1,
+    minHeight: 0,
+    position: 'relative',
+  },
+  chatStickyDateOverlay: {
+    position: 'absolute',
+    top: 6,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 8,
+    zIndex: 8,
   },
-  historyAboveMessagesFlex: {
-    height: 56,
+  chatStickyDatePill: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  historyToggleBtn: {
-    minWidth: 120,
-    height: 32,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
+  chatStickyDateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  chatAgentHistorySection: {
+    paddingTop: 4,
+    gap: 10,
+  },
+  chatHistoryMessagesSpacer: {
+    flexGrow: 1,
+    minHeight: 12,
+  },
+  chatSuggestionsWrap: {
+    zIndex: 6,
+    paddingTop: 4,
+    paddingBottom: 10,
+    backgroundColor: 'transparent',
+  },
+  /** שורת הצעות: רוחב מלא של הגיליון (מסכה/גלילה), תוכן מתחיל כמו בועות ONE (אותו gutter כמו chatModalScrollContent) */
+  chatSuggestionsInThreadWrap: {
+    marginBottom: 12,
+    marginTop: 2,
+    marginHorizontal: -16,
+    alignSelf: 'stretch',
+  },
+  chatSuggestionsScroller: {
+    maxHeight: 46,
+    width: '100%',
+  },
+  chatSuggestionsRow: {
+    gap: 10,
+    paddingStart: 16,
+    paddingEnd: 16,
+    alignItems: 'center',
+  },
+  chatSuggestionChip: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
   },
-  historyToggleLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  historyToggleChevron: {
-    fontSize: 14,
-    marginTop: -2,
+  chatSuggestionChipLabel: {
+    fontSize: 16,
+    fontWeight: '500',
   },
   chatModalInputWrap: {
     paddingHorizontal: 16,
@@ -4185,6 +5665,91 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     minHeight: 52,
+  },
+  chatComposerExpandedRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chatComposerInputRowExpanded: {
+    flex: 1,
+  },
+  chatComposerOuterPlus: {
+    flexShrink: 0,
+  },
+  chatExpandedComposerPanel: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    height: 320,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingTop: 14,
+    paddingHorizontal: 14,
+    zIndex: 9,
+  },
+  chatExpandedComposerCollapseBtn: {
+    position: 'absolute',
+    right: 10,
+    top: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  chatExpandedComposerCollapseGlyph: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  chatExpandedComposerInput: {
+    flex: 1,
+    fontSize: 34,
+    lineHeight: 44,
+    textAlignVertical: 'top',
+    paddingTop: 26,
+  },
+  chatVoiceTrayRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingHorizontal: 6,
+  },
+  voiceTrayBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#a3a3a3',
+  },
+  voiceTrayBtnActive: {
+    backgroundColor: '#22c55e',
+  },
+  voiceTrayBtnLabel: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  voiceTrayBtnLabelActive: {
+    color: '#ffffff',
+  },
+  voiceTrayCloseBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceTrayCloseGlyph: {
+    fontSize: 24,
+    color: '#ff4d4f',
+    fontWeight: '700',
+    marginTop: -2,
   },
   chatSendBtn: {
     width: 38,

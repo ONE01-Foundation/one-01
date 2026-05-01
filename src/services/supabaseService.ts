@@ -6,17 +6,33 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { Agent, Goal, ConversationMessage, Lens } from '../types';
+import type { OneUser } from '../core/types';
 
 // These should be moved to environment variables
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim();
+const SUPABASE_ANON_KEY = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
+
+function isValidSupabaseUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 class SupabaseService {
   private client: SupabaseClient | null = null;
 
   initialize(): void {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.warn('Supabase credentials not configured');
+    if (!isValidSupabaseUrl(SUPABASE_URL) || !SUPABASE_ANON_KEY) {
+      this.client = null;
+      if (SUPABASE_URL || SUPABASE_ANON_KEY) {
+        console.warn(
+          'Supabase: invalid or missing EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY (URL must be https://…)'
+        );
+      }
       return;
     }
 
@@ -74,6 +90,57 @@ class SupabaseService {
       throw new Error('Supabase client not initialized');
     }
     return await this.client.auth.getUser();
+  }
+
+  /** התחברות אנונימית (אם מופעל בפרויקט) — מאפשרת שמירת שורת פרופיל לפי auth.uid */
+  async signInAnonymously() {
+    if (!this.client) {
+      throw new Error('Supabase client not initialized');
+    }
+    return await this.client.auth.signInAnonymously();
+  }
+
+  /** OAuth — נוח בעיקר בווב; בנייטיב דורש הגדרת deep link בפרויקט */
+  async signInWithOAuth(provider: 'google' | 'apple') {
+    if (!this.client) {
+      throw new Error('Supabase client not initialized');
+    }
+    const redirectTo =
+      typeof window !== 'undefined' && window.location?.origin
+        ? `${window.location.origin}`
+        : undefined;
+    return await this.client.auth.signInWithOAuth({
+      provider,
+      options: redirectTo ? { redirectTo } : undefined,
+    });
+  }
+
+  /**
+   * שומר את מצב ONE המקומי בטבלת profiles (אחרי התחברות).
+   * דורש טבלה `public.profiles` ו־RLS — ראה supabase/profiles_v01.sql
+   */
+  async syncOneUserProfile(user: OneUser): Promise<{ ok: boolean; reason?: string }> {
+    if (!this.client) {
+      return { ok: false, reason: 'no_client' };
+    }
+    const { data: sessionData } = await this.client.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) {
+      return { ok: false, reason: 'no_session' };
+    }
+    const { error } = await this.client.from('profiles').upsert(
+      {
+        id: uid,
+        one_user: user as unknown as Record<string, unknown>,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    if (error) {
+      console.warn('profiles upsert:', error.message);
+      return { ok: false, reason: error.message };
+    }
+    return { ok: true };
   }
 
   // Data methods

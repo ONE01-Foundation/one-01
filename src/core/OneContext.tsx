@@ -14,8 +14,11 @@ import type {
   ProcessEvent,
   ProcessFields,
   ProcessMessage,
+  ProductOnboardingPayload,
 } from './types';
 import { storage } from '../utils/session';
+import { supabaseService } from '../services/supabaseService';
+import { inferLensFromGoal } from '../utils/inferLensFromGoal';
 
 const ONE_USER_KEY = 'one_user';
 
@@ -92,6 +95,7 @@ interface OneContextValue extends State {
   setDesire: (d: string) => void;
   nextStep: () => void;
   completeOnboarding: () => Promise<void>;
+  completeProductOnboarding: (payload: ProductOnboardingPayload) => Promise<void>;
   initialize: () => Promise<void>;
   getProcess: (id: string) => OneProcess | null;
   addProcessMessage: (processId: string, sender: 'user' | 'agent', text: string) => Promise<void>;
@@ -121,6 +125,43 @@ function timelineEvent(type: ProcessEvent['type'], payload: Record<string, unkno
     at: new Date().toISOString(),
     type,
     payload,
+  };
+}
+
+function buildUserFromProductFlow(p: ProductOnboardingPayload): OneUser {
+  const now = new Date().toISOString();
+  const uid = `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const aid = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const pid = `process_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const lens = p.lens || inferLensFromGoal(`${p.firstUnitTitle} ${p.firstUnitSummary}`);
+  const hats: Hat[] = ['base', lens];
+  const agent: OneAgent = {
+    id: aid,
+    name: p.agentName.trim() || 'ONE',
+    persona: p.persona,
+    hats,
+  };
+  const title = p.firstUnitTitle.trim() || 'First unit';
+  const firstProcess: OneProcess = {
+    id: pid,
+    title,
+    lens,
+    status: 'active',
+    createdAt: now,
+    summary: p.firstUnitSummary.trim() || `Goal: ${title}`,
+    messages: [],
+    fields: {
+      goal: title,
+      context: p.firstUnitSummary.trim() || undefined,
+    },
+    timeline: [],
+  };
+  return {
+    id: uid,
+    name: p.userName.trim() || 'Guest',
+    lenses: [lens],
+    agent,
+    processes: [firstProcess],
   };
 }
 
@@ -203,6 +244,10 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
     initialize();
   }, [initialize]);
 
+  useEffect(() => {
+    supabaseService.initialize();
+  }, []);
+
   const completeOnboarding = useCallback(async () => {
     const o = state.onboarding;
     if (o.lenses.length === 0 || !o.desire.trim()) return;
@@ -210,6 +255,18 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
     await storage.setItem(ONE_USER_KEY, JSON.stringify(user));
     dispatch({ type: 'COMPLETE', payload: user });
   }, [state.onboarding]);
+
+  const completeProductOnboarding = useCallback(async (payload: ProductOnboardingPayload) => {
+    const user = buildUserFromProductFlow(payload);
+    await storage.setItem(ONE_USER_KEY, JSON.stringify(user));
+    dispatch({ type: 'COMPLETE', payload: user });
+    try {
+      supabaseService.initialize();
+      await supabaseService.syncOneUserProfile(user);
+    } catch (e) {
+      console.warn('Supabase profile sync:', e);
+    }
+  }, []);
 
   const persistUser = useCallback(async (user: OneUser) => {
     await storage.setItem(ONE_USER_KEY, JSON.stringify(user));
@@ -395,6 +452,7 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
     setDesire: (d) => dispatch({ type: 'SET_DESIRE', payload: d }),
     nextStep: () => dispatch({ type: 'NEXT_STEP' }),
     completeOnboarding,
+    completeProductOnboarding,
     initialize,
     getProcess,
     addProcessMessage,

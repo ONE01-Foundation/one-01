@@ -1,9 +1,8 @@
 /**
  * פרופיל יחידה בתוך צ'אט ONE — מגירות (אקורדיון), מטריקות ותוכן מוכן לקהל רחב.
  */
-import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView, Animated } from 'react-native';
 import { useLocaleStore } from '../stores/localeStore';
 import { embedLatinRunsForRtlDisplay } from '../i18n/strings';
 
@@ -48,6 +47,9 @@ export type AgentChatProfileModel = {
   name: string;
   tagline: string;
   personaLine: string;
+  /** שורות מרכזיות מעל שבבי העולם — משתנות לפי מרחב נבחר */
+  broadcastPrimary: string;
+  broadcastSecondary: string;
   worlds: AgentChatProfileWorldRow[];
   hatsIntro: string;
   hatLabels: string[];
@@ -86,6 +88,13 @@ type UnitChatProfileProps = {
   editMode?: boolean;
   onRenameUnit?: (title: string) => void;
   onPressOpenUnits?: () => void;
+  /** פרופיל סוכן: תווית כפתור מנוי (שדרג / PRO / MAX) */
+  agentPlanBadgeLabel?: string;
+  agentPlanBadgePaid?: boolean;
+  onPressAgentPlanBadge?: () => void;
+  /** פרופיל סוכן: בחירת מרחב — מסנכרן צ׳אט ומסנן נתונים */
+  profileWorldId?: string;
+  onProfileWorldChange?: (worldId: string) => void;
 };
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -282,13 +291,13 @@ function permissionMark(state: AgentChatProfilePermissionRow['state']): string {
   return '◐';
 }
 
-const AGENT_DRAWER_KEYS = ['worlds', 'caps', 'perms', 'contacts', 'data', 'stats', 'privacy'] as const;
+/** עולמות מוצגים כשבבי בחירה מעל המגירות — בלי מגירת worlds כפולה */
+const AGENT_DRAWER_KEYS = ['caps', 'perms', 'contacts', 'data', 'stats', 'privacy'] as const;
 type AgentDrawerKey = (typeof AGENT_DRAWER_KEYS)[number];
 
 function agentDrawerCopy(lang: 'he' | 'en'): Record<AgentDrawerKey, { title: string; subtitle?: string }> {
   if (lang === 'he') {
     return {
-      worlds: { title: 'מרחבים ועולמות', subtitle: 'איפה ONE ממוקם כרגע — כל מרחב עם הקשר משלו' },
       caps: { title: 'יכולות וכובעים', subtitle: 'מה הסוכן יודע לעשות לפי ההקשר שבחרת' },
       perms: { title: 'הרשאות וגישה', subtitle: 'מה אפשר לסוכן לעשות במכשיר ובשירות' },
       contacts: { title: 'אנשי קשר וגורמים', subtitle: 'מי מופיע בשיחות ובתהליכים' },
@@ -298,7 +307,6 @@ function agentDrawerCopy(lang: 'he' | 'en'): Record<AgentDrawerKey, { title: str
     };
   }
   return {
-    worlds: { title: 'Worlds & spaces', subtitle: 'Where your agent is focused — each space has its own context' },
     caps: { title: 'Capabilities & hats', subtitle: 'What the agent can do based on the lenses you use' },
     perms: { title: 'Permissions', subtitle: 'What the agent may access on device and in the service' },
     contacts: { title: 'Contacts & parties', subtitle: 'Who shows up in chats and processes' },
@@ -324,10 +332,16 @@ export function UnitChatProfile({
   editMode = false,
   onRenameUnit,
   onPressOpenUnits,
+  agentPlanBadgeLabel,
+  agentPlanBadgePaid,
+  onPressAgentPlanBadge,
+  profileWorldId,
+  onProfileWorldChange,
 }: UnitChatProfileProps) {
   const language = useLocaleStore((s) => s.language);
   const agentLang: 'he' | 'en' = language === 'he' ? 'he' : 'en';
   const agentUi = useMemo(() => agentDrawerCopy(agentLang), [agentLang]);
+  const agentGlow = useRef(new Animated.Value(0.4)).current;
   /** במצב בהיר — בלוקים אפורים רכים; בכהה — כמעט שחור עם טקסט בהיר */
   const blockPalette = useMemo(() => {
     if (isDark) {
@@ -360,6 +374,18 @@ export function UnitChatProfile({
   useEffect(() => {
     if (!visible) setOpen({});
   }, [visible]);
+
+  useEffect(() => {
+    if (!isAgentCard) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(agentGlow, { toValue: 0.85, duration: 1400, useNativeDriver: true }),
+        Animated.timing(agentGlow, { toValue: 0.35, duration: 1400, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isAgentCard, agentGlow]);
 
   useEffect(() => {
     if (unit) {
@@ -472,50 +498,106 @@ export function UnitChatProfile({
 
   return (
     <View style={[styles.root, { direction: 'ltr' }]}>
-      <View style={styles.hero}>
-        <View style={styles.ringWrap}>
-          <Svg width={88} height={88} viewBox="0 0 88 88" style={StyleSheet.absoluteFillObject}>
-            <Circle
-              cx={44}
-              cy={44}
-              r={profileRingR}
-              stroke={hexToRgba(colors.textSecondary, isDark ? 0.35 : 0.22)}
-              strokeWidth={6}
-              fill="none"
+      {isAgentCard && ap ? (
+        <View style={styles.agentHero}>
+          <View style={styles.agentHeroOrbStage}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.agentHeroGlow,
+                {
+                  opacity: agentGlow,
+                  backgroundColor: hexToRgba(profileAccent, isDark ? 0.55 : 0.4),
+                },
+              ]}
             />
-            <Circle
-              cx={44}
-              cy={44}
-              r={profileRingR}
-              stroke={profileAccent}
-              strokeWidth={6}
-              fill="none"
-              strokeLinecap="round"
-              strokeDasharray={`${profileRingC * unitProgressPct} ${profileRingC}`}
-              transform="rotate(-90 44 44)"
-            />
-          </Svg>
-          <View style={styles.ringCenter} pointerEvents="none">
-            {centerContent}
+            <View style={[styles.agentHeroOrbShell, { shadowColor: '#000' }]}>
+              <View style={[styles.agentHeroOrbInner, { backgroundColor: isDark ? '#0a0a0c' : '#111111' }]} pointerEvents="none">
+                <View style={styles.agentHeroOrbContent}>{centerContent}</View>
+              </View>
+            </View>
+          </View>
+          <Text style={[styles.agentHeroName, { color: colors.text, writingDirection: heWd }]}>{heroTitle}</Text>
+          {agentPlanBadgeLabel && onPressAgentPlanBadge ? (
+            <TouchableOpacity
+              style={[
+                styles.agentPlanBadge,
+                agentPlanBadgePaid ? styles.agentPlanBadgePaid : null,
+              ]}
+              onPress={onPressAgentPlanBadge}
+              activeOpacity={0.82}
+              accessibilityRole="button"
+              accessibilityLabel={agentPlanBadgeLabel}
+            >
+              <Text style={[styles.agentPlanBadgeText, agentPlanBadgePaid ? styles.agentPlanBadgeTextPaid : null]}>
+                {agentPlanBadgeLabel}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          <Text style={[styles.agentBroadcastPrimary, { color: colors.text, writingDirection: heWd }]}>{ap.broadcastPrimary}</Text>
+          <Text style={[styles.agentBroadcastSecondary, { color: colors.textSecondary, writingDirection: heWd }]}>
+            {ap.broadcastSecondary}
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.agentWorldChipsScroller}
+            contentContainerStyle={styles.agentWorldChipsRow}
+          >
+            {ap.worlds.map((w) => {
+              const selected = profileWorldId != null && w.id === profileWorldId;
+              return (
+                <TouchableOpacity
+                  key={w.id}
+                  style={[
+                    styles.agentWorldChip,
+                    selected ? styles.agentWorldChipSelected : { backgroundColor: hexToRgba(colors.textSecondary, isDark ? 0.2 : 0.12) },
+                  ]}
+                  onPress={() => onProfileWorldChange?.(w.id)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                >
+                  <View style={[styles.agentWorldChipDot, { backgroundColor: selected ? '#ffffff' : w.color }]} />
+                  <Text
+                    style={[styles.agentWorldChipLabel, { color: selected ? '#ffffff' : colors.text, writingDirection: heWd }]}
+                    numberOfLines={1}
+                  >
+                    {embedLatinRunsForRtlDisplay(w.label, language)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          {ap.personaLine ? (
+            <Text style={[styles.agentPersonaHint, { color: colors.textSecondary, writingDirection: heWd }]} numberOfLines={2}>
+              {ap.personaLine}
+            </Text>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.hero}>
+          <View style={styles.ringWrap}>
+            <View style={styles.ringCenter} pointerEvents="none">
+              {centerContent}
+            </View>
+          </View>
+          <Text style={[styles.title, { color: colors.text, writingDirection: unit ? heWd : heWd }]}>{heroTitle}</Text>
+          <Text
+            style={[styles.subtitle, { color: colors.textSecondary, writingDirection: heWd }]}
+            numberOfLines={4}
+          >
+            {[heroSubtitle, heroPersonaLine].filter(Boolean).join('\n')}
+          </Text>
+          <View style={[styles.statusPill, { backgroundColor: statusStyle.bg, direction: 'ltr' }]}>
+            <Text style={[styles.statusPillText, { color: statusStyle.fg, writingDirection: heWd }]}>{statusLabel}</Text>
+            <Text style={[styles.statusDot, { color: colors.textSecondary }]}> · </Text>
+            <Text style={[styles.statusMeta, { color: colors.textSecondary, writingDirection: heWd }]}>
+              {unit ? `${unit.progress}%` : chatAgentStatus}
+            </Text>
           </View>
         </View>
-        <Text style={[styles.title, { color: colors.text, writingDirection: unit ? heWd : heWd }]}>
-          {heroTitle}
-        </Text>
-        <Text
-          style={[styles.subtitle, { color: colors.textSecondary, writingDirection: heWd }]}
-          numberOfLines={4}
-        >
-          {[heroSubtitle, heroPersonaLine].filter(Boolean).join('\n')}
-        </Text>
-        <View style={[styles.statusPill, { backgroundColor: statusStyle.bg, direction: 'ltr' }]}>
-          <Text style={[styles.statusPillText, { color: statusStyle.fg, writingDirection: heWd }]}>{statusLabel}</Text>
-          <Text style={[styles.statusDot, { color: colors.textSecondary }]}> · </Text>
-          <Text style={[styles.statusMeta, { color: colors.textSecondary, writingDirection: heWd }]}>
-            {unit ? `${unit.progress}%` : chatAgentStatus}
-          </Text>
-        </View>
-      </View>
+      )}
 
       <View style={[styles.metricsRow, { direction: 'ltr' }]}>
         {metricTriple ? (
@@ -573,54 +655,12 @@ export function UnitChatProfile({
 
       {isAgentCard && ap
         ? drawerOrder
-            .filter((key) => !hiddenDrawerKeys.includes(key))
+            .filter(
+              (key): key is AgentDrawerKey =>
+                !hiddenDrawerKeys.includes(key) && (AGENT_DRAWER_KEYS as readonly string[]).includes(key)
+            )
             .map((key, index, visibleKeys) => {
-              const dc = agentUi[key as AgentDrawerKey];
-              if (key === 'worlds') {
-                return (
-                  <DrawerRow
-                    key={key}
-                    title={dc.title}
-                    subtitle={dc.subtitle}
-                    open={!!open.worlds}
-                    onToggle={() => toggle('worlds')}
-                    leadingEmoji="🌐"
-                    blockBg={blockPalette.bg}
-                    blockFg={blockPalette.fg}
-                    blockFgMuted={blockPalette.muted}
-                    blockBorder={blockPalette.border}
-                    editMode={editMode}
-                    canMoveUp={index > 0}
-                    canMoveDown={index < visibleKeys.length - 1}
-                    onMoveUp={() => moveDrawer(key, -1)}
-                    onMoveDown={() => moveDrawer(key, 1)}
-                    onRemove={() => removeDrawer(key)}
-                  >
-                    {ap.worlds.map((w) => (
-                      <View key={w.id} style={styles.worldRow}>
-                        <View style={[styles.worldDot, { backgroundColor: w.color }]} />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={styles.worldTitleRow}>
-                            <Text style={[styles.personName, { color: blockPalette.fg, textAlign: heTa, writingDirection: heWd }]}>
-                              {embedLatinRunsForRtlDisplay(w.label, language)}
-                            </Text>
-                            {w.active ? (
-                              <View style={[styles.activePill, { borderColor: profileAccent }]}>
-                                <Text style={[styles.activePillText, { color: profileAccent }]}>
-                                  {agentLang === 'he' ? 'פעיל' : 'Active'}
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
-                          <Text style={[styles.body, { color: blockPalette.muted, textAlign: heTa, writingDirection: heWd }]}>
-                            {w.detail}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </DrawerRow>
-                );
-              }
+              const dc = agentUi[key];
               if (key === 'caps') {
                 return (
                   <DrawerRow
@@ -1042,6 +1082,138 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  agentHero: {
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    gap: 10,
+  },
+  agentHeroOrbStage: {
+    width: 118,
+    height: 118,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  agentHeroGlow: {
+    position: 'absolute',
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+  },
+  agentHeroOrbShell: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  agentHeroOrbInner: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  agentHeroOrbContent: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  agentHeroName: {
+    fontSize: 26,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
+  agentPlanBadge: {
+    height: 32,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#e6bf3f',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  agentPlanBadgePaid: {
+    backgroundColor: '#111111',
+    borderWidth: 1,
+    borderColor: '#2b2b2b',
+  },
+  agentPlanBadgeText: {
+    color: '#111111',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  agentPlanBadgeTextPaid: {
+    color: '#ffffff',
+    letterSpacing: 0.25,
+  },
+  agentBroadcastPrimary: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+    paddingHorizontal: 12,
+    lineHeight: 22,
+  },
+  agentBroadcastSecondary: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 2,
+    paddingHorizontal: 14,
+    lineHeight: 20,
+  },
+  agentWorldChipsScroller: {
+    marginTop: 6,
+    maxHeight: 48,
+    width: '100%',
+  },
+  agentWorldChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  agentWorldChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+  },
+  agentWorldChipSelected: {
+    backgroundColor: '#111111',
+    borderColor: '#111111',
+  },
+  agentWorldChipDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  agentWorldChipLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    maxWidth: 140,
+  },
+  agentPersonaHint: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+    paddingHorizontal: 16,
   },
   title: {
     fontSize: 22,
