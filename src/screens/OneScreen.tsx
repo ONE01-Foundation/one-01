@@ -2131,6 +2131,7 @@ export function OneScreen() {
   const [chatComposerMeasuredHeight, setChatComposerMeasuredHeight] = useState(COMPOSER_LINE_HEIGHT);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [accountSpace, setAccountSpace] = useState<AccountSpace>('personal');
+  const [activeDomainId, setActiveDomainId] = useState<DomainId | undefined>(undefined);
   const [showSpacePicker, setShowSpacePicker] = useState(false);
   const WORLDS = accountSpace === 'business' ? BUSINESS_WORLDS : PERSONAL_WORLDS;
   const [businessName, setBusinessName] = useState('Nova Studio');
@@ -2188,6 +2189,8 @@ export function OneScreen() {
   const [showChatProfile, setShowChatProfile] = useState(false);
   const [chatProfileEditMode, setChatProfileEditMode] = useState(false);
   const [chatPinnedWorldId, setChatPinnedWorldId] = useState<string>('personal');
+  const [chatPinnedSpaceId, setChatPinnedSpaceId] = useState<SpaceId>('personal');
+  const [chatPinnedDomainId, setChatPinnedDomainId] = useState<DomainId | undefined>(undefined);
   /** צ׳אט סוכן: רשימת יחידות בהיסטוריה — מקופלת עד «פתח היסטוריה» */
   const [agentChatHistoryExpanded, setAgentChatHistoryExpanded] = useState(false);
   useEffect(() => {
@@ -2281,6 +2284,7 @@ export function OneScreen() {
   const globalEnterOpacity = useRef(new Animated.Value(1)).current;
   const globalEnterTranslateY = useRef(new Animated.Value(0)).current;
   const currentWorldId = WORLDS[worldIndex]?.id ?? WORLDS[0]?.id ?? 'personal';
+  const currentSpaceId: SpaceId = accountSpace as SpaceId;
   const currentWorld = WORLDS[worldIndex] ?? WORLDS[0];
   const currentOrbData = useMemo(
     () =>
@@ -2460,7 +2464,7 @@ export function OneScreen() {
       .slice(0, 4)
       .map((o) => ({ key: o.id, title: o.title, sub: o.subtitle }));
     const unitsHot = [...flowUnits]
-      .filter((u) => u.worldId === currentWorldId)
+      .filter((u) => u.spaceId === currentSpaceId && (!activeDomainId || u.domainId === activeDomainId))
       .sort((a, b) => b.progress - a.progress)
       .slice(0, 3)
       .map((u) => ({ key: u.id, title: u.goal?.trim() || u.title, sub: `${u.progress}%` }));
@@ -2490,8 +2494,10 @@ export function OneScreen() {
           },
         ];
     return { aggregate, discovery, agentSearchThemes, unitsHot, marketPulse };
-  }, [currentOrbData, currentWorldId, flowUnits, language]);
+  }, [currentOrbData, currentWorldId, currentSpaceId, activeDomainId, flowUnits, language]);
   const effectiveChatWorldId = showChatSheet ? chatPinnedWorldId : currentWorldId;
+  const effectiveChatSpaceId: SpaceId = showChatSheet ? chatPinnedSpaceId : currentSpaceId;
+  const effectiveChatDomainId: DomainId | undefined = showChatSheet ? chatPinnedDomainId : activeDomainId;
   const effectiveChatWorld = WORLDS.find((w) => w.id === effectiveChatWorldId) ?? WORLDS[0];
   const effectiveChatWorldColor = effectiveChatWorld.color;
   const rawFirstName = user?.name?.trim()?.split(/\s+/)[0] || 'אריאל';
@@ -2683,11 +2689,14 @@ export function OneScreen() {
   }, [activeUnit, effectiveChatWorldId, language, agentUnitCreationMode]);
   const historyUnitsForWorld = useMemo(() => {
     const list =
-      effectiveChatWorldId === 'personal'
+      effectiveChatSpaceId === 'personal' && !effectiveChatDomainId
         ? flowUnits
-        : flowUnits.filter((unit) => unit.worldId === effectiveChatWorldId);
+        : flowUnits.filter((unit) =>
+            unit.spaceId === effectiveChatSpaceId &&
+            (!effectiveChatDomainId || unit.domainId === effectiveChatDomainId)
+          );
     return sortFlowUnitsHistoryOldestFirst(list);
-  }, [flowUnits, effectiveChatWorldId]);
+  }, [flowUnits, effectiveChatSpaceId, effectiveChatDomainId]);
 
   const agentChatProfileModel = useMemo((): AgentChatProfileModel => {
     const he = language === 'he';
@@ -2714,7 +2723,12 @@ export function OneScreen() {
             : `Units tagged to «${worldTitle(w.id, 'en')}» and matching context.`,
     }));
     const worldUnitsList =
-      effectiveChatWorldId === 'personal' ? flowUnits : flowUnits.filter((u) => u.worldId === effectiveChatWorldId);
+      effectiveChatSpaceId === 'personal' && !effectiveChatDomainId
+        ? flowUnits
+        : flowUnits.filter((u) =>
+            u.spaceId === effectiveChatSpaceId &&
+            (!effectiveChatDomainId || u.domainId === effectiveChatDomainId)
+          );
     const activeUnitsInWorld = worldUnitsList.filter((u) => u.status !== 'done').length;
     const worldNameHe = WORLDS.find((w) => w.id === effectiveChatWorldId)?.label ?? 'כללי';
     const worldNameEn = worldTitle(effectiveChatWorldId, 'en');
@@ -2835,7 +2849,7 @@ export function OneScreen() {
         ? 'נתונים מינימליים — שקיפות מקסימלית. לשינוי הרשאות: הגדרות המערכת והנחיות בצ׳אט.'
         : 'Minimal data — maximal clarity. Change permissions via system settings and chat.',
     };
-  }, [language, user, effectiveChatWorldId, activeWorldChatLabel, flowUnits, chatSheetMessages]);
+  }, [language, user, effectiveChatWorldId, effectiveChatSpaceId, effectiveChatDomainId, activeWorldChatLabel, flowUnits, chatSheetMessages]);
 
 
   /** מעבר חלק בכפתור כדור: לכדור אחר – פייד; חזרה לסוכן – פייד־אין קצר (בלי קפיצה) */
@@ -2975,6 +2989,7 @@ export function OneScreen() {
     setShowCredits(false);
     setShowChatMenu(false);
     setChatPinnedWorldId(currentWorldId);
+    { const _p = legacyWorldIdToSpaceDomain(currentWorldId); setChatPinnedSpaceId(_p.spaceId); setChatPinnedDomainId(_p.domainId); }
     const selectedOrb = wheelOrbData[orbIndex];
     if (selectedOrb?.id === GLOBAL_WHEEL_ORB_ID) {
       setAgentUnitCreationMode(false);
@@ -3225,11 +3240,15 @@ export function OneScreen() {
       setFlowUnits(seeded.flowUnits);
       setWorldIndex(0);
       setChatPinnedWorldId('business');
+      setChatPinnedSpaceId('business');
+      setChatPinnedDomainId(undefined);
     } else {
       setPersonalOrbs([{ id: 'origin', emoji: '👤', title: language === 'he' ? 'ראשי' : 'Home', subtitle: '' }]);
       setFlowUnits([]);
       setWorldIndex(0);
       setChatPinnedWorldId('personal');
+      setChatPinnedSpaceId('personal');
+      setChatPinnedDomainId(undefined);
     }
     setActiveUnitId(null);
     setShowChatProfile(false);
@@ -3245,6 +3264,8 @@ export function OneScreen() {
     setActiveUnitId(null);
     setWorldIndex(0);
     setChatPinnedWorldId('personal');
+    setChatPinnedSpaceId('personal');
+    setChatPinnedDomainId(undefined);
   }, [syntheticHomeApplyNonce, language]);
 
   const collapseProfileToChat = useCallback(() => {
@@ -3655,6 +3676,8 @@ export function OneScreen() {
       const wi = WORLDS.findIndex((w) => w.id === tmpl.worldId);
       if (wi >= 0) setWorldIndex(wi);
       setChatPinnedWorldId(tmpl.worldId);
+      setChatPinnedSpaceId(tmpl.spaceId);
+      setChatPinnedDomainId(tmpl.domainId);
       setAgentUnitCreationMode(false);
       setNowValue('');
       setTimeout(() => setChatStatusPhase('planning'), 500);
@@ -3792,6 +3815,8 @@ export function OneScreen() {
       const wi = WORLDS.findIndex((w) => w.id === tmpl.worldId);
       if (wi >= 0) setWorldIndex(wi);
       setChatPinnedWorldId(tmpl.worldId);
+      setChatPinnedSpaceId(tmpl.spaceId);
+      setChatPinnedDomainId(tmpl.domainId);
       setChatSheetMessages((prev) => [
         ...prev,
         userLine,
@@ -4127,6 +4152,7 @@ export function OneScreen() {
     setAgentUnitCreationMode(false);
     setActiveUnitId(null);
     setChatPinnedWorldId(currentWorldId);
+    { const _p = legacyWorldIdToSpaceDomain(currentWorldId); setChatPinnedSpaceId(_p.spaceId); setChatPinnedDomainId(_p.domainId); }
     // חשוב: לא להציג מקלדת בפתיחת פרופיל מה־Home.
     shouldRefocusComposerAfterChatOpenRef.current = false;
     setChatSheetMessages([
@@ -4177,6 +4203,7 @@ export function OneScreen() {
       const wi = WORLDS.findIndex((w) => w.id === worldId);
       if (wi >= 0) setWorldIndex(wi);
       setChatPinnedWorldId(worldId);
+      { const _p = legacyWorldIdToSpaceDomain(worldId); setChatPinnedSpaceId(_p.spaceId); setChatPinnedDomainId(_p.domainId); }
       const open = () => setViewMode('global');
       if (showChatSheetRef.current) {
         closeChatSheet({ direction: 'down', afterClose: open });
@@ -4191,7 +4218,9 @@ export function OneScreen() {
     globalWheelNavigateFromScrollRef.current = false;
     const restoreWi = preGlobalWorldIndexRef.current;
     setWorldIndex(restoreWi);
-    setChatPinnedWorldId(WORLDS[restoreWi]?.id ?? WORLDS[0]?.id ?? 'personal');
+    const _restoreWid = WORLDS[restoreWi]?.id ?? WORLDS[0]?.id ?? 'personal';
+    setChatPinnedWorldId(_restoreWid);
+    { const _rp = legacyWorldIdToSpaceDomain(_restoreWid); setChatPinnedSpaceId(_rp.spaceId); setChatPinnedDomainId(_rp.domainId); }
     setViewMode('orb');
     const y = AGENT_ORB_INDEX * WHEEL_ITEM_HEIGHT;
     requestAnimationFrame(() => {
@@ -4339,6 +4368,8 @@ export function OneScreen() {
       setTimeout(() => {
         setActiveUnitId(uid);
         setChatPinnedWorldId(unit.worldId);
+        setChatPinnedSpaceId(unit.spaceId);
+        setChatPinnedDomainId(unit.domainId);
         shouldRefocusComposerAfterChatOpenRef.current = true;
         setShowChatSheet(true);
       }, 380);
@@ -5477,6 +5508,9 @@ export function OneScreen() {
                       onPress={() => {
                         setWorldIndex(wi);
                         setChatPinnedWorldId(w.id);
+                        const _p = legacyWorldIdToSpaceDomain(w.id);
+                        setChatPinnedSpaceId(_p.spaceId);
+                        setChatPinnedDomainId(_p.domainId);
                       }}
                       style={[
                         styles.globalWorldChip,
@@ -6737,6 +6771,9 @@ export function OneScreen() {
                           profileWorldId={effectiveChatWorldId}
                           onProfileWorldChange={(worldId) => {
                             setChatPinnedWorldId(worldId);
+                            const _p = legacyWorldIdToSpaceDomain(worldId);
+                            setChatPinnedSpaceId(_p.spaceId);
+                            setChatPinnedDomainId(_p.domainId);
                             const wi = WORLDS.findIndex((w) => w.id === worldId);
                             if (wi >= 0) setWorldIndex(wi);
                           }}
