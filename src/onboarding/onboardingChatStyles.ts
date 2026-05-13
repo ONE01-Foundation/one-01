@@ -19,10 +19,11 @@ export const onboardingChatStyles = StyleSheet.create({
     minHeight: 56,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
     paddingHorizontal: 14,
     gap: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   iconBtn: {
     width: 26,
@@ -42,33 +43,39 @@ export const onboardingChatStyles = StyleSheet.create({
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 16,
   },
   headerText: {
     flex: 1,
     minWidth: 0,
     alignSelf: 'stretch',
   },
+  /** כותרת/תת־כותרת מיושרות לימין (עברית) */
+  headerTextRtl: {
+    alignItems: 'flex-end',
+    width: '100%',
+  },
   title: {
     fontSize: 16,
     fontWeight: '700',
+    marginTop: 1,
   },
   subtitle: {
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 4,
   },
   freeBadge: {
     height: 30,
     paddingHorizontal: 12,
     borderRadius: 10,
-    backgroundColor: '#e6bf3f',
+    backgroundColor: '#aeb2b8',
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: 4,
     flexShrink: 0,
   },
   freeBadgeText: {
-    color: '#111111',
+    color: '#ffffff',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -98,21 +105,41 @@ export const onboardingChatStyles = StyleSheet.create({
     gap: 10,
     flexGrow: 1,
   },
+  msgRow: {
+    width: '100%',
+    alignSelf: 'stretch',
+    direction: 'ltr',
+  },
+  msgRowOne: {
+    alignItems: 'flex-start',
+  },
+  msgRowOneRtl: {
+    alignItems: 'flex-end',
+  },
+  msgRowUser: {
+    alignItems: 'flex-end',
+  },
+  msgRowUserRtl: {
+    alignItems: 'flex-start',
+  },
   bubble: {
     maxWidth: '82%',
+    minWidth: 0,
+    flexShrink: 1,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   bubbleOne: {
-    alignSelf: 'flex-start',
+    backgroundColor: '#f0f0f0',
   },
   bubbleUser: {
-    alignSelf: 'flex-end',
     backgroundColor: '#000000',
   },
   bubbleText: {
     fontSize: 16,
+    lineHeight: 22,
+    flexShrink: 1,
   },
   bubbleTextOne: {
     color: '#111111',
@@ -123,11 +150,14 @@ export const onboardingChatStyles = StyleSheet.create({
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 14,
     marginTop: 4,
     marginBottom: 6,
     alignSelf: 'flex-start',
     maxWidth: '100%',
+  },
+  chipRowRtl: {
+    alignSelf: 'flex-end',
   },
   chip: {
     paddingVertical: 8,

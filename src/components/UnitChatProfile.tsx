@@ -2,12 +2,20 @@
  * פרופיל יחידה בתוך צ'אט ONE — מגירות (אקורדיון), מטריקות ותוכן מוכן לקהל רחב.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView, Animated, useWindowDimensions } from 'react-native';
 import { useLocaleStore } from '../stores/localeStore';
 import { embedLatinRunsForRtlDisplay } from '../i18n/strings';
 
 export type UnitProfilePerson = { id: string; role: string; name: string };
 export type UnitProfileMilestone = { id: string; title: string; done: boolean };
+
+/** שדות מבנה בפרופיל יחידה — מתמלאים מהצ׳אט ונשמרים כאן (לא «נעלמים» בהיסטוריית בועות) */
+export type UnitProfileSlot = {
+  id: string;
+  label: string;
+  value?: string;
+  optional?: boolean;
+};
 
 /** מודל תצוגה לפרופיל — כל השדות האופציונליים ממולאים ברירות מחדל בקומפוננטה */
 export type UnitChatProfileModel = {
@@ -28,6 +36,7 @@ export type UnitChatProfileModel = {
   nextAction?: string;
   lastUpdatedLabel?: string;
   blockCount?: number;
+  profileSlots?: UnitProfileSlot[];
 };
 
 /** פרופיל סוכן (בלי יחידה פעילה) — כל המחרוזות בשפת הממשק שנבחרה בבנייה */
@@ -95,6 +104,10 @@ type UnitChatProfileProps = {
   /** פרופיל סוכן: בחירת מרחב — מסנכרן צ׳אט ומסנן נתונים */
   profileWorldId?: string;
   onProfileWorldChange?: (worldId: string) => void;
+  /** לחיצה על פרצוף הסוכן / אימוג׳י יחידה במרכז — פותחת גלובל למרחב */
+  onPressHeroOpenGlobal?: () => void;
+  /** לחיצה על שבב עולם — פותחת גלובל לאותו מרחב (דורס בחירת מרחב בפרופיל כשמועבר) */
+  onPressWorldChipOpenGlobal?: (worldId: string) => void;
 };
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -147,6 +160,8 @@ function inferMilestones(unit: UnitChatProfileModel | null, stepsDone: number, s
   }));
 }
 
+const PROFILE_HE_MOBILE_MAX_W = 428;
+
 function DrawerRow({
   title,
   subtitle,
@@ -182,7 +197,10 @@ function DrawerRow({
   onRemove?: () => void;
   children: ReactNode;
 }) {
-  /** שורת מגירה: תמיד LTR פיזית (אימוג׳י משמאל, צ׳ברון מימין) — כמו במעטפת שפה אנגלית; הטקסט בעברית עם bidi RTL */
+  const language = useLocaleStore((s) => s.language);
+  const { width: winW } = useWindowDimensions();
+  const heMobileRow = language === 'he' && winW <= PROFILE_HE_MOBILE_MAX_W;
+  /** במובייל עברית: שורה RTL (אימוג׳י ימין, צ׳ברון שמאל), טקסט מיושר ימין */
   return (
     <View style={styles.drawerWrap}>
       <TouchableOpacity
@@ -193,16 +211,16 @@ function DrawerRow({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={title}
       >
-        <View style={styles.drawerHeadRow}>
-          <Text style={styles.drawerEmoji}>{leadingEmoji}</Text>
+        <View style={[styles.drawerHeadRow, heMobileRow && styles.drawerHeadRowHeMobile]}>
+          <Text style={[styles.drawerEmoji, heMobileRow && styles.drawerEmojiHeMobile]}>{leadingEmoji}</Text>
           <View style={styles.drawerHeadText}>
             <Text
               style={[
                 styles.drawerTitle,
                 {
                   color: blockFg,
-                  textAlign: 'left',
-                  writingDirection: 'rtl',
+                  textAlign: language === 'he' ? 'right' : 'left',
+                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
                   alignSelf: 'stretch',
                   width: '100%',
                 },
@@ -216,8 +234,8 @@ function DrawerRow({
                   styles.drawerSubtitle,
                   {
                     color: blockFgMuted,
-                    textAlign: 'left',
-                    writingDirection: 'rtl',
+                    textAlign: language === 'he' ? 'right' : 'left',
+                    writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
                     alignSelf: 'stretch',
                     width: '100%',
                   },
@@ -250,7 +268,9 @@ function DrawerRow({
               </TouchableOpacity>
             </View>
           ) : null}
-          <Text style={[styles.drawerChev, { color: blockFgMuted }]}>{open ? '⌃' : '⌄'}</Text>
+          <Text style={[styles.drawerChev, { color: blockFgMuted }, heMobileRow && styles.drawerChevHeMobile]}>
+            {open ? '⌃' : '⌄'}
+          </Text>
         </View>
       </TouchableOpacity>
       {open ? (
@@ -337,6 +357,8 @@ export function UnitChatProfile({
   onPressAgentPlanBadge,
   profileWorldId,
   onProfileWorldChange,
+  onPressHeroOpenGlobal,
+  onPressWorldChipOpenGlobal,
 }: UnitChatProfileProps) {
   const language = useLocaleStore((s) => s.language);
   const agentLang: 'he' | 'en' = language === 'he' ? 'he' : 'en';
@@ -359,12 +381,17 @@ export function UnitChatProfile({
       border: colors.border,
     };
   }, [isDark, colors.border]);
-  /** טקסט עברי בקלף: RTL לוגי, אבל שורות flex ב־LTR — נמנע כפל RTL (מערכת + אפליקציה) שמבלבל מגירות */
-  const heTa: 'left' = 'left';
-  const heWd: 'rtl' | 'ltr' = 'rtl';
+  /** עברית: טקסט ותיבות מיושרים לימין (מחוץ לברודקאסט בכדור — שם נשאר ממורכז ב־OneScreen) */
+  const heTa: 'left' | 'right' = agentLang === 'he' ? 'right' : 'left';
+  const heWd: 'rtl' | 'ltr' = agentLang === 'he' ? 'rtl' : 'ltr';
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [draftTitle, setDraftTitle] = useState('');
-  const defaultUnitDrawerOrder = useMemo(() => ['goal', 'steps', 'time', 'people', 'docs'] as const, []);
+  const defaultUnitDrawerOrder = useMemo(() => {
+    if (unit?.profileSlots?.length) {
+      return ['goal', 'slots', 'steps', 'time', 'people', 'docs'] as const;
+    }
+    return ['goal', 'steps', 'time', 'people', 'docs'] as const;
+  }, [unit?.id, unit?.profileSlots?.length]);
   const defaultAgentDrawerOrder = useMemo(() => [...AGENT_DRAWER_KEYS] as string[], []);
   const [drawerOrder, setDrawerOrder] = useState<string[]>([...defaultUnitDrawerOrder]);
   const [hiddenDrawerKeys, setHiddenDrawerKeys] = useState<string[]>([]);
@@ -512,12 +539,32 @@ export function UnitChatProfile({
               ]}
             />
             <View style={[styles.agentHeroOrbShell, { shadowColor: '#000' }]}>
-              <View style={[styles.agentHeroOrbInner, { backgroundColor: isDark ? '#0a0a0c' : '#111111' }]} pointerEvents="none">
-                <View style={styles.agentHeroOrbContent}>{centerContent}</View>
-              </View>
+              {onPressHeroOpenGlobal ? (
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  onPress={onPressHeroOpenGlobal}
+                  accessibilityRole="button"
+                  accessibilityLabel={agentLang === 'he' ? 'פתח גלובל' : 'Open global'}
+                >
+                  <View style={[styles.agentHeroOrbInner, { backgroundColor: isDark ? '#0a0a0c' : '#111111' }]}>
+                    <View style={styles.agentHeroOrbContent}>{centerContent}</View>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.agentHeroOrbInner, { backgroundColor: isDark ? '#0a0a0c' : '#111111' }]} pointerEvents="none">
+                  <View style={styles.agentHeroOrbContent}>{centerContent}</View>
+                </View>
+              )}
             </View>
           </View>
-          <Text style={[styles.agentHeroName, { color: colors.text, writingDirection: heWd }]}>{heroTitle}</Text>
+          <Text
+            style={[
+              styles.agentHeroName,
+              { color: colors.text, writingDirection: heWd, textAlign: agentLang === 'he' ? 'right' : 'center', alignSelf: 'stretch', width: '100%' },
+            ]}
+          >
+            {heroTitle}
+          </Text>
           {agentPlanBadgeLabel && onPressAgentPlanBadge ? (
             <TouchableOpacity
               style={[
@@ -534,8 +581,26 @@ export function UnitChatProfile({
               </Text>
             </TouchableOpacity>
           ) : null}
-          <Text style={[styles.agentBroadcastPrimary, { color: colors.text, writingDirection: heWd }]}>{ap.broadcastPrimary}</Text>
-          <Text style={[styles.agentBroadcastSecondary, { color: colors.textSecondary, writingDirection: heWd }]}>
+          <Text
+            style={[
+              styles.agentBroadcastPrimary,
+              { color: colors.text, writingDirection: heWd, textAlign: agentLang === 'he' ? 'right' : 'center', alignSelf: 'stretch', width: '100%' },
+            ]}
+          >
+            {ap.broadcastPrimary}
+          </Text>
+          <Text
+            style={[
+              styles.agentBroadcastSecondary,
+              {
+                color: colors.textSecondary,
+                writingDirection: heWd,
+                textAlign: agentLang === 'he' ? 'right' : 'center',
+                alignSelf: 'stretch',
+                width: '100%',
+              },
+            ]}
+          >
             {ap.broadcastSecondary}
           </Text>
           <ScrollView
@@ -553,7 +618,9 @@ export function UnitChatProfile({
                     styles.agentWorldChip,
                     selected ? styles.agentWorldChipSelected : { backgroundColor: hexToRgba(colors.textSecondary, isDark ? 0.2 : 0.12) },
                   ]}
-                  onPress={() => onProfileWorldChange?.(w.id)}
+                  onPress={() =>
+                    onPressWorldChipOpenGlobal ? onPressWorldChipOpenGlobal(w.id) : onProfileWorldChange?.(w.id)
+                  }
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
@@ -570,7 +637,19 @@ export function UnitChatProfile({
             })}
           </ScrollView>
           {ap.personaLine ? (
-            <Text style={[styles.agentPersonaHint, { color: colors.textSecondary, writingDirection: heWd }]} numberOfLines={2}>
+            <Text
+              style={[
+                styles.agentPersonaHint,
+                {
+                  color: colors.textSecondary,
+                  writingDirection: heWd,
+                  textAlign: agentLang === 'he' ? 'right' : 'center',
+                  alignSelf: 'stretch',
+                  width: '100%',
+                },
+              ]}
+              numberOfLines={2}
+            >
               {ap.personaLine}
             </Text>
           ) : null}
@@ -578,21 +657,57 @@ export function UnitChatProfile({
       ) : (
         <View style={styles.hero}>
           <View style={styles.ringWrap}>
-            <View style={styles.ringCenter} pointerEvents="none">
-              {centerContent}
-            </View>
+            {onPressHeroOpenGlobal ? (
+              <TouchableOpacity
+                style={styles.ringCenter}
+                activeOpacity={0.88}
+                onPress={onPressHeroOpenGlobal}
+                accessibilityRole="button"
+                accessibilityLabel={agentLang === 'he' ? 'פתח גלובל' : 'Open global'}
+              >
+                {centerContent}
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.ringCenter} pointerEvents="none">
+                {centerContent}
+              </View>
+            )}
           </View>
-          <Text style={[styles.title, { color: colors.text, writingDirection: unit ? heWd : heWd }]}>{heroTitle}</Text>
           <Text
-            style={[styles.subtitle, { color: colors.textSecondary, writingDirection: heWd }]}
+            style={[
+              styles.title,
+              { color: colors.text, writingDirection: heWd, textAlign: agentLang === 'he' ? 'right' : 'center', alignSelf: 'stretch', width: '100%' },
+            ]}
+          >
+            {heroTitle}
+          </Text>
+          <Text
+            style={[
+              styles.subtitle,
+              {
+                color: colors.textSecondary,
+                writingDirection: heWd,
+                textAlign: agentLang === 'he' ? 'right' : 'center',
+                alignSelf: 'stretch',
+                width: '100%',
+              },
+            ]}
             numberOfLines={4}
           >
             {[heroSubtitle, heroPersonaLine].filter(Boolean).join('\n')}
           </Text>
-          <View style={[styles.statusPill, { backgroundColor: statusStyle.bg, direction: 'ltr' }]}>
-            <Text style={[styles.statusPillText, { color: statusStyle.fg, writingDirection: heWd }]}>{statusLabel}</Text>
+          <View
+            style={[
+              styles.statusPill,
+              { backgroundColor: statusStyle.bg, direction: 'ltr' },
+              agentLang === 'he' ? { alignSelf: 'flex-end' } : null,
+            ]}
+          >
+            <Text style={[styles.statusPillText, { color: statusStyle.fg, writingDirection: heWd, textAlign: heTa }]}>
+              {statusLabel}
+            </Text>
             <Text style={[styles.statusDot, { color: colors.textSecondary }]}> · </Text>
-            <Text style={[styles.statusMeta, { color: colors.textSecondary, writingDirection: heWd }]}>
+            <Text style={[styles.statusMeta, { color: colors.textSecondary, writingDirection: heWd, textAlign: heTa }]}>
               {unit ? `${unit.progress}%` : chatAgentStatus}
             </Text>
           </View>
@@ -602,34 +717,39 @@ export function UnitChatProfile({
       <View style={[styles.metricsRow, { direction: 'ltr' }]}>
         {metricTriple ? (
           metricTriple.map((m, i) => (
-            <View key={`m_${i}`} style={styles.metricCol}>
-              <Text style={[styles.metricLabel, { color: colors.textSecondary, writingDirection: heWd }]}>{m.label}</Text>
-              <Text style={[styles.metricValue, { color: colors.text, writingDirection: heWd }]} numberOfLines={2}>
+            <View key={`m_${i}`} style={[styles.metricCol, agentLang === 'he' ? styles.metricColHe : null]}>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary, writingDirection: heWd, textAlign: heTa }]}>
+                {m.label}
+              </Text>
+              <Text
+                style={[styles.metricValue, { color: colors.text, writingDirection: heWd, textAlign: heTa }]}
+                numberOfLines={2}
+              >
                 {m.value}
               </Text>
             </View>
           ))
         ) : (
           <>
-            <View style={styles.metricCol}>
-              <Text style={[styles.metricLabel, { color: colors.textSecondary, writingDirection: heWd }]}>
+            <View style={[styles.metricCol, agentLang === 'he' ? styles.metricColHe : null]}>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary, writingDirection: heWd, textAlign: heTa }]}>
                 {agentLang === 'he' ? 'זמן משוער' : 'Est. time'}
               </Text>
-              <Text style={[styles.metricValue, { color: colors.text, writingDirection: heWd }]}>{etaLabel}</Text>
+              <Text style={[styles.metricValue, { color: colors.text, writingDirection: heWd, textAlign: heTa }]}>{etaLabel}</Text>
             </View>
-            <View style={styles.metricCol}>
-              <Text style={[styles.metricLabel, { color: colors.textSecondary, writingDirection: heWd }]}>
+            <View style={[styles.metricCol, agentLang === 'he' ? styles.metricColHe : null]}>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary, writingDirection: heWd, textAlign: heTa }]}>
                 {agentLang === 'he' ? 'תקציב' : 'Budget'}
               </Text>
-              <Text style={[styles.metricValue, { color: colors.text, writingDirection: heWd }]} numberOfLines={2}>
+              <Text style={[styles.metricValue, { color: colors.text, writingDirection: heWd, textAlign: heTa }]} numberOfLines={2}>
                 {budgetLabel}
               </Text>
             </View>
-            <View style={styles.metricCol}>
-              <Text style={[styles.metricLabel, { color: colors.textSecondary, writingDirection: heWd }]}>
+            <View style={[styles.metricCol, agentLang === 'he' ? styles.metricColHe : null]}>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary, writingDirection: heWd, textAlign: heTa }]}>
                 {agentLang === 'he' ? 'מעורבים' : 'People'}
               </Text>
-              <Text style={[styles.metricValue, { color: colors.text, writingDirection: heWd }]}>
+              <Text style={[styles.metricValue, { color: colors.text, writingDirection: heWd, textAlign: heTa }]}>
                 {unit ? `${peopleCount}` : '1'}
               </Text>
             </View>
@@ -637,11 +757,21 @@ export function UnitChatProfile({
         )}
       </View>
 
-      <Text style={[styles.metaFoot, { color: colors.textSecondary, writingDirection: heWd }]}>{metaFootText}</Text>
+      <Text style={[styles.metaFoot, { color: colors.textSecondary, writingDirection: heWd, textAlign: heTa, alignSelf: 'stretch' }]}>
+        {metaFootText}
+      </Text>
 
       {editMode && unit ? (
         <TextInput
-          style={[styles.editTitleInlineInput, { color: blockPalette.fg, borderColor: blockPalette.border }]}
+          style={[
+            styles.editTitleInlineInput,
+            {
+              color: blockPalette.fg,
+              borderColor: blockPalette.border,
+              textAlign: agentLang === 'he' ? 'right' : 'left',
+              writingDirection: heWd,
+            },
+          ]}
           value={draftTitle}
           onChangeText={setDraftTitle}
           onBlur={() => {
@@ -891,6 +1021,49 @@ export function UnitChatProfile({
               </DrawerRow>
             );
           }
+          if (key === 'slots') {
+            const slots = unit?.profileSlots ?? [];
+            return (
+              <DrawerRow
+                key={key}
+                title={agentLang === 'he' ? 'נתונים בפרופיל היחידה' : 'Unit profile data'}
+                subtitle={
+                  agentLang === 'he' ? 'נשמר כאן מהשיחה — לא רק בבועות' : 'Saved here from chat — not only in bubbles'
+                }
+                open={!!open.slots}
+                onToggle={() => toggle('slots')}
+                leadingEmoji="📌"
+                blockBg={blockPalette.bg}
+                blockFg={blockPalette.fg}
+                blockFgMuted={blockPalette.muted}
+                blockBorder={blockPalette.border}
+                editMode={editMode}
+                canMoveUp={index > 0}
+                canMoveDown={index < visibleKeys.length - 1}
+                onMoveUp={() => moveDrawer(key, -1)}
+                onMoveDown={() => moveDrawer(key, 1)}
+                onRemove={() => removeDrawer(key)}
+              >
+                {slots.map((s) => (
+                  <RowKV
+                    key={s.id}
+                    label={s.label}
+                    value={
+                      s.value?.trim()
+                        ? s.value
+                        : agentLang === 'he'
+                          ? '— חסר'
+                          : '— missing'
+                    }
+                    textAlign={heTa}
+                    writingDirection={heWd}
+                    fgMuted={blockPalette.muted}
+                    fg={s.value?.trim() ? blockPalette.fg : hexToRgba(blockPalette.muted, 0.85)}
+                  />
+                ))}
+              </DrawerRow>
+            );
+          }
           if (key === 'steps') {
             return (
               <DrawerRow
@@ -1073,6 +1246,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   ringWrap: {
+    position: 'relative',
     width: 88,
     height: 88,
     alignItems: 'center',
@@ -1249,6 +1423,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   metricCol: { flex: 1, alignItems: 'center', gap: 4 },
+  metricColHe: { alignItems: 'flex-end' },
   metricLabel: { fontSize: 11, fontWeight: '600' },
   metricValue: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
   metaFoot: {
@@ -1283,15 +1458,23 @@ const styles = StyleSheet.create({
     width: '100%',
     direction: 'ltr',
   },
+  drawerHeadRowHeMobile: {
+    flexDirection: 'row-reverse',
+  },
   drawerEmoji: {
     fontSize: 22,
     lineHeight: 26,
     marginRight: 10,
   },
+  drawerEmojiHeMobile: {
+    marginRight: 0,
+    marginLeft: 10,
+  },
   drawerHeadText: { flex: 1, gap: 2, minWidth: 0, alignSelf: 'stretch' },
   drawerTitle: { fontSize: 15, fontWeight: '700' },
   drawerSubtitle: { fontSize: 12 },
   drawerChev: { fontSize: 15, fontWeight: '600', marginLeft: 6 },
+  drawerChevHeMobile: { marginLeft: 0, marginRight: 6 },
   drawerInlineActions: {
     flexDirection: 'row',
     alignItems: 'center',

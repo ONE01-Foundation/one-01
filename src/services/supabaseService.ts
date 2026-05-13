@@ -143,6 +143,17 @@ class SupabaseService {
     return { ok: true };
   }
 
+  /** טוען את מסמך one_user מהשורה של המשתמש המחובר (אם קיים) */
+  async fetchOneUserProfileForCurrentSession(): Promise<OneUser | null> {
+    if (!this.client) return null;
+    const { data: sessionData } = await this.client.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) return null;
+    const { data, error } = await this.client.from('profiles').select('one_user').eq('id', uid).maybeSingle();
+    if (error || !data?.one_user) return null;
+    return data.one_user as OneUser;
+  }
+
   // Data methods
   async saveGoal(goal: Goal) {
     if (!this.client) {

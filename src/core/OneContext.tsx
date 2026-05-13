@@ -16,6 +16,8 @@ import type {
   ProcessMessage,
   ProductOnboardingPayload,
 } from './types';
+import type { SpaceId, DomainId } from './spaces';
+import { legacyWorldIdToSpaceDomain } from './spaces';
 import { storage } from '../utils/session';
 import { supabaseService } from '../services/supabaseService';
 import { inferLensFromGoal } from '../utils/inferLensFromGoal';
@@ -96,6 +98,8 @@ interface OneContextValue extends State {
   nextStep: () => void;
   completeOnboarding: () => Promise<void>;
   completeProductOnboarding: (payload: ProductOnboardingPayload) => Promise<void>;
+  /** שחזור משתמש מהענן אחרי התחברות (למשל ממסך אונבורדינג) */
+  restoreOneUser: (user: OneUser) => Promise<void>;
   initialize: () => Promise<void>;
   getProcess: (id: string) => OneProcess | null;
   addProcessMessage: (processId: string, sender: 'user' | 'agent', text: string) => Promise<void>;
@@ -105,7 +109,7 @@ interface OneContextValue extends State {
   setProcessOutcome: (processId: string, outcome: string) => Promise<void>;
   updateAgentHats: (hats: Hat[]) => Promise<void>;
   addProcess: (process: OneProcess) => Promise<void>;
-  createProcess: (params: { lens: LifeLens; title: string }) => Promise<OneProcess>;
+  createProcess: (params: { lens: LifeLens; title: string; spaceId?: SpaceId; domainId?: DomainId }) => Promise<OneProcess>;
   clearUser: () => Promise<void>;
   attachProviderToProcess: (processId: string, providerId: string, providerDisplayName: string) => Promise<void>;
   startProcessFromProtocol: (protocolId: string) => Promise<OneProcess | null>;
@@ -142,10 +146,13 @@ function buildUserFromProductFlow(p: ProductOnboardingPayload): OneUser {
     hats,
   };
   const title = p.firstUnitTitle.trim() || 'First unit';
+  const { spaceId, domainId } = legacyWorldIdToSpaceDomain(lens);
   const firstProcess: OneProcess = {
     id: pid,
     title,
     lens,
+    spaceId,
+    domainId,
     status: 'active',
     createdAt: now,
     summary: p.firstUnitSummary.trim() || `Goal: ${title}`,
@@ -179,10 +186,13 @@ function buildUserFromOnboarding(o: OnboardingState): OneUser {
     hats: ['base', ...o.lenses],
   };
 
+  const { spaceId, domainId } = legacyWorldIdToSpaceDomain(o.lenses[0]);
   const firstProcess: OneProcess = {
     id: pid,
     title: desire,
     lens: o.lenses[0],
+    spaceId,
+    domainId,
     status: 'active',
     createdAt: now,
     summary: `Goal: ${desire}`,
@@ -231,7 +241,14 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
             ...user.agent,
             hats,
           },
-          processes: user.processes.map((p) => normalizeProcess(p as OneProcess)),
+          processes: user.processes.map((p) => {
+            const proc = normalizeProcess(p as OneProcess);
+            if (!proc.spaceId) {
+              const { spaceId, domainId } = legacyWorldIdToSpaceDomain(proc.lens);
+              return { ...proc, spaceId, domainId };
+            }
+            return proc;
+          }),
         };
       }
       dispatch({ type: 'LOAD', payload: user });
@@ -267,6 +284,22 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
       console.warn('Supabase profile sync:', e);
     }
   }, []);
+
+  const restoreOneUser = useCallback(async (user: OneUser) => {
+    const normalized: OneUser = {
+      ...user,
+      processes: (user.processes ?? []).map((p) => {
+        const proc = normalizeProcess(p as OneProcess);
+        if (!proc.spaceId) {
+          const { spaceId, domainId } = legacyWorldIdToSpaceDomain(proc.lens);
+          return { ...proc, spaceId, domainId };
+        }
+        return proc;
+      }),
+    };
+    await storage.setItem(ONE_USER_KEY, JSON.stringify(normalized));
+    dispatch({ type: 'COMPLETE', payload: normalized });
+  }, [normalizeProcess]);
 
   const persistUser = useCallback(async (user: OneUser) => {
     await storage.setItem(ONE_USER_KEY, JSON.stringify(user));
@@ -370,14 +403,19 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
   );
 
   const createProcess = useCallback(
-    async (params: { lens: LifeLens; title: string }): Promise<OneProcess> => {
+    async (params: { lens: LifeLens; title: string; spaceId?: SpaceId; domainId?: DomainId }): Promise<OneProcess> => {
       const now = new Date().toISOString();
       const pid = `process_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const title = params.title.trim() || 'New process';
+      const resolved = params.spaceId
+        ? { spaceId: params.spaceId, domainId: params.domainId }
+        : legacyWorldIdToSpaceDomain(params.lens);
       const process: OneProcess = {
         id: pid,
         title,
         lens: params.lens,
+        spaceId: resolved.spaceId,
+        domainId: resolved.domainId,
         status: 'active',
         createdAt: now,
         summary: `Goal: ${title}`,
@@ -453,6 +491,7 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
     nextStep: () => dispatch({ type: 'NEXT_STEP' }),
     completeOnboarding,
     completeProductOnboarding,
+    restoreOneUser,
     initialize,
     getProcess,
     addProcessMessage,

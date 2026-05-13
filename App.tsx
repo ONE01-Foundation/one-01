@@ -11,6 +11,7 @@ import { useThemeStore } from './src/stores/themeStore';
 import { useLocaleStore } from './src/stores/localeStore';
 import { useLoadingStore } from './src/stores/loadingStore';
 import { useDevModeStore } from './src/stores/devModeStore';
+import { useOnboardingPresentationStore } from './src/stores/onboardingPresentationStore';
 import { OneProvider } from './src/core/OneContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 
@@ -21,6 +22,7 @@ export default function App() {
   const { initialize: initLocale, layoutDirection } = useLocaleStore();
   const { initialize: initLoading } = useLoadingStore();
   const { initialize: initDevMode } = useDevModeStore();
+  const { initialize: initOnboardingPresentation } = useOnboardingPresentationStore();
 
   useEffect(() => {
     const init = async () => {
@@ -28,6 +30,7 @@ export default function App() {
       await initLocale();
       await initLoading();
       await initDevMode();
+      await initOnboardingPresentation();
       setIsInitialized(true);
     };
     init();

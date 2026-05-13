@@ -10,6 +10,9 @@ export type SettingsStringKey =
   | 'settings_lang_he'
   | 'settings_lang_en'
   | 'settings_language_hint'
+  | 'settings_onboarding_experience'
+  | 'settings_onboarding_composer_toggle'
+  | 'settings_onboarding_composer_hint'
   | 'menu_share'
   | 'menu_profile'
   | 'menu_history'
@@ -35,6 +38,10 @@ const SETTINGS_HE: Record<SettingsStringKey, string> = {
   settings_lang_he: 'עברית',
   settings_lang_en: 'English',
   settings_language_hint: 'כיוון הממשק (ימין/שמאל) משתנה אוטומטית לפי השפה.',
+  settings_onboarding_experience: 'אונבורדינג',
+  settings_onboarding_composer_toggle: 'גרסת הסבר מאוחדת (ספלאש + לנדינג)',
+  settings_onboarding_composer_hint:
+    'כשהמפסק דלוק — טקסט הלנדינג והספלאש משתמשים בגרסה שמסבירה את ONE, היחידות והזרימה בצורה מקצועית ומאוחדת. אפס חשבון מההתחלה כדי לראות מיד.',
   menu_share: 'שיתוף',
   menu_profile: 'פרופיל',
   menu_history: 'היסטוריה',
@@ -51,6 +58,10 @@ const SETTINGS_EN: Record<SettingsStringKey, string> = {
   settings_lang_he: 'Hebrew',
   settings_lang_en: 'English',
   settings_language_hint: 'Layout direction (RTL/LTR) follows the selected language.',
+  settings_onboarding_experience: 'Onboarding',
+  settings_onboarding_composer_toggle: 'Unified product intro (splash + landing)',
+  settings_onboarding_composer_hint:
+    'When on, splash and landing copy use a curated version that explains ONE, units, and the flow in one coherent narrative. Use “Restart onboarding from scratch” to preview immediately.',
   menu_share: 'Share',
   menu_profile: 'Profile',
   menu_history: 'History',

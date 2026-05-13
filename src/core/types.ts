@@ -4,6 +4,8 @@
  * Life Lenses (Hats): context filters only. No separate accounts.
  */
 
+import type { SpaceId, DomainId } from './spaces';
+
 /** v0.1: exactly 4 Life Lenses */
 export type LifeLens = 'health' | 'finance' | 'knowledge' | 'business';
 
@@ -13,7 +15,7 @@ export const LENS_LABELS: Record<LifeLens, string> = {
   health: 'Health',
   finance: 'Finance',
   knowledge: 'Knowledge',
-  business: 'Business',
+  business: 'Work',
 };
 
 /** Agent tone for responses later. Stored at onboarding. */
@@ -33,7 +35,7 @@ export const HAT_LABELS: Record<Hat, string> = {
   health: 'Health',
   finance: 'Finance',
   knowledge: 'Knowledge',
-  business: 'Business',
+  business: 'Work',
   provider: 'Provider',
 };
 
@@ -100,7 +102,10 @@ export interface ProcessEvent {
 export interface OneProcess {
   id: string;
   title: string;
+  /** @deprecated use spaceId + domainId — kept for backward compat during migration */
   lens: LifeLens;
+  spaceId: SpaceId;
+  domainId?: DomainId;
   status: 'active' | 'done';
   createdAt: string;
   summary: string;

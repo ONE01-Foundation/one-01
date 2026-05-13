@@ -14,8 +14,7 @@ import { EdgeGradientBars } from '../components/EdgeGradientBars';
 import { OrbAgent } from '../components/OrbAgent';
 import { useOne } from '../core/OneContext';
 import { useThemeStore } from '../stores/themeStore';
-import { getHatColor } from '../core/types';
-import type { Hat } from '../core/types';
+import { buildHomeRotatingLines, labelLinesForHomeCenterOrbFromHomeState } from '../components/homeCenterOrbPresentation';
 
 export type HomePagerScrollContextValue = {
   scrollToPage: (index: number) => void;
@@ -64,13 +63,7 @@ export function HomePager() {
 
   const orbZoneTop = insets.top + ORB_ZONE_TOP_OFFSET;
 
-  const rotatingLines = useMemo(() => {
-    if (!user) return [];
-    const lines: string[] = ['What are we building today?', 'Momentum is high today — good time to execute'];
-    const active = user.processes.filter((p) => p.status === 'active');
-    if (active.length > 0) lines.push(`Process active: ${active[0].title}`);
-    return lines;
-  }, [user]);
+  const rotatingLines = useMemo(() => buildHomeRotatingLines(user), [user]);
 
   const [labelIndex, setLabelIndex] = useState(0);
   useEffect(() => {
@@ -83,12 +76,8 @@ export function HomePager() {
   const orbLabelLines = useMemo(() => {
     if (currentPageIndex === 0) return ['Discovery', 'Swipe down to see Discovery'];
     if (currentPageIndex === 2) return ["Timeline", "Swipe up to see what's next"];
-    if (agentStatusText) return ['One Agent', agentStatusText];
-    return rotatingLines.length ? ['One Agent', rotatingLines[labelIndex]] : ['One Agent'];
-  }, [currentPageIndex, agentStatusText, rotatingLines, labelIndex]);
-
-  const primaryHat = (user?.agent?.hats ?? ['base']).filter((h: Hat) => h !== 'base')[0] ?? 'base';
-  const orbGlow = getHatColor(primaryHat);
+    return labelLinesForHomeCenterOrbFromHomeState(user, agentStatusText, rotatingLines, labelIndex);
+  }, [currentPageIndex, user, agentStatusText, rotatingLines, labelIndex]);
 
   const orbMode = currentPageIndex === 0 ? 'discovery' : currentPageIndex === 2 ? 'process' : 'home';
 
@@ -127,7 +116,6 @@ export function HomePager() {
             labelLines={orbLabelLines}
             onPress={currentPageIndex === 1 ? onOrbPress : undefined}
             tappable={currentPageIndex === 1}
-            glowColor={orbGlow}
             typingEffect={currentPageIndex === 1}
             showFace
           />

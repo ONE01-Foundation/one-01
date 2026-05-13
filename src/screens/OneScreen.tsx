@@ -14,6 +14,7 @@ import {
   StyleSheet,
   type ColorValue,
   TouchableOpacity,
+  Pressable,
   useWindowDimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -38,9 +39,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Path, Rect, G, ClipPath, Mask } from 'react-native-svg';
 import { useThemeStore } from '../stores/themeStore';
-import { useLocaleStore } from '../stores/localeStore';
+import { useLocaleStore, type AppLanguage } from '../stores/localeStore';
 import { useLoadingStore } from '../stores/loadingStore';
 import { useDevModeStore, type DevPreviewProfile } from '../stores/devModeStore';
+import { useGlobalIntentSignalsStore } from '../stores/globalIntentSignalsStore';
 import {
   translate,
   embedLatinRunsForRtlDisplay,
@@ -51,11 +53,16 @@ import type { ViewMode, CardContext } from '../one01/viewState';
 import { getProcessStepsData, getProgress } from '../data/processSteps';
 import type { AppShellParamList } from '../navigation/types';
 import { useOne } from '../core/OneContext';
+import type { LifeLens, OneProcess } from '../core/types';
+import type { SpaceId, DomainId } from '../core/spaces';
+import { legacyWorldIdToSpaceDomain } from '../core/spaces';
+import { OrbAgent } from '../components/OrbAgent';
 import {
   UnitChatProfile,
   type AgentChatProfileModel,
   type UnitChatProfileModel,
   type UnitProfilePerson,
+  type UnitProfileSlot,
 } from '../components/UnitChatProfile';
 import { HAT_LABELS, PERSONA_LABELS, type Hat } from '../core/types';
 import { AttachActionSheet, type AttachActionId } from '../components/AttachActionSheet';
@@ -63,6 +70,7 @@ import { AddContactIcon } from '../components/icons/AddContactIcon';
 import { ShareIcon } from '../components/icons/ShareIcon';
 import { ChatBackArrowIcon } from '../components/icons/ChatBackArrowIcon';
 import { SettingsIcon } from '../components/icons/SettingsIcon';
+import { BackgroundOvarly } from '../components/icons/BackgroundOvarly';
 
 const MAX_CONTENT_WIDTH = 428;
 const INACTIVITY_HIDE_MS = 3000;
@@ -86,10 +94,26 @@ const CHAT_MENU_ROWS: { id: 'Share' | 'Profile' | 'History' | 'Settings'; labelK
   { id: 'Settings', labelKey: 'menu_settings' },
 ];
 
+/** זהב כפתור שדרוג – עקביות לקרדיטים, תג PRO וכפתורי ארנק */
+const UPGRADE_GOLD = '#e6bf3f';
+const UPGRADE_GOLD_ON = '#111111';
+
 /** צ׳אט סוכן: גלילה למעלה (לכיוון הודעות/תוכן קודם, y קטן) אחרי שכבר גללת למטה — פותחת היסטוריה מעל */
 /** פריט אחד בגלגל – תהליך עם אימוג'י, כותרת, תת־כותרת */
 export type OrbItem = { id: string; emoji: string; title: string; subtitle: string };
+
+/** כדורי יחידה חדשים מיד מתחת לשורת הבית (origin), לא בסוף הגלגל */
+function insertPersonalOrbsAfterOrigin(prev: OrbItem[], orbs: OrbItem[]): OrbItem[] {
+  if (!orbs.length) return prev;
+  const idSet = new Set(orbs.map((o) => o.id));
+  const without = prev.filter((p) => !idSet.has(p.id));
+  const originIdx = without.findIndex((p) => p.id === 'origin');
+  if (originIdx < 0) return [...orbs, ...without];
+  return [...without.slice(0, originIdx + 1), ...orbs, ...without.slice(originIdx + 1)];
+}
+
 type ChatLine = { id: string; sender: 'user' | 'one'; text: string; sentAt?: number };
+type AccountSpace = 'personal' | 'business';
 
 function startOfLocalDayMs(t: number): number {
   const d = new Date(t);
@@ -128,41 +152,229 @@ function formatChatDayStickyLabel(sentAt: number, he: boolean): string {
     ...(new Date(sentAt).getFullYear() !== new Date(now).getFullYear() ? { year: 'numeric' } : {}),
   });
 }
-type FlowUnit = UnitChatProfileModel & { messages: ChatLine[]; worldId: string };
 
-/** עולמות – רק בכדור הראשון אפשר לדפדף ביניהם; לכל עולם צבע */
-const WORLDS: { id: string; label: string; color: string }[] = [
+function formatUnitLogStatusLine(
+  status: UnitChatProfileModel['status'],
+  progress: number,
+  steps: number,
+  language: AppLanguage,
+): string {
+  if (language === 'he') {
+    const statusHe = status === 'active' ? 'פעיל' : status === 'waiting' ? 'ממתין' : 'הושלם';
+    return `${statusHe} · ${progress}% · ${steps} צעדים`;
+  }
+  return `${status} · ${progress}% · ${steps} steps`;
+}
+
+type FlowUnit = UnitChatProfileModel & {
+  messages: ChatLine[];
+  spaceId: SpaceId;
+  domainId?: DomainId;
+  /** @deprecated temporary migration bridge */
+  worldId: string;
+};
+
+/** היסטוריית יחידות בצ׳אט סוכן — הישן למעלה */
+function flowUnitHistorySortKey(unit: FlowUnit): number {
+  const times =
+    unit.messages
+      ?.map((m) => m.sentAt)
+      .filter((t): t is number => typeof t === 'number' && !Number.isNaN(t)) ?? [];
+  if (times.length) return Math.min(...times);
+  const parsed = /^unit_(\d+)$/.exec(unit.id);
+  if (parsed) return Number(parsed[1]) || 0;
+  return 0;
+}
+
+function sortFlowUnitsHistoryOldestFirst(units: FlowUnit[]): FlowUnit[] {
+  return [...units].sort((a, b) => {
+    const d = flowUnitHistorySortKey(a) - flowUnitHistorySortKey(b);
+    if (d !== 0) return d;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/** עולמות משתמש אישי */
+const PERSONAL_WORLDS: { id: string; label: string; color: string }[] = [
   { id: 'personal', label: 'ראשי', color: '#ffffff' },
-  { id: 'business', label: 'עסקים', color: '#0ea5e9' },
+  { id: 'business', label: 'עבודה', color: '#0ea5e9' },
   { id: 'health', label: 'בריאות', color: '#22c55e' },
-  { id: 'finance', label: 'כלכלה', color: '#eab308' },
+  { id: 'finance', label: 'כסף', color: '#eab308' },
   { id: 'knowledge', label: 'לימודים', color: '#a855f7' },
   { id: 'leisure', label: 'פנאי', color: '#fde047' },
   { id: 'relations', label: 'קשרים', color: '#f472b6' },
 ];
 
+/** עולמות ייעודיים לחשבון עסקי */
+const BUSINESS_WORLDS: { id: string; label: string; color: string }[] = [
+  { id: 'business', label: 'סקירה', color: '#0ea5e9' },
+  { id: 'clients', label: 'לקוחות', color: '#38bdf8' },
+  { id: 'marketing', label: 'שיווק', color: '#f59e0b' },
+  { id: 'sales', label: 'מכירות', color: '#22c55e' },
+  { id: 'operations', label: 'תפעול', color: '#a78bfa' },
+  { id: 'finance', label: 'כספים', color: '#eab308' },
+  { id: 'team', label: 'צוות', color: '#f472b6' },
+];
+
+const WORLD_LABEL_HE: Record<string, string> = {
+  personal: 'ראשי',
+  business: 'עבודה',
+  health: 'בריאות',
+  finance: 'כסף',
+  knowledge: 'לימודים',
+  leisure: 'פנאי',
+  relations: 'קשרים',
+  clients: 'לקוחות',
+  marketing: 'שיווק',
+  sales: 'מכירות',
+  operations: 'תפעול',
+  team: 'צוות',
+};
+
+const WORLD_LABEL_EN: Record<string, string> = {
+  personal: 'General',
+  business: 'Work',
+  health: 'Health',
+  finance: 'Finance',
+  knowledge: 'Learning',
+  leisure: 'Leisure',
+  relations: 'Relationships',
+  clients: 'Clients',
+  marketing: 'Marketing',
+  sales: 'Sales',
+  operations: 'Operations',
+  team: 'Team',
+};
+
+function worldTitle(worldId: string, language: AppLanguage): string {
+  if (language === 'he') return WORLD_LABEL_HE[worldId] ?? worldId;
+  return WORLD_LABEL_EN[worldId] ?? worldId;
+}
+
+/** כדור גלובל מלאכותי בראש הגלגל — מעל הסוכן; אינדקס 0 = גלובל, 1 = סוכן */
+const GLOBAL_WHEEL_ORB_ID = '__wheel_global__';
+const GLOBAL_ORB_INDEX = 0;
+const AGENT_ORB_INDEX = 1;
+
+/** גרירה מעבר לראש הגלגל בכדור הסוכן → מעבר לגלובל מוד */
+const GLOBAL_PULL_ENTER_PX = 56;
+/** גלילה למעלה מתחת לעמדת הסוכן — פתיחת גלובל בלי להמתין למרכוז מלא של כדור הגלובל */
+const GLOBAL_WHEEL_EARLY_OPEN_SCROLL_PX = 36;
+
 /** ברודקאסט – שורה ראשית: סוג (עדכון/הודעה/תזכורת), שורה משנית: התוכן */
 export type BroadcastMessage = { type: string; body: string };
 
-/** ברודקאסט לכדור יחידה / תהליך בגלגל — מתאים ל־flowUnits או לנתוני ה־Orb בלבד */
-function broadcastMessagesForOrbItem(item: OrbItem, units: FlowUnit[]): BroadcastMessage[] {
-  const unit = units.find((u) => u.id === item.id);
-  if (unit) {
-    const out: BroadcastMessage[] = [];
-    if (unit.nextAction?.trim()) out.push({ type: 'צעד הבא', body: unit.nextAction.trim() });
-    if (unit.goal?.trim()) out.push({ type: 'מטרה', body: unit.goal.trim() });
-    out.push({ type: 'התקדמות', body: `${unit.progress}% · ${unit.subtitle}` });
-    if (unit.lastUpdatedLabel?.trim()) out.push({ type: 'עדכון', body: unit.lastUpdatedLabel.trim() });
-    if (unit.city?.trim()) out.push({ type: 'אזור', body: unit.city.trim() });
-    return out.length > 0 ? out : [{ type: 'יחידה', body: unit.subtitle || item.subtitle }];
+/** ברודקאסט גלובלי — מרקט דיסקברי + אגרגט אנונימי של רצונות/יחידות שנפתחו בעולם */
+function getGlobalBroadcastMessages(
+  worldId: string,
+  language: AppLanguage,
+  crowdSignals: { key: string; labelHe: string; labelEn: string; count: number }[]
+): BroadcastMessage[] {
+  const name = worldTitle(worldId, language);
+  const crowd: BroadcastMessage[] = [];
+  const top = crowdSignals.filter((s) => s.count > 0).slice(0, 4);
+  if (language === 'he') {
+    for (const s of top) {
+      crowd.push({
+        type: 'ציבורי · אנונימי',
+        body: `${s.count} אנשים פתחו לאחרונה תהליך דומה: «${s.labelHe}» — אגרגט בלבד, בלי זהויות.`,
+      });
+    }
+  } else {
+    for (const s of top) {
+      crowd.push({
+        type: 'Public · anonymous',
+        body: `${s.count} people recently started a similar journey: “${s.labelEn}”—aggregate only, no identities.`,
+      });
+    }
+  }
+  if (language === 'he') {
+    return [
+      ...crowd,
+      {
+        type: 'גילוי',
+        body: `«${name}» — כאן כל סוכני האנשים נפגשים כדי לחפש ספק שירות, מוצר או תהליך; רואים שכבת אגרגציה אחת שמזינה אתכם ואת ה-AI.`,
+      },
+      {
+        type: 'אגרגט',
+        body: 'מחירים, זמינות, ביקורות מאומתות, נפח חיפושים ומגמות ביקוש — מרוכזים לפי עולם ולפי אזור.',
+      },
+      {
+        type: 'שוק',
+        body: 'דירוג היצע מול ביקוש, מי מגיב מהר, ומה נפתח הכי הרבה כיחידות בבית — כדי להחליט מה לרדוף אחריו.',
+      },
+      {
+        type: 'סוכנים',
+        body: 'שאילתות מסוכנים שונים משלימות תמונה אחת: פחות רעש, יותר התאמה לפני שבוחרים ספק או מוצר.',
+      },
+    ];
   }
   return [
-    { type: 'עדכון', body: item.subtitle || 'מוכן לביצוע' },
-    { type: 'תזכורת', body: `«${item.title}» — פתחו בצ׳אט למעקב אחר צעדים` },
+    ...crowd,
+    {
+      type: 'Discovery',
+      body: `“${name}” — where everyone’s agents search for services, products, and flows; one aggregated layer for people and for AI.`,
+    },
+    {
+      type: 'Aggregate',
+      body: 'Prices, availability, verified reviews, search volume, and demand trends — rolled up by world and region.',
+    },
+    {
+      type: 'Market',
+      body: 'Supply vs demand, who responds fast, and what becomes a home unit most often — so you pick what to chase.',
+    },
+    {
+      type: 'Agents',
+      body: 'Queries from many agents complete one picture: less noise, better fit before you commit to a provider or product.',
+    },
   ];
 }
 
-const BROADCAST_BY_WORLD: Record<string, BroadcastMessage[]> = {
+function broadcastMessagesForOrbItem(item: OrbItem, units: FlowUnit[], language: AppLanguage): BroadcastMessage[] {
+  const he = language === 'he';
+  const t = {
+    next: he ? 'צעד הבא' : 'Next step',
+    goal: he ? 'מטרה' : 'Goal',
+    progress: he ? 'התקדמות' : 'Progress',
+    update: he ? 'עדכון' : 'Update',
+    area: he ? 'אזור' : 'Area',
+    unit: he ? 'יחידה' : 'Unit',
+    reminder: he ? 'תזכורת' : 'Reminder',
+    ready: he ? 'מוכן לביצוע' : 'Ready to go',
+    chatHint: he ? 'פתחו בצ׳אט למעקב אחר צעדים' : 'Open chat to track steps',
+    need: he ? 'צריך ממך' : 'Need from you',
+    status: he ? 'סטטוס' : 'Status',
+  };
+  const unit = units.find((u) => u.id === item.id);
+  if (unit) {
+    const out: BroadcastMessage[] = [];
+    const slots = unit.profileSlots?.filter((s) => !s.optional) ?? [];
+    const missing = slots.filter((s) => !s.value?.trim());
+    if (missing.length > 0) {
+      out.push({
+        type: t.need,
+        body: he ? `${missing.length} שדות חסרים בפרופיל — ${missing[0].label}` : `${missing.length} profile fields missing — ${missing[0].label}`,
+      });
+      for (const s of missing.slice(1, 4)) {
+        out.push({ type: t.need, body: s.label });
+      }
+    }
+    const stLine = formatUnitLogStatusLine(unit.status, unit.progress, unit.steps, language);
+    out.push({ type: t.status, body: stLine });
+    if (unit.nextAction?.trim()) out.push({ type: t.next, body: unit.nextAction.trim() });
+    if (unit.goal?.trim()) out.push({ type: t.goal, body: unit.goal.trim() });
+    out.push({ type: t.progress, body: `${unit.progress}% · ${unit.subtitle}` });
+    if (unit.lastUpdatedLabel?.trim()) out.push({ type: t.update, body: unit.lastUpdatedLabel.trim() });
+    if (unit.city?.trim()) out.push({ type: t.area, body: unit.city.trim() });
+    return out.length > 0 ? out : [{ type: t.unit, body: unit.subtitle || item.subtitle }];
+  }
+  return [
+    { type: t.update, body: item.subtitle || t.ready },
+    { type: t.reminder, body: `«${item.title}» — ${t.chatHint}` },
+  ];
+}
+
+const BROADCAST_BY_WORLD_HE: Record<string, BroadcastMessage[]> = {
   personal: [
     { type: 'עדכון', body: 'הודעות חדשות מחכות' },
     { type: 'תזכורת', body: 'תזכורת לרישיון נהיגה' },
@@ -221,6 +433,84 @@ const BROADCAST_BY_WORLD: Record<string, BroadcastMessage[]> = {
   ],
 };
 
+const BROADCAST_BY_WORLD_EN: Record<string, BroadcastMessage[]> = {
+  personal: [
+    { type: 'Update', body: 'New messages are waiting' },
+    { type: 'Reminder', body: 'Driver license reminder' },
+    { type: 'Update', body: 'Profile updated successfully' },
+    { type: 'Message', body: '3 tasks pending' },
+    { type: 'Reminder', body: 'Meeting with Dani tomorrow' },
+    { type: 'Update', body: 'Password changed' },
+  ],
+  business: [
+    { type: 'Message', body: 'Quarterly report uploaded' },
+    { type: 'Reminder', body: 'Meeting tomorrow 09:00' },
+    { type: 'Update', body: 'Contract ready for signature' },
+    { type: 'Reminder', body: 'Project deadline Thursday' },
+    { type: 'Update', body: 'Quote sent' },
+    { type: 'Message', body: 'Client status updated' },
+  ],
+  health: [
+    { type: 'Update', body: 'Test results received' },
+    { type: 'Reminder', body: 'Doctor appointment tomorrow 10:00' },
+    { type: 'Message', body: 'Tests within range' },
+    { type: 'Update', body: 'Blood test slot confirmed' },
+    { type: 'Reminder', body: 'Time to take medication' },
+    { type: 'Update', body: 'Medical records available' },
+  ],
+  finance: [
+    { type: 'Update', body: 'Portfolio up 2%' },
+    { type: 'Reminder', body: 'Monthly payment due tomorrow' },
+    { type: 'Message', body: 'Tax report prepared' },
+    { type: 'Update', body: 'Transfer completed' },
+    { type: 'Reminder', body: 'Checking account balance low' },
+    { type: 'Update', body: 'Dividend received' },
+  ],
+  knowledge: [
+    { type: 'Update', body: 'New study goal added' },
+    { type: 'Reminder', body: 'Time for 20 minutes of practice' },
+    { type: 'Message', body: 'New lesson available' },
+    { type: 'Update', body: 'Lesson summary saved' },
+    { type: 'Reminder', body: 'Review before exam' },
+    { type: 'Update', body: 'Learning progress updated' },
+  ],
+  leisure: [
+    { type: 'Reminder', body: 'Movie tomorrow 8:00 PM — tickets on your list' },
+    { type: 'Update', body: 'Short trip suggestion added' },
+    { type: 'Message', body: 'Friends confirmed weekend plans' },
+    { type: 'Reminder', body: 'Time to finish the camping gear list' },
+    { type: 'Update', body: 'New tracks in your leisure playlist' },
+    { type: 'Message', body: 'Neighborhood event this weekend' },
+  ],
+  relations: [
+    { type: 'Reminder', body: "Grandma's birthday next week — pick a gift" },
+    { type: 'Message', body: 'Friend asked when to meet' },
+    { type: 'Update', body: 'Note added for family dinner' },
+    { type: 'Reminder', body: 'Return Dani’s call from last week' },
+    { type: 'Update', body: 'Evening guest list updated' },
+    { type: 'Message', body: 'Invited to an event on Friday' },
+  ],
+};
+
+function broadcastMessagesForAgentWorld(worldId: string, language: AppLanguage, units: FlowUnit[]): BroadcastMessage[] {
+  const he = language === 'he';
+  const open = units
+    .filter((u) => u.worldId === worldId && u.status !== 'done')
+    .sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0));
+  if (open.length === 0) {
+    return he
+      ? [{ type: 'סטטוס', body: 'אין עדיין יחידות פתוחות במרחב הזה. פתחו יחידה חדשה מהצ׳אט.' }]
+      : [{ type: 'Status', body: 'No active units in this space yet. Create one from chat.' }];
+  }
+  const top = open.slice(0, 3);
+  return top.map((u) => ({
+    type: he ? 'יחידה פעילה' : 'Active unit',
+    body: he
+      ? `${u.title} · ${u.progress}% · ${u.nextAction || 'ממתין לצעד הבא'}`
+      : `${u.title} · ${u.progress}% · ${u.nextAction || 'Waiting for next action'}`,
+  }));
+}
+
 /** תהליכים לכל עולם – הכדורים שנגלילים למטה (דוגמאות רחבות) */
 const ORB_DATA_BY_WORLD: Record<string, OrbItem[]> = {
   personal: [
@@ -230,10 +520,40 @@ const ORB_DATA_BY_WORLD: Record<string, OrbItem[]> = {
     { id: 'passport', emoji: '🛂', title: 'חידוש דרכון', subtitle: 'תיאום תור, מסמכים, איסוף' },
   ],
   business: [
-    { id: 'origin', emoji: '💼', title: 'עסקים', subtitle: '' },
-    { id: 'b1', emoji: '📋', title: 'הקמת עסק', subtitle: 'רישום, בנק, מוצרים והפעלה' },
-    { id: 'b2', emoji: '📊', title: 'דוח רווח והפסד', subtitle: 'איסוף נתונים, סיווג, ייצוא' },
-    { id: 'b3', emoji: '👤', title: 'גיוס עובד ראשון', subtitle: 'הגדרת תפקיד, פרסום, ראיונות' },
+    { id: 'origin', emoji: '🏢', title: 'סקירת עסק', subtitle: '' },
+    { id: 'biz_dashboard', emoji: '📈', title: 'לוח KPI שבועי', subtitle: 'יעדים, המרות, צווארי בקבוק' },
+    { id: 'biz_q_plan', emoji: '🧭', title: 'תוכנית רבעונית', subtitle: 'מטרות, בעלים, דדליינים' },
+    { id: 'biz_automation', emoji: '⚙️', title: 'אוטומציות חוסכות זמן', subtitle: 'CRM, פולואפ, דוחות' },
+  ],
+  clients: [
+    { id: 'origin', emoji: '🤝', title: 'לקוחות', subtitle: '' },
+    { id: 'clients_onboarding', emoji: '🧾', title: 'Onboarding לקוח חדש', subtitle: 'טפסים, דרישות, kickoff' },
+    { id: 'clients_retention', emoji: '❤️', title: 'שימור לקוחות', subtitle: 'NPS, פולואפים, מניעת נטישה' },
+    { id: 'clients_support', emoji: '🎧', title: 'תמיכה ו-SLA', subtitle: 'תורים, זמני תגובה, הסלמה' },
+  ],
+  marketing: [
+    { id: 'origin', emoji: '📣', title: 'שיווק', subtitle: '' },
+    { id: 'mkt_content', emoji: '🎬', title: 'תוכן חודשי', subtitle: 'רעיונות, הפקה, פרסום' },
+    { id: 'mkt_ads', emoji: '💸', title: 'קמפיינים ממומנים', subtitle: 'קריאייטיב, קהלים, אופטימיזציה' },
+    { id: 'mkt_site', emoji: '🌐', title: 'שיפור אתר/דפי נחיתה', subtitle: 'מהירות, CTA, A/B' },
+  ],
+  sales: [
+    { id: 'origin', emoji: '💰', title: 'מכירות', subtitle: '' },
+    { id: 'sales_pipeline', emoji: '🎯', title: 'ניהול Pipeline', subtitle: 'לידים, הצעות, סגירות' },
+    { id: 'sales_followups', emoji: '📞', title: 'פולואפים יומיים', subtitle: 'שיחות, וואטסאפ, סטטוס' },
+    { id: 'sales_pricing', emoji: '🧮', title: 'בניית הצעת מחיר', subtitle: 'סקופ, תמחור, מרווח' },
+  ],
+  operations: [
+    { id: 'origin', emoji: '🛠️', title: 'תפעול', subtitle: '' },
+    { id: 'ops_board', emoji: '📋', title: 'לוח משימות צוות', subtitle: 'עדיפויות, בעלים, SLA' },
+    { id: 'ops_inventory', emoji: '📦', title: 'מלאי ורכש', subtitle: 'חוסרים, הזמנות, עלות' },
+    { id: 'ops_quality', emoji: '✅', title: 'בקרת איכות', subtitle: 'צ׳קליסט, חריגות, תיקונים' },
+  ],
+  team: [
+    { id: 'origin', emoji: '👥', title: 'צוות', subtitle: '' },
+    { id: 'team_hiring', emoji: '🧲', title: 'גיוס תפקיד קריטי', subtitle: 'דרישות, סורסינג, ראיונות' },
+    { id: 'team_training', emoji: '🎓', title: 'הכשרת עובדים', subtitle: 'SOP, חניכה, בדיקה' },
+    { id: 'team_reviews', emoji: '🗓️', title: 'שיחות 1:1 חודשיות', subtitle: 'יעדים, חסמים, משוב' },
   ],
   health: [
     { id: 'origin', emoji: '🏥', title: 'בריאות', subtitle: '' },
@@ -242,7 +562,7 @@ const ORB_DATA_BY_WORLD: Record<string, OrbItem[]> = {
     { id: 'h3', emoji: '🩸', title: 'בדיקות דם שנתיות', subtitle: 'הפניה, תיאום, תוצאות' },
   ],
   finance: [
-    { id: 'origin', emoji: '💰', title: 'כלכלה', subtitle: '' },
+    { id: 'origin', emoji: '💰', title: 'כסף', subtitle: '' },
     { id: 'f1', emoji: '📈', title: 'השקעות', subtitle: 'מטרה, פלטפורמה, פיזור נכסים' },
     { id: 'f2', emoji: '🧾', title: 'החזרי מס', subtitle: 'טפסים, הגשה, מעקב' },
     { id: 'f3', emoji: '🚗', title: 'חיסכון לרכב', subtitle: 'יעד, תקציב חודשי, אסטרטגיה' },
@@ -267,49 +587,715 @@ const ORB_DATA_BY_WORLD: Record<string, OrbItem[]> = {
   ],
 };
 
-function createSeedUnit(
-  id: string,
+const ORB_DATA_BY_WORLD_EN: Record<string, OrbItem[]> = {
+  personal: [
+    { id: 'origin', emoji: '👤', title: 'Home', subtitle: '' },
+    { id: 'license', emoji: '🚗', title: "Driver's license", subtitle: 'Theory, lessons, practical exam' },
+    { id: 'mass', emoji: '💪', title: 'Gain 5 kg muscle', subtitle: 'Nutrition, workouts, tracking' },
+    { id: 'passport', emoji: '🛂', title: 'Passport renewal', subtitle: 'Appointment, documents, pickup' },
+  ],
+  business: [
+    { id: 'origin', emoji: '🏢', title: 'Business overview', subtitle: '' },
+    { id: 'biz_dashboard', emoji: '📈', title: 'Weekly KPI dashboard', subtitle: 'Targets, conversion, bottlenecks' },
+    { id: 'biz_q_plan', emoji: '🧭', title: 'Quarterly plan', subtitle: 'Goals, owners, deadlines' },
+    { id: 'biz_automation', emoji: '⚙️', title: 'Time-saving automations', subtitle: 'CRM, follow-ups, reports' },
+  ],
+  clients: [
+    { id: 'origin', emoji: '🤝', title: 'Clients', subtitle: '' },
+    { id: 'clients_onboarding', emoji: '🧾', title: 'Client onboarding', subtitle: 'Forms, requirements, kickoff' },
+    { id: 'clients_retention', emoji: '❤️', title: 'Client retention', subtitle: 'NPS, follow-ups, churn prevention' },
+    { id: 'clients_support', emoji: '🎧', title: 'Support & SLA', subtitle: 'Queues, response times, escalation' },
+  ],
+  marketing: [
+    { id: 'origin', emoji: '📣', title: 'Marketing', subtitle: '' },
+    { id: 'mkt_content', emoji: '🎬', title: 'Monthly content engine', subtitle: 'Ideas, production, publishing' },
+    { id: 'mkt_ads', emoji: '💸', title: 'Paid campaigns', subtitle: 'Creatives, audiences, optimization' },
+    { id: 'mkt_site', emoji: '🌐', title: 'Website & landing optimization', subtitle: 'Speed, CTA, A/B tests' },
+  ],
+  sales: [
+    { id: 'origin', emoji: '💰', title: 'Sales', subtitle: '' },
+    { id: 'sales_pipeline', emoji: '🎯', title: 'Pipeline management', subtitle: 'Leads, proposals, closes' },
+    { id: 'sales_followups', emoji: '📞', title: 'Daily follow-ups', subtitle: 'Calls, messages, status updates' },
+    { id: 'sales_pricing', emoji: '🧮', title: 'Proposal pricing', subtitle: 'Scope, pricing, margin control' },
+  ],
+  operations: [
+    { id: 'origin', emoji: '🛠️', title: 'Operations', subtitle: '' },
+    { id: 'ops_board', emoji: '📋', title: 'Team ops board', subtitle: 'Priorities, owners, SLA' },
+    { id: 'ops_inventory', emoji: '📦', title: 'Inventory & procurement', subtitle: 'Stock gaps, orders, cost' },
+    { id: 'ops_quality', emoji: '✅', title: 'Quality control', subtitle: 'Checklists, incidents, fixes' },
+  ],
+  team: [
+    { id: 'origin', emoji: '👥', title: 'Team', subtitle: '' },
+    { id: 'team_hiring', emoji: '🧲', title: 'Hiring critical role', subtitle: 'JD, sourcing, interviews' },
+    { id: 'team_training', emoji: '🎓', title: 'Employee training', subtitle: 'SOP, shadowing, validation' },
+    { id: 'team_reviews', emoji: '🗓️', title: 'Monthly 1:1 reviews', subtitle: 'Goals, blockers, feedback' },
+  ],
+  health: [
+    { id: 'origin', emoji: '🏥', title: 'Health', subtitle: '' },
+    { id: 'h1', emoji: '🩺', title: 'Doctor visit', subtitle: 'Booking, visit, summary' },
+    { id: 'h2', emoji: '💊', title: 'Medication tracking', subtitle: 'Log, reminders, follow-up' },
+    { id: 'h3', emoji: '🩸', title: 'Annual blood tests', subtitle: 'Referral, scheduling, results' },
+  ],
+  finance: [
+    { id: 'origin', emoji: '💰', title: 'Finance', subtitle: '' },
+    { id: 'f1', emoji: '📈', title: 'Investing', subtitle: 'Goal, platform, diversification' },
+    { id: 'f2', emoji: '🧾', title: 'Tax refunds', subtitle: 'Forms, filing, tracking' },
+    { id: 'f3', emoji: '🚗', title: 'Saving for a car', subtitle: 'Goal, monthly budget, strategy' },
+  ],
+  knowledge: [
+    { id: 'origin', emoji: '📚', title: 'Learning', subtitle: '' },
+    { id: 'k1', emoji: '🧠', title: 'Learning plan', subtitle: 'Topics, practice, exam' },
+    { id: 'k2', emoji: '📝', title: 'Exam prep', subtitle: 'Syllabus, practice, review' },
+    { id: 'k3', emoji: '🎓', title: 'Professional course', subtitle: 'Modules, tasks, tracking' },
+  ],
+  leisure: [
+    { id: 'origin', emoji: '😊', title: 'Leisure', subtitle: '' },
+    { id: 'l1', emoji: '🎬', title: 'Movie night', subtitle: 'Tickets, trip, quick review' },
+    { id: 'l2', emoji: '🏕️', title: 'Family camping', subtitle: 'Gear, route, reminders' },
+    { id: 'l3', emoji: '🎮', title: 'Gaming with friends', subtitle: 'Time, game, recap' },
+  ],
+  relations: [
+    { id: 'origin', emoji: '💕', title: 'Relationships', subtitle: '' },
+    { id: 'r1', emoji: '🎂', title: 'Family birthday', subtitle: 'Gift, RSVP, guest reminders' },
+    { id: 'r2', emoji: '☕', title: 'Friends coffee', subtitle: 'Place, time, RSVP' },
+    { id: 'r3', emoji: '💌', title: 'Relationship check-ins', subtitle: 'Calls, important dates, notes' },
+  ],
+};
+
+/** כדורי פרופיל dev שלא מופיעים בשורת personal המלאה — תרגום EN לפי id */
+const ORB_EXTRA_EN: Record<string, Pick<OrbItem, 'title' | 'subtitle'>> = {
+  study_plan: { title: 'Study plan', subtitle: 'Topics, practice, exam' },
+  exam: { title: 'Exam prep', subtitle: 'Syllabus, practice, review' },
+  content: { title: 'Content production', subtitle: 'Idea, shoot, edit' },
+  launch: { title: 'Launch', subtitle: 'Landing page, promo, metrics' },
+  class_plan: { title: 'Lesson plan', subtitle: 'Structure, tasks, feedback' },
+  business_ops: { title: 'Business ops', subtitle: 'Clients, billing, tracking' },
+};
+
+/** כדורי עולם: רק «מקור» של העולם + יחידות שאתה יצרת — בלי כדורי דוגמה מהקטלוג (אלא אם includeCatalogExamples) */
+function localizedOrbDataForWorld(
   worldId: string,
-  title: string,
-  subtitle: string,
-  emoji: string,
-  progress: number,
-  steps: number,
-  nextAction: string
-): FlowUnit {
+  personalOrbs: OrbItem[],
+  language: AppLanguage,
+  flowUnits: FlowUnit[],
+  includeCatalogExamples: boolean
+): OrbItem[] {
+  const catalogHe = ORB_DATA_BY_WORLD[worldId] ?? ORB_DATA_BY_WORLD.personal;
+  const catalogEn = ORB_DATA_BY_WORLD_EN[worldId] ?? ORB_DATA_BY_WORLD_EN.personal;
+
+  const userOrbsForWorld = (excludeOrigin: boolean) =>
+    personalOrbs.filter((o) => {
+      if (excludeOrigin && o.id === 'origin') return false;
+      const u = flowUnits.find((fu) => fu.id === o.id);
+      return u?.worldId === worldId;
+    });
+
+  const catalogExamplesForWorld = (): OrbItem[] => {
+    const cat = language === 'he' ? catalogHe : catalogEn;
+    return cat.filter((o) => o.id !== 'origin');
+  };
+
+  const mergeById = (base: OrbItem[], extras: OrbItem[]): OrbItem[] => {
+    const seen = new Set(base.map((o) => o.id));
+    const out = [...base];
+    for (const o of extras) {
+      if (seen.has(o.id)) continue;
+      seen.add(o.id);
+      out.push(o);
+    }
+    return out;
+  };
+
+  if (language === 'he') {
+    if (worldId === 'personal') {
+      if (!includeCatalogExamples) return personalOrbs;
+      return mergeById(catalogHe, personalOrbs.filter((o) => !catalogHe.some((c) => c.id === o.id)));
+    }
+    const origin = catalogHe.find((o) => o.id === 'origin');
+    const head = [origin ?? personalOrbs[0] ?? { id: 'origin', emoji: '👤', title: 'ראשי', subtitle: '' }];
+    const user = userOrbsForWorld(true);
+    if (!includeCatalogExamples) return [...head, ...user];
+    const examples = catalogExamplesForWorld().filter((o) => !user.some((u) => u.id === o.id));
+    return [...head, ...mergeById(examples, user)];
+  }
+  if (worldId === 'personal') {
+    const mappedPersonal = personalOrbs.map((o) => {
+      const fromEn = ORB_DATA_BY_WORLD_EN.personal.find((e) => e.id === o.id);
+      if (fromEn) return { ...o, title: fromEn.title, subtitle: fromEn.subtitle };
+      const extra = ORB_EXTRA_EN[o.id];
+      return extra ? { ...o, title: extra.title, subtitle: extra.subtitle ?? o.subtitle } : o;
+    });
+    if (!includeCatalogExamples) return mappedPersonal;
+    return mergeById(
+      ORB_DATA_BY_WORLD_EN.personal.map((o) => {
+        const m = mappedPersonal.find((p) => p.id === o.id);
+        return m ? { ...o, title: m.title, subtitle: m.subtitle } : o;
+      }),
+      mappedPersonal.filter((o) => !ORB_DATA_BY_WORLD_EN.personal.some((c) => c.id === o.id))
+    );
+  }
+  const originEn = catalogEn.find((o) => o.id === 'origin');
+  const head = [originEn ?? { id: 'origin', emoji: '👤', title: 'Home', subtitle: '' }];
+  const user = userOrbsForWorld(true);
+  if (!includeCatalogExamples) return [...head, ...user];
+  const examples = catalogExamplesForWorld().filter((o) => !user.some((u) => u.id === o.id));
+  return [...head, ...mergeById(examples, user)];
+}
+
+/** פרופיל + יחידות דמו לבדיקות — וריאציה דטרמיניסטית לפי זמן (מדמה «יצירה אוטומטית») */
+function generateAiSyntheticProfile(language: AppLanguage): { personalOrbs: OrbItem[]; flowUnits: FlowUnit[] } {
+  const catalog = language === 'he' ? ORB_DATA_BY_WORLD : ORB_DATA_BY_WORLD_EN;
+  const personal = [...(catalog.personal ?? [])];
+  const salt = Date.now();
+  const flowUnits: FlowUnit[] = [];
+  const syntheticOrbs: OrbItem[] = [];
+  const lensWorlds = ['business', 'health', 'finance', 'knowledge', 'leisure', 'relations'] as const;
+  lensWorlds.forEach((wid, wi) => {
+    const rows = (catalog[wid] ?? []).filter((o) => o.id !== 'origin');
+    const pickCount = 1 + (wi % 2);
+    rows.slice(0, pickCount).forEach((orb, j) => {
+      const id = `syn_${wid}_${j}_${salt}`;
+      const he = language === 'he';
+      const { spaceId: _sp, domainId: _dm } = legacyWorldIdToSpaceDomain(wid);
+      flowUnits.push({
+        id,
+        spaceId: _sp,
+        domainId: _dm,
+        worldId: wid,
+        title: orb.title,
+        subtitle: orb.subtitle,
+        emoji: orb.emoji,
+        status: 'active',
+        progress: 12 + ((wi * 7 + j * 3 + salt) % 40),
+        steps: 10 + j * 2,
+        messages: [
+          {
+            id: `m_${id}`,
+            sender: 'one',
+            text: he
+              ? `יחידת דוגמה שנוצרה אוטומטית — פרופיל משתמש פוטנציאלי לבדיקת ממשק.`
+              : `Auto-generated demo unit — synthetic potential-user profile for UI testing.`,
+            sentAt: Date.now(),
+          },
+        ],
+        goal: orb.subtitle,
+        nextAction: he ? 'צעד הבא לדוגמה' : 'Sample next step',
+        peopleRoles: [
+          { id: 'p1', role: he ? 'סוכן' : 'Agent', name: 'ONE' },
+          { id: 'p2', role: he ? 'אחראי/ת' : 'Owner', name: he ? 'את/ה' : 'You' },
+        ],
+        lastUpdatedLabel: he ? 'נוצר בגנרטור' : 'Generated',
+        blockCount: 4,
+      });
+      syntheticOrbs.push({ id, emoji: orb.emoji, title: orb.title, subtitle: orb.subtitle });
+    });
+  });
+  return { personalOrbs: [...personal, ...syntheticOrbs], flowUnits };
+}
+
+function generateBusinessWorkspaceSeed(language: AppLanguage): { personalOrbs: OrbItem[]; flowUnits: FlowUnit[] } {
+  const catalog = language === 'he' ? ORB_DATA_BY_WORLD : ORB_DATA_BY_WORLD_EN;
+  const he = language === 'he';
+  const businessRoot = [...(catalog.business ?? [{ id: 'origin', emoji: '🏢', title: he ? 'סקירת עסק' : 'Business overview', subtitle: '' }])];
+  const worldIds: Array<'clients' | 'marketing' | 'sales' | 'operations' | 'finance' | 'team'> = [
+    'clients',
+    'marketing',
+    'sales',
+    'operations',
+    'finance',
+    'team',
+  ];
+  const flowUnits: FlowUnit[] = [];
+  const orbs: OrbItem[] = [...businessRoot];
+  worldIds.forEach((wid, wi) => {
+    const rows = (catalog[wid] ?? []).filter((o) => o.id !== 'origin').slice(0, 2);
+    rows.forEach((orb, j) => {
+      const id = `biz_seed_${wid}_${j}`;
+      const { spaceId: _bsp, domainId: _bdm } = legacyWorldIdToSpaceDomain(wid);
+      flowUnits.push({
+        id,
+        spaceId: _bsp,
+        domainId: _bdm,
+        worldId: wid,
+        title: orb.title,
+        subtitle: orb.subtitle,
+        emoji: orb.emoji,
+        status: 'active',
+        progress: 18 + wi * 7 + j * 6,
+        steps: 10 + wi + j,
+        messages: [
+          {
+            id: `seed_msg_${id}`,
+            sender: 'one',
+            text: he
+              ? `יחידת עסק לדוגמה נוצרה כדי שתוכל לראות תפעול אמיתי במוצר.`
+              : `Business demo unit created so you can simulate real operations in-product.`,
+            sentAt: Date.now(),
+          },
+        ],
+        goal: orb.subtitle,
+        nextAction: he ? 'לעדכן סטטוס יומי ולהתקדם לצעד הבא' : 'Update daily status and move to the next step',
+        peopleRoles: [
+          { id: `owner_${id}`, role: he ? 'אחראי/ת' : 'Owner', name: he ? 'את/ה' : 'You' },
+          { id: `agent_${id}`, role: he ? 'סוכן' : 'Agent', name: 'ONE' },
+        ],
+        lastUpdatedLabel: he ? 'נזרע במרחב עסקי' : 'Seeded in business workspace',
+        blockCount: 5,
+      });
+      orbs.push({ id, emoji: orb.emoji, title: orb.title, subtitle: orb.subtitle });
+    });
+  });
+  return { personalOrbs: orbs, flowUnits };
+}
+
+function inferWorldForIntent(intentRaw: string, fallbackWorldId: string): string {
+  const t = intentRaw.toLowerCase();
+  if (/(לקוח|לקוחות|לקוחה|crm|onboard|retention|support|sla|customer|client|churn)/.test(t)) return 'clients';
+  if (/(שיווק|קמפיין|מודעה|ads|meta|google ads|seo|content|funnel|landing)/.test(t)) return 'marketing';
+  if (/(מכירה|מכירות|ליד|לידים|quote|proposal|deal|close|pipeline|follow[- ]?up)/.test(t)) return 'sales';
+  if (/(תפעול|ops|inventory|procurement|logistics|אספקה|איכות|qa|sop)/.test(t)) return 'operations';
+  if (/(עובד|עובדים|גיוס|ראיון|hr|hire|hiring|team|culture|training)/.test(t)) return 'team';
+  if (/(לקוח|לקוחות|מכירה|מכירות|עסק|עסקי|invoice|crm|lead|sales|client|quote)/.test(t)) return 'business';
+  if (/(כסף|תזרים|חשבונית|גביה|מס|השקעה|finance|cash|payment|tax|invoice)/.test(t)) return 'finance';
+  if (/(בריאות|רופא|בדיקה|תרופה|health|doctor|medic|clinic)/.test(t)) return 'health';
+  if (/(לימוד|מבחן|קורס|למידה|study|learn|course|exam)/.test(t)) return 'knowledge';
+  if (/(זוג|משפחה|חבר|relationship|family|friend)/.test(t)) return 'relations';
+  return fallbackWorldId;
+}
+
+/** תשובת סוכן בצ׳אט יחידה — בלי עדכון הורה בתוך עדכון state אחר */
+function buildAgentUnitChatReply(unit: FlowUnit, userNote: string, language: AppLanguage): string {
+  const clip = userNote.trim().slice(0, 220);
+  const he = language === 'he';
+  const na = unit.nextAction?.trim() || (he ? 'לא הוגדר' : 'not set');
+  const goalHint =
+    !unit.goal || unit.goal.length < 12
+      ? he
+        ? 'חדדו את המטרה במשפט אחד. '
+        : 'State the goal in one clear sentence. '
+      : '';
+  if (he) {
+    return (
+      `שמרתי ב־«${unit.title}»: ${clip || 'עדכון'}\n\n` +
+      `${goalHint}הצעד הבא בפרופיל: «${na}».\n` +
+      `כתבו במפורש מה לשנות ביעד, בצעד הבא, בחסם או בתאריך יעד — אמשיך לעדכן את השיחה ואת פרופיל היחידה כאן.`
+    );
+  }
+  return (
+    `Saved under «${unit.title}»: ${clip || 'update'}\n\n` +
+    `${goalHint}Next step on the profile: «${na}».\n` +
+    `Spell out changes to goal, next step, blocker, or target date — I will keep the thread and unit profile aligned here.`
+  );
+}
+
+type GoalTemplate = {
+  title: string;
+  /** @deprecated use spaceId + domainId */
+  worldId: string;
+  spaceId: SpaceId;
+  domainId?: DomainId;
+  emoji: string;
+  subtitle: string;
+  slots: UnitProfileSlot[];
+  steps: number;
+  /** מפתח יציב לאגרגט גלובלי אנונימי */
+  publicSignalKey: string;
+  publicSignalLabelHe: string;
+  publicSignalLabelEn: string;
+};
+
+const EMPTY_GLOBAL_SIGNALS: { key: string; labelHe: string; labelEn: string; count: number }[] = [];
+
+function recordGoalTemplatePublicSignal(tmpl: GoalTemplate): void {
+  useGlobalIntentSignalsStore.getState().recordUnitIntent(
+    tmpl.worldId,
+    tmpl.publicSignalKey,
+    tmpl.publicSignalLabelHe,
+    tmpl.publicSignalLabelEn
+  );
+}
+
+type GoalTemplateBase = Omit<GoalTemplate, 'spaceId' | 'domainId'>;
+
+function goalTemplateFromText(goal: string, language: AppLanguage, fallbackWorld: string): GoalTemplate {
+  const base = _goalTemplateCore(goal, language, fallbackWorld);
+  const { spaceId, domainId } = legacyWorldIdToSpaceDomain(base.worldId);
+  return { ...base, spaceId, domainId };
+}
+
+function _goalTemplateCore(goal: string, language: AppLanguage, fallbackWorld: string): GoalTemplateBase {
+  const g = goal.toLowerCase();
+  const he = language === 'he';
+  const trimTitle = goal.trim().slice(0, 28);
+  if (/(רדת|משקל|דיאטה|diet|lose weight|weight loss|lbs|קילו|kg\b|נשמן|רזון)/.test(g)) {
+    return {
+      title: trimTitle || (he ? 'לרדת במשקל' : 'Lose weight'),
+      worldId: 'health',
+      emoji: '⚖️',
+      subtitle: he ? 'מעקב משקל, גיל ויעד' : 'Weight, age & target tracking',
+      slots: he
+        ? [
+            { id: 'age', label: 'גיל (בשנים)' },
+            { id: 'weight_current', label: 'משקל נוכחי (ק״ג)' },
+            { id: 'weight_target', label: 'משקל יעד (ק״ג)' },
+            { id: 'constraints', label: 'מגבלות רפואיות / מה חשוב שנדע', optional: true },
+          ]
+        : [
+            { id: 'age', label: 'Age (years)' },
+            { id: 'weight_current', label: 'Current weight (kg)' },
+            { id: 'weight_target', label: 'Target weight (kg)' },
+            { id: 'constraints', label: 'Medical notes / constraints', optional: true },
+          ],
+      steps: 12,
+      publicSignalKey: 'intent_weight_loss',
+      publicSignalLabelHe: 'ירידה במשקל',
+      publicSignalLabelEn: 'Losing weight',
+    };
+  }
+  if (/(רישיון|נהיגה|license|driving)/.test(g)) {
+    return {
+      title: he ? 'רישיון נהיגה' : "Driver's license",
+      worldId: 'personal',
+      emoji: '🚗',
+      subtitle: he ? 'תיאוריה · שיעורים · מבחן' : 'Theory · lessons · exam',
+      slots: he
+        ? [
+            { id: 'theory_done', label: 'מבחן תיאוריה (כן/לא)' },
+            { id: 'lessons_done', label: 'כמה שיעורי נהיגה כבר עשית?' },
+            { id: 'exam_target', label: 'תאריך יעד למבחן (אופציונלי)', optional: true },
+          ]
+        : [
+            { id: 'theory_done', label: 'Theory exam done? (yes/no)' },
+            { id: 'lessons_done', label: 'How many driving lessons completed?' },
+            { id: 'exam_target', label: 'Target test date (optional)', optional: true },
+          ],
+      steps: 25,
+      publicSignalKey: 'intent_drivers_license',
+      publicSignalLabelHe: 'רישיון נהיגה',
+      publicSignalLabelEn: "Driver's license",
+    };
+  }
+  if (/(מבחן|למוד|בחינה|exam prep|study plan|course\b|לימוד)/.test(g)) {
+    return {
+      title: trimTitle || (he ? 'הכנה למבחן' : 'Exam prep'),
+      worldId: 'knowledge',
+      emoji: '📝',
+      subtitle: he ? 'תוכנית למידה ומעקב' : 'Study plan & tracking',
+      slots: he
+        ? [
+            { id: 'subject', label: 'נושא / קורס' },
+            { id: 'exam_when', label: 'מתי המבחן (משוער)?' },
+            { id: 'hours_week', label: 'כמה שעות בשבוע להשקיע?', optional: true },
+          ]
+        : [
+            { id: 'subject', label: 'Subject / course' },
+            { id: 'exam_when', label: 'When is the exam (estimate)?' },
+            { id: 'hours_week', label: 'Hours per week?', optional: true },
+          ],
+      steps: 15,
+      publicSignalKey: 'intent_exam_prep',
+      publicSignalLabelHe: 'הכנה למבחן / לימודים',
+      publicSignalLabelEn: 'Exam / study prep',
+    };
+  }
+  if (/(עסק|לקוח|מכירות|business|startup|crm)/.test(g)) {
+    return {
+      title: trimTitle || (he ? 'יעד עסקי' : 'Business goal'),
+      worldId: 'business',
+      emoji: '💼',
+      subtitle: he ? 'יעד, מדדים וצעדים' : 'Goals, metrics, steps',
+      slots: he
+        ? [
+            { id: 'outcome', label: 'מה התוצר או המדד שמסמן הצלחה?' },
+            { id: 'timeline', label: 'באיזה חלון זמן?' },
+          ]
+        : [
+            { id: 'outcome', label: 'What outcome defines success?' },
+            { id: 'timeline', label: 'What time window?' },
+          ],
+      steps: 14,
+      publicSignalKey: 'intent_business_goal',
+      publicSignalLabelHe: 'יעד עסקי / מכירות',
+      publicSignalLabelEn: 'Business / sales goal',
+    };
+  }
+  if (/(חיסכון|כסף|תקציב|save money|savings|finance\b)/.test(g)) {
+    return {
+      title: trimTitle || (he ? 'יעד כספי' : 'Money goal'),
+      worldId: 'finance',
+      emoji: '💸',
+      subtitle: he ? 'יעד, סכום, לו״ז' : 'Target amount & timeline',
+      slots: he
+        ? [
+            { id: 'amount', label: 'סכום יעד (בערך)' },
+            { id: 'horizon', label: 'עד מתי?' },
+          ]
+        : [
+            { id: 'amount', label: 'Target amount (approx.)' },
+            { id: 'horizon', label: 'By when?' },
+          ],
+      steps: 12,
+      publicSignalKey: 'intent_finance_goal',
+      publicSignalLabelHe: 'יעד כספי / חיסכון',
+      publicSignalLabelEn: 'Money / savings goal',
+    };
+  }
+  const inferred = inferWorldForIntent(goal, fallbackWorld);
   return {
-    id,
-    worldId,
-    title,
-    subtitle,
-    emoji,
-    status: 'active',
+    title: trimTitle || (he ? 'יחידה חדשה' : 'New unit'),
+    worldId: inferred,
+    emoji: '🧩',
+    subtitle: he ? 'נוצר מהמטרה שבחרת' : 'Created from your goal',
+    slots: he
+      ? [
+          { id: 'clarify_goal', label: 'חדד את המטרה במשפט אחד' },
+          { id: 'first_step', label: 'מה הצעד הקטן הראשון השבוע?' },
+        ]
+      : [
+          { id: 'clarify_goal', label: 'Sharpen the goal in one sentence' },
+          { id: 'first_step', label: 'First small step this week?' },
+        ],
+    steps: 10,
+    publicSignalKey: `intent_${inferred}_custom`,
+    publicSignalLabelHe: 'תהליך אישי חדש',
+    publicSignalLabelEn: 'New personal process',
+  };
+}
+
+function nextMissingSlot(slots: UnitProfileSlot[]): UnitProfileSlot | undefined {
+  const req = slots.find((s) => !s.optional && !s.value?.trim());
+  if (req) return req;
+  return slots.find((s) => s.optional && !s.value?.trim());
+}
+
+function applyProfileSlotsFromMessage(unit: FlowUnit, text: string, language: AppLanguage): FlowUnit {
+  const slots = (unit.profileSlots ?? []).map((s) => ({ ...s }));
+  if (!slots.length) return unit;
+  const t = text.trim();
+  const he = language === 'he';
+  const idx = slots.findIndex((s) => !s.value?.trim());
+  if (idx < 0) return unit;
+  const slot = slots[idx];
+  const lower = t.toLowerCase();
+  const numMatch = t.match(/-?\d+([.,]\d+)?/);
+  const num = numMatch ? parseFloat(numMatch[0].replace(',', '.')) : null;
+
+  if (slot.id === 'theory_done') {
+    if (/^(כן|yes|y|true|1|עבר)/i.test(lower)) slot.value = he ? 'כן' : 'Yes';
+    else if (/^(לא|no|n|false|0)/i.test(lower)) slot.value = he ? 'לא' : 'No';
+    else slot.value = t.slice(0, 48);
+  } else if (
+    slot.id === 'age' ||
+    slot.id === 'weight_current' ||
+    slot.id === 'weight_target' ||
+    slot.id === 'lessons_done' ||
+    slot.id === 'hours_week'
+  ) {
+    slot.value = num != null && !Number.isNaN(num) ? String(num) : t.slice(0, 48);
+  } else {
+    slot.value = t.slice(0, 120);
+  }
+
+  const required = slots.filter((s) => !s.optional);
+  const filledReq = required.filter((s) => s.value?.trim()).length;
+  const progress = Math.min(94, 10 + Math.round((filledReq / Math.max(required.length, 1)) * 72));
+  const next = nextMissingSlot(slots);
+  const nextAction = next
+    ? he
+      ? `למלא בפרופיל: ${next.label}`
+      : `Fill in profile: ${next.label}`
+    : he
+      ? 'לסגור יעד שבועי או צעד מדידה הבא'
+      : 'Set a weekly target or next check-in';
+
+  let milestonesOut = unit.milestones;
+  if (required.length > 0 && filledReq >= required.length) {
+    const age = slots.find((s) => s.id === 'age')?.value;
+    const wc = slots.find((s) => s.id === 'weight_current')?.value;
+    const wt = slots.find((s) => s.id === 'weight_target')?.value;
+    if (age && wc && wt) {
+      milestonesOut = he
+        ? [
+            { id: 'mw1', title: 'מדידת התחלה + יעד שבועי קטן', done: true },
+            { id: 'mw2', title: 'שגרת תזונה ופעילות ל־4 שבועות', done: false },
+            { id: 'mw3', title: 'בדיקת ביניים מול משקל יעד', done: false },
+            { id: 'mw4', title: 'ייצוב משקל ושמירה', done: false },
+          ]
+        : [
+            { id: 'mw1', title: 'Baseline weigh-in + small weekly target', done: true },
+            { id: 'mw2', title: 'Nutrition & movement habit (4 weeks)', done: false },
+            { id: 'mw3', title: 'Mid-check vs target weight', done: false },
+            { id: 'mw4', title: 'Stabilize and maintain', done: false },
+          ];
+    } else if (slots.some((s) => s.id === 'theory_done')) {
+      milestonesOut = he
+        ? [
+            { id: 'ml1', title: 'תיאוריה / שיעורים לפי הסטטוס שמילאת', done: true },
+            { id: 'ml2', title: 'תיאום מבחן מעשי', done: false },
+            { id: 'ml3', title: 'מבחן וקבלת רישיון', done: false },
+          ]
+        : [
+            { id: 'ml1', title: 'Theory / lessons per your status', done: true },
+            { id: 'ml2', title: 'Schedule practical test', done: false },
+            { id: 'ml3', title: 'Exam & license pickup', done: false },
+          ];
+    }
+  }
+
+  return {
+    ...unit,
+    profileSlots: slots,
     progress,
-    steps,
+    nextAction,
+    lastUpdatedLabel: he ? 'עודכן מהצ׳אט לפרופיל' : 'Profile updated from chat',
+    milestones: milestonesOut,
+  };
+}
+
+function findNewlyFilledSlotLabel(before: UnitProfileSlot[], after: UnitProfileSlot[]): string | undefined {
+  for (let i = 0; i < after.length; i++) {
+    if (!before[i]?.value?.trim() && after[i]?.value?.trim()) return after[i].label;
+  }
+  return undefined;
+}
+
+/** תשובה טבעית יותר: לא שאלה אחרי כל הודעה; מציע המשך רק כשמתאים */
+function buildAdaptiveProfileReply(beforeUnit: FlowUnit, afterUnit: FlowUnit, userText: string, language: AppLanguage): string {
+  const he = language === 'he';
+  const slots = afterUnit.profileSlots ?? [];
+  const beforeSlots = beforeUnit.profileSlots ?? [];
+  const filledLabel = findNewlyFilledSlotLabel(beforeSlots, slots);
+  const next = nextMissingSlot(slots);
+  const userTurn = beforeUnit.messages.filter((m) => m.sender === 'user').length + 1;
+  const requiredLeft = slots.filter((s) => !s.optional && !s.value?.trim()).length;
+
+  const clip = userText.trim().slice(0, 180);
+  const ack = filledLabel
+    ? he
+      ? `הבנתי. «${filledLabel}» נשמר בפרופיל היחידה.`
+      : `Understood. «${filledLabel}» is saved on the unit profile.`
+    : he
+      ? 'קלטתי ושמרתי בפרופיל.'
+      : 'Got it—saved to the unit profile.';
+
+  if (requiredLeft === 0) {
+    const opt = slots.find((s) => s.optional && !s.value?.trim());
+    return he
+      ? `${ack}\nהשדות המרכזיים מלאים — אפשר לבנות עכשיו תוכנית שבוע אחת קצרה (מדד אחד + פעולה אחת).${opt ? ` אם תרצה, בהמשך גם ${opt.label}.` : ''}`
+      : `${ack}\nCore fields are set—we can shape one short weekly plan (one metric + one action).${opt ? ` Later we can add ${opt.label} if you want.` : ''}`;
+  }
+
+  if (clip.length > 80 || /[\n.]/.test(userText)) {
+    return he
+      ? `${ack}\n${next ? `כשיהיה לך נוח נשלים גם ${next.label} — רק אם זה רלוונטי לך עכשיו.` : 'כשתרצה נמשיך לחדד את התהליך.'}`
+      : `${ack}\n${next ? `When it feels right we can finish ${next.label} too—only if it matters now.` : 'We can refine the flow whenever you want.'}`;
+  }
+
+  if (userTurn % 2 === 0 && next) {
+    return he
+      ? `${ack}\nאם תרצה בהמשך — ${next.label}.`
+      : `${ack}\nWhenever you want next: ${next.label}.`;
+  }
+
+  if (next) {
+    return he
+      ? `${ack}\nכדי לסגור את התמונה בפרופיל — ${next.label}?`
+      : `${ack}\nTo round out the profile—${next.label}?`;
+  }
+
+  return ack;
+}
+
+function lensToWorldId(lens: LifeLens): string {
+  return lens;
+}
+
+function processToFlowUnit(p: OneProcess, language: AppLanguage): FlowUnit {
+  const worldId = lensToWorldId(p.lens);
+  const seed = `${p.fields?.goal ?? p.title} ${p.summary ?? ''}`;
+  const tmpl = goalTemplateFromText(seed, language, worldId);
+  recordGoalTemplatePublicSignal(tmpl);
+  const resolvedSpaceId: SpaceId = p.spaceId ?? tmpl.spaceId;
+  const resolvedDomainId: DomainId | undefined = p.domainId ?? tmpl.domainId;
+  const firstEmpty = tmpl.slots.find((s) => !s.optional) ?? tmpl.slots[0];
+  const he = language === 'he';
+  const intro = he
+    ? `אני ONE — מתחילים את «${tmpl.title}» אחרי ההרשמה.\n${p.summary ? `סיכום מה שכתבת: ${p.summary.slice(0, 200)}${p.summary.length > 200 ? '…' : ''}\n` : ''}נבנה כאן תהליך אמיתי: מה שתשלח נשמר בפרופיל היחידה (מספרים, תאריכים, סטטוסים) — לא רק בועות שמתפזרות.`
+    : `I’m ONE—we’re starting “${tmpl.title}” after signup.\n${p.summary ? `What you wrote: ${p.summary.slice(0, 200)}${p.summary.length > 200 ? '…' : ''}\n` : ''}We will build a real flow here: what you send is stored on the unit profile, not only as chat bubbles.`;
+
+  return {
+    id: p.id,
+    spaceId: resolvedSpaceId,
+    domainId: resolvedDomainId,
+    worldId: tmpl.worldId,
+    title: tmpl.title,
+    subtitle: tmpl.subtitle,
+    emoji: tmpl.emoji,
+    status: p.status,
+    progress: 14,
+    steps: tmpl.steps,
+    profileSlots: tmpl.slots.map((s) => ({ ...s })),
     messages: [
       {
-        id: `m_${id}`,
+        id: `reg_${p.id}`,
         sender: 'one',
-        text: `היחידה «${title}» מוכנה להמשך. נתקדם לפי ה־TODO.`,
-        sentAt: Date.now() - 86400000,
+        text:
+          intro +
+          (firstEmpty
+            ? he
+              ? `\n\nכשתרצה נשלים את ${firstEmpty.label} — או תכתוב בחופשיות ואזין לפרופיל.`
+              : `\n\nWhen you want we will complete ${firstEmpty.label}—or write freely and I will map it to the profile.`
+            : ''),
+        sentAt: Date.now(),
       },
     ],
-    goal: `להשלים את ${title} בצורה מסודרת.`,
-    city: 'ישראל',
-    etaWeeks: 6,
+    goal: p.fields?.goal ?? (he ? `להגשים: ${p.title}` : `Achieve: ${p.title}`),
+    city: he ? 'לא צוין' : 'Not set',
+    etaWeeks: 8,
     peopleRoles: [
-      { id: `p1_${id}`, role: 'סוכן', name: 'ONE' },
-      { id: `p2_${id}`, role: 'אחראי/ת', name: 'את/ה' },
+      { id: 'p1', role: he ? 'סוכן' : 'Agent', name: 'ONE' },
+      { id: 'p2', role: he ? 'אחראי/ת' : 'Owner', name: he ? 'את/ה' : 'You' },
     ],
-    milestones: [
-      { id: `ms1_${id}`, title: 'הגדרת יעד', done: true },
-      { id: `ms2_${id}`, title: 'TODO ראשון', done: progress >= 35 },
-      { id: `ms3_${id}`, title: 'בדיקת סטטוס', done: progress >= 70 },
-    ],
-    nextAction,
-    lastUpdatedLabel: 'עודכן עכשיו',
+    nextAction: firstEmpty ? (he ? `פרופיל: ${firstEmpty.label}` : `Profile: ${firstEmpty.label}`) : undefined,
+    lastUpdatedLabel: he ? 'נוצר מהרשמה' : 'Created from signup',
     blockCount: 5,
   };
+}
+
+function buildAgentGoalPromptMessage(language: AppLanguage, worldId: string): string {
+  const he = language === 'he';
+  const w = worldTitle(worldId, language);
+  if (he) {
+    return `מה ברצונך להגשים?\nבחרו דוגמה למטה או כתבו בשורת המקלדת — ניצור יחידה, נעבור לכדור שלה בבית, ואמשיך לשאול כאן ולמלא את הפרופיל (הנתונים נשמרים שם, לא רק בבועות). מרחב נוכחי: ${w}.`;
+  }
+  return `What do you want to achieve?\nPick an example below or type in the keyboard — we will create a unit, jump to its orb at home, and continue here while your profile fills in (data lives on the profile, not only in bubbles). Current space: ${w}.`;
+}
+
+function creationGoalChipsForWorld(worldId: string, language: AppLanguage): string[] {
+  const he = language === 'he';
+  if (worldId === 'health') {
+    return he
+      ? ['לרדת במשקל', 'מעקב שינה', 'תור לרופא']
+      : ['Lose weight', 'Sleep tracking', 'Doctor visit'];
+  }
+  if (worldId === 'knowledge') {
+    return he ? ['הכנה למבחן', 'קורס מקצועי', 'תוכנית למידה'] : ['Exam prep', 'Professional course', 'Study plan'];
+  }
+  if (worldId === 'business') {
+    return he ? ['לסגור 3 לקוחות', 'הקמת עסק', 'מעקב משימות'] : ['Close 3 clients', 'Start a business', 'Task tracking'];
+  }
+  if (worldId === 'finance') {
+    return he ? ['חיסכון לרכב', 'החזר מס', 'יעד חודשי'] : ['Save for a car', 'Tax refund', 'Monthly target'];
+  }
+  if (worldId === 'relations') {
+    return he ? ['יום הולדת במשפחה', 'פגישה עם חברים', 'מעקב קשרים'] : ['Family birthday', 'Friends meet-up', 'Relationship check-ins'];
+  }
+  if (worldId === 'leisure') {
+    return he ? ['ערב קולנוע', 'טיול סופ״ש', 'רשימת ציוד'] : ['Movie night', 'Weekend trip', 'Gear checklist'];
+  }
+  return he
+    ? ['לרדת במשקל', 'רישיון נהיגה', 'הכנה למבחן', 'יעד כספי', 'משהו אחר — אכתוב למטה']
+    : ['Lose weight', "Driver's license", 'Exam prep', 'Money goal', 'Something else — I will type'];
 }
 
 const DEV_PROFILE_PRESETS: Record<DevPreviewProfile, { personalOrbs: OrbItem[]; flowUnits: FlowUnit[]; planTier: 'FREE' | 'PRO' | 'MAX' }> = {
@@ -323,9 +1309,7 @@ const DEV_PROFILE_PRESETS: Record<DevPreviewProfile, { personalOrbs: OrbItem[]; 
       { id: 'origin', emoji: '👤', title: 'ראשי', subtitle: '' },
       { id: 'license', emoji: '🚗', title: 'רישיון נהיגה', subtitle: 'תיאוריה, שיעורים, מבחן' },
     ],
-    flowUnits: [
-      createSeedUnit('license', 'personal', 'רישיון נהיגה', 'תיאוריה · שיעורים · מבחן מעשי', '🚗', 32, 25, 'להשלים 2 שיעורים השבוע'),
-    ],
+    flowUnits: [],
     planTier: 'FREE',
   },
   student: {
@@ -334,9 +1318,7 @@ const DEV_PROFILE_PRESETS: Record<DevPreviewProfile, { personalOrbs: OrbItem[]; 
       { id: 'study_plan', emoji: '📚', title: 'תוכנית למידה', subtitle: 'נושאים, תרגול, מבחן' },
       { id: 'exam', emoji: '📝', title: 'הכנה למבחן', subtitle: 'סילבוס, תרגול, חזרות' },
     ],
-    flowUnits: [
-      createSeedUnit('study_plan', 'personal', 'תוכנית למידה', 'חלוקה לנושאים שבועיים', '📚', 46, 12, 'לסגור TODO יומי לשבוע הקרוב'),
-    ],
+    flowUnits: [],
     planTier: 'FREE',
   },
   creator: {
@@ -345,9 +1327,7 @@ const DEV_PROFILE_PRESETS: Record<DevPreviewProfile, { personalOrbs: OrbItem[]; 
       { id: 'content', emoji: '🎬', title: 'הפקת תוכן', subtitle: 'רעיון, צילום, עריכה' },
       { id: 'launch', emoji: '🚀', title: 'השקה', subtitle: 'עמוד נחיתה, פרסום, מדידה' },
     ],
-    flowUnits: [
-      createSeedUnit('content', 'business', 'הפקת תוכן', 'תכנון סדרת פוסטים', '🎬', 38, 10, 'לנעול 3 רעיונות ולעדכן סטטוס'),
-    ],
+    flowUnits: [],
     planTier: 'FREE',
   },
   teacher_business: {
@@ -356,33 +1336,39 @@ const DEV_PROFILE_PRESETS: Record<DevPreviewProfile, { personalOrbs: OrbItem[]; 
       { id: 'class_plan', emoji: '👩‍🏫', title: 'מערך שיעור', subtitle: 'מבנה, משימות, משוב' },
       { id: 'business_ops', emoji: '💼', title: 'תפעול עסק', subtitle: 'לקוחות, גביה, מעקב' },
     ],
-    flowUnits: [
-      createSeedUnit('class_plan', 'personal', 'מערך שיעור', 'מטרות שיעור + משימות', '👩‍🏫', 54, 14, 'לבנות TODO לשיעור הבא'),
-      createSeedUnit('business_ops', 'business', 'תפעול עסק', 'משימות לקוחות ושיווק', '💼', 27, 16, 'לעדכן TODO יומי לצוות'),
-    ],
+    flowUnits: [],
     planTier: 'PRO',
   },
   pro_user: {
     personalOrbs: ORB_DATA_BY_WORLD.personal,
-    flowUnits: [
-      createSeedUnit('license', 'personal', 'רישיון נהיגה', 'תיאוריה · שיעורים · מבחן מעשי', '🚗', 62, 25, 'לתאם תאריך מבחן מעשי'),
-      createSeedUnit('b2', 'business', 'דוח רווח והפסד', 'איסוף נתונים וסיכום', '📊', 41, 10, 'לעדכן דוח חודשי'),
-    ],
+    flowUnits: [],
     planTier: 'PRO',
   },
   max_user: {
     personalOrbs: ORB_DATA_BY_WORLD.personal,
-    flowUnits: [
-      createSeedUnit('license', 'personal', 'רישיון נהיגה', 'תיאוריה · שיעורים · מבחן מעשי', '🚗', 88, 25, 'לסגור checklist סופי'),
-      createSeedUnit('b1', 'business', 'הקמת עסק', 'רישום, בנק, מוצרים והפעלה', '📋', 72, 18, 'לסיים TODO רישום סופי'),
-      createSeedUnit('h1', 'health', 'תור לרופא', 'תיאום, הגעה, סיכום', '🩺', 59, 8, 'להעלות סיכום ביקור'),
-      createSeedUnit('f1', 'finance', 'השקעות', 'מטרה, פלטפורמה, פיזור נכסים', '📈', 65, 12, 'לאשר TODO איזון תיק'),
-      createSeedUnit('l_cinema', 'leisure', 'ערב קולנוע', 'כרטיסים · הגעה · חוויה', '🎬', 35, 8, 'לבחור סרט ולהזמין מקומות'),
-      createSeedUnit('r_bday', 'relations', 'יום הולדת לאמא', 'מתנה · הזמנה · מקום', '🎂', 40, 5, 'לבחור תאריך ולהזמין מסעדה'),
-    ],
+    flowUnits: [],
     planTier: 'MAX',
   },
 };
+
+const BUSINESS_ACCOUNT_ORBS_HE: OrbItem[] = [
+  { id: 'origin', emoji: '🏢', title: 'חשבון עסקי', subtitle: '' },
+  { id: 'sales_pipeline', emoji: '🎯', title: 'צינור מכירות', subtitle: 'לידים, הצעות, סגירות' },
+  { id: 'ops_board', emoji: '🗂️', title: 'לוח תפעול', subtitle: 'משימות, SLA, בקרה יומית' },
+  { id: 'cashflow', emoji: '💸', title: 'תזרים עסקי', subtitle: 'גבייה, תשלומים, תחזית' },
+];
+
+const BUSINESS_ACCOUNT_ORBS_EN: OrbItem[] = [
+  { id: 'origin', emoji: '🏢', title: 'Business account', subtitle: '' },
+  { id: 'sales_pipeline', emoji: '🎯', title: 'Sales pipeline', subtitle: 'Leads, quotes, closures' },
+  { id: 'ops_board', emoji: '🗂️', title: 'Ops board', subtitle: 'Tasks, SLA, daily control' },
+  { id: 'cashflow', emoji: '💸', title: 'Business cashflow', subtitle: 'Collections, payments, forecast' },
+];
+
+function businessAccountOrbs(language: AppLanguage): OrbItem[] {
+  return language === 'he' ? BUSINESS_ACCOUNT_ORBS_HE : BUSINESS_ACCOUNT_ORBS_EN;
+}
+
 /** כמו Background-Ovarly: עיגול r=160.5 ב-viewBox 375 → קוטר 321/375 של המסך */
 const ORB_SIZE_RATIO = 321 / 375;
 // הכדור הקטן ~שליש מהגדול, כדי שירגיש משמעותי אבל עדיין משני
@@ -401,12 +1387,35 @@ const EMOJI_CIRCLE_DARK = '#2a2a2a';
 const EMOJI_CIRCLE_SIZE = 72;
 /** עיגול הסוכן בעולמות עסקים/בריאות/כלכלה – קטן יותר */
 const AGENT_CIRCLE_SIZE_OTHER_WORLDS = 56;
+/** היסט אנימטיבי של פרצוף הסוכן/איקון העולם בתוך הכדור; במרכז בלבד — הרמה נוספת כדי שלא ייחתך כשהכדור קטן */
+const WHEEL_AGENT_FACE_BASE_TRANSLATE_Y = -10;
+const WHEEL_AGENT_FACE_EXTRA_LIFT_WHEN_CENTERED_PX = 30;
+/** כשכדור הסוכן במרכז — הגדלת קוטר מעט כדי שהפרצוף ייראה טוב */
+const WHEEL_AGENT_CENTER_ORB_EXTRA_PX = 18;
+/** ברודקאסט כדור סוכן — היסט אנכי לכותרת ראשית (שם עולם / ברכה); שלילי = למעלה, חיובי = למטה */
+const WHEEL_AGENT_BROADCAST_PRIMARY_TITLE_OFFSET_Y = 0;
+/** מרווח מעל כותרת משנית — רק בכדור סוכן (יחידות נשארות marginTop מה־StyleSheet) */
+const WHEEL_AGENT_BROADCAST_SUBTITLE_MARGIN_TOP = 8;
 
 function hexToRgba(hex: string, alpha: number): string {
   const match = hex.replace(/^#/, '').match(/.{2}/g);
   if (!match) return hex;
   const [r, g, b] = match.map((x) => parseInt(x, 16));
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** אייקון פלוס מ־assets/icons/plus-icon.svg (viewBox 0 0 46 46) */
+function PlusIconSvg({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 46 46" fill="none">
+      <Path
+        d="M25.6758 25.7412V33.7921C25.6758 34.4054 25.4611 34.9268 25.0317 35.3562C24.6025 35.7857 24.0811 36.0004 23.4675 36.0004C22.8539 36.0004 22.3325 35.7857 21.9033 35.3562C21.4739 34.9268 21.2592 34.4054 21.2592 33.7921V25.7412H13.2083C12.595 25.7412 12.0736 25.5265 11.6442 25.0971C11.2147 24.6679 11 24.1465 11 23.5329C11 22.9193 11.2147 22.3979 11.6442 21.9687C12.0736 21.5393 12.595 21.3246 13.2083 21.3246H21.2592V13.2737C21.2592 12.6604 21.4739 12.139 21.9033 11.7096C22.3325 11.2801 22.8539 11.0654 23.4675 11.0654C24.0811 11.0654 24.6025 11.2801 25.0317 11.7096C25.4611 12.139 25.6758 12.6604 25.6758 13.2737V21.3246H33.7267C34.34 21.3246 34.8614 21.5393 35.2908 21.9687C35.7203 22.3979 35.935 22.9193 35.935 23.5329C35.935 24.1465 35.7203 24.6679 35.2908 25.0971C34.8614 25.5265 34.34 25.7412 33.7267 25.7412H25.6758Z"
+        fill={color}
+        stroke={color}
+        strokeWidth={1.42857}
+      />
+    </Svg>
+  );
 }
 
 /**
@@ -448,6 +1457,34 @@ function NowInputBarRow({
   );
 }
 
+/**
+ * ב־react-native-web, `direction: 'ltr'` על שורת הקומפוזר לא תמיד מבטל את ציר flex של הורה `rtl`;
+ * הופכים את סדר ה־DOM רק בווב+עברית כדי שפלוס הצירוף יישאר משמאל וכפתור הפרופיל מימין.
+ */
+function orderChatComposerRowWebRtl(
+  isWebRtl: boolean,
+  plus: React.ReactElement,
+  bar: React.ReactElement,
+  profile: React.ReactElement | null
+): React.ReactNode {
+  if (isWebRtl) {
+    return (
+      <>
+        {profile}
+        {bar}
+        {plus}
+      </>
+    );
+  }
+  return (
+    <>
+      {plus}
+      {bar}
+      {profile}
+    </>
+  );
+}
+
 function VoiceTrayButton({
   label,
   onPress,
@@ -470,6 +1507,10 @@ function VoiceTrayButton({
 
 /** גובה נוסף מעבר ל-safe area – שטח תפריט מורחב כלפי מרכז המסך */
 const BAR_EXTRA = 96;
+/** גובה מסילת ה־fade ב־assets/icons/fading-bg.svg — גלובל משתמש באותה לוגיקה (LinearGradient) */
+const GLOBAL_FADING_BG_STRIP_PX = 88;
+/** הרמת bottom bar + כפתור X בגלובל מעל קצה המסך */
+const GLOBAL_BOTTOM_CHROME_LIFT_PX = 36;
 /** כמו bar-bg.svg: צבע מלא דומיננטי, מעבר לשקוף רק בקצה. מלא (1) נשמר על ~40% מהבר, אז המעבר רך אבל הצבע המלא בולט. */
 const GRADIENT_STOPS: number[] = [0, 0.2, 0.4, 0.5, 0.6, 0.75, 0.88, 0.96, 1];
 const ALPHAS = [0, 0.02, 0.08, 0.2, 0.5, 0.8, 1, 1, 1];
@@ -485,6 +1526,19 @@ function FadeBroadcastBlock({
   titleProgressColor,
   titleProgressTrackColor,
   onBroadcastLoopComplete,
+  onBroadcastLoopBackwardComplete,
+  /** כל עלייה (מההורה) = טאפ על הכדור הממורכז — קידום ברודקאסט צעד אחד */
+  advanceRequest,
+  /** טאפ על חצי שמאל — הודעה קודמת; מההודעה הראשונה — מעבר עולם/כדור (אם הוגדר) */
+  backwardRequest,
+  titleTextAlign,
+  subtitleTextAlign,
+  /** כיוון כתיבה לטקסט — חובה בעברית כשהשורש `direction: rtl` כדי שלא יתהפכו תווים מול `textAlign` */
+  writingDirection,
+  /** תיבת טקסט ברוחב מלא כדי שיישור ימין ייושר לקצה המסך */
+  fullWidthCopy,
+  primaryTitleOffsetY,
+  subtitleMarginTop,
 }: {
   messages: BroadcastMessage[];
   visible: boolean;
@@ -498,20 +1552,75 @@ function FadeBroadcastBlock({
   titleProgressTrackColor?: string;
   /** אחרי הצגת כל ההודעות וחזרה לראשית – למשל מעבר לעולם הבא בכדור הסוכן */
   onBroadcastLoopComplete?: () => void;
+  onBroadcastLoopBackwardComplete?: () => void;
+  advanceRequest?: number;
+  backwardRequest?: number;
+  titleTextAlign?: 'left' | 'right' | 'center';
+  subtitleTextAlign?: 'left' | 'right' | 'center';
+  writingDirection?: 'rtl' | 'ltr';
+  fullWidthCopy?: boolean;
+  primaryTitleOffsetY?: number;
+  /** כשמוגדר — מרווח מעל כותרת משנית; כשלא — משתמשים ב־marginTop מ־wheelOrbSubtitle (כדורי יחידה) */
+  subtitleMarginTop?: number;
 }) {
   const [msgIndex, setMsgIndex] = useState(0);
   const opacity = useRef(new Animated.Value(1)).current;
   const loopCompleteRef = useRef(onBroadcastLoopComplete);
   loopCompleteRef.current = onBroadcastLoopComplete;
+  const loopBackwardRef = useRef(onBroadcastLoopBackwardComplete);
+  loopBackwardRef.current = onBroadcastLoopBackwardComplete;
+  const lastAdvanceReqRef = useRef(0);
+  const lastBackwardReqRef = useRef(0);
+  /** תוכן ההודעות — לא זהות מערך (ההורה מעביר מערך חדש מ־broadcastMessagesForOrbItem בכל רינדור) */
+  const broadcastFingerprint = messages.map((m) => `${m.type}\0${m.body}`).join('\x1e');
 
   useEffect(() => {
     setMsgIndex(0);
     opacity.setValue(1);
-  }, [messages, opacity]);
+    lastAdvanceReqRef.current = 0;
+    lastBackwardReqRef.current = 0;
+  }, [broadcastFingerprint, opacity]);
 
   useEffect(() => {
     if (visible) opacity.setValue(1);
   }, [visible, opacity]);
+
+  /** טאפ על הכדור הממורכז — מקדם ברודקאסט מיד (ללא המתנה לטיימר) */
+  useEffect(() => {
+    if (advanceRequest == null) return;
+    if (advanceRequest <= lastAdvanceReqRef.current) return;
+    lastAdvanceReqRef.current = advanceRequest;
+    if (!visible || messages.length === 0) return;
+    const n = messages.length;
+    setMsgIndex((i) => {
+      const next = (i + 1) % n;
+      /** הודעה אחת בעולם — כל טאפ קדימה = סוף המחזור → מעבר עולם */
+      if (n === 1) {
+        queueMicrotask(() => loopCompleteRef.current?.());
+        return 0;
+      }
+      if (i === n - 1) {
+        queueMicrotask(() => loopCompleteRef.current?.());
+      }
+      return next;
+    });
+  }, [advanceRequest, visible, messages.length]);
+
+  useEffect(() => {
+    if (backwardRequest == null) return;
+    if (backwardRequest <= lastBackwardReqRef.current) return;
+    lastBackwardReqRef.current = backwardRequest;
+    if (!visible || messages.length === 0) return;
+    const n = messages.length;
+    setMsgIndex((i) => {
+      const goPrevWorld = loopBackwardRef.current;
+      if (i === 0 && goPrevWorld) {
+        queueMicrotask(() => goPrevWorld());
+        return 0;
+      }
+      return (i + n - 1) % n;
+    });
+  }, [backwardRequest, visible, messages.length]);
 
   useEffect(() => {
     if (!visible || messages.length === 0) return;
@@ -523,8 +1632,9 @@ function FadeBroadcastBlock({
         setMsgIndex((i) => {
           const n = messages.length;
           const next = (i + 1) % n;
+          /** טיימר אוטומטי: מעבר עולם רק כשיש יותר מהודעה אחת וסיימנו את האחרונה */
           if (n > 1 && i === n - 1) {
-            loopCompleteRef.current?.();
+            queueMicrotask(() => loopCompleteRef.current?.());
           }
           return next;
         });
@@ -538,74 +1648,76 @@ function FadeBroadcastBlock({
   if (!visible) return null;
   const msg = messages[msgIndex % (messages.length || 1)];
   if (!msg) return null;
-  return (
+  const wdStyle = writingDirection != null ? { writingDirection } : null;
+  const fullWidthText = fullWidthCopy ? ({ width: '100%' as const, alignSelf: 'stretch' as const } as const) : null;
+  const inner = (
     <>
-      <Text style={[styles.wheelOrbTitle, { color: titleColor }]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.wheelOrbTitle,
+          { color: titleColor, marginTop: 10 + (primaryTitleOffsetY ?? 0) },
+          titleTextAlign != null ? { textAlign: titleTextAlign } : null,
+          wdStyle,
+          fullWidthText,
+        ]}
+        numberOfLines={1}
+      >
         {fixedTitle ?? msg.type}
       </Text>
       {titleProgressPct != null ? (
-        <View style={[styles.wheelOrbTitleProgressTrack, { backgroundColor: titleProgressTrackColor ?? 'rgba(127,127,127,0.25)' }]}>
-          <View
-            style={[
-              styles.wheelOrbTitleProgressFill,
-              { width: `${Math.max(6, titleProgressPct * 100)}%`, backgroundColor: titleProgressColor ?? '#22c55e' },
-            ]}
-          />
+        <View style={{ width: '100%', direction: 'ltr' }}>
+          <View style={[styles.wheelOrbTitleProgressTrack, { backgroundColor: titleProgressTrackColor ?? 'rgba(127,127,127,0.25)' }]}>
+            <View
+              style={[
+                styles.wheelOrbTitleProgressFill,
+                { width: `${Math.max(6, titleProgressPct * 100)}%`, backgroundColor: titleProgressColor ?? '#22c55e' },
+              ]}
+            />
+          </View>
         </View>
       ) : null}
       <Animated.View style={{ opacity }}>
-        <Text style={[styles.wheelOrbSubtitle, { color: subtitleColor }]} numberOfLines={2}>{msg.body}</Text>
+        <Text
+          style={[
+            styles.wheelOrbSubtitle,
+            { color: subtitleColor, ...(subtitleMarginTop != null ? { marginTop: subtitleMarginTop } : {}) },
+            subtitleTextAlign != null ? { textAlign: subtitleTextAlign } : null,
+            wdStyle,
+            fullWidthText,
+          ]}
+          numberOfLines={2}
+        >
+          {msg.body}
+        </Text>
       </Animated.View>
     </>
   );
+  if (fullWidthCopy) {
+    return <View style={{ width: '100%', alignSelf: 'stretch' }}>{inner}</View>;
+  }
+  return inner;
 }
 
-/** עיניים ונשימה – סוכן חי רק בעולם ראשי (בית) */
-function AgentEyes({ compact = false }: { compact?: boolean }) {
-  const breath = useRef(new Animated.Value(1)).current;
-  const pulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const breathLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breath, { toValue: 1.06, duration: 1600, useNativeDriver: true }),
-        Animated.timing(breath, { toValue: 1, duration: 1600, useNativeDriver: true }),
-      ])
-    );
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.05, duration: 2200, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 2200, useNativeDriver: true }),
-      ])
-    );
-    breathLoop.start();
-    pulseLoop.start();
-    return () => {
-      breathLoop.stop();
-      pulseLoop.stop();
-    };
-  }, [breath, pulse]);
-  return (
-    <Animated.View
-      style={[
-        styles.agentEyesRow,
-        compact && styles.agentEyesRowCompact,
-        { transform: [{ scale: Animated.multiply(breath, pulse) }] },
-      ]}
-    >
-      <View style={[styles.agentEye, compact && styles.agentEyeCompact]} />
-      <View style={[styles.agentEye, compact && styles.agentEyeCompact]} />
-    </Animated.View>
-  );
-}
+/** שקיפות משותפת לחצי רמז גלילה בגלגל הכדורים */
+const ORB_WHEEL_SCROLL_HINT_ARROW_FILL_OPACITY = 0.38;
 
 /** חץ מטה בסגנון קלף — מסובב מ־assets/icons/icon-arrow-(left).svg; רמז גלילה בכדור מתחת לסוכן */
-function OrbScrollDownHintSvg({ size, color }: { size: number; color: string }) {
+function OrbScrollDownHintSvg({
+  size,
+  color,
+  fillOpacity = ORB_WHEEL_SCROLL_HINT_ARROW_FILL_OPACITY,
+}: {
+  size: number;
+  color: string;
+  fillOpacity?: number;
+}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
       <G transform="rotate(-90 16 16)">
         <Path
           d="M23.6223 5.28353C24.3734 4.53238 24.3734 3.31452 23.6223 2.56337C22.8711 1.81221 21.6533 1.81221 20.9021 2.56337L8.56337 14.9021C7.81221 15.6533 7.81221 16.8711 8.56337 17.6223L20.9021 29.961C21.6533 30.7122 22.8711 30.7122 23.6223 29.961C24.3734 29.2099 24.3734 27.992 23.6223 27.2409L12.6436 16.2622L23.6223 5.28353Z"
           fill={color}
+          fillOpacity={fillOpacity}
         />
       </G>
     </Svg>
@@ -613,13 +1725,22 @@ function OrbScrollDownHintSvg({ size, color }: { size: number; color: string }) 
 }
 
 /** חץ למעלה — אותו path, סיבוב הפוך; רמז חזרה לכדור הסוכן */
-function OrbScrollUpHintSvg({ size, color }: { size: number; color: string }) {
+function OrbScrollUpHintSvg({
+  size,
+  color,
+  fillOpacity = ORB_WHEEL_SCROLL_HINT_ARROW_FILL_OPACITY,
+}: {
+  size: number;
+  color: string;
+  fillOpacity?: number;
+}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
       <G transform="rotate(90 16 16)">
         <Path
           d="M23.6223 5.28353C24.3734 4.53238 24.3734 3.31452 23.6223 2.56337C22.8711 1.81221 21.6533 1.81221 20.9021 2.56337L8.56337 14.9021C7.81221 15.6533 7.81221 16.8711 8.56337 17.6223L20.9021 29.961C21.6533 30.7122 22.8711 30.7122 23.6223 29.961C24.3734 29.2099 24.3734 27.992 23.6223 27.2409L12.6436 16.2622L23.6223 5.28353Z"
           fill={color}
+          fillOpacity={fillOpacity}
         />
       </G>
     </Svg>
@@ -636,12 +1757,20 @@ function BusinessIconSvg({ size, color }: { size: number; color: string }) {
   );
 }
 
-/** אייקון בריאות — מבוסס על assets/icons/Health-icon.svg */
+/** אייקון בריאות — assets/icons/Health-icon.svg */
 function HealthIconSvg({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
       <Path
-        d="M23.8339 12.509C21.5387 9.09084 18.727 9.84482 16.8666 10.3438C16.6705 10.3963 16.4785 10.4479 16.2968 10.4917C16.5307 8.39324 17.6032 6.76139 19.5563 5.52216L18.7813 4.1835C17.7485 4.83877 16.9133 5.60381 16.276 6.47367C16.0389 5.68369 15.6683 5.02055 15.1637 4.49231C14.1923 3.47532 12.7466 2.97343 10.8673 3.00108L10.1404 3.01172L10.1302 3.77274C10.1039 5.74036 10.5832 7.25372 11.5547 8.27076C12.3544 9.10799 13.4764 9.59451 14.8962 9.72562C14.8503 9.98244 14.8156 10.2449 14.7917 10.5127C14.5843 10.4647 14.3616 10.4051 14.1333 10.3438C12.2728 9.84496 9.4612 9.09093 7.16602 12.5091C6.06918 14.1426 5.73771 16.3534 6.20749 18.9026C6.76229 21.9136 8.43027 25.0354 10.0874 26.1644C12.1071 27.5405 13.8112 26.8906 14.8293 26.5023C15.0761 26.4082 15.3832 26.2911 15.5001 26.2911C15.617 26.2911 15.924 26.4082 16.1708 26.5023C16.7225 26.7127 17.4757 27 18.3714 27C19.1285 27 19.9875 26.7947 20.9127 26.1644C22.5699 25.0354 24.2378 21.9135 24.7926 18.9026C25.2622 16.3534 24.9307 14.1425 23.8339 12.509Z"
+        d="M19.2477 8.46421C19.8478 7.8641 20.0607 6.94217 20.1337 6.27442C20.1669 5.97002 20.175 5.68795 20.1724 5.4566C19.377 5.44683 17.9849 5.56096 17.1647 6.38121C16.5646 6.98132 16.3517 7.90325 16.2788 8.571C16.2707 8.64514 16.2641 8.71794 16.2588 8.789C16.2618 9.00944 16.2585 9.21131 16.252 9.38892C17.0487 9.39691 18.4315 9.28039 19.2477 8.46421Z"
+        fill={color}
+      />
+      <Path
+        d="M12.384 9.22141C12.7055 9.26459 13.0166 9.31243 13.3133 9.35947C13.8772 9.41371 14.3836 9.41301 14.7508 9.39808C14.749 9.21556 14.753 9.00887 14.7671 8.78541C14.748 7.54415 14.5056 5.62957 13.3222 4.44607C11.9195 3.04343 9.48932 2.96279 8.37048 3.00914C8.32413 4.12723 8.40447 6.55781 9.80751 7.9608C10.5074 8.6607 11.463 9.0314 12.384 9.22141Z"
+        fill={color}
+      />
+      <Path
+        d="M25.0459 12.7654C24.3288 11.5138 23.3017 10.8317 21.8134 10.6188C20.4555 10.4247 18.9699 10.6623 17.6591 10.8721C16.831 11.0046 16.1157 11.119 15.5 11.119C14.8843 11.119 14.1691 11.0046 13.3409 10.8721C12.0301 10.6623 10.5444 10.4247 9.18659 10.6188C7.6983 10.8317 6.67116 11.5138 5.95409 12.7654C4.98189 14.4623 4.73153 17.2584 5.30068 20.0626C5.59862 21.5307 6.1171 22.9367 6.80014 24.1289C7.54982 25.4375 8.48386 26.4871 9.57615 27.2485C11.4914 28.5836 12.57 28.467 13.9352 28.3195C14.4215 28.2669 14.9243 28.2126 15.5 28.2126C16.0757 28.2126 16.5785 28.2669 17.0648 28.3195C18.43 28.467 19.5086 28.5836 21.4239 27.2485C22.5161 26.487 23.4502 25.4375 24.1999 24.1289C24.8829 22.9367 25.4014 21.5307 25.6993 20.0626C26.2685 17.2584 26.0181 14.4623 25.0459 12.7654Z"
         fill={color}
       />
     </Svg>
@@ -710,17 +1839,22 @@ function KnowledgeIconSvg({ size, color }: { size: number; color: string }) {
 
 const WORLD_ICON_SIZE = 46;
 
+const PERSONAL_WORLD_ICON_LIGHT_GRAY = '#737373';
+
 function WorldMiniIcon({ worldId, color, size }: { worldId: string; color: string; size: number }) {
+  const theme = useThemeStore((s) => s.theme);
   if (worldId === 'business') return <BusinessIconSvg size={size} color={color} />;
   if (worldId === 'health') return <HealthIconSvg size={size} color={color} />;
   if (worldId === 'finance') return <FinanceIconSvg size={size} color={color} />;
   if (worldId === 'knowledge') return <KnowledgeIconSvg size={size} color={color} />;
   if (worldId === 'leisure') return <LeisureIconSvg size={size} color={color} />;
   if (worldId === 'relations') return <RelationsIconSvg size={size} color={color} />;
+  const personalGlyphColor =
+    theme === 'light' && worldId === 'personal' ? PERSONAL_WORLD_ICON_LIGHT_GRAY : color;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
-      <Circle cx={12} cy={12} r={3.2} fill={color} />
+      <Circle cx={12} cy={12} r={9} stroke={personalGlyphColor} strokeWidth={2} />
+      <Circle cx={12} cy={12} r={3.2} fill={personalGlyphColor} />
     </Svg>
   );
 }
@@ -846,7 +1980,12 @@ const COMPOSER_LINE_HEIGHT = 20;
 const COMPOSER_MIN_LINES = 1;
 const COMPOSER_MAX_LINES = 8;
 
-function getTimeGreeting(hour: number, name: string): string {
+function getTimeGreeting(hour: number, name: string, language: AppLanguage): string {
+  if (language === 'en') {
+    if (hour >= 5 && hour < 12) return `Good morning, ${name}`;
+    if (hour >= 12 && hour < 18) return `Good afternoon, ${name}`;
+    return `Good evening, ${name}`;
+  }
   if (hour >= 5 && hour < 12) return `בוקר טוב, ${name}`;
   if (hour >= 12 && hour < 18) return `צהריים טובים, ${name}`;
   return `ערב טוב, ${name}`;
@@ -866,12 +2005,21 @@ export function OneScreen() {
   const language = useLocaleStore((s) => s.language);
   const layoutDirection = useLocaleStore((s) => s.layoutDirection);
   const previewProfile = useDevModeStore((s) => s.previewProfile);
+  const showAllWorldsExamples = useDevModeStore((s) => s.showAllWorldsExamples);
+  const syntheticHomeApplyNonce = useDevModeStore((s) => s.syntheticHomeApplyNonce);
   const isRtlLayout = layoutDirection === 'rtl';
   const chatMenuRows = useMemo(
     () => CHAT_MENU_ROWS.map((row) => ({ ...row, label: translate(language, row.labelKey) })),
     [language]
   );
+  const [agentUnitCreationMode, setAgentUnitCreationMode] = useState(false);
+  const pendingReopenUnitChatRef = useRef<string | null>(null);
   const nowPlaceholderPhrase = useMemo(() => (language === 'he' ? 'עכשיו?' : 'Now?'), [language]);
+  /** צבע עדין ל־«עכשיו?» / Now? — בשכבת overlay וב־placeholder של השדה */
+  const nowFieldPlaceholderColor = useMemo(
+    () => hexToRgba(colors.textSecondary, 0.36),
+    [colors.textSecondary]
+  );
   const [chatStatusPhase, setChatStatusPhase] = useState<ChatStatusPhase>('agent');
   const chatAgentStatusLabel = useMemo(
     () => translate(language, CHAT_PHASE_KEY[chatStatusPhase]),
@@ -883,14 +2031,78 @@ export function OneScreen() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isNarrow = windowWidth <= MAX_CONTENT_WIDTH;
   const contentWidth = isNarrow ? windowWidth : MAX_CONTENT_WIDTH;
-  const creditsColor = theme === 'light' ? '#000000' : colors.text;
-  const creditsCircleBg = theme === 'light' ? '#000000' : '#ffffff';
 
-  const [orbIndex, setOrbIndex] = useState(0);
-  /** עולם נבחר (אישי / עסקים / בריאות / כלכלה) – דפדוף רק בכדור הראשון */
+  /** גלובל בעברית: יישור ימין — כמו UnitChatProfile: מיכל LTR + textAlign/writingDirection על טקסט */
+  const globalHebrewUi = language === 'he';
+  /** כרטיס One בגלובל — רוחב כמו contentWrap + גובה דומה לשכבת oval בבית (לא ריבוע 400px) */
+  const globalOnePlatterLayout = useMemo(() => {
+    const w = contentWidth;
+    const h = Math.max(Math.round(w * 1.02), Math.round(windowHeight * 0.38));
+    return {
+      width: w,
+      minHeight: h,
+      marginHorizontal: isNarrow ? -16 : 0,
+      alignSelf: 'center' as const,
+    };
+  }, [contentWidth, windowHeight, isNarrow]);
+  const [orbIndex, setOrbIndex] = useState(AGENT_ORB_INDEX);
+  /** עולם נבחר (אישי / עסקים / בריאות / כלכלה) – דפדוף רק בכדור הסוכן */
   const [worldIndex, setWorldIndex] = useState(0);
+  const worldIndexRef = useRef(worldIndex);
+  const [agentWorldLookX, setAgentWorldLookX] = useState(0);
+  const worldLookResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevWorldLookIndexRef = useRef(worldIndex);
+  useEffect(() => {
+    worldIndexRef.current = worldIndex;
+  }, [worldIndex]);
+  useEffect(() => {
+    const prev = prevWorldLookIndexRef.current;
+    if (prev === worldIndex) return;
+    const total = WORLDS.length;
+    const forwardSteps = (worldIndex - prev + total) % total;
+    const backwardSteps = (prev - worldIndex + total) % total;
+    const dir = forwardSteps <= backwardSteps ? 1 : -1;
+    setAgentWorldLookX(dir > 0 ? 2 : -2);
+    if (worldLookResetTimerRef.current) clearTimeout(worldLookResetTimerRef.current);
+    worldLookResetTimerRef.current = setTimeout(() => {
+      setAgentWorldLookX(0);
+    }, 460);
+    prevWorldLookIndexRef.current = worldIndex;
+  }, [worldIndex]);
+  useEffect(
+    () => () => {
+      if (worldLookResetTimerRef.current) clearTimeout(worldLookResetTimerRef.current);
+    },
+    []
+  );
+  /** עולם לפני כניסה לגלובל — משחזרים ביציאה ב־X */
+  const preGlobalWorldIndexRef = useRef(0);
+  /** 0→1: נקודות הצד בכפתור ONE נצבעות בעולם; חזרה ל־0 — רק המרכז נשאר בולט */
+  const worldDotsPulse = useRef(new Animated.Value(0)).current;
+  const worldDotsPulseSkipMountRef = useRef(true);
+  /** טאפ על כדור ממורכז — קידום ברודקאסט (סוכן) */
+  const [agentBroadcastKick, setAgentBroadcastKick] = useState(0);
+  /** טאפ על כדור יחידה ממורכז — קידום ברודקאסט לפי id */
+  const [unitBroadcastKickByOrbId, setUnitBroadcastKickByOrbId] = useState<Record<string, number>>({});
+  /** חצי שמאל באזור הברודקאסט — הודעה קודמת (סוכן / יחידה) */
+  const [agentBroadcastBackwardKick, setAgentBroadcastBackwardKick] = useState(0);
+  const [unitBroadcastBackwardByOrbId, setUnitBroadcastBackwardByOrbId] = useState<Record<string, number>>({});
+  /** פעימת נקודת צד בכפתור ONE אחרי טאפ שמאל/ימין בברודקאסט */
+  const [broadcastDotFlashSide, setBroadcastDotFlashSide] = useState<'left' | 'right' | null>(null);
+  const broadcastDotFlashOpacity = useRef(new Animated.Value(0)).current;
   /** מסך אחד – מחליף מצבים: orb | card | global */
   const [viewMode, setViewMode] = useState<ViewMode>('orb');
+  const viewModeRef = useRef(viewMode);
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+  const orbIndexForPullRef = useRef(0);
+  useEffect(() => {
+    orbIndexForPullRef.current = orbIndex;
+  }, [orbIndex]);
+  /** מניעת פתיחת גלובל כפולה (גלילה מוקדמת + סיום גלילה) */
+  const globalWheelNavigateFromScrollRef = useRef(false);
+  const overlaysBlockGlobalRef = useRef(false);
   const [cardContext, setCardContext] = useState<CardContext | null>(null);
   /** כדור יחידה בבית: אחרי idle – מסתירים שורת מצב; תזוזה מחזירה */
   const [unitOrbSystemBarVisible, setUnitOrbSystemBarVisible] = useState(true);
@@ -902,7 +2114,15 @@ export function OneScreen() {
   }, [showChatSheet]);
   const [showCredits, setShowCredits] = useState(false);
   const [showAttachSheet, setShowAttachSheet] = useState(false);
+  const showAttachSheetRef = useRef(showAttachSheet);
+  useEffect(() => {
+    showAttachSheetRef.current = showAttachSheet;
+  }, [showAttachSheet]);
   const [showAgentCard, setShowAgentCard] = useState(false);
+  useEffect(() => {
+    overlaysBlockGlobalRef.current =
+      showChatSheet || showCredits || showAttachSheet || showAgentCard;
+  }, [showChatSheet, showCredits, showAttachSheet, showAgentCard]);
   const [agentCardWorldIndex, setAgentCardWorldIndex] = useState(0);
   const [unitsBalance, setUnitsBalance] = useState(1800);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -910,6 +2130,10 @@ export function OneScreen() {
   const [nowValue, setNowValue] = useState('');
   const [chatComposerMeasuredHeight, setChatComposerMeasuredHeight] = useState(COMPOSER_LINE_HEIGHT);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+  const [accountSpace, setAccountSpace] = useState<AccountSpace>('personal');
+  const [showSpacePicker, setShowSpacePicker] = useState(false);
+  const WORLDS = accountSpace === 'business' ? BUSINESS_WORLDS : PERSONAL_WORLDS;
+  const [businessName, setBusinessName] = useState('Nova Studio');
   const [isVoiceTrayOpen, setIsVoiceTrayOpen] = useState(false);
   const [isMicHoldActive, setIsMicHoldActive] = useState(false);
   const [chatSheetMessages, setChatSheetMessages] = useState<ChatLine[]>([
@@ -917,12 +2141,61 @@ export function OneScreen() {
   ]);
   const [personalOrbs, setPersonalOrbs] = useState<OrbItem[]>(DEV_PROFILE_PRESETS[previewProfile].personalOrbs);
   const [flowUnits, setFlowUnits] = useState<FlowUnit[]>(DEV_PROFILE_PRESETS[previewProfile].flowUnits);
+  const activeHomeWorldIds = useMemo(() => {
+    const primary = accountSpace === 'business' ? 'business' : 'personal';
+    const openWorlds = new Set(
+      flowUnits
+        .filter((u) => u.status !== 'done')
+        .map((u) => u.worldId)
+        .filter((wid) => WORLDS.some((w) => w.id === wid))
+    );
+    return [primary, ...Array.from(openWorlds).filter((wid) => wid !== primary)];
+  }, [flowUnits, accountSpace, WORLDS]);
+
+  /** יחידות מהרשמה (OneProcess) → FlowUnit + כדור בגלגל — היחידה הראשונה מהצ׳אט בהרשמה */
+  useEffect(() => {
+    if (!user?.processes?.length) return;
+    let created: FlowUnit[] = [];
+    setFlowUnits((prev) => {
+      const existing = new Set(prev.map((u) => u.id));
+      created = user.processes.filter((p) => !existing.has(p.id)).map((p) => processToFlowUnit(p, language));
+      if (!created.length) return prev;
+      return [...created, ...prev];
+    });
+    setPersonalOrbs((prev) => {
+      if (!created.length) return prev;
+      const existing = new Set(prev.map((o) => o.id));
+      const newOrbs: OrbItem[] = [];
+      for (const fu of created) {
+        if (existing.has(fu.id)) continue;
+        newOrbs.push({ id: fu.id, emoji: fu.emoji, title: fu.title, subtitle: fu.subtitle });
+      }
+      if (!newOrbs.length) return prev;
+      return insertPersonalOrbsAfterOrigin(prev, newOrbs);
+    });
+  }, [user?.id, user?.processes, language]);
+
+  useEffect(() => {
+    if (viewModeRef.current !== 'orb') return;
+    const selected = WORLDS[worldIndex]?.id;
+    if (selected && activeHomeWorldIds.includes(selected)) return;
+    const fallbackId = activeHomeWorldIds[0] ?? (accountSpace === 'business' ? 'business' : 'personal');
+    const wi = WORLDS.findIndex((w) => w.id === fallbackId);
+    if (wi >= 0 && wi !== worldIndex) setWorldIndex(wi);
+  }, [activeHomeWorldIds, worldIndex, accountSpace]);
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
-  const [intakeState, setIntakeState] = useState<{ intent: string; questionIndex: number; answers: string[] } | null>(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showChatProfile, setShowChatProfile] = useState(false);
   const [chatProfileEditMode, setChatProfileEditMode] = useState(false);
   const [chatPinnedWorldId, setChatPinnedWorldId] = useState<string>('personal');
+  /** צ׳אט סוכן: רשימת יחידות בהיסטוריה — מקופלת עד «פתח היסטוריה» */
+  const [agentChatHistoryExpanded, setAgentChatHistoryExpanded] = useState(false);
+  useEffect(() => {
+    setAgentChatHistoryExpanded(false);
+  }, [showChatSheet, chatPinnedWorldId]);
+  useEffect(() => {
+    if (activeUnitId) setAgentChatHistoryExpanded(false);
+  }, [activeUnitId]);
   const [chatOpenedFromOrbProfileShortcut, setChatOpenedFromOrbProfileShortcut] = useState(false);
   /** בפרופיל יחידה: אחרי גלילה — כותרת ואימוג׳י מוצגים בסרגל העליון (כמו בצ׳אט) */
   const [chatProfileHeaderCompact, setChatProfileHeaderCompact] = useState(false);
@@ -938,6 +2211,10 @@ export function OneScreen() {
     { id: '3', label: 'New User Gift', time: 'Sunday', change: 101, icon: 'gift' },
   ]);
   const [splashDone, setSplashDone] = useState(false);
+  const wheelStepLockRef = useRef(false);
+  const wheelStepLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mobileQuickDragDeltaRef = useRef(0);
+  const [mobileQuickDragActive, setMobileQuickDragActive] = useState(false);
   const { hasSeenOrbSplash, markOrbSplashComplete } = useLoadingStore();
   const showSplashOverlay = !hasSeenOrbSplash && !splashDone;
 
@@ -952,6 +2229,15 @@ export function OneScreen() {
   const chatMessageBubbleYRef = useRef<Map<string, number>>(new Map());
   const chatStickyLabelLastRef = useRef<string>('');
   const lastChatScrollYRef = useRef(0);
+  const profilePullCloseTriggeredRef = useRef(false);
+  const chatPullCloseTriggeredRef = useRef(false);
+  const closeChatFromProfileOverscroll = useCallback(() => {
+    // Close the whole chat sheet (agent/unit) when pulling beyond the top.
+    closeChatSheetRef.current?.({ direction: 'down' });
+  }, []);
+  const closeChatFromChatOverscroll = useCallback(() => {
+    closeChatSheetRef.current?.({ direction: 'down' });
+  }, []);
   const homeNowInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const chatComposerInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
   /** פתיחת צ׳אט ממיקוד בשדה — אחרי הלייאאוט מפעילים focus שוב כדי שהמקלדת תיפתח */
@@ -962,10 +2248,14 @@ export function OneScreen() {
   /** עד סיום שלב הקלף+המקלדת — לא מיישמים padding למקלדת על הקומפוזר */
   const suppressKeyboardForChatLayoutRef = useRef(false);
   const pendingKeyboardInsetRef = useRef(0);
-  const closeChatSheetRef = useRef<(opts?: { gestureDx?: number; gestureDy?: number; direction?: 'side' | 'down' }) => void>(() => {});
+  const closeChatSheetRef = useRef<
+    (opts?: { gestureDx?: number; gestureDy?: number; direction?: 'side' | 'down'; afterClose?: () => void }) => void
+  >(() => {});
   const lastHomeTapAtRef = useRef(0);
   const lastHomeTapYRef = useRef(0);
-  /** ref לכדור הסוכן בגלגל (פריט 0) – למדידת מיקום ל־Smart Animate */
+  /** רוחב אזור טאפ ברודקאסט לפי אינדקס פריט בגלגל — לחלוקת שמאל/ימין */
+  const broadcastPadWidthByOrbRef = useRef<Record<number, number>>({});
+  /** ref לכדור הסוכן בגלגל (פריט סוכן) – למדידת מיקום ל־Smart Animate */
   const wheelOrbRef = useRef<View>(null);
   const agentCardScrollRef = useRef<ScrollView>(null);
   const inactivityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -975,7 +2265,6 @@ export function OneScreen() {
   /** מעבר חלק בין תווית העולם לאייקון Enter בכפתור הכדור; בחזרה ל־orb 0 מופיע מיד */
   const orbButtonLabelOpacity = useRef(new Animated.Value(1)).current;
   const orbButtonEnterOpacity = useRef(new Animated.Value(0)).current;
-  const nowQuestionPulse = useRef(new Animated.Value(1)).current;
   const chatBackdropOpacity = useRef(new Animated.Value(0)).current;
   const chatSheetTranslateY = useRef(new Animated.Value(1200)).current;
   const chatSheetTranslateX = useRef(new Animated.Value(0)).current;
@@ -988,21 +2277,246 @@ export function OneScreen() {
   /** כדורים שכנים (לא במרכז): fade מסונכרן עם שורת המצב בכדור יחידה */
   const peripheralOrbsOpacity = useRef(new Animated.Value(1)).current;
   const chatActionBreath = useRef(new Animated.Value(1)).current;
-
-  const currentWorldId = WORLDS[worldIndex]?.id ?? 'personal';
+  /** כניסה לגלובל מוד — Animated רגיל (ללא moti/reanimated worklets) למניעת קריסה ב־iOS */
+  const globalEnterOpacity = useRef(new Animated.Value(1)).current;
+  const globalEnterTranslateY = useRef(new Animated.Value(0)).current;
+  const currentWorldId = WORLDS[worldIndex]?.id ?? WORLDS[0]?.id ?? 'personal';
   const currentWorld = WORLDS[worldIndex] ?? WORLDS[0];
-  const currentOrbData = currentWorldId === 'personal' ? personalOrbs : (ORB_DATA_BY_WORLD[currentWorldId] ?? ORB_DATA_BY_WORLD.personal);
+  const currentOrbData = useMemo(
+    () =>
+      localizedOrbDataForWorld(currentWorldId, personalOrbs, language, flowUnits, showAllWorldsExamples && accountSpace !== 'business'),
+    [currentWorldId, personalOrbs, language, flowUnits, showAllWorldsExamples, accountSpace]
+  );
+  const globalWheelOrbItem = useMemo<OrbItem>(
+    () => ({
+      id: GLOBAL_WHEEL_ORB_ID,
+      emoji: '🌐',
+      title: language === 'he' ? 'גלובל' : 'Global',
+      subtitle:
+        language === 'he'
+          ? 'מרקט גילוי — ספקים, מוצרים ואגרגט דאטה לסוכנים'
+          : 'Market discovery — providers, products & aggregated signals',
+    }),
+    [language]
+  );
+  const wheelOrbData = useMemo(() => [globalWheelOrbItem, ...currentOrbData], [globalWheelOrbItem, currentOrbData]);
+  const wheelOrbDataRef = useRef(wheelOrbData);
+  useEffect(() => {
+    wheelOrbDataRef.current = wheelOrbData;
+  }, [wheelOrbData]);
   const currentWorldColor = WORLDS[worldIndex]?.color ?? WORLDS[0].color;
+  /** צבע הבזק נקודות ברודקאסט: בעולמות = עולם נוכחי; בכדור יחידה = צבע העולם של היחידה */
+  const broadcastDotFlashColor = useMemo(() => {
+    if (orbIndex > AGENT_ORB_INDEX) {
+      const row = wheelOrbData[orbIndex];
+      if (!row || row.id === GLOBAL_WHEEL_ORB_ID) return currentWorldColor;
+      const u = flowUnits.find((f) => f.id === row.id);
+      const wid = u?.worldId ?? 'personal';
+      return WORLDS.find((w) => w.id === wid)?.color ?? currentWorldColor;
+    }
+    return currentWorldColor;
+  }, [orbIndex, wheelOrbData, flowUnits, currentWorldColor]);
+  const worldSideDotPulseBg = useMemo(
+    () =>
+      worldDotsPulse.interpolate({
+        inputRange: [0, 1],
+        outputRange: [hexToRgba(colors.textSecondary, 0.35), hexToRgba(currentWorldColor, 1)],
+      }),
+    [worldDotsPulse, colors.textSecondary, currentWorldColor]
+  );
+  useEffect(() => {
+    if (worldDotsPulseSkipMountRef.current) {
+      worldDotsPulseSkipMountRef.current = false;
+      return;
+    }
+    worldDotsPulse.stopAnimation();
+    worldDotsPulse.setValue(0);
+    Animated.sequence([
+      Animated.timing(worldDotsPulse, { toValue: 1, duration: 150, useNativeDriver: false }),
+      Animated.delay(200),
+      Animated.timing(worldDotsPulse, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [worldIndex, worldDotsPulse]);
+
+  const triggerBroadcastDotFlash = useCallback(
+    (side: 'left' | 'right') => {
+      setBroadcastDotFlashSide(side);
+      broadcastDotFlashOpacity.stopAnimation();
+      broadcastDotFlashOpacity.setValue(0);
+      Animated.sequence([
+        Animated.timing(broadcastDotFlashOpacity, {
+          toValue: 0.78,
+          duration: 150,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
+        Animated.delay(540),
+        Animated.timing(broadcastDotFlashOpacity, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
+      ]).start(({ finished }) => {
+        if (finished) setBroadcastDotFlashSide(null);
+      });
+    },
+    [broadcastDotFlashOpacity]
+  );
+
+  const globalIntentByWorld = useGlobalIntentSignalsStore((s) => s.byWorld);
+  const globalBroadcastMessages = useMemo(
+    () =>
+      getGlobalBroadcastMessages(
+        currentWorldId,
+        language,
+        globalIntentByWorld[currentWorldId] ?? EMPTY_GLOBAL_SIGNALS
+      ),
+    [currentWorldId, language, globalIntentByWorld]
+  );
+  const globalNewInOneTitle = useMemo(
+    () => (language === 'he' ? 'גילוי בשוק' : 'Market discovery'),
+    [language]
+  );
+  const globalDiscoverySections = useMemo(() => {
+    const he = language === 'he';
+    const aggregate = he
+      ? [
+          {
+            key: 'agg-q',
+            title: 'חיפושי סוכנים (24 שעות)',
+            sub: '1.4k שאילתות · ~62% ספקי שירות · ~28% מוצרים ומסלולים · ~10% תהליכים',
+          },
+          {
+            key: 'agg-src',
+            title: 'מה נכנס לאגרגט',
+            sub: 'מחירון, סלוטים, SLA, ביקורות מאומתות, נפח חיפוש ויחידות בבית שמצביעות על ביקוש',
+          },
+          {
+            key: 'agg-ai',
+            title: 'למה זה עוזר ל-AI ולך',
+            sub: 'שכבה אחת עקבית לפי עולם — פחות סתירות בין סוכנים, יותר בחירה מושכלת לפני פתיחת יחידה',
+          },
+        ]
+      : [
+          {
+            key: 'agg-q',
+            title: 'Agent searches (24h)',
+            sub: '1.4k queries · ~62% services · ~28% products & bundles · ~10% flows',
+          },
+          {
+            key: 'agg-src',
+            title: 'What feeds the aggregate',
+            sub: 'Pricing, slots, SLAs, verified reviews, search volume, and home units that signal demand',
+          },
+          {
+            key: 'agg-ai',
+            title: 'Why people & AI both win',
+            sub: 'One consistent layer per world — fewer cross-agent conflicts, sharper picks before you open a unit',
+          },
+        ];
+    const discovery = he
+      ? [
+          {
+            key: 'd-svc',
+            title: 'ספקי שירות',
+            sub: 'משרדי ליווי, קליניקות, מאמנים, יועצים — דירוג לפי זמינות, מהירות מענה והתאמה לעולם הזה.',
+          },
+          {
+            key: 'd-prd',
+            title: 'מוצרים ומסלולים',
+            sub: 'חבילות התחלה, מנויים, קורסים וכלים — מול ביקוש אמיתי מהשטח, לא רק פרסום.',
+          },
+          {
+            key: 'd-match',
+            title: 'התאמה מהשוק',
+            sub: 'סוכנים מרכיבים הצעות מול אותו אגרגט — כדי לצמצם רעש ולהגיע מהר לשורה התחתונה.',
+          },
+        ]
+      : [
+          {
+            key: 'd-svc',
+            title: 'Service providers',
+            sub: 'Desks, clinics, coaches, consultants — ranked by availability, response time, and fit to this world.',
+          },
+          {
+            key: 'd-prd',
+            title: 'Products & bundles',
+            sub: 'Starter packs, subscriptions, courses, and tools — against real demand signals, not ads alone.',
+          },
+          {
+            key: 'd-match',
+            title: 'Market-matched offers',
+            sub: 'Agents compose options against the same aggregate — less noise, faster path to a decision.',
+          },
+        ];
+    const agentSearchThemes = currentOrbData
+      .filter((o) => o.id !== 'origin')
+      .slice(0, 4)
+      .map((o) => ({ key: o.id, title: o.title, sub: o.subtitle }));
+    const unitsHot = [...flowUnits]
+      .filter((u) => u.worldId === currentWorldId)
+      .sort((a, b) => b.progress - a.progress)
+      .slice(0, 3)
+      .map((u) => ({ key: u.id, title: u.goal?.trim() || u.title, sub: `${u.progress}%` }));
+    const marketPulse = he
+      ? [
+          {
+            key: 'm1',
+            title: 'היצע מול ביקוש',
+            sub: 'חבילות ליווי בתחילת דרך — היצע גבוה; חלונות פגישה בערב — ביקוש חזק באזורים מסוימים.',
+          },
+          {
+            key: 'm2',
+            title: 'מה נפתח כיחידות',
+            sub: 'תבניות שחוזרות מהחיפושים → נכנסות לבית כיחידות — מעידות על כיוון השוק.',
+          },
+        ]
+      : [
+          {
+            key: 'm1',
+            title: 'Supply vs demand',
+            sub: 'Starter coaching — high supply; evening slots — tight demand in several metros.',
+          },
+          {
+            key: 'm2',
+            title: 'What becomes a unit',
+            sub: 'Patterns that repeat in agent queries tend to land as home units — a live market compass.',
+          },
+        ];
+    return { aggregate, discovery, agentSearchThemes, unitsHot, marketPulse };
+  }, [currentOrbData, currentWorldId, flowUnits, language]);
   const effectiveChatWorldId = showChatSheet ? chatPinnedWorldId : currentWorldId;
   const effectiveChatWorld = WORLDS.find((w) => w.id === effectiveChatWorldId) ?? WORLDS[0];
   const effectiveChatWorldColor = effectiveChatWorld.color;
   const rawFirstName = user?.name?.trim()?.split(/\s+/)[0] || 'אריאל';
-  const firstName = rawFirstName.toLowerCase() === 'guest' ? 'אורח' : rawFirstName;
-  const personalGreeting = getTimeGreeting(new Date().getHours(), firstName);
+  const firstName =
+    rawFirstName.toLowerCase() === 'guest' ? (language === 'he' ? 'אורח' : 'Guest') : rawFirstName;
+  const greetingName = accountSpace === 'business' ? businessName : firstName;
+  const personalGreeting = getTimeGreeting(new Date().getHours(), greetingName, language);
   const nowInputHasText = nowValue.trim().length > 0;
   const nowInputIsRtl = /[\u0590-\u08FF]/.test(nowValue);
-  const nowInputTextAlign: 'left' | 'right' = nowInputHasText ? (nowInputIsRtl ? 'right' : 'left') : 'left';
-  const nowInputWritingDirection: 'ltr' | 'rtl' = nowInputHasText ? (nowInputIsRtl ? 'rtl' : 'ltr') : 'ltr';
+  const nowInputTextAlign: 'left' | 'right' =
+    language === 'he'
+      ? nowInputHasText && !nowInputIsRtl
+        ? 'left'
+        : 'right'
+      : nowInputHasText && nowInputIsRtl
+        ? 'right'
+        : 'left';
+  const nowInputWritingDirection: 'ltr' | 'rtl' =
+    language === 'he'
+      ? nowInputHasText && !nowInputIsRtl
+        ? 'ltr'
+        : 'rtl'
+      : nowInputHasText && nowInputIsRtl
+        ? 'rtl'
+        : 'ltr';
   const isChatSystemWorking = chatStatusPhase === 'thinking' || chatStatusPhase === 'planning';
   const chatComposerMaxHeight = COMPOSER_MAX_LINES * COMPOSER_LINE_HEIGHT;
   const chatComposerVisibleHeight = Math.max(
@@ -1025,7 +2539,8 @@ export function OneScreen() {
   const profileAccent = effectiveChatWorldColor;
   const chatAgentAvatarBg = theme === 'light' ? '#000000' : '#1f1f1f';
   const generalWorldLabel = language === 'he' ? 'כללי' : 'General';
-  const activeWorldChatLabel = effectiveChatWorldId === 'personal' ? generalWorldLabel : effectiveChatWorld.label;
+  const activeWorldChatLabel =
+    effectiveChatWorldId === 'personal' ? generalWorldLabel : worldTitle(effectiveChatWorldId, language);
   const agentHeaderSubtitle = language === 'he' ? 'סוכן' : 'Agent';
   /** בצ׳אט סוכן — כותרת ההדר היא שם הסוכן (לא «ONE שלי» קבוע) */
   const chatAgentHeaderTitle = useMemo(() => {
@@ -1038,8 +2553,8 @@ export function OneScreen() {
       const he = language === 'he';
       if (worldId === 'business') {
         return he
-          ? 'שלום! מצב עסקים: כתבו יעד אחד, ואני אכין TODO מסודר + עדכון התקדמות ראשון.'
-          : 'Business mode is on. Share one goal and I will build a focused TODO list with a first progress update.';
+          ? 'שלום! מצב עבודה: כתבו יעד אחד, ואני אכין TODO מסודר + עדכון התקדמות ראשון.'
+          : 'Work mode is on. Share one goal and I will build a focused TODO list with a first progress update.';
       }
       if (worldId === 'health') {
         return he
@@ -1048,7 +2563,7 @@ export function OneScreen() {
       }
       if (worldId === 'finance') {
         return he
-          ? 'שלום! מצב כלכלה: כתבו מה רוצים לשפר, ואני אבנה TODO כספי + עדכון מצב.'
+          ? 'שלום! מצב כסף: כתבו מה רוצים לשפר, ואני אבנה TODO כספי + עדכון מצב.'
           : 'Finance mode is on. Tell me what you want to improve and I will build a money TODO plan with status updates.';
       }
       if (worldId === 'knowledge') {
@@ -1099,6 +2614,12 @@ export function OneScreen() {
     : (language === 'he' ? 'פרופיל סוכן' : 'Agent Profile');
   const chatContextSuggestions = useMemo(() => {
     const he = language === 'he';
+    if (!activeUnit && agentUnitCreationMode) {
+      return creationGoalChipsForWorld(effectiveChatWorldId, language);
+    }
+    if (activeUnit?.profileSlots?.length) {
+      return [];
+    }
     if (activeUnit) {
       const nextStepLabel = activeUnit.nextAction?.trim() || (he ? 'מה הצעד הבא?' : 'What is the next step?');
       if (activeUnit.worldId === 'health') {
@@ -1141,7 +2662,7 @@ export function OneScreen() {
         : ['Update TODO', 'What is unit status?', nextStepLabel];
     }
     if (effectiveChatWorldId === 'business') {
-      return he ? ['פתח TODO לעסק', 'עדכון לקוחות', 'מה הכי דחוף היום?'] : ['Open business TODO', 'Client update', 'Top priority today?'];
+      return he ? ['פתח TODO לעבודה', 'עדכון לקוחות', 'מה הכי דחוף היום?'] : ['Open work TODO', 'Client update', 'Top priority today?'];
     }
     if (effectiveChatWorldId === 'health') {
       return he ? ['TODO בריאות יומי', 'מעקב בדיקות', 'תזכורת תרופה'] : ['Daily health TODO', 'Track tests', 'Medication reminder'];
@@ -1159,10 +2680,13 @@ export function OneScreen() {
       return he ? ['TODO למשפחה', 'תזכורת ליום הולדת', 'מעקב אחר חברים'] : ['Family TODO', 'Birthday reminder', 'Friends check-in'];
     }
     return he ? ['פתח יחידה חדשה', 'הראה היסטוריה', 'מה עושים עכשיו?'] : ['Open new unit', 'Show history', 'What now?'];
-  }, [activeUnit, effectiveChatWorldId, language]);
+  }, [activeUnit, effectiveChatWorldId, language, agentUnitCreationMode]);
   const historyUnitsForWorld = useMemo(() => {
-    if (effectiveChatWorldId === 'personal') return flowUnits;
-    return flowUnits.filter((unit) => unit.worldId === effectiveChatWorldId);
+    const list =
+      effectiveChatWorldId === 'personal'
+        ? flowUnits
+        : flowUnits.filter((unit) => unit.worldId === effectiveChatWorldId);
+    return sortFlowUnitsHistoryOldestFirst(list);
   }, [flowUnits, effectiveChatWorldId]);
 
   const agentChatProfileModel = useMemo((): AgentChatProfileModel => {
@@ -1175,18 +2699,9 @@ export function OneScreen() {
     const hatLabels = hats.length
       ? hats.map((h: Hat) => `${HAT_LABELS[h]} — ${he ? 'הקשר פעיל לפי הצורך' : 'context when relevant'}`)
       : [he ? 'מצב כללי — ללא כובע ממוקד' : 'General mode — no focused hat'];
-    const worldLabelsEn: Record<string, string> = {
-      personal: 'General',
-      business: 'Business',
-      health: 'Health',
-      finance: 'Finance',
-      knowledge: 'Knowledge',
-      leisure: 'Leisure',
-      relations: 'Relations',
-    };
     const worlds = WORLDS.map((w) => ({
       id: w.id,
-      label: he ? w.label : worldLabelsEn[w.id] ?? w.label,
+      label: worldTitle(w.id, language),
       color: w.color,
       active: w.id === effectiveChatWorldId,
       detail:
@@ -1196,13 +2711,13 @@ export function OneScreen() {
             : 'All units and history — no world filter.'
           : he
             ? `יחידות מתויגות לעולם «${w.label}» והקשר ${w.label} לסוכן.`
-            : `Units tagged to «${worldLabelsEn[w.id] ?? w.label}» and matching context.`,
+            : `Units tagged to «${worldTitle(w.id, 'en')}» and matching context.`,
     }));
     const worldUnitsList =
       effectiveChatWorldId === 'personal' ? flowUnits : flowUnits.filter((u) => u.worldId === effectiveChatWorldId);
     const activeUnitsInWorld = worldUnitsList.filter((u) => u.status !== 'done').length;
     const worldNameHe = WORLDS.find((w) => w.id === effectiveChatWorldId)?.label ?? 'כללי';
-    const worldNameEn = worldLabelsEn[effectiveChatWorldId] ?? 'General';
+    const worldNameEn = worldTitle(effectiveChatWorldId, 'en');
     const broadcastPrimary = he
       ? effectiveChatWorldId === 'personal'
         ? `יש לך ${activeUnitsInWorld} יחידות פעילות במרחב הכללי.`
@@ -1224,7 +2739,7 @@ export function OneScreen() {
             value: String(msgCount),
             hint: effectiveChatWorldId === 'personal' ? 'בצ׳אט ONE הנוכחי' : `מיקוד: «${worldNameHe}»`,
           },
-          { label: 'מרחבים זמינים', value: String(WORLDS.length), hint: 'כללי, עסקים, בריאות, כלכלה, לימודים, פנאי, קשרים' },
+          { label: 'מרחבים זמינים', value: String(WORLDS.length), hint: 'כללי, עבודה, בריאות, כסף, לימודים, פנאי, קשרים' },
         ]
       : [
           {
@@ -1289,7 +2804,7 @@ export function OneScreen() {
       broadcastSecondary,
       worlds,
       hatsIntro: he
-        ? 'הכובעים מצמצמים את ההקשר: אותו סוכן, פרשנות שונה לפי חיים / עבודה / בריאות / כספים.'
+        ? 'הכובעים מצמצמים את ההקשר: אותו סוכן, פרשנות שונה לפי חיים / עבודה / בריאות / כסף.'
         : 'Hats narrow context: same agent, different emphasis per life area.',
       hatLabels,
       permissions,
@@ -1323,28 +2838,15 @@ export function OneScreen() {
   }, [language, user, effectiveChatWorldId, activeWorldChatLabel, flowUnits, chatSheetMessages]);
 
 
-  /** מעבר חלק בכפתור כדור: לכדור אחר – פייד; חזרה לראשי – פייד־אין קצר (בלי קפיצה) */
+  /** מעבר חלק בכפתור כדור: לכדור אחר – פייד; חזרה לסוכן – פייד־אין קצר (בלי קפיצה) */
   useEffect(() => {
-    const toFirstOrb = orbIndex === 0;
+    const toFirstOrb = orbIndex === AGENT_ORB_INDEX;
     const duration = toFirstOrb ? 120 : 200;
     Animated.parallel([
       Animated.timing(orbButtonLabelOpacity, { toValue: toFirstOrb ? 1 : 0, duration, useNativeDriver: true }),
       Animated.timing(orbButtonEnterOpacity, { toValue: toFirstOrb ? 0 : 1, duration, useNativeDriver: true }),
     ]).start();
   }, [orbIndex, orbButtonLabelOpacity, orbButtonEnterOpacity]);
-
-  /** פולס עדין לטקסט placeholder (עכשיו? / Now?) – לא נעלם לגמרי */
-  useEffect(() => {
-    nowQuestionPulse.setValue(1);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(nowQuestionPulse, { toValue: 0.45, duration: 500, useNativeDriver: true }),
-        Animated.timing(nowQuestionPulse, { toValue: 1, duration: 500, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [nowQuestionPulse, showChatSheet]);
 
   useEffect(() => {
     if (!showChatSheet || !isChatSystemWorking) {
@@ -1473,13 +2975,23 @@ export function OneScreen() {
     setShowCredits(false);
     setShowChatMenu(false);
     setChatPinnedWorldId(currentWorldId);
-    const selectedOrb = currentOrbData[orbIndex];
-    if (selectedOrb && selectedOrb.id !== 'origin') {
+    const selectedOrb = wheelOrbData[orbIndex];
+    if (selectedOrb?.id === GLOBAL_WHEEL_ORB_ID) {
+      setAgentUnitCreationMode(false);
+      setActiveUnitId(null);
+      setChatSheetMessages([
+        { id: `seed_${Date.now()}`, sender: 'one', text: buildWorldAgentWelcome(currentWorldId), sentAt: Date.now() },
+      ]);
+    } else if (selectedOrb && selectedOrb.id !== 'origin') {
+      setAgentUnitCreationMode(false);
       let target = flowUnits.find((u) => u.id === selectedOrb.id);
       if (!target) {
         const isLicenseOrb = selectedOrb.id === 'license';
+        const { spaceId: _orbSp, domainId: _orbDm } = legacyWorldIdToSpaceDomain(effectiveChatWorldId);
         target = {
           id: selectedOrb.id,
+          spaceId: _orbSp,
+          domainId: _orbDm,
           worldId: effectiveChatWorldId,
           title: selectedOrb.title,
           subtitle: selectedOrb.subtitle || 'תהליך עם ליווי ONE',
@@ -1512,14 +3024,27 @@ export function OneScreen() {
       setActiveUnitId(target.id);
     } else {
       setActiveUnitId(null);
+      setAgentUnitCreationMode(true);
       setChatSheetMessages([
-        { id: `seed_${Date.now()}`, sender: 'one', text: buildWorldAgentWelcome(currentWorldId), sentAt: Date.now() },
+        { id: `seed_${Date.now()}`, sender: 'one', text: buildAgentGoalPromptMessage(language, currentWorldId), sentAt: Date.now() },
       ]);
+      shouldRefocusComposerAfterChatOpenRef.current = true;
     }
     chatBackdropOpacity.setValue(0);
     chatSheetTranslateY.setValue(windowHeight + 180);
     setShowChatSheet(true);
-  }, [currentOrbData, orbIndex, flowUnits, windowHeight, chatBackdropOpacity, chatSheetTranslateY, currentWorldId, buildWorldAgentWelcome]);
+  }, [
+    wheelOrbData,
+    orbIndex,
+    flowUnits,
+    effectiveChatWorldId,
+    windowHeight,
+    chatBackdropOpacity,
+    chatSheetTranslateY,
+    currentWorldId,
+    buildWorldAgentWelcome,
+    language,
+  ]);
 
   const closeAttachSheet = useCallback(() => {
     setShowAttachSheet(false);
@@ -1533,7 +3058,7 @@ export function OneScreen() {
   }, []);
 
   const closeChatSheet = useCallback(
-    (opts?: { gestureDx?: number; gestureDy?: number; direction?: 'side' | 'down' }) => {
+    (opts?: { gestureDx?: number; gestureDy?: number; direction?: 'side' | 'down'; afterClose?: () => void }) => {
       setShowAttachSheet(false);
       chatOpenAnimGenerationRef.current += 1;
       shouldRefocusComposerAfterChatOpenRef.current = false;
@@ -1597,10 +3122,11 @@ export function OneScreen() {
         setChatProfileEditMode(false);
       setIsVoiceTrayOpen(false);
       setIsMicHoldActive(false);
-      setChatOpenedFromOrbProfileShortcut(false);
+        setChatOpenedFromOrbProfileShortcut(false);
         setShowCredits(false);
         /** אחרי שהקלף נסגר — לא לפני, כדי שלא יבזק מסך «My One» בזמן האנימציה */
         setActiveUnitId(null);
+        opts?.afterClose?.();
       });
     },
     [windowWidth, isRtlLayout, chatBackdropOpacity, chatSheetTranslateY, chatSheetTranslateX, chatComposerTranslateY]
@@ -1693,12 +3219,33 @@ export function OneScreen() {
   }, [nowValue]);
 
   useEffect(() => {
-    const preset = DEV_PROFILE_PRESETS[previewProfile];
-    setPersonalOrbs(preset.personalOrbs);
-    setFlowUnits(preset.flowUnits);
+    if (accountSpace === 'business') {
+      const seeded = generateBusinessWorkspaceSeed(language);
+      setPersonalOrbs(seeded.personalOrbs);
+      setFlowUnits(seeded.flowUnits);
+      setWorldIndex(0);
+      setChatPinnedWorldId('business');
+    } else {
+      setPersonalOrbs([{ id: 'origin', emoji: '👤', title: language === 'he' ? 'ראשי' : 'Home', subtitle: '' }]);
+      setFlowUnits([]);
+      setWorldIndex(0);
+      setChatPinnedWorldId('personal');
+    }
     setActiveUnitId(null);
     setShowChatProfile(false);
-  }, [previewProfile]);
+  }, [previewProfile, accountSpace, language]);
+
+  const lastSyntheticApplyNonceRef = useRef(0);
+  useEffect(() => {
+    if (syntheticHomeApplyNonce === 0 || syntheticHomeApplyNonce === lastSyntheticApplyNonceRef.current) return;
+    lastSyntheticApplyNonceRef.current = syntheticHomeApplyNonce;
+    const gen = generateAiSyntheticProfile(language);
+    setPersonalOrbs(gen.personalOrbs);
+    setFlowUnits(gen.flowUnits);
+    setActiveUnitId(null);
+    setWorldIndex(0);
+    setChatPinnedWorldId('personal');
+  }, [syntheticHomeApplyNonce, language]);
 
   const collapseProfileToChat = useCallback(() => {
     if (chatOpenedFromOrbProfileShortcut) {
@@ -1943,15 +3490,61 @@ export function OneScreen() {
   const onCombinedChatScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (showChatProfile) {
+        const y = e.nativeEvent.contentOffset.y;
+        if (y < -56 && !profilePullCloseTriggeredRef.current) {
+          profilePullCloseTriggeredRef.current = true;
+          closeChatFromProfileOverscroll();
+          return;
+        }
         onChatProfileScroll(e);
         return;
+      }
+      if (showChatSheet) {
+        const y = e.nativeEvent.contentOffset.y;
+        if (y < -56 && !chatPullCloseTriggeredRef.current) {
+          chatPullCloseTriggeredRef.current = true;
+          closeChatFromChatOverscroll();
+          return;
+        }
       }
       const y = e.nativeEvent.contentOffset.y;
       lastChatScrollYRef.current = y;
       recomputeChatStickyDateLabel(y);
     },
-    [showChatProfile, onChatProfileScroll, recomputeChatStickyDateLabel]
+    [
+      showChatProfile,
+      onChatProfileScroll,
+      recomputeChatStickyDateLabel,
+      showChatSheet,
+      closeChatFromProfileOverscroll,
+      closeChatFromChatOverscroll,
+    ]
   );
+
+  const onChatThreadScrollEndDrag = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      if (showChatProfile) {
+        if (y < -32 && !profilePullCloseTriggeredRef.current) {
+          profilePullCloseTriggeredRef.current = true;
+          closeChatFromProfileOverscroll();
+        }
+        return;
+      }
+      if (showChatSheet) {
+        if (y < -32 && !chatPullCloseTriggeredRef.current) {
+          chatPullCloseTriggeredRef.current = true;
+          closeChatFromChatOverscroll();
+        }
+      }
+    },
+    [showChatProfile, showChatSheet, closeChatFromProfileOverscroll, closeChatFromChatOverscroll]
+  );
+
+  useEffect(() => {
+    if (showChatProfile) profilePullCloseTriggeredRef.current = false;
+    if (showChatSheet && !showChatProfile) chatPullCloseTriggeredRef.current = false;
+  }, [showChatProfile, showChatSheet]);
 
   /** לא מציגים «היום» בדיפולט — רק אחרי גלילה אחורה ליום קודם או תאריך מלא */
   const chatStickyDatePillVisible =
@@ -1960,130 +3553,173 @@ export function OneScreen() {
   /** צ׳אט סוכן: פוקוס על הודעות אחרונות (היסטוריית יחידות נשארת למעלה בגלילה) */
   useEffect(() => {
     if (!showChatSheet || activeUnitId) return;
+    // When opening the agent profile from Home, the UI should start at the top.
+    if (showChatProfile || chatOpenedFromOrbProfileShortcut) return;
     const t = setTimeout(scrollOneChatToBottom, 40);
     const t2 = setTimeout(scrollOneChatToBottom, 120);
     return () => {
       clearTimeout(t);
       clearTimeout(t2);
     };
-  }, [showChatSheet, activeUnitId, flowUnits.length, chatSheetMessages.length, scrollOneChatToBottom]);
+  }, [
+    showChatSheet,
+    activeUnitId,
+    showChatProfile,
+    chatOpenedFromOrbProfileShortcut,
+    flowUnits.length,
+    chatSheetMessages.length,
+    scrollOneChatToBottom,
+  ]);
+
+  const commitAgentCreationGoal = useCallback(
+    (rawGoal: string) => {
+      const text = rawGoal.trim();
+      if (!text) return;
+      if (!agentUnitCreationMode || activeUnitId) return;
+
+      const matched = flowUnits.find(
+        (unit) =>
+          text.toLowerCase().includes(unit.title.toLowerCase()) ||
+          unit.title.toLowerCase().includes(text.toLowerCase())
+      );
+      if (matched) {
+        setAgentUnitCreationMode(false);
+        setChatSheetMessages((prev) => [
+          ...prev,
+          { id: `u_${Date.now()}`, sender: 'user', text, sentAt: Date.now() },
+          {
+            id: `open_${Date.now()}`,
+            sender: 'one',
+            text:
+              language === 'he'
+                ? `פותחים יחידה קיימת: ${matched.title}`
+                : `Opening existing unit: ${matched.title}`,
+            sentAt: Date.now(),
+          },
+        ]);
+        setActiveUnitId(matched.id);
+        setNowValue('');
+        return;
+      }
+
+      setChatStatusPhase('thinking');
+      const tmpl = goalTemplateFromText(text, language, effectiveChatWorldId);
+      recordGoalTemplatePublicSignal(tmpl);
+      const newUnitId = `unit_${Date.now()}`;
+      const firstEmpty = tmpl.slots.find((s) => !s.optional) ?? tmpl.slots[0];
+      const he = language === 'he';
+      const firstAsk = he
+        ? `היחידה «${tmpl.title}» מוכנה. מה ${firstEmpty?.label ?? 'הפרט הבא'}? (הנתונים נשמרים בפרופיל היחידה.)`
+        : `Unit “${tmpl.title}” is ready. What is ${firstEmpty?.label ?? 'the next detail'}? (Saved on the unit profile.)`;
+
+      const newUnit: FlowUnit = {
+        id: newUnitId,
+        spaceId: tmpl.spaceId,
+        domainId: tmpl.domainId,
+        worldId: tmpl.worldId,
+        title: tmpl.title,
+        subtitle: tmpl.subtitle,
+        emoji: tmpl.emoji,
+        status: 'active',
+        progress: 8,
+        steps: tmpl.steps,
+        profileSlots: tmpl.slots.map((s) => ({ ...s })),
+        messages: [
+          {
+            id: `seed_${newUnitId}`,
+            sender: 'one',
+            text: firstAsk,
+            sentAt: Date.now(),
+          },
+        ],
+        goal: he ? `להגשים: ${text.slice(0, 120)}` : `Achieve: ${text.slice(0, 120)}`,
+        city: he ? 'לא צוין' : 'Not set',
+        etaWeeks: 8,
+        peopleRoles: [
+          { id: 'nu1', role: he ? 'סוכן' : 'Agent', name: 'ONE' },
+          { id: 'nu2', role: he ? 'אחראי/ת' : 'Owner', name: he ? 'את/ה' : 'You' },
+        ],
+        nextAction: firstEmpty ? (he ? `למלא: ${firstEmpty.label}` : `Fill: ${firstEmpty.label}`) : undefined,
+        lastUpdatedLabel: he ? 'נוצר מהמטרה שבחרת' : 'Created from your goal',
+        blockCount: 5,
+      };
+
+      setFlowUnits((prev) => [newUnit, ...prev.filter((u) => u.id !== newUnitId)]);
+      setPersonalOrbs((prev) =>
+        prev.some((p) => p.id === newUnitId)
+          ? prev
+          : insertPersonalOrbsAfterOrigin(prev, [
+              { id: newUnitId, emoji: newUnit.emoji, title: newUnit.title, subtitle: newUnit.subtitle },
+            ])
+      );
+      const wi = WORLDS.findIndex((w) => w.id === tmpl.worldId);
+      if (wi >= 0) setWorldIndex(wi);
+      setChatPinnedWorldId(tmpl.worldId);
+      setAgentUnitCreationMode(false);
+      setNowValue('');
+      setTimeout(() => setChatStatusPhase('planning'), 500);
+      setTimeout(() => setChatStatusPhase('ready'), 1100);
+      setTimeout(() => setChatStatusPhase('agent'), 2000);
+
+      closeChatSheetRef.current?.({
+        afterClose: () => {
+          pendingReopenUnitChatRef.current = newUnitId;
+        },
+      });
+    },
+    [agentUnitCreationMode, activeUnitId, flowUnits, language, effectiveChatWorldId]
+  );
 
   const submitNowValue = useCallback(() => {
     const text = nowValue.trim();
     if (!text) return;
+    if (agentUnitCreationMode && !activeUnitId) {
+      commitAgentCreationGoal(text);
+      return;
+    }
     setChatStatusPhase('thinking');
 
     const userLine: ChatLine = { id: `u_${Date.now()}`, sender: 'user', text, sentAt: Date.now() };
 
     if (activeUnitId) {
       setFlowUnits((prev) =>
-        prev.map((unit) =>
-          unit.id === activeUnitId
-            ? {
-                ...unit,
-                messages: [
-                  ...unit.messages,
-                  userLine,
-                  {
-                    id: `o_${Date.now() + 1}`,
-                    sender: 'one',
-                    text: 'Updated. I logged this in your unit and adjusted the next steps.',
-                    sentAt: Date.now(),
-                  },
-                ],
-              }
-            : unit
-        )
+        prev.map((unit) => {
+          if (unit.id !== activeUnitId) return unit;
+          if (!unit.profileSlots?.length) {
+            return {
+              ...unit,
+              messages: [
+                ...unit.messages,
+                userLine,
+                {
+                  id: `o_${Date.now() + 1}`,
+                  sender: 'one',
+                  text: buildAgentUnitChatReply(unit, text, language),
+                  sentAt: Date.now(),
+                },
+              ],
+            };
+          }
+          const updated = applyProfileSlotsFromMessage(unit, text, language);
+          return {
+            ...updated,
+            messages: [
+              ...updated.messages,
+              userLine,
+              {
+                id: `o_${Date.now() + 1}`,
+                sender: 'one',
+                text: buildAdaptiveProfileReply(unit, updated, text, language),
+                sentAt: Date.now(),
+              },
+            ],
+          };
+        })
       );
       setNowValue('');
       setTimeout(() => setChatStatusPhase('planning'), 700);
       setTimeout(() => setChatStatusPhase('ready'), 1400);
       setTimeout(() => setChatStatusPhase('agent'), 2600);
-      return;
-    }
-
-    const intakeQuestions = [
-      'In which city?',
-      'What budget range should we target?',
-      'What timeline do you want?',
-    ];
-
-    if (intakeState) {
-      const nextAnswers = [...intakeState.answers, text];
-      const nextIndex = intakeState.questionIndex + 1;
-      setChatSheetMessages((prev) => [...prev, userLine]);
-      if (nextIndex < intakeQuestions.length) {
-        setIntakeState({ ...intakeState, questionIndex: nextIndex, answers: nextAnswers });
-        setChatSheetMessages((prev) => [
-          ...prev,
-          { id: `q_${Date.now()}`, sender: 'one', text: intakeQuestions[nextIndex], sentAt: Date.now() },
-        ]);
-      } else {
-        const intent = intakeState.intent.toLowerCase();
-        const isLicense = intent.includes('license') || intent.includes('רישיון');
-        const newUnitId = `unit_${Date.now()}`;
-        const [cityAns, , timelineAns] = nextAnswers;
-        const weeksGuess =
-          typeof timelineAns === 'string' && /\d+/.test(timelineAns)
-            ? Math.min(24, Math.max(2, parseInt(timelineAns.match(/\d+/)![0], 10)))
-            : 8;
-        const newUnit: FlowUnit = {
-          id: newUnitId,
-          worldId: effectiveChatWorldId,
-          title: isLicense ? 'רישיון נהיגה' : intakeState.intent.slice(0, 28),
-          subtitle: isLicense ? 'תיאוריה · שיעורים · מבחן מעשי' : 'יחידה חדשה שנוצרה מהשיחה',
-          emoji: isLicense ? '🚗' : '🧩',
-          status: 'active',
-          progress: 0,
-          steps: isLicense ? 25 : 10,
-          messages: [
-            {
-              id: `created_${Date.now()}`,
-              sender: 'one',
-              text: isLicense
-                ? 'היחידה נוצרה. נתחיל מהמסמכים והרשמה לתיאוריה — כתוב אם כבר יש לך תואם רפואי.'
-                : 'היחידה נוצרה. נפרק את המטרה לשלוש משימות ראשונות — מה הכי דחוף בשבילך?',
-              sentAt: Date.now(),
-            },
-          ],
-          goal: isLicense
-            ? 'לעבור תיאוריה, שיעורים ומבחן מעשי לרישיון נהיגה.'
-            : `להשלים: ${intakeState.intent.slice(0, 72)}`,
-          city: cityAns || 'לא צוין',
-          etaWeeks: weeksGuess,
-          budgetMinIls: isLicense ? 4500 : undefined,
-          budgetMaxIls: isLicense ? 7000 : undefined,
-          peopleRoles: [
-            { id: 'nu1', role: 'סוכן', name: 'ONE' },
-            { id: 'nu2', role: 'אחראי/ת', name: 'את/ה' },
-          ],
-          nextAction: isLicense
-            ? 'לאסוף תו רפואי וצילום ת.ז., ואז להירשם למבחן תיאוריה.'
-            : 'לנסח בשורה אחת מה נחשב «סיום מוצלח» ליחידה הזו.',
-          lastUpdatedLabel: 'נוצר עכשיו מהשיחה',
-          blockCount: isLicense ? 6 : 5,
-        };
-        setFlowUnits((prev) => [newUnit, ...prev]);
-        setPersonalOrbs((prev) => [
-          ...prev,
-          { id: newUnitId, emoji: newUnit.emoji, title: newUnit.title, subtitle: newUnit.subtitle },
-        ]);
-        setChatSheetMessages((prev) => [
-          ...prev,
-          {
-            id: `createdlog_${Date.now()}`,
-            sender: 'one',
-            text: `Created new unit: ${newUnit.title} (${newUnit.status})`,
-            sentAt: Date.now(),
-          },
-        ]);
-        setIntakeState(null);
-        setActiveUnitId(newUnitId);
-      }
-      setNowValue('');
-      setTimeout(() => setChatStatusPhase('planning'), 900);
-      setTimeout(() => setChatStatusPhase('ready'), 1800);
-      setTimeout(() => setChatStatusPhase('agent'), 3200);
       return;
     }
 
@@ -2098,30 +3734,92 @@ export function OneScreen() {
         {
           id: `open_${Date.now()}`,
           sender: 'one',
-          text: `Opening existing unit: ${matched.title}`,
+          text:
+            language === 'he'
+              ? `פותחים יחידה קיימת: ${matched.title}`
+              : `Opening existing unit: ${matched.title}`,
           sentAt: Date.now(),
         },
       ]);
       setActiveUnitId(matched.id);
     } else {
+      const tmpl = goalTemplateFromText(text, language, effectiveChatWorldId);
+      recordGoalTemplatePublicSignal(tmpl);
+      const newUnitId = `unit_${Date.now()}`;
+      const firstEmpty = tmpl.slots.find((s) => !s.optional) ?? tmpl.slots[0];
+      const he = language === 'he';
+      const newUnit: FlowUnit = {
+        id: newUnitId,
+        spaceId: tmpl.spaceId,
+        domainId: tmpl.domainId,
+        worldId: tmpl.worldId,
+        title: tmpl.title,
+        subtitle: tmpl.subtitle,
+        emoji: tmpl.emoji,
+        status: 'active',
+        progress: 6,
+        steps: tmpl.steps,
+        profileSlots: tmpl.slots.map((s) => ({ ...s })),
+        messages: [
+          {
+            id: `created_${Date.now()}`,
+            sender: 'one',
+            text: he
+              ? `היחידה «${tmpl.title}» נפתחה. מה ${firstEmpty?.label ?? 'הפרט הבא'}?`
+              : `Unit “${tmpl.title}” is open. What is ${firstEmpty?.label ?? 'next'}?`,
+            sentAt: Date.now(),
+          },
+        ],
+        goal: he ? `להגשים: ${text.slice(0, 120)}` : `Achieve: ${text.slice(0, 120)}`,
+        city: he ? 'לא צוין' : 'Not set',
+        etaWeeks: 8,
+        peopleRoles: [
+          { id: 'nu1', role: he ? 'סוכן' : 'Agent', name: 'ONE' },
+          { id: 'nu2', role: he ? 'אחראי/ת' : 'Owner', name: he ? 'את/ה' : 'You' },
+        ],
+        nextAction: firstEmpty ? (he ? `למלא: ${firstEmpty.label}` : `Fill: ${firstEmpty.label}`) : undefined,
+        lastUpdatedLabel: he ? 'נוצר עכשיו מהשיחה' : 'Created now from chat',
+        blockCount: 5,
+      };
+      setFlowUnits((prev) => [newUnit, ...prev]);
+      setPersonalOrbs((prev) =>
+        prev.some((p) => p.id === newUnit.id)
+          ? prev
+          : insertPersonalOrbsAfterOrigin(prev, [
+              { id: newUnitId, emoji: newUnit.emoji, title: newUnit.title, subtitle: newUnit.subtitle },
+            ])
+      );
+      const wi = WORLDS.findIndex((w) => w.id === tmpl.worldId);
+      if (wi >= 0) setWorldIndex(wi);
+      setChatPinnedWorldId(tmpl.worldId);
       setChatSheetMessages((prev) => [
         ...prev,
         userLine,
         {
-          id: `start_${Date.now()}`,
+          id: `createdlog_${Date.now()}`,
           sender: 'one',
-          text: 'I need a few details before creating your unit.',
+          text:
+            language === 'he'
+              ? `פתחתי יחידה חדשה: ${newUnit.title} · עולם ${worldTitle(tmpl.worldId, language)}`
+              : `Opened new unit: ${newUnit.title} · World ${worldTitle(tmpl.worldId, language)}`,
           sentAt: Date.now(),
         },
-        { id: `q0_${Date.now()}`, sender: 'one', text: intakeQuestions[0], sentAt: Date.now() },
       ]);
-      setIntakeState({ intent: text, questionIndex: 0, answers: [] });
+      setActiveUnitId(newUnitId);
     }
     setNowValue('');
     setTimeout(() => setChatStatusPhase('planning'), 900);
     setTimeout(() => setChatStatusPhase('ready'), 1800);
     setTimeout(() => setChatStatusPhase('agent'), 3200);
-  }, [nowValue, activeUnitId, intakeState, flowUnits, effectiveChatWorldId]);
+  }, [
+    nowValue,
+    activeUnitId,
+    flowUnits,
+    effectiveChatWorldId,
+    language,
+    agentUnitCreationMode,
+    commitAgentCreationGoal,
+  ]);
 
   const appendUserAttachmentMessage = useCallback(
     (text: string) => {
@@ -2245,16 +3943,98 @@ export function OneScreen() {
               he ? 'איש קשר, קבצים ומיקום יתווספו בגרסה הבאה.' : 'Contacts, files, and location sharing are planned next.'
             );
             return;
+          case 'attach_ctx_unit_done': {
+            setShowAttachSheet(false);
+            const title = activeUnit?.title?.trim() || (he ? 'יחידה' : 'Unit');
+            runAfterChatOpen(() =>
+              appendUserAttachmentMessage(
+                he
+                  ? `✅ «${title}»: סימנתי שהצעד הנוכחי בוצע — עדכנו אותי אם צריך לפצל צעדים.`
+                  : `✅ “${title}”: marked the current step as done—tell me if we should split the next steps.`
+              )
+            );
+            return;
+          }
+          case 'attach_ctx_unit_blocker': {
+            setShowAttachSheet(false);
+            const title = activeUnit?.title?.trim() || (he ? 'יחידה' : 'Unit');
+            runAfterChatOpen(() =>
+              appendUserAttachmentMessage(
+                he
+                  ? `🧱 «${title}»: יש חוסם או דחף — תארו במשפט מה עוצר אתכם.`
+                  : `🧱 “${title}”: there is a blocker or friction—describe in one sentence what is stuck.`
+              )
+            );
+            return;
+          }
+          case 'attach_ctx_unit_note': {
+            setShowAttachSheet(false);
+            const title = activeUnit?.title?.trim() || (he ? 'יחידה' : 'Unit');
+            runAfterChatOpen(() =>
+              appendUserAttachmentMessage(
+                he
+                  ? `📝 «${title}»: הערה לסוכן —`
+                  : `📝 “${title}”: note for the agent—`
+              )
+            );
+            return;
+          }
+          case 'attach_ctx_world_tip': {
+            setShowAttachSheet(false);
+            const wid = effectiveChatWorldId;
+            runAfterChatOpen(() => {
+              if (wid === 'finance' || wid === 'knowledge') {
+                appendUserAttachmentMessage(
+                  he
+                    ? `📋 עולם ${wid}: הדביקו שורה מהלוח (תנועה, נושא, שאלה) ואעזור לפרק לצעדים.`
+                    : `📋 ${wid} world: paste a line from the clipboard and I will help break it into steps.`
+                );
+              } else if (wid === 'health') {
+                appendUserAttachmentMessage(
+                  he
+                    ? '🩺 בריאות: מה מדדים השבוע (שינה, צעדים, דופק)? כתבו משפט אחד.'
+                    : '🩺 Health: what will you track this week (sleep, steps, HR)? One sentence.'
+                );
+              } else if (wid === 'business') {
+                appendUserAttachmentMessage(
+                  he
+                    ? '💼 עבודה: מה הדבר הבא שחייב לצאת? משימה אחת ברורה.'
+                    : '💼 Work: what is the single next deliverable?'
+                );
+              } else if (wid === 'leisure') {
+                appendUserAttachmentMessage(
+                  he
+                    ? '🎭 פנאי: מה בא לכם לתזמן או לגלות? רעיון קצר.'
+                    : '🎭 Leisure: what do you want to plan or discover? Short idea.'
+                );
+              } else if (wid === 'relations') {
+                appendUserAttachmentMessage(
+                  he
+                    ? '💬 קשרים: על מי או מה תרצו עדכון עדין? משפט אחד.'
+                    : '💬 Relationships: who or what deserves a gentle check-in? One sentence.'
+                );
+              } else {
+                appendUserAttachmentMessage(
+                  he ? '✨ עדכון קצר לסוכן לפי העולם הפעיל.' : '✨ Short update for the agent in the active world.'
+                );
+              }
+            });
+            return;
+          }
           default:
             setShowAttachSheet(false);
         }
       })();
     },
-    [language, openChatSheet, appendUserAttachmentMessage]
+    [language, openChatSheet, appendUserAttachmentMessage, activeUnit, effectiveChatWorldId]
   );
 
-  const topBarHeight = insets.top + BAR_EXTRA;
-  const bottomBarHeight = insets.bottom + BAR_EXTRA;
+  const topBarHeight =
+    viewMode === 'global' ? insets.top + GLOBAL_FADING_BG_STRIP_PX : insets.top + BAR_EXTRA;
+  const bottomBarHeight =
+    viewMode === 'global'
+      ? insets.bottom + GLOBAL_FADING_BG_STRIP_PX + GLOBAL_BOTTOM_CHROME_LIFT_PX
+      : insets.bottom + BAR_EXTRA;
   const paddingVertical = (windowHeight - WHEEL_ITEM_HEIGHT) / 2;
 
   const largeOrbSize = Math.min(contentWidth, windowHeight) * ORB_SIZE_RATIO;
@@ -2264,7 +4044,7 @@ export function OneScreen() {
   /** בגלגל: גודל במרכז – כדור גדול כשממורכז (אימוג'י + כותרת + תת־כותרת) */
   const centerOrbSize = Math.min(largeOrbSize * 0.92, WHEEL_ITEM_HEIGHT * 1.4, 380);
   /** שורה נוספת אחרי האורבים: ממורכזת או לחיצה → גלילה מיידית לכדור הסוכן */
-  const wheelSlotCount = currentOrbData.length + 1;
+  const wheelSlotCount = wheelOrbData.length + 1;
   const wheelSnapOffsets = useMemo(
     () => Array.from({ length: wheelSlotCount }, (_, i) => i * WHEEL_ITEM_HEIGHT),
     [wheelSlotCount]
@@ -2303,7 +4083,7 @@ export function OneScreen() {
         return;
       }
 
-      if (effectiveOrb > 0) {
+      if (effectiveOrb > AGENT_ORB_INDEX) {
         setUnitOrbSystemBarVisible(true);
         statusBarIdleRef.current = setTimeout(() => {
           fadeNeighborsOut();
@@ -2329,25 +4109,178 @@ export function OneScreen() {
   }, [resetInactivityTimer]);
 
   const jumpWheelToAgentOrb = useCallback(() => {
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-    setOrbIndex(0);
-    resetInactivityTimer({ orbIndex: 0 });
+    const y = AGENT_ORB_INDEX * WHEEL_ITEM_HEIGHT;
+    scrollRef.current?.scrollTo({ y, animated: true });
+    setOrbIndex(AGENT_ORB_INDEX);
+    resetInactivityTimer({ orbIndex: AGENT_ORB_INDEX });
   }, [resetInactivityTimer]);
+
+  /** לחיצה על פרצוף הסוכן בגלגל הבית → קלף פרופיל סוכן (כמו קיצור מיחידה) */
+  const openAgentProfileFromHomeOrb = useCallback(() => {
+    if (viewMode !== 'orb') return;
+    resetInactivityTimer({ orbIndex: AGENT_ORB_INDEX });
+    Keyboard.dismiss();
+    setChatOpenedFromOrbProfileShortcut(true);
+    setShowAttachSheet(false);
+    setShowCredits(false);
+    setShowChatMenu(false);
+    setAgentUnitCreationMode(false);
+    setActiveUnitId(null);
+    setChatPinnedWorldId(currentWorldId);
+    // חשוב: לא להציג מקלדת בפתיחת פרופיל מה־Home.
+    shouldRefocusComposerAfterChatOpenRef.current = false;
+    setChatSheetMessages([
+      { id: `seed_${Date.now()}`, sender: 'one', text: buildWorldAgentWelcome(currentWorldId), sentAt: Date.now() },
+    ]);
+
+    const openAndScrollTop = () => {
+      openChatProfile();
+      requestAnimationFrame(() => {
+        chatScrollRef.current?.scrollTo({ y: 0, animated: false });
+        lastChatScrollYRef.current = 0;
+      });
+    };
+
+    if (showChatSheetRef.current) {
+      openAndScrollTop();
+      return;
+    }
+
+    chatBackdropOpacity.setValue(0);
+    chatSheetTranslateY.setValue(windowHeight + 180);
+    setShowChatSheet(true);
+    requestAnimationFrame(() => {
+      openAndScrollTop();
+    });
+  }, [
+    viewMode,
+    resetInactivityTimer,
+    currentWorldId,
+    buildWorldAgentWelcome,
+    windowHeight,
+    openChatProfile,
+  ]);
+
+  const openGlobalMode = useCallback(() => {
+    if (viewModeRef.current !== 'orb') return;
+    if (orbIndexForPullRef.current !== AGENT_ORB_INDEX) return;
+    if (overlaysBlockGlobalRef.current) return;
+    if (showSplashOverlay) return;
+    preGlobalWorldIndexRef.current = worldIndexRef.current;
+    setViewMode('global');
+  }, [showSplashOverlay]);
+
+  /** פתיחת גלובל למרחב נתון — גם מתוך צ׳אט (אחרי סגירת הקלף) */
+  const navigateToGlobalForContext = useCallback(
+    (worldId: string) => {
+      preGlobalWorldIndexRef.current = worldIndexRef.current;
+      const wi = WORLDS.findIndex((w) => w.id === worldId);
+      if (wi >= 0) setWorldIndex(wi);
+      setChatPinnedWorldId(worldId);
+      const open = () => setViewMode('global');
+      if (showChatSheetRef.current) {
+        closeChatSheet({ direction: 'down', afterClose: open });
+      } else {
+        open();
+      }
+    },
+    [closeChatSheet]
+  );
+
+  const exitGlobalMode = useCallback(() => {
+    globalWheelNavigateFromScrollRef.current = false;
+    const restoreWi = preGlobalWorldIndexRef.current;
+    setWorldIndex(restoreWi);
+    setChatPinnedWorldId(WORLDS[restoreWi]?.id ?? WORLDS[0]?.id ?? 'personal');
+    setViewMode('orb');
+    const y = AGENT_ORB_INDEX * WHEEL_ITEM_HEIGHT;
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y, animated: false });
+      scrollY.setValue(y);
+      setOrbIndex(AGENT_ORB_INDEX);
+    });
+    resetInactivityTimer({ orbIndex: AGENT_ORB_INDEX });
+  }, [scrollY, resetInactivityTimer]);
+
+  useEffect(() => {
+    if (viewMode !== 'global') return;
+    globalEnterOpacity.setValue(0);
+    globalEnterTranslateY.setValue(22);
+    Animated.parallel([
+      Animated.timing(globalEnterOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.timing(globalEnterTranslateY, { toValue: 0, duration: 280, useNativeDriver: true }),
+    ]).start();
+  }, [viewMode, globalEnterOpacity, globalEnterTranslateY]);
+
+  const onOrbScrollMove = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      lastScrollYRef.current = y;
+      scrollY.setValue(y);
+      const H = WHEEL_ITEM_HEIGHT;
+      const liveRaw = Math.round(y / H);
+      const liveIndex = Math.max(0, Math.min(liveRaw, wheelOrbData.length - 1));
+      if (liveIndex !== orbIndexForPullRef.current) {
+        setOrbIndex(liveIndex);
+      }
+      resetInactivityTimer();
+      if (viewModeRef.current !== 'orb') return;
+      if (overlaysBlockGlobalRef.current) return;
+      if (showSplashOverlay) return;
+      const agentSnapY = AGENT_ORB_INDEX * H;
+      /** גלילה קצרה למעלה מהסוכן / אזור גלובל–סוכן → גלובל מיד (בלי להמתין למרכוז חץ הגלובל) */
+      if (
+        orbIndexForPullRef.current <= AGENT_ORB_INDEX &&
+        y >= 0 &&
+        y < agentSnapY - GLOBAL_WHEEL_EARLY_OPEN_SCROLL_PX &&
+        !globalWheelNavigateFromScrollRef.current
+      ) {
+        globalWheelNavigateFromScrollRef.current = true;
+        requestAnimationFrame(() => {
+          navigateToGlobalForContext(currentWorldId);
+        });
+        return;
+      }
+      if (orbIndexForPullRef.current !== AGENT_ORB_INDEX) return;
+      if (y < -GLOBAL_PULL_ENTER_PX) {
+        openGlobalMode();
+      }
+    },
+    [scrollY, wheelOrbData.length, resetInactivityTimer, openGlobalMode, showSplashOverlay, navigateToGlobalForContext, currentWorldId]
+  );
 
   const onOrbScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const y = e.nativeEvent.contentOffset.y;
       const H = WHEEL_ITEM_HEIGHT;
       const raw = Math.round(y / H);
-      if (raw >= currentOrbData.length) {
+      if (raw >= wheelOrbData.length) {
         jumpWheelToAgentOrb();
         return;
       }
-      const index = Math.max(0, Math.min(raw, currentOrbData.length - 1));
+      const index = Math.max(0, Math.min(raw, wheelOrbData.length - 1));
       setOrbIndex(index);
       resetInactivityTimer({ orbIndex: index });
+      if (
+        index === GLOBAL_ORB_INDEX &&
+        !globalWheelNavigateFromScrollRef.current &&
+        !overlaysBlockGlobalRef.current &&
+        !showSplashOverlay
+      ) {
+        globalWheelNavigateFromScrollRef.current = true;
+        requestAnimationFrame(() => {
+          navigateToGlobalForContext(currentWorldId);
+        });
+      }
     },
-    [currentOrbData.length, jumpWheelToAgentOrb, resetInactivityTimer]
+    [
+      wheelOrbData.length,
+      jumpWheelToAgentOrb,
+      resetInactivityTimer,
+      navigateToGlobalForContext,
+      currentWorldId,
+      showSplashOverlay,
+    ]
   );
 
   const renderOrbContent = useCallback((item: OrbItem, isSmall: boolean) => {
@@ -2387,15 +4320,49 @@ export function OneScreen() {
     scrollRef.current?.scrollTo({ y: index * WHEEL_ITEM_HEIGHT, animated: true });
   }, []);
 
+  /** אחרי יצירת יחידה ממסך המטרה — סגירת צ׳אט, מיקוד כדור בבית, פתיחת צ׳אט יחידה */
+  useEffect(() => {
+    if (showChatSheet) return;
+    const uid = pendingReopenUnitChatRef.current;
+    if (!uid) return;
+    const unit = flowUnits.find((u) => u.id === uid);
+    if (!unit) return;
+    pendingReopenUnitChatRef.current = null;
+    const wi = WORLDS.findIndex((w) => w.id === unit.worldId);
+    if (wi >= 0) setWorldIndex(wi);
+    setTimeout(() => {
+      const idx = wheelOrbDataRef.current.findIndex((o) => o.id === uid);
+      if (idx >= 0) {
+        setOrbIndex(idx);
+        scrollToOrb(idx);
+      }
+      setTimeout(() => {
+        setActiveUnitId(uid);
+        setChatPinnedWorldId(unit.worldId);
+        shouldRefocusComposerAfterChatOpenRef.current = true;
+        setShowChatSheet(true);
+      }, 380);
+    }, 90);
+  }, [showChatSheet, flowUnits, scrollToOrb]);
+
+  const stepOrb = useCallback((dir: 1 | -1) => {
+    const current = Math.max(0, Math.min(orbIndexForPullRef.current, wheelOrbData.length - 1));
+    const next = Math.max(0, Math.min(current + dir, wheelOrbData.length - 1));
+    if (next === current) return;
+    setOrbIndex(next);
+    resetInactivityTimer({ orbIndex: next });
+    scrollToOrb(next);
+  }, [wheelOrbData.length, resetInactivityTimer, scrollToOrb]);
+
   const handleHomeDoubleTap = useCallback(
     (tapY: number) => {
       const now = Date.now();
       const deltaMs = now - lastHomeTapAtRef.current;
       const deltaY = Math.abs(tapY - lastHomeTapYRef.current);
-      const goingToAgentOrb = orbIndex > 0 && deltaMs > 40 && deltaMs < 320 && deltaY < 56;
+      const goingToAgentOrb = orbIndex > AGENT_ORB_INDEX && deltaMs > 40 && deltaMs < 320 && deltaY < 56;
       if (goingToAgentOrb) {
-        scrollToOrb(0);
-        resetInactivityTimer({ orbIndex: 0 });
+        scrollToOrb(AGENT_ORB_INDEX);
+        resetInactivityTimer({ orbIndex: AGENT_ORB_INDEX });
       } else {
         resetInactivityTimer();
       }
@@ -2405,23 +4372,41 @@ export function OneScreen() {
     [orbIndex, resetInactivityTimer, scrollToOrb]
   );
 
-  /** במחשב: גלילה עם גלגלת העכבר מעבירה כדור אחד בכל פעם */
+  /** במחשב: גלילה עם גלגלת העכבר מעבירה כדור אחד בכל פעם; בראש הגלגל + גלילה למעלה → גלובל */
   const handleWheel = useCallback((e: { preventDefault?: () => void; nativeEvent?: { deltaY: number }; deltaY?: number }) => {
     if (Platform.OS !== 'web') return;
     resetInactivityTimer();
     e.preventDefault?.();
+    if (wheelStepLockRef.current) return;
     const deltaY = e.nativeEvent?.deltaY ?? (e as { deltaY: number }).deltaY ?? 0;
     const y = lastScrollYRef.current;
-    const i = Math.round(y / WHEEL_ITEM_HEIGHT);
-    const maxIndex = currentOrbData.length;
-    const next = deltaY > 0 ? Math.min(i + 1, maxIndex) : Math.max(i - 1, 0);
-    if (next !== i) scrollRef.current?.scrollTo({ y: next * WHEEL_ITEM_HEIGHT, animated: true });
-  }, [currentOrbData.length, resetInactivityTimer]);
+    const i = Math.max(0, Math.min(orbIndexForPullRef.current, wheelOrbData.length - 1));
+    const agentY = AGENT_ORB_INDEX * WHEEL_ITEM_HEIGHT;
+    if (
+      deltaY < 0 &&
+      i === AGENT_ORB_INDEX &&
+      y <= agentY + 1 &&
+      orbIndex === AGENT_ORB_INDEX &&
+      viewMode === 'orb' &&
+      !showSplashOverlay
+    ) {
+      openGlobalMode();
+      return;
+    }
+    wheelStepLockRef.current = true;
+    if (wheelStepLockTimerRef.current) clearTimeout(wheelStepLockTimerRef.current);
+    wheelStepLockTimerRef.current = setTimeout(() => {
+      wheelStepLockRef.current = false;
+    }, 160);
+    stepOrb(deltaY > 0 ? 1 : -1);
+  }, [wheelOrbData.length, resetInactivityTimer, viewMode, showSplashOverlay, openGlobalMode, stepOrb]);
 
   /** פריט אחד בגלגל: גודל כדור + opacity טקסט מונפשים לפי scroll (מעבר מהיר וחלק, בלי קפיצה). */
   const renderWheelItem = useCallback((item: OrbItem, index: number) => {
     const H = WHEEL_ITEM_HEIGHT;
     const i = index;
+    const isGlobalSlot = item.id === GLOBAL_WHEEL_ORB_ID;
+    const isAgentSlot = index === AGENT_ORB_INDEX;
     const inputRange = [i - 2, i - 1, i, i + 1, i + 2].map((x) => x * H);
     const scale = scrollY.interpolate({
       inputRange,
@@ -2434,23 +4419,32 @@ export function OneScreen() {
       extrapolate: 'clamp',
     });
     /** מעבר גודל מהיר: קטן → גדול במרכז על ~0.25 שורות גלילה */
-    const sizeRange = [(i - 1) * H, (i - 0.25) * H, i * H, (i + 0.25) * H, (i + 1) * H];
+    const sizeRange = [(i - 1) * H, (i - 0.42) * H, i * H, (i + 0.42) * H, (i + 1) * H];
+    const agentCenterOrbPeak = centerOrbSize + WHEEL_AGENT_CENTER_ORB_EXTRA_PX;
     const orbSize = scrollY.interpolate({
       inputRange: sizeRange,
-      outputRange: [wheelOrbSize, wheelOrbSize, centerOrbSize, wheelOrbSize, wheelOrbSize],
+      outputRange: isAgentSlot
+        ? [wheelOrbSize, wheelOrbSize, agentCenterOrbPeak, wheelOrbSize, wheelOrbSize]
+        : [wheelOrbSize, wheelOrbSize, centerOrbSize, wheelOrbSize, wheelOrbSize],
+      extrapolate: 'clamp',
+    });
+    /** סקייל פנימי רציף לאימוג׳י/פרצוף כדי למנוע "קפיצות" כשהכדור קטן מהמרכז */
+    const wheelInnerContentScale = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: isAgentSlot ? [0.78, 0.9, 1, 0.9, 0.78] : [0.74, 0.88, 1, 0.88, 0.74],
       extrapolate: 'clamp',
     });
     /** טקסט מופיע מהר – טווח רחב ל־1 כדי שבחזרה לכדור ראשי התוכן נראה מיד */
-    const textOpacityRange = [(i - 0.5) * H, (i - 0.28) * H, (i + 0.28) * H, (i + 0.5) * H];
+    const textOpacityRange = [(i - 0.38) * H, (i - 0.16) * H, (i + 0.16) * H, (i + 0.38) * H];
     const textOpacity = scrollY.interpolate({
       inputRange: textOpacityRange,
       outputRange: [0, 1, 1, 0],
       extrapolate: 'clamp',
     });
-    /** כדור הסוכן מוגבה מעל לכותרת – רווח ביניהם כשממורכז */
+    /** כדור הסוכן מוגבה מעל לכותרת – רווח ביניהם כשממורכז (גדלנו כי הפרצוף צריך לצאת מעל המסכה + תאג מתחת) */
     const emojiMarginTop = scrollY.interpolate({
       inputRange: sizeRange,
-      outputRange: [0, 0, index === 0 ? -142 : -135, 0, 0],
+      outputRange: [0, 0, isAgentSlot ? -162 : -135, 0, 0],
       extrapolate: 'clamp',
     });
     const textBlockMarginTop = scrollY.interpolate({
@@ -2464,6 +4458,35 @@ export function OneScreen() {
       outputRange: [0, 0, -33, 0, 0],
       extrapolate: 'clamp',
     });
+    /** פרצוף/איקון סוכן: במרכז — 25px מעלה נוספים; בשכנים — כמו קודם (לא נדחף לתוך המסכה) */
+    const wheelEmojiInnerTranslateY = scrollY.interpolate({
+      inputRange: sizeRange,
+      outputRange: isAgentSlot
+        ? [
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y - WHEEL_AGENT_FACE_EXTRA_LIFT_WHEN_CENTERED_PX,
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+          ]
+        : [
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+            WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+          ],
+      extrapolate: 'clamp',
+    });
+    /** מבט למעלה/מטה לפי מיקום גלילה (לא קפיצה רק אחרי snap לכדור) */
+    const agentEyesPersonalGazeY =
+      isAgentSlot
+        ? scrollY.interpolate({
+            inputRange: [(AGENT_ORB_INDEX - 1) * H, AGENT_ORB_INDEX * H, (AGENT_ORB_INDEX + 1) * H],
+            outputRange: [-1.8, 0, 2.4],
+            extrapolate: 'clamp',
+          })
+        : null;
     /** הכדור הממורכז (ראש הסוכן) מוגבה 15px למעלה */
     const orbTranslateY = scrollY.interpolate({
       inputRange: sizeRange,
@@ -2479,42 +4502,67 @@ export function OneScreen() {
     /** שכבה כפולה: opacity מהגלילה × fade שכנים — בלי Animated.multiply (לא תואם width/height אנימטיביים ב־native driver) */
     const neighborFadeOpacity = index === orbIndex ? 1 : peripheralOrbsOpacity;
     const debugOutline = SHOW_ORB_DEBUG_OUTLINE ? styles.orbDebugOutline : undefined;
-    /** רקע עיגול הסוכן רק בכדור הראשון – צבע לפי מצב כהה/בהיר */
-    const emojiCircleBg = index === 0 ? agentCircleColor : 'transparent';
-    /** גודל עיגול הסוכן: מלא בראשי, קטן בשאר העולמות */
-    const agentCircleSize = index === 0 && currentWorldId !== 'personal'
-      ? AGENT_CIRCLE_SIZE_OTHER_WORLDS
-      : EMOJI_CIRCLE_SIZE;
-    const agentIconSize = index === 0 && currentWorldId !== 'personal'
-      ? Math.round(WORLD_ICON_SIZE * AGENT_CIRCLE_SIZE_OTHER_WORLDS / EMOJI_CIRCLE_SIZE)
-      : WORLD_ICON_SIZE;
-    const unitProgress = index === 0 ? null : flowUnits.find((u) => u.id === item.id)?.progress;
+    /** רקע עיגול הסוכן — תמיד שקוף (OrbAgent מצייר בעצמו) */
+    const emojiCircleBg = isAgentSlot ? 'transparent' : 'transparent';
+    /** גודל עיגול הסוכן — תמיד מלא (פרצוף בכל העולמות) */
+    const agentCircleSize = EMOJI_CIRCLE_SIZE;
+    const agentIconSize = WORLD_ICON_SIZE;
+    const unitProgress = isAgentSlot || isGlobalSlot ? null : flowUnits.find((u) => u.id === item.id)?.progress;
     const unitProgressPct = unitProgress != null ? Math.max(0, Math.min(100, unitProgress)) / 100 : null;
     const unitProgressColor = progressColorByPct(unitProgressPct ?? 0, isDark);
     /** כדור ראשון מתחת לסוכן: כשהוא קטן — חץ מטה; כשמתקרב למרכז — חזרה לאימוג'י */
+    const hintScrollBase = AGENT_ORB_INDEX * H;
     const firstNeighborScrollHintArrowOpacity =
-      index === 1
+      index === AGENT_ORB_INDEX + 1
         ? scrollY.interpolate({
-            inputRange: [0, H * 0.38, H * 0.72],
+            inputRange: [hintScrollBase, hintScrollBase + H * 0.38, hintScrollBase + H * 0.72],
             outputRange: [1, 0.22, 0],
             extrapolate: 'clamp',
           })
         : null;
     const firstNeighborScrollHintEmojiOpacity =
-      index === 1
+      index === AGENT_ORB_INDEX + 1
         ? scrollY.interpolate({
-            inputRange: [0, H * 0.34, H * 0.72],
+            inputRange: [hintScrollBase, hintScrollBase + H * 0.34, hintScrollBase + H * 0.72],
             outputRange: [0, 0.72, 1],
             extrapolate: 'clamp',
           })
         : null;
-    const scrollHintArrowSize = Math.max(20, Math.round(agentCircleSize * 0.44));
+    const scrollHintArrowSize = Math.max(20, Math.round(EMOJI_CIRCLE_SIZE * 0.44));
+    /** היסט נוסף לשורת הכדור מתחת לסוכן — מירבי כשהסוכן ממורכז; מתאפס כשהכדור הזה מתמרכן */
+    const rowTranslateY =
+      index === AGENT_ORB_INDEX + 1
+        ? Animated.add(
+            Animated.add(orbTranslateY, neighborDownShift),
+            scrollY.interpolate({
+              inputRange: [H * 0.9, H, 2 * H],
+              outputRange: [0, 50, 0],
+              extrapolate: 'clamp',
+            })
+          )
+        : Animated.add(orbTranslateY, neighborDownShift);
     return (
       <TouchableOpacity
         key={item.id}
         activeOpacity={1}
+        onLongPress={() => {
+          if (isAgentSlot && orbIndex === index) setShowSpacePicker(true);
+        }}
+        delayLongPress={340}
         onPress={() => {
           resetInactivityTimer({ orbIndex: index });
+          if (orbIndex === index) {
+            if (isGlobalSlot) {
+              navigateToGlobalForContext(currentWorldId);
+              return;
+            }
+            if (isAgentSlot) {
+              openAgentProfileFromHomeOrb();
+              return;
+            }
+            /** סוכן/יחידה: קידום ברודקאסט רק מלחיצה על אזור הטקסט (חצי שמאל/ימין) */
+            return;
+          }
           scrollToOrb(index);
         }}
         style={styles.wheelItemTouch}
@@ -2525,7 +4573,7 @@ export function OneScreen() {
             {
               height: H,
               opacity,
-              transform: [{ scale }, { translateY: Animated.add(orbTranslateY, neighborDownShift) }],
+              transform: [{ scale }, { translateY: rowTranslateY }],
             },
           ]}
         >
@@ -2539,42 +4587,62 @@ export function OneScreen() {
                   width: orbSize,
                   height: orbSize,
                   borderRadius: 999,
+                  overflow: isAgentSlot ? ('visible' as const) : ('hidden' as const),
                 },
               ]}
             >
-            <View style={styles.wheelOrbInner}>
-              <Animated.View style={{ marginTop: Animated.add(emojiMarginTop, centerContentLift), transform: [{ translateY: -10 }] }}>
-                <View
-                  ref={index === 0 ? wheelOrbRef : undefined}
+            <View style={[styles.wheelOrbInner, isAgentSlot ? { overflow: 'visible' as const } : null]}>
+              <Animated.View
+                style={{
+                  marginTop: Animated.add(emojiMarginTop, centerContentLift),
+                  transform: [
+                    { translateY: wheelEmojiInnerTranslateY },
+                    { scale: isGlobalSlot || index === AGENT_ORB_INDEX + 1 ? 1 : wheelInnerContentScale },
+                  ],
+                }}
+              >
+                <Animated.View
+                  ref={isAgentSlot ? wheelOrbRef : undefined}
                   style={[
                     styles.wheelOrbEmojiCircle,
                     {
                       width: agentCircleSize,
                       height: agentCircleSize,
                       borderRadius: agentCircleSize / 2,
-                      borderWidth: EMOJI_CIRCLE_BORDER_WIDTH,
-                      borderColor: EMOJI_CIRCLE_BORDER_COLOR,
+                      borderWidth: isGlobalSlot ? 0 : EMOJI_CIRCLE_BORDER_WIDTH,
+                      borderColor: isGlobalSlot ? 'transparent' : EMOJI_CIRCLE_BORDER_COLOR,
                       backgroundColor: emojiCircleBg,
                     },
                   ]}
                 >
-                  {index === 0 ? (
-                    currentWorldId === 'personal' ? (
-                      <AgentEyes />
-                    ) : currentWorldId === 'business' ? (
-                      <BusinessIconSvg size={agentIconSize} color={currentWorldColor} />
-                    ) : currentWorldId === 'health' ? (
-                      <HealthIconSvg size={agentIconSize} color={currentWorldColor} />
-                    ) : currentWorldId === 'finance' ? (
-                      <FinanceIconSvg size={agentIconSize} color={currentWorldColor} />
-                    ) : currentWorldId === 'knowledge' ? (
-                      <KnowledgeIconSvg size={agentIconSize} color={currentWorldColor} />
-                    ) : currentWorldId === 'leisure' ? (
-                      <LeisureIconSvg size={agentIconSize} color={currentWorldColor} />
-                    ) : currentWorldId === 'relations' ? (
-                      <RelationsIconSvg size={agentIconSize} color={currentWorldColor} />
-                    ) : null
-                  ) : index === 1 && firstNeighborScrollHintArrowOpacity && firstNeighborScrollHintEmojiOpacity ? (
+                  {isGlobalSlot ? (
+                    <View
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        height: '100%',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        transform: [{ translateY: 6 }],
+                      }}
+                    >
+                      <OrbScrollUpHintSvg size={scrollHintArrowSize} color={colors.text} />
+                    </View>
+                  ) : isAgentSlot ? (
+                      <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+                        <OrbAgent
+                          size={agentCircleSize}
+                          state="idle"
+                          mode="home"
+                          showFace
+                          gazeX={agentWorldLookX}
+                          gazeY={agentEyesPersonalGazeY ?? 0}
+                          labelLines={[]}
+                          tappable={orbIndex === index}
+                          onPress={openAgentProfileFromHomeOrb}
+                        />
+                      </View>
+                  ) : index === AGENT_ORB_INDEX + 1 && firstNeighborScrollHintArrowOpacity && firstNeighborScrollHintEmojiOpacity ? (
                     <View
                       style={{
                         position: 'relative',
@@ -2588,7 +4656,12 @@ export function OneScreen() {
                         pointerEvents="none"
                         style={[
                           StyleSheet.absoluteFillObject,
-                          { justifyContent: 'center', alignItems: 'center', opacity: firstNeighborScrollHintArrowOpacity },
+                          {
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            opacity: firstNeighborScrollHintArrowOpacity,
+                            transform: [{ translateY: 16 }],
+                          },
                         ]}
                       >
                         <OrbScrollDownHintSvg size={scrollHintArrowSize} color={colors.text} />
@@ -2606,36 +4679,131 @@ export function OneScreen() {
                   ) : (
                     <Text style={styles.wheelOrbEmoji}>{item.emoji}</Text>
                   )}
-                </View>
+                </Animated.View>
               </Animated.View>
-              {index !== 0 ? <View pointerEvents="none" style={styles.wheelOrbBottomSafeArea} /> : null}
+              {!isAgentSlot ? <View pointerEvents="none" style={styles.wheelOrbBottomSafeArea} /> : null}
+              {isAgentSlot ? (() => {
+                const tagColor = currentWorldColor === '#ffffff' ? colors.textSecondary : currentWorldColor;
+                return (
+                <Animated.View
+                  pointerEvents={orbIndex === index ? 'box-none' : 'none'}
+                  style={[
+                    styles.agentWorldTagWrap,
+                    { opacity: textOpacity, transform: [{ translateY: centerContentLift }] },
+                  ]}
+                >
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    style={[
+                      styles.agentWorldTag,
+                      {
+                        backgroundColor: hexToRgba(tagColor, isDark ? 0.18 : 0.12),
+                        borderColor: hexToRgba(tagColor, isDark ? 0.38 : 0.28),
+                      },
+                    ]}
+                    onPress={() => setWorldIndex(cycleWorldNext)}
+                    {...(orbIndex === index ? worldSwipeResponder.panHandlers : {})}
+                  >
+                    <Text style={[styles.agentWorldTagText, { color: tagColor }]}>
+                      {worldTitle(currentWorldId, language)}
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
+                );
+              })() : null}
               <Animated.View
-                style={[styles.wheelOrbTextBlock, { opacity: textOpacity, marginTop: Animated.add(textBlockMarginTop, centerContentLift) }]}
-                pointerEvents="none"
+                style={[
+                  styles.wheelOrbTextBlock,
+                  { opacity: textOpacity, marginTop: Animated.add(textBlockMarginTop, centerContentLift) },
+                ]}
+                pointerEvents={orbIndex === index && !isGlobalSlot ? 'box-none' : 'none'}
               >
-                {index === 0 ? (
-                  <FadeBroadcastBlock
-                    messages={BROADCAST_BY_WORLD[currentWorldId] ?? []}
-                    visible={orbIndex === 0 && index === 0}
-                    titleColor={theme === 'dark' ? '#ffffff' : colors.text}
-                    subtitleColor={colors.textSecondary}
-                    fixedTitle={currentWorldId === 'personal' ? personalGreeting : (WORLDS[worldIndex]?.label ?? '')}
-                    onBroadcastLoopComplete={() => {
-                      if (showChatSheetRef.current) return;
-                      setWorldIndex((wi) => (wi + 1) % WORLDS.length);
-                    }}
-                  />
+                {isGlobalSlot ? (
+                  <Text style={[styles.wheelOrbSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
                 ) : (
-                  <FadeBroadcastBlock
-                    messages={broadcastMessagesForOrbItem(item, flowUnits)}
-                    visible={orbIndex === index}
-                    titleColor={colors.text}
-                    subtitleColor={colors.textSecondary}
-                    fixedTitle={item.title}
-                    titleProgressPct={orbIndex === index ? unitProgressPct : null}
-                    titleProgressColor={unitProgressColor}
-                    titleProgressTrackColor={hexToRgba(colors.textSecondary, isDark ? 0.34 : 0.18)}
-                  />
+                  <View
+                    style={styles.wheelOrbBroadcastTapPad}
+                    onLayout={(ev) => {
+                      broadcastPadWidthByOrbRef.current[index] = ev.nativeEvent.layout.width;
+                    }}
+                  >
+                    <Pressable
+                      style={StyleSheet.absoluteFillObject}
+                      disabled={orbIndex !== index}
+                      onPress={(e) => {
+                        if (orbIndex !== index) return;
+                        const w = broadcastPadWidthByOrbRef.current[index] || 1;
+                        const x = e.nativeEvent.locationX;
+                        /** נקודות למטה: ימין/שמאל פיזי; תוכן ההודעה — הפוך (ימין = קדימה בהתאם לקריאה) */
+                        const onPhysicalRightHalf = x >= w / 2;
+                        triggerBroadcastDotFlash(onPhysicalRightHalf ? 'right' : 'left');
+                        const advanceBroadcast = !onPhysicalRightHalf;
+                        if (isAgentSlot) {
+                          if (advanceBroadcast) setAgentBroadcastKick((k) => k + 1);
+                          else setAgentBroadcastBackwardKick((k) => k + 1);
+                        } else if (advanceBroadcast) {
+                          setUnitBroadcastKickByOrbId((prev) => ({
+                            ...prev,
+                            [item.id]: (prev[item.id] ?? 0) + 1,
+                          }));
+                        } else {
+                          setUnitBroadcastBackwardByOrbId((prev) => ({
+                            ...prev,
+                            [item.id]: (prev[item.id] ?? 0) + 1,
+                          }));
+                        }
+                      }}
+                    >
+                    {isAgentSlot ? (
+                      <FadeBroadcastBlock
+                        messages={broadcastMessagesForAgentWorld(currentWorldId, language, flowUnits)}
+                        visible={orbIndex === index}
+                        titleColor={theme === 'dark' ? '#ffffff' : colors.text}
+                        subtitleColor={colors.textSecondary}
+                        fixedTitle={
+                          currentWorldId === 'personal' ? personalGreeting : worldTitle(currentWorldId, language)
+                        }
+                        advanceRequest={agentBroadcastKick}
+                        backwardRequest={agentBroadcastBackwardKick}
+                        onBroadcastLoopComplete={() => {
+                          if (showChatSheetRef.current || showAttachSheetRef.current) return;
+                          setWorldIndex((wi) => cycleWorldNext(wi));
+                        }}
+                        onBroadcastLoopBackwardComplete={() => {
+                          if (showChatSheetRef.current || showAttachSheetRef.current) return;
+                          setWorldIndex((wi) => cycleWorldPrev(wi));
+                        }}
+                        titleTextAlign="center"
+                        subtitleTextAlign="center"
+                        writingDirection={language === 'he' ? 'rtl' : undefined}
+                        primaryTitleOffsetY={WHEEL_AGENT_BROADCAST_PRIMARY_TITLE_OFFSET_Y}
+                        subtitleMarginTop={WHEEL_AGENT_BROADCAST_SUBTITLE_MARGIN_TOP}
+                      />
+                    ) : (
+                      <FadeBroadcastBlock
+                        messages={broadcastMessagesForOrbItem(item, flowUnits, language)}
+                        visible={orbIndex === index}
+                        titleColor={colors.text}
+                        subtitleColor={colors.textSecondary}
+                        fixedTitle={item.title}
+                        titleProgressPct={orbIndex === index ? unitProgressPct : null}
+                        titleProgressColor={unitProgressColor}
+                        titleProgressTrackColor={hexToRgba(colors.textSecondary, isDark ? 0.34 : 0.18)}
+                        advanceRequest={unitBroadcastKickByOrbId[item.id] ?? 0}
+                        backwardRequest={unitBroadcastBackwardByOrbId[item.id] ?? 0}
+                        onBroadcastLoopComplete={() => {
+                          if (showChatSheetRef.current || showAttachSheetRef.current) return;
+                          scrollToOrb(Math.min(index + 1, wheelOrbData.length));
+                        }}
+                        titleTextAlign="center"
+                        subtitleTextAlign="center"
+                        writingDirection={language === 'he' ? 'rtl' : undefined}
+                      />
+                    )}
+                    </Pressable>
+                  </View>
                 )}
               </Animated.View>
             </View>
@@ -2654,7 +4822,7 @@ export function OneScreen() {
     isDark,
     peripheralOrbsOpacity,
     orbIndex,
-    currentOrbData,
+    wheelOrbData,
     agentCircleColor,
     currentWorldId,
     currentWorldColor,
@@ -2662,12 +4830,24 @@ export function OneScreen() {
     flowUnits,
     resetInactivityTimer,
     setWorldIndex,
+    agentBroadcastKick,
+    agentBroadcastBackwardKick,
+    unitBroadcastKickByOrbId,
+    unitBroadcastBackwardByOrbId,
+    triggerBroadcastDotFlash,
+    language,
+    navigateToGlobalForContext,
+    personalGreeting,
+    worldIndex,
+    cycleWorldNext,
+    cycleWorldPrev,
+    openAgentProfileFromHomeOrb,
   ]);
 
   /** כדור־שליח אחרי האורב האחרון: ממורכז או לחיצה → קפיצה לכדור הסוכן */
   const renderWheelTopSentinel = useCallback(() => {
     const H = WHEEL_ITEM_HEIGHT;
-    const i = currentOrbData.length;
+    const i = wheelOrbData.length;
     const inputRange = [i - 2, i - 1, i, i + 1, i + 2].map((x) => x * H);
     const scale = scrollY.interpolate({
       inputRange,
@@ -2679,13 +4859,13 @@ export function OneScreen() {
       outputRange: [0.35, 0.7, 1, 0.7, 0.35],
       extrapolate: 'clamp',
     });
-    const sizeRange = [(i - 1) * H, (i - 0.25) * H, i * H, (i + 0.25) * H, (i + 1) * H];
+    const sizeRange = [(i - 1) * H, (i - 0.42) * H, i * H, (i + 0.42) * H, (i + 1) * H];
     const orbSize = scrollY.interpolate({
       inputRange: sizeRange,
       outputRange: [wheelOrbSize, wheelOrbSize, centerOrbSize, wheelOrbSize, wheelOrbSize],
       extrapolate: 'clamp',
     });
-    const textOpacityRange = [(i - 0.5) * H, (i - 0.28) * H, (i + 0.28) * H, (i + 0.5) * H];
+    const textOpacityRange = [(i - 0.38) * H, (i - 0.16) * H, (i + 0.16) * H, (i + 0.38) * H];
     const textOpacity = scrollY.interpolate({
       inputRange: textOpacityRange,
       outputRange: [0, 1, 1, 0],
@@ -2720,13 +4900,27 @@ export function OneScreen() {
     const debugOutline = SHOW_ORB_DEBUG_OUTLINE ? styles.orbDebugOutline : undefined;
     const circleSize = EMOJI_CIRCLE_SIZE;
     const hintSize = Math.max(20, Math.round(circleSize * 0.44));
-    const sentinelLabel = language === 'he' ? 'חזרה לסוכן' : 'Back to agent';
+    const hasOpenUnitsInWorld = flowUnits.some((u) => u.worldId === currentWorldId && u.status !== 'done');
+    const sentinelLabel = hasOpenUnitsInWorld
+      ? language === 'he'
+        ? 'חזרה לסוכן'
+        : 'Back to agent'
+      : language === 'he'
+        ? 'צ׳אט סוכן'
+        : 'Agent chat';
 
     return (
       <TouchableOpacity
         key="__wheel_top_sentinel__"
         activeOpacity={1}
-        onPress={jumpWheelToAgentOrb}
+        onPress={() => {
+          if (hasOpenUnitsInWorld) {
+            jumpWheelToAgentOrb();
+            return;
+          }
+          resetInactivityTimer();
+          openChatSheet();
+        }}
         style={styles.wheelItemTouch}
       >
         <Animated.View
@@ -2769,7 +4963,11 @@ export function OneScreen() {
                       },
                     ]}
                   >
-                    <OrbScrollUpHintSvg size={hintSize} color={colors.text} />
+                    {hasOpenUnitsInWorld ? (
+                      <OrbScrollUpHintSvg size={hintSize} color={colors.text} />
+                    ) : (
+                      <PlusIconSvg size={hintSize} color={colors.text} />
+                    )}
                   </View>
                 </Animated.View>
                 <View pointerEvents="none" style={styles.wheelOrbBottomSafeArea} />
@@ -2793,26 +4991,56 @@ export function OneScreen() {
     centerOrbSize,
     colors,
     jumpWheelToAgentOrb,
-    currentOrbData.length,
+    wheelOrbData.length,
     language,
+    flowUnits,
+    currentWorldId,
+    openChatSheet,
+    resetInactivityTimer,
   ]);
 
   const wheelContentHeight = paddingVertical * 2 + wheelSlotCount * WHEEL_ITEM_HEIGHT;
 
-  /** החלפת עולם – גלילה חזרה לכדור הראשון */
+  /** החלפת עולם – גלילה חזרה לכדור הסוכן + איפוס קידום ברודקאסט בטאפ */
   useEffect(() => {
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
-    scrollY.setValue(0);
-    setOrbIndex(0);
+    const y = AGENT_ORB_INDEX * WHEEL_ITEM_HEIGHT;
+    scrollRef.current?.scrollTo({ y, animated: false });
+    scrollY.setValue(y);
+    setOrbIndex(AGENT_ORB_INDEX);
+    setAgentBroadcastKick(0);
+    setUnitBroadcastKickByOrbId({});
   }, [worldIndex]);
 
-  /** לופ אינסופי: מראשי שמאלה → כלכלה, מכלכלה ימינה → ראשי */
-  const cycleWorldPrev = (prev: number) => (prev - 1 + WORLDS.length) % WORLDS.length;
-  const cycleWorldNext = (prev: number) => (prev + 1) % WORLDS.length;
+  useEffect(
+    () => () => {
+      if (wheelStepLockTimerRef.current) clearTimeout(wheelStepLockTimerRef.current);
+    },
+    []
+  );
 
-  /** במחשב: חצים ימינה/שמאלה בכדור הראשון – החלפת עולם (לופ) */
+  /** לופ עולמות בבית: רק עולמות שיש בהם תהליך פתוח (או עולם ראשי של החשבון) */
+  function cycleWorldPrev(prev: number): number {
+    const allowed = activeHomeWorldIds
+      .map((id) => WORLDS.findIndex((w) => w.id === id))
+      .filter((idx) => idx >= 0);
+    if (allowed.length === 0) return prev;
+    const pos = allowed.indexOf(prev);
+    const base = pos >= 0 ? pos : 0;
+    return allowed[(base - 1 + allowed.length) % allowed.length];
+  }
+  function cycleWorldNext(prev: number): number {
+    const allowed = activeHomeWorldIds
+      .map((id) => WORLDS.findIndex((w) => w.id === id))
+      .filter((idx) => idx >= 0);
+    if (allowed.length === 0) return prev;
+    const pos = allowed.indexOf(prev);
+    const base = pos >= 0 ? pos : 0;
+    return allowed[(base + 1) % allowed.length];
+  }
+
+  /** במחשב: חצים ימינה/שמאלה בכדור הסוכן – החלפת עולם (לופ) */
   useEffect(() => {
-    if (Platform.OS !== 'web' || orbIndex !== 0) return;
+    if (Platform.OS !== 'web' || orbIndex !== AGENT_ORB_INDEX || viewMode !== 'orb') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
         setWorldIndex(cycleWorldPrev);
@@ -2824,9 +5052,25 @@ export function OneScreen() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [orbIndex]);
+  }, [orbIndex, viewMode, cycleWorldPrev, cycleWorldNext]);
 
-  /** סוויפ אופקי (רק בכדור הראשון) – החלפת עולם בלופ אינסופי */
+  /** במחשב: חצי מעלה/מטה (וגם Ctrl+Tab / Ctrl+Shift+Tab) לדילוג מהיר בין כדורים */
+  useEffect(() => {
+    if (Platform.OS !== 'web' || viewMode !== 'orb') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'Tab' && !e.shiftKey)) {
+        e.preventDefault();
+        stepOrb(1);
+      } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'Tab' && e.shiftKey)) {
+        e.preventDefault();
+        stepOrb(-1);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [viewMode, stepOrb]);
+
+  /** סוויפ אופקי (רק בכדור הסוכן) – החלפת עולם בלופ אינסופי */
   const worldSwipeResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy),
@@ -2837,12 +5081,47 @@ export function OneScreen() {
     })
   ).current;
 
+  /** מובייל: גרירה אנכית מהירה לדילוג רציף בין כדורים */
+  const mobileWheelQuickNavResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) =>
+          Platform.OS !== 'web' && viewModeRef.current === 'orb' && Math.abs(g.dy) > 14 && Math.abs(g.dy) > Math.abs(g.dx),
+        onPanResponderGrant: () => {
+          mobileQuickDragDeltaRef.current = 0;
+          setMobileQuickDragActive(true);
+        },
+        onPanResponderMove: (_, g) => {
+          const delta = g.dy - mobileQuickDragDeltaRef.current;
+          const STEP_PX = 46;
+          if (Math.abs(delta) < STEP_PX) return;
+          const steps = Math.floor(Math.abs(delta) / STEP_PX);
+          const dir: 1 | -1 = delta > 0 ? -1 : 1;
+          for (let i = 0; i < steps; i += 1) stepOrb(dir);
+          mobileQuickDragDeltaRef.current += (delta > 0 ? 1 : -1) * steps * STEP_PX;
+        },
+        onPanResponderTerminationRequest: () => true,
+        onPanResponderRelease: () => {
+          setMobileQuickDragActive(false);
+        },
+        onPanResponderTerminate: () => {
+          setMobileQuickDragActive(false);
+        },
+      }),
+    [stepOrb]
+  );
+
   /** גרדיאנט: [מלא, …, שקוף] – שני הברים מלא בקצה המכשיר, שקוף לכיוון התוכן. */
   const gradientColorsBase = GRADIENT_STOPS.map((_, i) =>
     hexToRgba(colors.background, ALPHAS[i])
   ) as unknown as readonly [ColorValue, ColorValue, ...ColorValue[]];
   const gradientColorsFromOpaque = [...gradientColorsBase].reverse() as unknown as readonly [ColorValue, ColorValue, ...ColorValue[]];
   const gradientLocations = GRADIENT_STOPS as unknown as readonly [number, number, ...number[]];
+  /** גלובל: כמו fading-bg.svg — רקע מלא בקצה (שעון למעלה / אזור X למטה) → שקוף לכיוון התוכן */
+  const globalChromeFadeColors = useMemo(
+    () => [colors.background, hexToRgba(colors.background, 0)] as readonly [string, string],
+    [colors.background]
+  );
 
   const ovalBottomLight = theme === 'light' ? '#e8e8e8' : '#181818';
   const ovalMidLight = theme === 'light' ? '#f0f0f0' : '#181818';
@@ -2862,7 +5141,7 @@ export function OneScreen() {
   const hideStatusBarForAgentOrbHome =
     Platform.OS !== 'web' &&
     viewMode === 'orb' &&
-    orbIndex === 0 &&
+    orbIndex === AGENT_ORB_INDEX &&
     !showChatSheet &&
     !showCredits &&
     !showAttachSheet &&
@@ -2872,7 +5151,7 @@ export function OneScreen() {
   const hideStatusBarForUnitOrbIdle =
     Platform.OS !== 'web' &&
     viewMode === 'orb' &&
-    orbIndex > 0 &&
+    orbIndex > AGENT_ORB_INDEX &&
     !unitOrbSystemBarVisible &&
     !showChatSheet &&
     !showCredits &&
@@ -2880,6 +5159,14 @@ export function OneScreen() {
     !showAgentCard;
 
   const systemStatusBarHidden = hideStatusBarForAgentOrbHome || hideStatusBarForUnitOrbIdle;
+
+  const creditsFloatingVisible =
+    viewMode === 'global' &&
+    !showCredits &&
+    !showChatSheet &&
+    !showAttachSheet &&
+    !showAgentCard &&
+    !showSplashOverlay;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -2940,7 +5227,8 @@ export function OneScreen() {
         <View
           style={styles.orbPagerWrap}
           onTouchStart={() => resetInactivityTimer()}
-          {...(orbIndex === 0 ? worldSwipeResponder.panHandlers : null)}
+          {...(viewMode === 'orb' && orbIndex === AGENT_ORB_INDEX ? worldSwipeResponder.panHandlers : null)}
+          {...(Platform.OS !== 'web' ? mobileWheelQuickNavResponder.panHandlers : null)}
           onTouchEnd={(e) => handleHomeDoubleTap(e.nativeEvent.locationY)}
           {...(Platform.OS === 'web' && {
             onWheelCapture: handleWheel,
@@ -2955,21 +5243,21 @@ export function OneScreen() {
               minHeight: wheelContentHeight,
             }}
             onTouchStart={() => resetInactivityTimer()}
+            onScrollBeginDrag={() => {
+              globalWheelNavigateFromScrollRef.current = false;
+            }}
+            scrollEnabled={Platform.OS === 'web' ? true : !mobileQuickDragActive}
             showsVerticalScrollIndicator={false}
             snapToOffsets={wheelSnapOffsets}
             snapToAlignment="start"
-            decelerationRate="fast"
-            onScroll={(e) => {
-              const y = e.nativeEvent.contentOffset.y;
-              lastScrollYRef.current = y;
-              scrollY.setValue(y);
-              resetInactivityTimer();
-            }}
+            decelerationRate="normal"
+            bounces
+            alwaysBounceVertical
+            onScroll={onOrbScrollMove}
             onMomentumScrollEnd={onOrbScrollEnd}
-            onScrollEndDrag={onOrbScrollEnd}
             scrollEventThrottle={16}
           >
-            {currentOrbData.map((item, i) => renderWheelItem(item, i))}
+            {wheelOrbData.map((item, i) => renderWheelItem(item, i))}
             {renderWheelTopSentinel()}
           </ScrollView>
         </View>
@@ -3060,9 +5348,7 @@ export function OneScreen() {
                   activeOpacity={0.8}
                   onPress={openAttachSheet}
                 >
-                  <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
-                    <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
-                  </Svg>
+                  <PlusIconSvg size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
               }
               field={
@@ -3076,7 +5362,7 @@ export function OneScreen() {
                         : null,
                     ]}
                     placeholder={nowPlaceholderPhrase}
-                    placeholderTextColor={hexToRgba(colors.textSecondary, 0.5)}
+                    placeholderTextColor={nowFieldPlaceholderColor}
                     value={nowValue}
                     onChangeText={setNowValue}
                     onFocus={() => setIsInputFocused(true)}
@@ -3110,16 +5396,218 @@ export function OneScreen() {
         </View>
       )}
 
-      {/* קרדיטים – מופיעים רק אחרי לחיצה על פלוס; לחיצה פותחת חלון ארנק */}
-      {showBottomActions && !showCredits && !showChatSheet && (
-        <TouchableOpacity
-          style={[styles.creditsTrigger, { top: insets.top + 12 }]}
-          activeOpacity={0.8}
-          onPress={() => setShowCredits(true)}
-        >
-          <View style={[styles.creditsCircle, { backgroundColor: creditsCircleBg }]} />
-          <Text style={[styles.creditsText, { color: creditsColor }]}>{unitsBalance.toLocaleString()}</Text>
-        </TouchableOpacity>
+      {viewMode === 'global' && (
+        <>
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                zIndex: 11,
+                backgroundColor: colors.background,
+                opacity: globalEnterOpacity,
+                transform: [{ translateY: globalEnterTranslateY }],
+                direction: 'ltr',
+              },
+            ]}
+          >
+            <ScrollView
+              style={{ flex: 1, direction: 'ltr' }}
+              contentContainerStyle={{
+                paddingTop: insets.top + 10,
+                paddingBottom: insets.bottom + 140 + GLOBAL_BOTTOM_CHROME_LIFT_PX,
+                paddingHorizontal: 16,
+                overflow: 'visible' as const,
+                width: '100%',
+                alignItems: 'stretch',
+                direction: 'ltr',
+              }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.globalScrollInner}>
+                <View style={[styles.globalOnePlatter, globalOnePlatterLayout]}>
+                {/* assets/icons/Background-Ovarly.svg — דרך BackgroundOvarly + scale בגלובל */}
+                <View style={styles.globalOneBgSlot} pointerEvents="none">
+                  <View
+                    style={{ flex: 1, opacity: theme === 'light' ? 0.7 : 0.8 }}
+                    pointerEvents="none"
+                  >
+                    <BackgroundOvarly
+                      gradientId="globalPlatterOvalGradient"
+                      backgroundColor={colors.background}
+                      midColor={ovalMidLight}
+                      bottomColor={ovalBottomLight}
+                      scale={1.07}
+                    />
+                  </View>
+                </View>
+                <View style={styles.globalBroadcastBlock}>
+                  <View style={{ marginBottom: 8, alignSelf: 'center' }}>
+                    <WorldMiniIcon worldId={currentWorldId} color={currentWorldColor} size={42} />
+                  </View>
+                  <View style={styles.globalBroadcastCopyStretch}>
+                    <FadeBroadcastBlock
+                      messages={globalBroadcastMessages}
+                      visible
+                      titleColor={colors.text}
+                      subtitleColor={colors.textSecondary}
+                      fixedTitle={globalNewInOneTitle}
+                      titleTextAlign="center"
+                      subtitleTextAlign="center"
+                      writingDirection={globalHebrewUi ? 'rtl' : undefined}
+                      fullWidthCopy
+                    />
+                  </View>
+                </View>
+                </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.globalWorldChipsScrollViewport}
+                contentContainerStyle={styles.globalWorldChipsScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {WORLDS.map((w, wi) => {
+                  const active = wi === worldIndex;
+                  return (
+                    <TouchableOpacity
+                      key={w.id}
+                      activeOpacity={0.82}
+                      onPress={() => {
+                        setWorldIndex(wi);
+                        setChatPinnedWorldId(w.id);
+                      }}
+                      style={[
+                        styles.globalWorldChip,
+                        {
+                          backgroundColor: active ? hexToRgba(w.color, 0.16) : colors.surface,
+                          borderColor: active ? hexToRgba(w.color, 0.52) : colors.border,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={worldTitle(w.id, language)}
+                      accessibilityState={{ selected: active }}
+                    >
+                      <WorldMiniIcon worldId={w.id} color={w.color} size={22} />
+                      <Text
+                        style={[
+                          styles.globalWorldChipLabel,
+                          { color: active ? colors.text : colors.textSecondary },
+                          globalHebrewUi
+                            ? ({ textAlign: 'right' as const, writingDirection: 'rtl' as const } as const)
+                            : null,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {worldTitle(w.id, language)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <Text style={[styles.globalSectionHeading, { color: colors.textSecondary }, globalHebrewUi ? styles.globalForceRtlText : null]}>
+                {language === 'he' ? 'אגרגט מהשוק' : 'Aggregated market data'}
+              </Text>
+              {globalDiscoverySections.aggregate.map((row) => (
+                <View key={row.key} style={[styles.globalListRow, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.globalListTitle, { color: colors.text }, globalHebrewUi ? styles.globalForceRtlText : null]}>{row.title}</Text>
+                  <Text style={[styles.globalListSub, { color: colors.textSecondary }, globalHebrewUi ? styles.globalForceRtlText : null]} numberOfLines={3}>
+                    {row.sub}
+                  </Text>
+                </View>
+              ))}
+
+              <Text
+                style={[styles.globalSectionHeading, { color: colors.textSecondary, marginTop: 18 }, globalHebrewUi ? styles.globalForceRtlText : null]}
+              >
+                {language === 'he' ? 'גילוי ספקים ומוצרים' : 'Services & product discovery'}
+              </Text>
+              {globalDiscoverySections.discovery.map((row) => (
+                <View key={row.key} style={[styles.globalListRow, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.globalListTitle, { color: colors.text }, globalHebrewUi ? styles.globalForceRtlText : null]}>{row.title}</Text>
+                  <Text style={[styles.globalListSub, { color: colors.textSecondary }, globalHebrewUi ? styles.globalForceRtlText : null]} numberOfLines={3}>
+                    {row.sub}
+                  </Text>
+                </View>
+              ))}
+
+              <Text
+                style={[styles.globalSectionHeading, { color: colors.textSecondary, marginTop: 18 }, globalHebrewUi ? styles.globalForceRtlText : null]}
+              >
+                {language === 'he' ? 'נושאי חיפוש נפוצים (סוכנים)' : 'Common agent search themes'}
+              </Text>
+              {globalDiscoverySections.agentSearchThemes.map((row) => (
+                <View key={row.key} style={[styles.globalListRow, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.globalListTitle, { color: colors.text }, globalHebrewUi ? styles.globalForceRtlText : null]}>{row.title}</Text>
+                  <Text style={[styles.globalListSub, { color: colors.textSecondary }, globalHebrewUi ? styles.globalForceRtlText : null]} numberOfLines={2}>
+                    {row.sub}
+                  </Text>
+                </View>
+              ))}
+
+              <Text
+                style={[styles.globalSectionHeading, { color: colors.textSecondary, marginTop: 18 }, globalHebrewUi ? styles.globalForceRtlText : null]}
+              >
+                {language === 'he' ? 'יחידות פופולריות' : 'Popular units'}
+              </Text>
+              {globalDiscoverySections.unitsHot.length === 0 ? (
+                <Text style={[styles.globalListSub, { color: colors.textSecondary, paddingHorizontal: 4 }, globalHebrewUi ? styles.globalForceRtlText : null]}>
+                  {language === 'he' ? 'אין עדיין יחידות בעולם הזה — צרו מהגלובל או מהבית.' : 'No units in this world yet — create from Global or Home.'}
+                </Text>
+              ) : (
+                globalDiscoverySections.unitsHot.map((row) => (
+                  <View key={row.key} style={[styles.globalListRow, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.globalListTitle, { color: colors.text }, globalHebrewUi ? styles.globalForceRtlText : null]}>{row.title}</Text>
+                    <Text style={[styles.globalListSub, { color: colors.textSecondary }, globalHebrewUi ? styles.globalForceRtlText : null]}>{row.sub}</Text>
+                  </View>
+                ))
+              )}
+
+              <Text
+                style={[styles.globalSectionHeading, { color: colors.textSecondary, marginTop: 18 }, globalHebrewUi ? styles.globalForceRtlText : null]}
+              >
+                {language === 'he' ? 'דופק שוק' : 'Market pulse'}
+              </Text>
+              {globalDiscoverySections.marketPulse.map((row) => (
+                <View key={row.key} style={[styles.globalListRow, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.globalListTitle, { color: colors.text }, globalHebrewUi ? styles.globalForceRtlText : null]}>{row.title}</Text>
+                  <Text style={[styles.globalListSub, { color: colors.textSecondary }, globalHebrewUi ? styles.globalForceRtlText : null]} numberOfLines={3}>
+                    {row.sub}
+                  </Text>
+                </View>
+              ))}
+              </View>
+            </ScrollView>
+          </Animated.View>
+          <View
+            style={[
+              styles.bottomActionBar,
+              styles.globalBottomChromeWrap,
+              { paddingBottom: insets.bottom + GLOBAL_BOTTOM_CHROME_LIFT_PX, paddingTop: 16, zIndex: 22 },
+            ]}
+            pointerEvents="box-none"
+          >
+            <TouchableOpacity
+              style={[styles.globalCloseFab, styles.globalCloseFabOnChrome]}
+              activeOpacity={0.65}
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+              onPress={exitGlobalMode}
+              accessibilityRole="button"
+              accessibilityLabel={language === 'he' ? 'סגור גלובל' : 'Close global'}
+            >
+              <Svg width={30} height={30} viewBox="0 0 46 46" fill="none">
+                <Path
+                  d="M22.954 26.8302L17.2612 32.523C16.8275 32.9567 16.307 33.1735 15.6996 33.1735C15.0925 33.1737 14.572 32.9569 14.1381 32.523C13.7042 32.0891 13.4874 31.5686 13.4876 30.9615C13.4876 30.3542 13.7044 29.8336 14.1381 29.4L19.8309 23.7072L14.1381 18.0144C13.7044 17.5807 13.4876 17.0602 13.4876 16.4528C13.4874 15.8457 13.7042 15.3252 14.1381 14.8913C14.572 14.4574 15.0925 14.2406 15.6996 14.2408C16.307 14.2408 16.8275 14.4576 17.2612 14.8913L22.954 20.5841L28.6468 14.8913C29.0805 14.4576 29.601 14.2408 30.2083 14.2408C30.8154 14.2406 31.3359 14.4574 31.7698 14.8913C32.2037 15.3252 32.4206 15.8457 32.4204 16.4528C32.4204 17.0602 32.2035 17.5807 31.7698 18.0144L26.077 23.7072L31.7698 29.4C32.2035 29.8336 32.4204 30.3542 32.4204 30.9615C32.4206 31.5686 32.2037 32.0891 31.7698 32.523C31.3359 32.9569 30.8154 33.1737 30.2083 33.1735C29.601 33.1735 29.0805 32.9567 28.6468 32.523L22.954 26.8302Z"
+                  fill={hexToRgba(colors.textSecondary, 0.52)}
+                  stroke={hexToRgba(colors.textSecondary, 0.45)}
+                  strokeWidth={1.43}
+                />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+        </>
       )}
 
       {/* חלון ארנק – במחשב: קלף ממורכז; במובייל: מלא מסך */}
@@ -3137,7 +5625,21 @@ export function OneScreen() {
             <View style={styles.walletFixedTop}>
               <View style={styles.walletPlanCard}>
                 <View style={styles.walletPlanRow}>
-                  <View style={styles.walletPlanIconPlaceholder} />
+                  <View
+                    style={[
+                      styles.walletPlanTierBadge,
+                      userPlanTier === 'FREE' && styles.walletPlanTierBadgeFree,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.walletPlanTierBadgeText,
+                        userPlanTier === 'FREE' && styles.walletPlanTierBadgeTextFree,
+                      ]}
+                    >
+                      {userPlanTier}
+                    </Text>
+                  </View>
                   <View style={{ flex: 1 }} />
                   <TouchableOpacity style={styles.walletUpgradeBtn} activeOpacity={0.8}>
                     <Text style={styles.walletUpgradeBtnText}>Upgrade</Text>
@@ -3200,6 +5702,72 @@ export function OneScreen() {
         </View>
       </Modal>
 
+      <Modal visible={showSpacePicker} transparent animationType="fade" onRequestClose={() => setShowSpacePicker(false)}>
+        <View style={styles.spacePickerOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setShowSpacePicker(false)} />
+          <View style={[styles.spacePickerSheet, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: insets.bottom + 14 }]}>
+            <Text style={[styles.spacePickerTitle, { color: colors.text }]}>
+              {language === 'he' ? 'בחר מרחב חשבון' : 'Choose account space'}
+            </Text>
+            <Text style={[styles.spacePickerSub, { color: colors.textSecondary }]}>
+              {language === 'he'
+                ? 'לחיצה ארוכה על כדור ONE פותחת את המגירה הזאת.'
+                : 'Long-press the ONE orb to open this drawer.'}
+            </Text>
+
+            <View style={styles.spacePickerRow}>
+              <TouchableOpacity
+                style={[
+                  styles.spacePickerChip,
+                  { borderColor: colors.border, backgroundColor: accountSpace === 'personal' ? `${colors.primary}22` : colors.surface },
+                ]}
+                onPress={() => {
+                  setAccountSpace('personal');
+                  setShowSpacePicker(false);
+                }}
+                activeOpacity={0.82}
+              >
+                <Text style={[styles.spacePickerChipText, { color: accountSpace === 'personal' ? colors.primary : colors.text }]}>
+                  {language === 'he' ? 'אישי' : 'Personal'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.spacePickerChip,
+                  { borderColor: colors.border, backgroundColor: accountSpace === 'business' ? `${colors.primary}22` : colors.surface },
+                ]}
+                onPress={() => {
+                  setAccountSpace('business');
+                  setShowSpacePicker(false);
+                }}
+                activeOpacity={0.82}
+              >
+                <Text style={[styles.spacePickerChipText, { color: accountSpace === 'business' ? colors.primary : colors.text }]}>
+                  {language === 'he' ? 'עסקי' : 'Business'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.spacePickerCreateBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              activeOpacity={0.82}
+              onPress={() => {
+                const next = accountSpace === 'business' ? `${businessName} 2` : 'ONE Workspace';
+                setBusinessName(next);
+                setAccountSpace('business');
+                setShowSpacePicker(false);
+                Alert.alert(language === 'he' ? 'מרחב חדש נוצר' : 'New space created', next);
+              }}
+            >
+              <Text style={[styles.spacePickerCreateTxt, { color: colors.text }]}>
+                {language === 'he' ? '+ צור מרחב חדש' : '+ Create new space'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <AttachActionSheet
         visible={showAttachSheet}
         onClose={closeAttachSheet}
@@ -3215,6 +5783,12 @@ export function OneScreen() {
         bottomInset={insets.bottom}
         hideChatRow={showChatSheet}
         onPick={handleAttachPick}
+        attachContext={{
+          chatSheetOpen: showChatSheet,
+          worldId: effectiveChatWorldId,
+          worldLabel: activeWorldChatLabel,
+          unitTitle: activeUnit?.title?.trim() ? activeUnit.title : null,
+        }}
       />
 
       {/* Agent / Orbit profile popup – במחשב: קלף ממורכז; במובייל: כמעט מלא */}
@@ -3248,12 +5822,27 @@ export function OneScreen() {
               style={styles.agentCardScroll}
             >
               {WORLDS.map((world, idx) => {
-                const broadcasts = BROADCAST_BY_WORLD[world.id] ?? [];
+                const broadcasts = broadcastMessagesForAgentWorld(world.id, language, flowUnits);
+                /** personal = לבן ב־WORLDS — על surface בהיר לא קריא; שאר העולמות משאירים צבע עולם */
+                const agentCardWorldTextOnSurface =
+                  world.id === 'personal' ? colors.textSecondary : world.color;
                 return (
                   <View key={world.id} style={[styles.agentCardPage, { width: contentWidth }]}>
                     <View style={[styles.agentCardWorldCard, { backgroundColor: colors.surface, borderLeftColor: world.color }]}>
-                      <View style={[styles.agentCardWorldBadge, { backgroundColor: hexToRgba(world.color, 0.2) }]}>
-                        <Text style={[styles.agentCardWorldName, { color: world.color }]}>{world.label}</Text>
+                      <View
+                        style={[
+                          styles.agentCardWorldBadge,
+                          {
+                            backgroundColor:
+                              world.id === 'personal'
+                                ? hexToRgba(colors.textSecondary, 0.14)
+                                : hexToRgba(world.color, 0.2),
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.agentCardWorldName, { color: agentCardWorldTextOnSurface }]}>
+                          {worldTitle(world.id, language)}
+                        </Text>
                       </View>
                       <Text style={[styles.agentCardWorldSub, { color: colors.textSecondary }]}>World · {world.id}</Text>
                       {broadcasts.length > 0 && (
@@ -3261,7 +5850,7 @@ export function OneScreen() {
                           <Text style={[styles.agentCardSectionLabel, { color: colors.textSecondary }]}>Updates</Text>
                           {broadcasts.slice(0, 4).map((b, i) => (
                             <View key={i} style={[styles.agentCardBroadcastRow, { borderBottomColor: hexToRgba(colors.text, 0.08) }]}>
-                              <Text style={[styles.agentCardBroadcastType, { color: world.color }]}>{b.type}</Text>
+                              <Text style={[styles.agentCardBroadcastType, { color: agentCardWorldTextOnSurface }]}>{b.type}</Text>
                               <Text style={[styles.agentCardBroadcastBody, { color: colors.text }]}>{b.body}</Text>
                             </View>
                           ))}
@@ -3296,14 +5885,17 @@ export function OneScreen() {
       <View
         style={[
           styles.topBar,
-          { height: topBarHeight },
+          {
+            height: topBarHeight,
+            zIndex: viewMode === 'global' ? 14 : 8,
+          },
           !isNarrow && styles.barDesktopInsetTop,
         ]}
         pointerEvents="none"
       >
         <LinearGradient
-          colors={gradientColorsFromOpaque}
-          locations={gradientLocations}
+          colors={viewMode === 'global' ? (globalChromeFadeColors as unknown as readonly [ColorValue, ColorValue, ...ColorValue[]]) : gradientColorsFromOpaque}
+          locations={viewMode === 'global' ? ([0, 1] as unknown as readonly [number, number, ...number[]]) : gradientLocations}
           style={StyleSheet.absoluteFill}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
@@ -3313,14 +5905,17 @@ export function OneScreen() {
       <View
         style={[
           styles.bottomBar,
-          { height: bottomBarHeight },
+          {
+            height: bottomBarHeight,
+            zIndex: viewMode === 'global' ? 12 : 8,
+          },
           !isNarrow && styles.barDesktopInsetBottom,
         ]}
         pointerEvents="none"
       >
         <LinearGradient
-          colors={gradientColorsFromOpaque}
-          locations={gradientLocations}
+          colors={viewMode === 'global' ? (globalChromeFadeColors as unknown as readonly [ColorValue, ColorValue, ...ColorValue[]]) : gradientColorsFromOpaque}
+          locations={viewMode === 'global' ? ([0, 1] as unknown as readonly [number, number, ...number[]]) : gradientLocations}
           style={StyleSheet.absoluteFill}
           start={{ x: 0.5, y: 1 }}
           end={{ x: 0.5, y: 0 }}
@@ -3342,23 +5937,21 @@ export function OneScreen() {
                 activeOpacity={0.8}
                 onPress={openAttachSheet}
               >
-                <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
-                    <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
-                  </Svg>
-                </TouchableOpacity>
-                <TextInput
-                  style={[styles.nowInputField, { color: colors.text }]}
-                  placeholder={nowPlaceholderPhrase}
-                  placeholderTextColor={hexToRgba(colors.textSecondary, 0.5)}
-                  value={nowValue}
-                  onChangeText={setNowValue}
-                  onFocus={() => setIsInputFocused(true)}
-                  onBlur={() => setIsInputFocused(false)}
-                  onSubmitEditing={submitNowValue}
-                  returnKeyType="done"
-                  blurOnSubmit
-                />
-                <TouchableOpacity style={styles.micButton} activeOpacity={0.7} hitSlop={6} onPress={submitNowValue}>
+                <PlusIconSvg size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <TextInput
+                style={[styles.nowInputField, { color: colors.text }]}
+                placeholder={nowPlaceholderPhrase}
+                placeholderTextColor={nowFieldPlaceholderColor}
+                value={nowValue}
+                onChangeText={setNowValue}
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
+                onSubmitEditing={submitNowValue}
+                returnKeyType="done"
+                blurOnSubmit
+              />
+              <TouchableOpacity style={styles.micButton} activeOpacity={0.7} hitSlop={6} onPress={submitNowValue}>
                   <Svg width={20} height={20} viewBox="0 0 26 26" fill="none">
                   <Path d="M13.1181 17.4274C14.1924 17.4274 15.2227 16.9709 15.9824 16.1582C16.7421 15.3455 17.1688 14.2433 17.1688 13.0941V6.59408C17.1688 5.4448 16.7421 4.3426 15.9824 3.52995C15.2227 2.71729 14.1924 2.26074 13.1181 2.26074C12.0438 2.26074 11.0135 2.71729 10.2538 3.52995C9.49415 4.3426 9.06738 5.4448 9.06738 6.59408V13.0941C9.06738 14.2433 9.49415 15.3455 10.2538 16.1582C11.0135 16.9709 12.0438 17.4274 13.1181 17.4274Z" fill={colors.textSecondary} />
                   <Path d="M19.3254 13.1882C19.0541 13.1882 18.794 13.2875 18.6022 13.4641C18.4103 13.6408 18.3026 13.8804 18.3026 14.1303C18.3026 15.3795 17.7638 16.5775 16.8048 17.4608C15.8457 18.3442 14.545 18.8404 13.1887 18.8404C11.8324 18.8404 10.5317 18.3442 9.57266 17.4608C8.61363 16.5775 8.07485 15.3795 8.07485 14.1303C8.07485 13.8804 7.96709 13.6408 7.77528 13.4641C7.58347 13.2875 7.32333 13.1882 7.05207 13.1882C6.78081 13.1882 6.52067 13.2875 6.32886 13.4641C6.13705 13.6408 6.0293 13.8804 6.0293 14.1303C6.0293 15.8792 6.78359 17.5564 8.12624 18.7931C9.46889 20.0297 11.2899 20.7245 13.1887 20.7245C15.0875 20.7245 16.9085 20.0297 18.2512 18.7931C19.5938 17.5564 20.3481 15.8792 20.3481 14.1303C20.3481 13.8804 20.2404 13.6408 20.0486 13.4641C19.8568 13.2875 19.5966 13.1882 19.3254 13.1882Z" fill={colors.textSecondary} />
@@ -3407,25 +6000,45 @@ export function OneScreen() {
                 },
               ]}
             >
-              <View
-                style={[
-                  styles.splashOrbCircle,
-                  {
-                    width: EMOJI_CIRCLE_SIZE,
-                    height: EMOJI_CIRCLE_SIZE,
-                    borderRadius: EMOJI_CIRCLE_SIZE / 2,
-                    backgroundColor: agentCircleColor,
-                  },
-                ]}
-              />
-              <Animated.View style={[styles.splashFaceWrap, { opacity: splashFaceOpacity }]} pointerEvents="none">
-                <AgentEyes />
+              <Animated.View style={{ opacity: splashFaceOpacity }} pointerEvents="none">
+                <OrbAgent
+                  size={EMOJI_CIRCLE_SIZE}
+                  state="idle"
+                  mode="home"
+                  showFace
+                  labelLines={[]}
+                />
               </Animated.View>
             </Animated.View>
           </View>
         </Animated.View>
       )}
       </View>
+      {/* קרדיטים – רק במצב גלובל; מחוץ ל־contentWrap כדי לרחף מעל הגלילה; סדר LTR */}
+      {creditsFloatingVisible && (
+        <TouchableOpacity
+          style={[styles.creditsFloatingWrap, { top: insets.top + 10 }]}
+          activeOpacity={0.88}
+          onPress={() => setShowCredits(true)}
+        >
+          <View style={styles.creditsPillLtrShell} pointerEvents="box-none">
+            <View
+              style={[
+                styles.creditsPillInner,
+                {
+                  backgroundColor: theme === 'light' ? '#0a0a0a' : '#121212',
+                  borderColor: hexToRgba('#ffffff', 0.12),
+                },
+              ]}
+            >
+              <View style={[styles.creditsPillCoin, { backgroundColor: UPGRADE_GOLD }]} />
+              <Text style={styles.creditsPillBalance}>{unitsBalance.toLocaleString()}</Text>
+              <Text style={styles.creditsPillSep}>|</Text>
+              <PlusIconSvg size={18} color="#ffffff" />
+            </View>
+          </View>
+        </TouchableOpacity>
+      )}
       {/* שכבת צ׳אט: בית+ONE בשכבה קבועה במרכז; שדה צ׳אט נפרד למטה כשהקלף פתוח */}
       {viewMode === 'orb' && !showBottomActions && (
         <View
@@ -3453,9 +6066,7 @@ export function OneScreen() {
                       activeOpacity={0.8}
                       onPress={openAttachSheet}
                     >
-                      <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
-                        <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
-                      </Svg>
+                      <PlusIconSvg size={24} color={colors.textSecondary} />
                     </TouchableOpacity>
                   }
                   field={
@@ -3471,7 +6082,7 @@ export function OneScreen() {
                             : null,
                         ]}
                         placeholder=""
-                        placeholderTextColor={hexToRgba(colors.textSecondary, 0.5)}
+                        placeholderTextColor={nowFieldPlaceholderColor}
                         value={nowValue}
                         onChangeText={setNowValue}
                         showSoftInputOnFocus={false}
@@ -3496,20 +6107,11 @@ export function OneScreen() {
                       />
                       {!nowInputHasText && (
                         <View style={styles.nowPlaceholderOverlay} pointerEvents="none">
-                          <Animated.Text
-                            style={[
-                              styles.nowPlaceholderText,
-                              {
-                                color: hexToRgba(colors.textSecondary, 0.72),
-                                opacity: nowQuestionPulse,
-                                writingDirection: isRtlLayout ? 'rtl' : 'ltr',
-                                textAlign: isRtlLayout ? 'right' : 'left',
-                                width: '100%',
-                              },
-                            ]}
-                          >
-                            {nowPlaceholderPhrase}
-                          </Animated.Text>
+                          <NowPlaceholderLabel
+                            phrase={nowPlaceholderPhrase}
+                            isRtl={isRtlLayout}
+                            mutedTextColor={nowFieldPlaceholderColor}
+                          />
                         </View>
                       )}
                     </View>
@@ -3531,7 +6133,9 @@ export function OneScreen() {
                   activeOpacity={0.8}
                   onPress={() => {
                     resetInactivityTimer();
-                    if (orbIndex === 0) {
+                    if (orbIndex === GLOBAL_ORB_INDEX) {
+                      navigateToGlobalForContext(currentWorldId);
+                    } else if (orbIndex === AGENT_ORB_INDEX) {
                       setAgentCardWorldIndex(worldIndex);
                       setShowAgentCard(true);
                     } else {
@@ -3558,27 +6162,120 @@ export function OneScreen() {
                       </G>
                     </G>
                   </Svg>
-                  <Animated.View style={[styles.orbButtonDotsRow, { opacity: orbButtonLabelOpacity }]} pointerEvents="none">
-                    {[cycleWorldPrev(worldIndex), worldIndex, cycleWorldNext(worldIndex)].map((idx, i) => {
-                      const isCenter = i === 1;
-                      const dotColor = isCenter
-                        ? (WORLDS[idx]?.color ?? currentWorldColor)
-                        : hexToRgba(colors.textSecondary, 0.35);
-                      return (
-                        <View
-                          key={idx}
-                          style={[
-                            styles.orbButtonDot,
-                            isCenter && styles.orbButtonDotActive,
-                            { backgroundColor: dotColor },
-                          ]}
-                        />
-                      );
-                    })}
-                  </Animated.View>
-                  <Animated.View style={[styles.orbButtonEnterIconWrap, { opacity: orbButtonEnterOpacity }]} pointerEvents="none">
-                    <EnterIconSvg size={ORB_BUTTON_ENTER_ICON_SIZE} color="#ffffff" />
-                  </Animated.View>
+                  {orbIndex > AGENT_ORB_INDEX ? (
+                    <View style={styles.orbButtonEnterIconWrap} pointerEvents="none">
+                      {broadcastDotFlashSide != null ? (
+                        <View style={styles.orbButtonDotsRow}>
+                          <View
+                            style={[
+                              styles.orbButtonDot,
+                              { overflow: 'hidden', backgroundColor: hexToRgba(colors.textSecondary, 0.35) },
+                            ]}
+                          >
+                            {broadcastDotFlashSide === 'left' ? (
+                              <Animated.View
+                                pointerEvents="none"
+                                style={[
+                                  StyleSheet.absoluteFillObject,
+                                  {
+                                    borderRadius: 3,
+                                    backgroundColor: broadcastDotFlashColor,
+                                    opacity: broadcastDotFlashOpacity,
+                                  },
+                                ]}
+                              />
+                            ) : null}
+                          </View>
+                          <View
+                            style={[
+                              styles.orbButtonDotActive,
+                              styles.orbButtonUnitBroadcastPlaySlot,
+                              { backgroundColor: 'transparent' },
+                            ]}
+                          >
+                            <EnterIconSvg size={ORB_BUTTON_ENTER_ICON_SIZE} color="#ffffff" />
+                          </View>
+                          <View
+                            style={[
+                              styles.orbButtonDot,
+                              { overflow: 'hidden', backgroundColor: hexToRgba(colors.textSecondary, 0.35) },
+                            ]}
+                          >
+                            {broadcastDotFlashSide === 'right' ? (
+                              <Animated.View
+                                pointerEvents="none"
+                                style={[
+                                  StyleSheet.absoluteFillObject,
+                                  {
+                                    borderRadius: 3,
+                                    backgroundColor: broadcastDotFlashColor,
+                                    opacity: broadcastDotFlashOpacity,
+                                  },
+                                ]}
+                              />
+                            ) : null}
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={styles.orbButtonUnitPlayOnlyShell}>
+                          <EnterIconSvg size={ORB_BUTTON_ENTER_ICON_SIZE} color="#ffffff" />
+                        </View>
+                      )}
+                    </View>
+                  ) : (
+                    <>
+                      <Animated.View style={[styles.orbButtonDotsRow, { opacity: orbButtonLabelOpacity }]} pointerEvents="none">
+                        {[cycleWorldPrev(worldIndex), worldIndex, cycleWorldNext(worldIndex)].map((idx, i) => {
+                          const isCenter = i === 1;
+                          const dotColor = WORLDS[idx]?.color ?? currentWorldColor;
+                          if (isCenter) {
+                            return (
+                              <View
+                                key={`${idx}-${i}-c`}
+                                style={[styles.orbButtonDot, styles.orbButtonDotActive, { backgroundColor: dotColor }]}
+                              />
+                            );
+                          }
+                          const flashThis =
+                            (broadcastDotFlashSide === 'left' && i === 0) ||
+                            (broadcastDotFlashSide === 'right' && i === 2);
+                          if (flashThis) {
+                            /** דפדוף ברודקאסט — שני הצדדים בצבע העולם הנוכחי (לא צבעי שכנים) */
+                            return (
+                              <View
+                                key={`${idx}-${i}-sf`}
+                                style={[
+                                  styles.orbButtonDot,
+                                  { overflow: 'hidden', backgroundColor: hexToRgba(colors.textSecondary, 0.35) },
+                                ]}
+                              >
+                                <Animated.View
+                                  pointerEvents="none"
+                                  style={[
+                                    StyleSheet.absoluteFillObject,
+                                    {
+                                      borderRadius: 3,
+                                      backgroundColor: broadcastDotFlashColor,
+                                      opacity: broadcastDotFlashOpacity,
+                                    },
+                                  ]}
+                                />
+                              </View>
+                            );
+                          }
+                          return (
+                            <Animated.View
+                              key={`${idx}-${i}-s`}
+                              style={[styles.orbButtonDot, { backgroundColor: worldSideDotPulseBg }]}
+                            />
+                          );
+                        })}
+                      </Animated.View>
+                      <Animated.View style={[styles.orbButtonEnterIconWrap, { opacity: orbButtonEnterOpacity }]} pointerEvents="none">
+                        <EnterIconSvg size={ORB_BUTTON_ENTER_ICON_SIZE} color="#ffffff" />
+                      </Animated.View>
+                    </>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -3640,7 +6337,7 @@ export function OneScreen() {
                       borderTopRightRadius: isNarrow ? 22 : 20,
                       overflow: 'hidden',
                       paddingTop: isNarrow ? 8 : 6,
-                      /** בנייטיב ה־direction לא תמיד יורש מהשורש — מפעילים מפה כדי שיוגה + טקסט יתנהגו כמו בווב */
+                      /** RTL לכרום הצ׳אט — לא לכפות LTR על כל הגיליון (זה היפך את סרגל הכלים והשבבים) */
                       direction: isRtlLayout ? 'rtl' : 'ltr',
                     },
                   ]}
@@ -3665,35 +6362,54 @@ export function OneScreen() {
                         <ChatBackArrowIcon color={colors.textSecondary} rtl={isRtlLayout} size={24} />
                       </TouchableOpacity>
                       {chatProfileHeaderCompact ? (
-                        <TouchableOpacity
-                          style={styles.chatProfileToolbarCompactCenter}
-                          activeOpacity={0.85}
-                          onPress={() => {
-                            chatScrollRef.current?.scrollTo({ y: 0, animated: true });
-                          }}
-                          accessibilityRole="button"
-                          accessibilityLabel={language === 'he' ? 'גלול לראש הפרופיל' : 'Scroll profile to top'}
-                        >
-                          <View
-                            style={[
-                              styles.chatModalAvatar,
-                              { backgroundColor: activeUnit ? colors.surface : chatAgentAvatarBg },
-                            ]}
+                        <View style={styles.chatProfileToolbarCompactCenter}>
+                          <TouchableOpacity
+                            activeOpacity={0.85}
+                            onPress={() =>
+                              navigateToGlobalForContext(activeUnit ? activeUnit.worldId : effectiveChatWorldId)
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel={language === 'he' ? 'גלובל' : 'Global'}
                           >
-                            {activeUnit ? (
-                              <Text style={styles.chatModalUnitEmoji}>{activeUnit.emoji}</Text>
-                            ) : (
-                              <AgentEyes compact />
-                            )}
-                          </View>
-                          <View style={styles.chatProfileToolbarCompactText}>
+                            <View
+                              style={[
+                                styles.chatModalAvatar,
+                                { backgroundColor: activeUnit ? colors.surface : chatAgentAvatarBg },
+                              ]}
+                            >
+                              {activeUnit ? (
+                                <Text style={styles.chatModalUnitEmoji}>{activeUnit.emoji}</Text>
+                              ) : (
+                                <OrbAgent
+                                  size={36}
+                                  state="idle"
+                                  mode="home"
+                                  showFace
+                                  labelLines={[]}
+                                />
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.chatProfileToolbarCompactText,
+                              language === 'he' ? styles.chatModalHeaderTextAlignHe : styles.chatModalHeaderTextAlignEn,
+                            ]}
+                            activeOpacity={0.85}
+                            onPress={() => {
+                              chatScrollRef.current?.scrollTo({ y: 0, animated: true });
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={language === 'he' ? 'גלול לראש הפרופיל' : 'Scroll profile to top'}
+                          >
                             <Text
                               style={[
                                 styles.chatProfileToolbarTitle,
                                 {
                                   color: colors.text,
-                                  textAlign: isRtlLayout ? 'right' : 'left',
-                                  writingDirection: isRtlLayout ? 'rtl' : 'ltr',
+                                  textAlign: language === 'he' ? 'right' : 'left',
+                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                  ...(language === 'he' ? { alignSelf: 'stretch' as const } : {}),
                                 },
                               ]}
                               numberOfLines={1}
@@ -3708,8 +6424,9 @@ export function OneScreen() {
                                   styles.chatProfileToolbarSubtitle,
                                   {
                                     color: colors.textSecondary,
-                                    textAlign: isRtlLayout ? 'right' : 'left',
-                                    writingDirection: isRtlLayout ? 'rtl' : 'ltr',
+                                    textAlign: language === 'he' ? 'right' : 'left',
+                                    writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                    ...(language === 'he' ? { alignSelf: 'stretch' as const } : {}),
                                   },
                                 ]}
                                 numberOfLines={1}
@@ -3720,12 +6437,22 @@ export function OneScreen() {
                                 </Text>
                               </Text>
                             ) : (
-                              <Text style={[styles.chatProfileToolbarSubtitle, { color: colors.textSecondary }]}>
+                              <Text
+                                style={[
+                                  styles.chatProfileToolbarSubtitle,
+                                  {
+                                    color: colors.textSecondary,
+                                    textAlign: language === 'he' ? 'right' : 'left',
+                                    writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                    ...(language === 'he' ? { alignSelf: 'stretch' as const } : {}),
+                                  },
+                                ]}
+                              >
                                 {agentHeaderSubtitle}
                               </Text>
                             )}
-                          </View>
-                        </TouchableOpacity>
+                          </TouchableOpacity>
+                        </View>
                       ) : (
                         <View style={styles.chatProfileToolbarSpacer} />
                       )}
@@ -3795,29 +6522,48 @@ export function OneScreen() {
                       >
                         <ChatBackArrowIcon color={colors.textSecondary} rtl={isRtlLayout} size={24} />
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.chatHeaderProfileBtn} activeOpacity={0.75} onPress={openChatProfile}>
-                        <View
-                          style={[
-                            styles.chatModalAvatar,
-                            { backgroundColor: activeUnit ? colors.surface : chatAgentAvatarBg },
-                          ]}
+                      <View style={styles.chatHeaderProfileBtn}>
+                        <TouchableOpacity
+                          activeOpacity={0.75}
+                          onPress={() =>
+                            navigateToGlobalForContext(activeUnit ? activeUnit.worldId : effectiveChatWorldId)
+                          }
                         >
-                          {activeUnit ? (
-                            <Text style={styles.chatModalUnitEmoji}>{activeUnit.emoji}</Text>
-                          ) : (
-                            <AgentEyes compact />
-                          )}
-                        </View>
-                        <View style={styles.chatModalHeaderText}>
+                          <View
+                            style={[
+                              styles.chatModalAvatar,
+                              { backgroundColor: activeUnit ? colors.surface : chatAgentAvatarBg },
+                            ]}
+                          >
+                            {activeUnit ? (
+                              <Text style={styles.chatModalUnitEmoji}>{activeUnit.emoji}</Text>
+                            ) : (
+                              <OrbAgent
+                                size={36}
+                                state="idle"
+                                mode="home"
+                                showFace
+                                labelLines={[]}
+                              />
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.chatModalHeaderText,
+                            language === 'he' ? styles.chatModalHeaderTextAlignHe : styles.chatModalHeaderTextAlignEn,
+                          ]}
+                          activeOpacity={0.75}
+                          onPress={openChatProfile}
+                        >
                           <Text
                             style={[
                               styles.chatModalTitle,
                               {
                                 color: colors.text,
-                                textAlign: isRtlLayout ? 'right' : 'left',
-                                writingDirection: isRtlLayout ? 'rtl' : 'ltr',
-                                alignSelf: 'stretch',
-                                width: '100%',
+                                textAlign: language === 'he' ? 'right' : 'left',
+                                writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                ...(language === 'he' ? { alignSelf: 'stretch' as const } : {}),
                               },
                             ]}
                           >
@@ -3831,10 +6577,9 @@ export function OneScreen() {
                                 styles.chatModalSubtitle,
                                 {
                                   color: colors.textSecondary,
-                                  textAlign: isRtlLayout ? 'right' : 'left',
-                                  writingDirection: isRtlLayout ? 'rtl' : 'ltr',
-                                  alignSelf: 'stretch',
-                                  width: '100%',
+                                  textAlign: language === 'he' ? 'right' : 'left',
+                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                  ...(language === 'he' ? { alignSelf: 'stretch' as const } : {}),
                                 },
                               ]}
                             >
@@ -3844,10 +6589,22 @@ export function OneScreen() {
                               </Text>
                             </Text>
                           ) : (
-                            <Text style={[styles.chatModalSubtitle, { color: colors.textSecondary }]}>{agentHeaderSubtitle}</Text>
+                            <Text
+                              style={[
+                                styles.chatModalSubtitle,
+                                {
+                                  color: colors.textSecondary,
+                                  textAlign: language === 'he' ? 'right' : 'left',
+                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                  ...(language === 'he' ? { alignSelf: 'stretch' as const } : {}),
+                                },
+                              ]}
+                            >
+                              {agentHeaderSubtitle}
+                            </Text>
                           )}
-                        </View>
-                      </TouchableOpacity>
+                        </TouchableOpacity>
+                      </View>
                       {!activeUnit ? (
                         <TouchableOpacity
                           style={[
@@ -3901,11 +6658,17 @@ export function OneScreen() {
                         activeOpacity={1}
                         onPress={() => setShowChatMenu(false)}
                       />
-                      <View style={[styles.chatMenuCard, { backgroundColor: colors.surface }]}>
+                      <View
+                        style={[
+                          styles.chatMenuCard,
+                          { backgroundColor: colors.surface },
+                          isRtlLayout ? ({ direction: 'ltr' } as const) : null,
+                        ]}
+                      >
                         {chatMenuRows.map((row) => (
                           <TouchableOpacity
                             key={row.id}
-                            style={styles.chatMenuItem}
+                            style={[styles.chatMenuItem, { width: '100%' }]}
                             activeOpacity={0.75}
                             onPress={() => {
                               setShowChatMenu(false);
@@ -3921,7 +6684,15 @@ export function OneScreen() {
                               }
                             }}
                           >
-                            <Text style={[styles.chatMenuItemText, { color: colors.text }]}>{row.label}</Text>
+                            <Text
+                              style={[
+                                styles.chatMenuItemText,
+                                { color: colors.text },
+                                language === 'he' ? styles.globalForceRtlText : styles.chatMenuItemTextEn,
+                              ]}
+                            >
+                              {row.label}
+                            </Text>
                           </TouchableOpacity>
                         ))}
                       </View>
@@ -3939,6 +6710,7 @@ export function OneScreen() {
                     showsVerticalScrollIndicator={false}
                     scrollEventThrottle={16}
                     onScroll={onCombinedChatScroll}
+                    onScrollEndDrag={onChatThreadScrollEndDrag}
                     onContentSizeChange={() => {
                       requestAnimationFrame(() => recomputeChatStickyDateLabel(lastChatScrollYRef.current));
                     }}
@@ -3972,8 +6744,14 @@ export function OneScreen() {
                             activeUnit ? (
                               <Text style={styles.chatProfileRingEmoji}>{activeUnit.emoji}</Text>
                             ) : (
-                              <View style={[styles.chatProfileAgentHeroOrb, { backgroundColor: chatAgentAvatarBg }]}>
-                                <AgentEyes />
+                              <View style={[styles.chatProfileAgentHeroOrb, { backgroundColor: 'transparent' }]}>
+                                <OrbAgent
+                                  size={80}
+                                  state="idle"
+                                  mode="home"
+                                  showFace
+                                  labelLines={[]}
+                                />
                               </View>
                             )
                           }
@@ -3982,6 +6760,10 @@ export function OneScreen() {
                             closeChatSheet();
                             navigation.navigate('Units');
                           }}
+                          onPressHeroOpenGlobal={() =>
+                            navigateToGlobalForContext(activeUnit ? activeUnit.worldId : effectiveChatWorldId)
+                          }
+                          onPressWorldChipOpenGlobal={(worldId) => navigateToGlobalForContext(worldId)}
                         />
                       </Animated.View>
                     )}
@@ -3991,48 +6773,134 @@ export function OneScreen() {
                           <>
                             <View style={styles.chatAgentHistorySection}>
                               {historyUnitsForWorld.length === 0 ? (
-                                <View style={styles.unitLogCard}>
-                                  <Text style={[styles.unitLogTitle, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
+                                <View
+                                  style={[
+                                    styles.unitLogCard,
+                                    isRtlLayout ? ({ direction: 'ltr' } as const) : null,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.unitLogTitle,
+                                      language === 'he' ? styles.globalForceRtlText : styles.unitLogEmptyHintEn,
+                                    ]}
+                                  >
                                     {language === 'he' ? 'אין היסטוריה לעולם הזה עדיין' : 'No history in this world yet'}
                                   </Text>
                                 </View>
                               ) : (
-                                historyUnitsForWorld.map((unit) => (
-                                  <TouchableOpacity
-                                    key={`log_${unit.id}`}
-                                    style={styles.unitLogCard}
-                                    activeOpacity={0.8}
-                                    onPress={() => {
-                                      setActiveUnitId(unit.id);
-                                    }}
-                                  >
-                                    <Text style={[styles.unitLogTitle, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
-                                      {unit.emoji} {embedLatinRunsForRtlDisplay(unit.title, language)}
-                                    </Text>
-                                    <Text style={[styles.unitLogMeta, { textAlign: isRtlLayout ? 'right' : 'left' }]}>
-                                      {unit.status} · {unit.progress}% · {unit.steps} steps
-                                    </Text>
-                                    {effectiveChatWorldId === 'personal' && (
-                                      <View style={styles.unitLogWorldTag}>
-                                        <WorldMiniIcon
-                                          worldId={unit.worldId}
-                                          color={(WORLDS.find((w) => w.id === unit.worldId)?.color ?? colors.textSecondary)}
-                                          size={12}
-                                        />
-                                        <Text
+                                <>
+                                  {agentChatHistoryExpanded ? (
+                                    <View style={styles.chatAgentHistoryExpandedList}>
+                                      {historyUnitsForWorld.map((unit) => (
+                                        <TouchableOpacity
+                                          key={`log_${unit.id}`}
                                           style={[
-                                            styles.unitLogWorldTagText,
-                                            { color: WORLDS.find((w) => w.id === unit.worldId)?.color ?? colors.textSecondary },
+                                            styles.unitLogCard,
+                                            language === 'he' ? ({ direction: 'rtl' } as const) : null,
                                           ]}
+                                          activeOpacity={0.8}
+                                          onPress={() => {
+                                            setActiveUnitId(unit.id);
+                                          }}
                                         >
-                                          {unit.worldId === 'personal'
-                                            ? generalWorldLabel
-                                            : (WORLDS.find((w) => w.id === unit.worldId)?.label ?? unit.worldId)}
-                                        </Text>
-                                      </View>
-                                    )}
-                                  </TouchableOpacity>
-                                ))
+                                          <View style={{ alignSelf: 'stretch', width: '100%', alignItems: 'flex-start' }}>
+                                            <View style={{ alignItems: 'stretch', maxWidth: '100%' }}>
+                                              <View
+                                                style={{
+                                                  flexDirection: 'row',
+                                                  alignItems: 'center',
+                                                  gap: 8,
+                                                  flexWrap: 'wrap',
+                                                  justifyContent: 'flex-start',
+                                                }}
+                                              >
+                                                <TouchableOpacity
+                                                  activeOpacity={0.85}
+                                                  onPress={() => navigateToGlobalForContext(unit.worldId)}
+                                                  accessibilityRole="button"
+                                                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                                >
+                                                  <Text style={styles.unitLogTitle}>{unit.emoji}</Text>
+                                                </TouchableOpacity>
+                                                <Text
+                                                  style={[
+                                                    styles.unitLogTitle,
+                                                    {
+                                                      flexShrink: 1,
+                                                      textAlign: language === 'he' ? 'right' : 'left',
+                                                      writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                                    },
+                                                  ]}
+                                                >
+                                                  {embedLatinRunsForRtlDisplay(unit.title, language)}
+                                                </Text>
+                                              </View>
+                                              <Text
+                                                style={[
+                                                  styles.unitLogMeta,
+                                                  {
+                                                    textAlign: language === 'he' ? 'right' : 'left',
+                                                    writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                                    alignSelf: 'stretch',
+                                                  },
+                                                ]}
+                                              >
+                                                {formatUnitLogStatusLine(unit.status, unit.progress, unit.steps, language)}
+                                              </Text>
+                                            </View>
+                                          </View>
+                                          {effectiveChatWorldId === 'personal' && (
+                                            <TouchableOpacity
+                                              style={styles.unitLogWorldTag}
+                                              activeOpacity={0.85}
+                                              onPress={() => navigateToGlobalForContext(unit.worldId)}
+                                              accessibilityRole="button"
+                                            >
+                                              <WorldMiniIcon
+                                                worldId={unit.worldId}
+                                                color={(WORLDS.find((w) => w.id === unit.worldId)?.color ?? colors.textSecondary)}
+                                                size={12}
+                                              />
+                                              <Text
+                                                style={[
+                                                  styles.unitLogWorldTagText,
+                                                  { color: WORLDS.find((w) => w.id === unit.worldId)?.color ?? colors.textSecondary },
+                                                ]}
+                                              >
+                                                {unit.worldId === 'personal'
+                                                  ? generalWorldLabel
+                                                  : (WORLDS.find((w) => w.id === unit.worldId)?.label ?? unit.worldId)}
+                                              </Text>
+                                            </TouchableOpacity>
+                                          )}
+                                        </TouchableOpacity>
+                                      ))}
+                                    </View>
+                                  ) : null}
+                                  <View style={styles.chatAgentHistoryToggleWrap}>
+                                    <TouchableOpacity
+                                      style={[
+                                        styles.chatAgentHistoryToggle,
+                                        { borderColor: colors.border, backgroundColor: hexToRgba(colors.surface, theme === 'dark' ? 0.42 : 0.94) },
+                                      ]}
+                                      activeOpacity={0.8}
+                                      onPress={() => setAgentChatHistoryExpanded((e) => !e)}
+                                      accessibilityRole="button"
+                                      accessibilityState={{ expanded: agentChatHistoryExpanded }}
+                                    >
+                                      <Text style={[styles.chatAgentHistoryToggleLabel, { color: colors.text }]}>
+                                        {agentChatHistoryExpanded
+                                          ? language === 'he'
+                                            ? 'סגור היסטוריה'
+                                            : 'Close history'
+                                          : language === 'he'
+                                            ? 'פתח היסטוריה'
+                                            : 'Open history'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                </>
                               )}
                             </View>
                             <View style={styles.chatHistoryMessagesSpacer} />
@@ -4060,18 +6928,21 @@ export function OneScreen() {
                                   message.sender === 'one' ? { backgroundColor: chatOneBubbleBg } : null,
                                 ]}
                               >
-                                <Text
-                                  style={[
-                                    styles.chatModalBubbleText,
-                                    message.sender === 'user' ? styles.chatModalBubbleTextUser : styles.chatModalBubbleTextOne,
-                                    {
-                                      writingDirection: isRtlLayout ? 'rtl' : 'ltr',
-                                      textAlign: isRtlLayout ? 'right' : 'left',
-                                    },
-                                  ]}
-                                >
-                                  {message.text}
-                                </Text>
+                                <View style={styles.chatModalBubbleTextShell}>
+                                  <Text
+                                    style={[
+                                      styles.chatModalBubbleText,
+                                      message.sender === 'user' ? styles.chatModalBubbleTextUser : styles.chatModalBubbleTextOne,
+                                      {
+                                        textAlign: language === 'he' ? 'right' : 'left',
+                                        writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                        alignSelf: 'stretch',
+                                      },
+                                    ]}
+                                  >
+                                    {message.text}
+                                  </Text>
+                                </View>
                               </View>
                             </View>
                           );
@@ -4090,11 +6961,24 @@ export function OneScreen() {
                                   style={[styles.chatSuggestionChip, { borderColor: colors.border, backgroundColor: hexToRgba(colors.surface, theme === 'dark' ? 0.48 : 0.92) }]}
                                   activeOpacity={0.8}
                                   onPress={() => {
+                                    if (agentUnitCreationMode && !activeUnitId) {
+                                      commitAgentCreationGoal(label);
+                                      return;
+                                    }
                                     setNowValue(label);
                                     setTimeout(() => chatComposerInputRef.current?.focus(), 0);
                                   }}
                                 >
-                                  <Text style={[styles.chatSuggestionChipLabel, { color: colors.text }]}>
+                                  <Text
+                                    style={[
+                                      styles.chatSuggestionChipLabel,
+                                      {
+                                        color: colors.text,
+                                        textAlign: language === 'he' ? 'right' : 'left',
+                                        writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                      },
+                                    ]}
+                                  >
                                     {label}
                                   </Text>
                                 </TouchableOpacity>
@@ -4196,7 +7080,7 @@ export function OneScreen() {
                     multiline
                     autoFocus
                     placeholder=""
-                    placeholderTextColor={hexToRgba(colors.textSecondary, 0.5)}
+                    placeholderTextColor={nowFieldPlaceholderColor}
                     onContentSizeChange={() => {
                       // Expanded textarea should not control compact composer height.
                     }}
@@ -4220,16 +7104,21 @@ export function OneScreen() {
                 ]}
               >
                 <View style={styles.chatComposerExpandedRow}>
+                  {orderChatComposerRowWebRtl(
+                    Platform.OS === 'web' && isRtlLayout,
+                    (
                   <TouchableOpacity
+                    key="chat-composer-attach"
                     style={[styles.plusInInputCircle, styles.chatComposerOuterPlus, { backgroundColor: 'transparent' }]}
                     activeOpacity={0.8}
                     onPress={openAttachSheet}
                   >
-                    <Svg width={26} height={26} viewBox="0 0 46 46" fill="none">
-                      <Path d="M25.6758 25.7408L25.6758 33.7917C25.6758 34.405 25.4611 34.9264 25.0317 35.3558C24.6025 35.7853 24.0811 36 23.4675 36C22.8539 36 22.3325 35.7853 21.9033 35.3558C21.4739 34.9264 21.2592 34.405 21.2592 33.7917L21.2592 25.7408L13.2083 25.7408C12.595 25.7408 12.0736 25.5261 11.6442 25.0967C11.2147 24.6675 11 24.1461 11 23.5325C11 22.9189 11.2147 22.3975 11.6442 21.9683C12.0736 21.5389 12.595 21.3242 13.2083 21.3242L21.2592 21.3242L21.2592 13.2733C21.2592 12.66 21.4739 12.1386 21.9033 11.7092C22.3325 11.2797 22.8539 11.065 23.4675 11.065C24.0811 11.065 24.6025 11.2797 25.0317 11.7092C25.4611 12.1386 25.6758 12.66 25.6758 13.2733L25.6758 21.3242L33.7267 21.3242C34.34 21.3242 34.8614 21.5389 35.2908 21.9683C35.7203 22.3975 35.935 22.9189 35.935 23.5325C35.935 24.1461 35.7203 24.6675 35.2908 25.0967C34.8614 25.5261 34.34 25.7408 33.7267 25.7408L25.6758 25.7408Z" fill={colors.textSecondary} stroke={colors.textSecondary} strokeWidth={1.43} />
-                    </Svg>
+                    <PlusIconSvg size={24} color={colors.textSecondary} />
                   </TouchableOpacity>
+                    ),
+                    (
                 <NowInputBarRow
+                  key="chat-composer-bar"
                   isRtl={isRtlLayout}
                   style={[
                     styles.chatModalInputRow,
@@ -4266,7 +7155,7 @@ export function OneScreen() {
                             : null,
                         ]}
                         placeholder=""
-                        placeholderTextColor={hexToRgba(colors.textSecondary, 0.5)}
+                        placeholderTextColor={nowFieldPlaceholderColor}
                         value={nowValue}
                         onChangeText={setNowValue}
                         multiline
@@ -4311,20 +7200,11 @@ export function OneScreen() {
                       />
                       {!nowInputHasText && !isChatInputFocused && (
                         <View style={styles.nowPlaceholderOverlay} pointerEvents="none">
-                          <Animated.Text
-                            style={[
-                              styles.nowPlaceholderText,
-                              {
-                                color: hexToRgba(colors.textSecondary, 0.72),
-                                opacity: nowQuestionPulse,
-                                writingDirection: isRtlLayout ? 'rtl' : 'ltr',
-                                textAlign: isRtlLayout ? 'right' : 'left',
-                                width: '100%',
-                              },
-                            ]}
-                          >
-                            {nowPlaceholderPhrase}
-                          </Animated.Text>
+                          <NowPlaceholderLabel
+                            phrase={nowPlaceholderPhrase}
+                            isRtl={isRtlLayout}
+                            mutedTextColor={nowFieldPlaceholderColor}
+                          />
                         </View>
                       )}
                       {chatComposerCanExpand && !isComposerExpanded ? (
@@ -4402,8 +7282,10 @@ export function OneScreen() {
                     </View>
                   }
                 />
-                {!nowValue.trim() ? (
+                    ),
+                    !nowValue.trim() ? (
                   <TouchableOpacity
+                    key="chat-composer-profile"
                     style={[
                       styles.plusInInputCircle,
                       styles.chatComposerOuterPlus,
@@ -4453,7 +7335,8 @@ export function OneScreen() {
                       </Svg>
                     )}
                   </TouchableOpacity>
-                ) : null}
+                ) : null
+                  )}
                 </View>
               </View>
               </Animated.View>
@@ -4463,6 +7346,34 @@ export function OneScreen() {
         </View>
       )}
     </View>
+  );
+}
+
+/** טקסט placeholder סטטי (עכשיו? / Now?) */
+function NowPlaceholderLabel({
+  phrase,
+  isRtl,
+  mutedTextColor,
+}: {
+  phrase: string;
+  isRtl: boolean;
+  mutedTextColor: string;
+}) {
+  return (
+    <Text
+      style={[
+        styles.nowPlaceholderText,
+        {
+          color: mutedTextColor,
+          width: '100%',
+          textAlign: isRtl ? 'right' : 'left',
+          writingDirection: isRtl ? 'rtl' : 'ltr',
+        },
+      ]}
+      numberOfLines={1}
+    >
+      {phrase}
+    </Text>
   );
 }
 
@@ -4478,14 +7389,6 @@ const styles = StyleSheet.create({
   splashOrbWrap: {
     width: EMOJI_CIRCLE_SIZE,
     height: EMOJI_CIRCLE_SIZE,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  splashOrbCircle: {
-    position: 'absolute',
-  },
-  splashFaceWrap: {
-    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -4581,7 +7484,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingHorizontal: 6,
     paddingVertical: 0,
-    textAlign: 'left',
     minWidth: 0,
     textAlignVertical: 'center',
     lineHeight: 20,
@@ -4626,6 +7528,140 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1,
+  },
+  globalOnePlatter: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  globalOneBgSlot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  globalBroadcastBlock: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    zIndex: 2,
+  },
+  /** ברודקאסט בגלובל — רוחב מלא של המגש כדי מרכוז שורות (עם textAlign center + writingDirection rtl בעברית) */
+  globalBroadcastCopyStretch: {
+    width: '100%',
+    alignSelf: 'stretch',
+    paddingHorizontal: 4,
+  },
+  /** כמו UnitChatProfile — מיכל LTR; יישור עברית רק דרך Text */
+  globalScrollInner: {
+    width: '100%',
+    alignSelf: 'stretch',
+    direction: 'ltr',
+  },
+  globalWorldChipsScrollViewport: {
+    alignSelf: 'stretch',
+    marginTop: 2,
+    marginBottom: 6,
+    maxWidth: '100%',
+  },
+  globalWorldChipsScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 4,
+    gap: 8,
+  },
+  globalWorldChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 5,
+  },
+  globalWorldChipLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  /** כותרות וגוף בגלובל בעברית — אותו דפוס כמו מגירות ביחידה */
+  globalForceRtlText: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    width: '100%',
+    maxWidth: '100%',
+    alignSelf: 'stretch',
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
+  },
+  globalSectionHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginTop: 20,
+    marginBottom: 8,
+    alignSelf: 'stretch',
+  },
+  globalListRow: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  globalListTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    alignSelf: 'stretch',
+  },
+  globalListSub: {
+    fontSize: 14,
+    marginTop: 4,
+    lineHeight: 20,
+    alignSelf: 'stretch',
+  },
+  /** כניסה לגלובל מהגלגל — ממורכז למעלה; הילה מונפשת אחרי השהייה */
+  orbGlobalFabWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orbGlobalFabCluster: {
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orbGlobalFabHalo: {
+    position: 'absolute',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 2,
+  },
+  orbGlobalFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  globalCloseFab: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 14,
+    alignSelf: 'center',
   },
   cardViewWrap: {
     position: 'absolute',
@@ -4757,26 +7793,6 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 999,
   },
-  agentEyesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  agentEyesRowCompact: {
-    gap: 9,
-  },
-  agentEye: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ffffff',
-  },
-  agentEyeCompact: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
   /** כותרת ראשית + משנית – מתחת לכדור הסוכן, קרוב יותר לכדור */
   wheelOrbTextBlock: {
     position: 'absolute',
@@ -4787,18 +7803,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
+  /** מרחב טאפ לברודקאסט (חצי שמאל/ימין) */
+  wheelOrbBroadcastTapPad: {
+    flex: 1,
+    width: '100%',
+    alignSelf: 'stretch',
+    minHeight: 48,
+  },
   wheelOrbTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     textAlign: 'center',
     marginTop: 10,
     paddingHorizontal: 6,
   },
   wheelOrbSubtitle: {
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
     marginTop: 6,
     paddingHorizontal: 6,
+  },
+  agentWorldTagWrap: {
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  agentWorldTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  agentWorldTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   /** אזור בטוח שקוף מעל תיבת הטקסט — שומר שלא נניח תוכן נמוך מדי בתוך הכדור */
   wheelOrbBottomSafeArea: {
@@ -4878,6 +7917,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+    direction: 'ltr',
   },
   orbButtonDot: {
     width: 6,
@@ -4888,6 +7928,19 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+  },
+  /** מיכל פליי: לא מרחיב את השורה (ממדים מ־orbButtonDotActive); overflow visible לציור המשולש */
+  orbButtonUnitBroadcastPlaySlot: {
+    overflow: 'visible',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  /** כדור יחידה: רק פליי; נקודות צד רק בזמן פלאש אחרי טאפ */
+  orbButtonUnitPlayOnlyShell: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   /** אייקון Enter במרכז כפתור הכדור – בכדורי תהליך, לבן תמיד */
   orbButtonEnterIconWrap: {
@@ -4913,20 +7966,61 @@ const styles = StyleSheet.create({
     bottom: 0,
     overflow: 'hidden',
   },
+  /** גלובל: מסילת תחתית עם fade כמו fading-bg — הגרדיאנט מאחורי כפתור X */
+  globalBottomChromeWrap: {
+    alignSelf: 'stretch',
+    width: '100%',
+    overflow: 'hidden',
+  },
+  /** X על ה־fade בלי כפתור צף נפרד */
+  globalCloseFabOnChrome: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
   barDesktopInsetTop: {
     top: 24,
   },
   barDesktopInsetBottom: {
     bottom: 24,
   },
-  creditsTrigger: {
+  creditsFloatingWrap: {
     position: 'absolute',
     left: 0,
     right: 0,
+    alignItems: 'center',
+    zIndex: 26,
+    elevation: 26,
+  },
+  /** מטבע תמיד משמאל, פלוס תמיד מימין — גם בעברית (RTL) */
+  creditsPillLtrShell: {
+    direction: 'ltr',
+    alignItems: 'center',
+  },
+  creditsPillInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  creditsPillCoin: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  creditsPillBalance: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  creditsPillSep: {
+    color: '#ffffff',
+    opacity: 0.45,
+    marginHorizontal: 6,
+    fontSize: 12,
+    fontWeight: '600',
   },
   walletScreenWrap: {
     flex: 1,
@@ -4961,20 +8055,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  walletPlanIconPlaceholder: {
-    width: 44,
+  walletPlanTierBadge: {
+    minWidth: 44,
     height: 44,
+    paddingHorizontal: 10,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: UPGRADE_GOLD,
+    backgroundColor: 'rgba(230, 191, 63, 0.22)',
+  },
+  walletPlanTierBadgeFree: {
+    borderColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  walletPlanTierBadgeText: {
+    color: UPGRADE_GOLD_ON,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  walletPlanTierBadgeTextFree: {
+    color: 'rgba(255,255,255,0.55)',
+    fontWeight: '700',
   },
   walletUpgradeBtn: {
     paddingVertical: 8,
     paddingHorizontal: 18,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: UPGRADE_GOLD,
   },
   walletUpgradeBtnText: {
-    color: '#fff',
+    color: UPGRADE_GOLD_ON,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -5189,16 +8302,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  creditsCircle: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  creditsText: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
   bottomActionBar: {
     position: 'absolute',
     left: 0,
@@ -5318,24 +8421,36 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   chatModalHeaderText: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     minWidth: 0,
-    alignSelf: 'stretch',
+    justifyContent: 'center',
+  },
+  /** מיכל LTR כדי ש־alignItems + textAlign לא יתהפכו תחת direction: rtl של הגיליון */
+  chatModalHeaderTextAlignHe: {
+    direction: 'ltr',
+    alignItems: 'flex-end',
+  },
+  chatModalHeaderTextAlignEn: {
+    direction: 'ltr',
+    alignItems: 'flex-start',
   },
   chatHeaderProfileBtn: {
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 16,
+    justifyContent: 'flex-start',
   },
   chatModalTitle: {
     fontSize: 16,
     fontWeight: '700',
+    marginTop: 1,
   },
   chatModalSubtitle: {
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 4,
   },
   chatAgentWorldRow: {
     flexDirection: 'row',
@@ -5348,25 +8463,25 @@ const styles = StyleSheet.create({
     height: 30,
     paddingHorizontal: 12,
     borderRadius: 10,
-    backgroundColor: '#e6bf3f',
+    backgroundColor: UPGRADE_GOLD,
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: 5,
     flexShrink: 0,
   },
   chatHeaderUpgradeBtnText: {
-    color: '#111111',
+    color: UPGRADE_GOLD_ON,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0,
   },
   chatHeaderPlanBadge: {
-    backgroundColor: '#111111',
+    backgroundColor: 'rgba(230, 191, 63, 0.22)',
     borderWidth: 1,
-    borderColor: '#2b2b2b',
+    borderColor: UPGRADE_GOLD,
   },
   chatHeaderPlanBadgeText: {
-    color: '#ffffff',
+    color: UPGRADE_GOLD,
     fontWeight: '800',
     letterSpacing: 0.25,
   },
@@ -5442,6 +8557,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
+  chatMenuItemTextEn: {
+    alignSelf: 'stretch',
+    width: '100%',
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
   chatProfileToolbarSpacer: {
     flex: 1,
   },
@@ -5465,22 +8586,24 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 16,
     paddingVertical: 2,
     paddingHorizontal: 4,
   },
   chatProfileToolbarCompactText: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     minWidth: 0,
     justifyContent: 'center',
   },
   chatProfileToolbarTitle: {
     fontSize: 16,
     fontWeight: '700',
+    marginTop: 1,
   },
   chatProfileToolbarSubtitle: {
     fontSize: 12,
-    marginTop: 1,
+    marginTop: 4,
     fontWeight: '600',
   },
   /** גודל אימוג'י במרכז טבעת הפרופיל (UnitChatProfile) */
@@ -5494,7 +8617,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  /** כדור סוכן בפרופיל — AgentEyes ללא compact, קצת קטן מהגרסה הקודמת */
+  /** כדור סוכן בפרופיל — OrbAgent כמו בלנדינג */
   chatProfileAgentHeroOrb: {
     width: 86,
     height: 86,
@@ -5536,9 +8659,18 @@ const styles = StyleSheet.create({
   },
   chatModalBubble: {
     maxWidth: '82%',
+    minWidth: 0,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    alignItems: 'stretch',
+  },
+  /** LTR פנימי — textAlign + writingDirection בעברית בלי היפוך מתחת ל־rtl של הגיליון */
+  chatModalBubbleTextShell: {
+    alignSelf: 'stretch',
+    width: '100%',
+    minWidth: 0,
+    direction: 'ltr',
   },
   chatModalBubbleOne: {
     alignSelf: 'flex-start',
@@ -5550,6 +8682,10 @@ const styles = StyleSheet.create({
   },
   chatModalBubbleText: {
     fontSize: 16,
+    flexShrink: 1,
+    ...(Platform.OS === 'web'
+      ? ({ overflowWrap: 'break-word', wordBreak: 'break-word' } as const)
+      : {}),
   },
   chatModalBubbleTextOne: {
     color: '#111111',
@@ -5570,6 +8706,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#f4f4f5',
+  },
+  unitLogEmptyHintEn: {
+    alignSelf: 'stretch',
+    width: '100%',
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   unitLogMeta: {
     fontSize: 12,
@@ -5614,6 +8756,28 @@ const styles = StyleSheet.create({
   chatAgentHistorySection: {
     paddingTop: 4,
     gap: 10,
+  },
+  chatAgentHistoryExpandedList: {
+    alignSelf: 'stretch',
+    gap: 6,
+  },
+  chatAgentHistoryToggleWrap: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  chatAgentHistoryToggle: {
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 168,
+  },
+  chatAgentHistoryToggleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   chatHistoryMessagesSpacer: {
     flexGrow: 1,
@@ -5666,11 +8830,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     minHeight: 52,
   },
+  /** `direction: 'ltr'` — גם כשהאפליקציה ב־RTL: פלוס צירוף משמאל, כפתור פרופיל/עריכה מימין */
   chatComposerExpandedRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    direction: 'ltr',
   },
   chatComposerInputRowExpanded: {
     flex: 1,
@@ -5788,5 +8954,56 @@ const styles = StyleSheet.create({
   exitButton: {
     marginTop: 26,
     padding: 10,
+  },
+  spacePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    justifyContent: 'flex-end',
+  },
+  spacePickerSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    gap: 10,
+  },
+  spacePickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  spacePickerSub: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  spacePickerRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  spacePickerChip: {
+    flex: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spacePickerChipText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  spacePickerCreateBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  spacePickerCreateTxt: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

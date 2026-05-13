@@ -1,0 +1,15 @@
+<!-- Reference: global chrome in OneScreen uses the same two-stop fade with colors.background (see GLOBAL_FADING_BG_STRIP_PX). -->
+<svg width="375" height="88" viewBox="0 0 375 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_2668_4870)">
+<rect x="375" y="88" width="375" height="88" transform="rotate(-180 375 88)" fill="url(#paint0_linear_2668_4870)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_2668_4870" x1="562.5" y1="88" x2="562.5" y2="176" gradientUnits="userSpaceOnUse">
+<stop stop-color="#494949"/>
+<stop offset="1" stop-color="white" stop-opacity="0"/>
+</linearGradient>
+<clipPath id="clip0_2668_4870">
+<rect width="375" height="88" fill="white"/>
+</clipPath>
+</defs>
+</svg>

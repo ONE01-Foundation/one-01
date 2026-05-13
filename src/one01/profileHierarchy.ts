@@ -237,7 +237,7 @@ export const WORLD_IDS: WorldId[] = [
 
 export const WORLD_LABELS: Record<string, string> = {
   health: 'בריאות',
-  business: 'עסקים',
+  business: 'עבודה',
   finance: 'פיננסים',
   learning: 'למידה',
   family: 'משפחה',

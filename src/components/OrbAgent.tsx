@@ -25,15 +25,35 @@ export interface OrbAgentProps {
   typingEffect?: boolean;
   /** Show eyes and mouth that look around (living face) */
   showFace?: boolean;
+  /** Horizontal mouth line; false = dots-only (eyes) */
+  showMouth?: boolean;
+  /** Optional eye gaze override in px (for world scroll / unit focus cues) */
+  gazeX?: number | Animated.AnimatedInterpolation<number>;
+  /** Optional vertical eye gaze override in px (positive = look down) */
+  gazeY?: number | Animated.AnimatedInterpolation<number>;
 }
 
-export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable, glowColor, typingEffect, showFace }: OrbAgentProps) {
+export function OrbAgent({
+  size,
+  state,
+  mode,
+  labelLines = [],
+  onPress,
+  tappable,
+  glowColor,
+  typingEffect,
+  showFace,
+  showMouth = false,
+  gazeX,
+  gazeY,
+}: OrbAgentProps) {
   const { colors } = useThemeStore();
   const scale = useRef(new Animated.Value(1)).current;
   const breathe = useRef(new Animated.Value(0)).current;
   const bounce = useRef(new Animated.Value(0)).current;
   const labelOpacity = useRef(new Animated.Value(1)).current;
   const lookVal = useRef(new Animated.Value(0.5)).current;
+  const blinkVal = useRef(new Animated.Value(1)).current;
   const [typedLine, setTypedLine] = React.useState('');
   const typedIndexRef = useRef(0);
   const lineIndexRef = useRef(0);
@@ -158,15 +178,54 @@ export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable
     if (!showFace || size < 40) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(lookVal, { toValue: 1, duration: 2200, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(lookVal, { toValue: 0.5, duration: 1800, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(lookVal, { toValue: 0, duration: 2200, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(lookVal, { toValue: 0.5, duration: 1800, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(lookVal, { toValue: 1, duration: 2200, useNativeDriver: false, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(lookVal, { toValue: 0.5, duration: 1800, useNativeDriver: false, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(lookVal, { toValue: 0, duration: 2200, useNativeDriver: false, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(lookVal, { toValue: 0.5, duration: 1800, useNativeDriver: false, easing: Easing.inOut(Easing.ease) }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, [showFace, size, lookVal]);
+
+  // Face: occasional natural blink
+  useEffect(() => {
+    if (!showFace || size < 30) {
+      blinkVal.setValue(1);
+      return;
+    }
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleBlink = () => {
+      if (cancelled) return;
+      const nextInMs = 2200 + Math.round(Math.random() * 3000);
+      timeoutId = setTimeout(() => {
+        Animated.sequence([
+          Animated.timing(blinkVal, {
+            toValue: 0.12,
+            duration: 90,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }),
+          Animated.timing(blinkVal, {
+            toValue: 1,
+            duration: 120,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }),
+        ]).start(() => {
+          if (!cancelled) scheduleBlink();
+        });
+      }, nextInMs);
+    };
+
+    scheduleBlink();
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [showFace, size, blinkVal]);
 
   const breatheScale = breathe.interpolate({
     inputRange: [0, 1],
@@ -255,22 +314,40 @@ export function OrbAgent({ size, state, mode, labelLines = [], onPress, tappable
             },
           ]}
         />
-        {showFace && size >= 40 && (() => {
-          const eyeSize = Math.max(4, size * 0.1);
-          const eyeY = size * 0.38;
-          const eyeOffsetX = size * 0.22;
+        {showFace && size >= 30 && (() => {
+          const eyeSize = Math.max(5, size * 0.158);
+          const rEye = eyeSize / 2;
+          const R = size / 2;
+          const cx = R;
+          const cy = R;
+          /** מעט נמוך יותר + רחוק יותר מהאף (רוחב) */
+          const eyeY = size * 0.378;
+          const dy = eyeY - cy;
+          /** מרחק מקסימלי מציר האנכי למרכז עין כך שכל דיסק העין נשאר בתוך העיגול */
+          const maxHoriz = Math.sqrt(Math.max(0, (R - rEye) ** 2 - dy * dy));
+          /** חצי מרחק בין מרכזי העיניים — רחוק יותר מגשר האף */
+          const halfInteraxial = Math.max(
+            rEye + 1.35,
+            Math.min(maxHoriz - 0.65, size * 0.166)
+          );
+          const leftCx = cx - halfInteraxial;
+          const rightCx = cx + halfInteraxial;
           const mouthWidth = size * 0.28;
           const mouthY = size * 0.62;
-          const lookX = lookVal.interpolate({ inputRange: [0, 0.5, 1], outputRange: [-2, 0, 2] });
+          const autoLookX = lookVal.interpolate({ inputRange: [0, 0.5, 1], outputRange: [-1.25, 0, 1.25] });
+          const lookX = gazeX ?? autoLookX;
+          const lookY = gazeY ?? 0;
           return (
             <View style={[styles.face, { width: size, height: size }]} pointerEvents="none">
-              <Animated.View style={[styles.eyeWrap, { left: eyeOffsetX - eyeSize / 2, top: eyeY - eyeSize / 2, width: eyeSize, height: eyeSize, transform: [{ translateX: lookX }] }]}>
+              <Animated.View style={[styles.eyeWrap, { left: leftCx - rEye, top: eyeY - rEye, width: eyeSize, height: eyeSize, transform: [{ translateX: lookX }, { translateY: lookY }, { scaleY: blinkVal }] }]}>
                 <View style={[styles.eye, { width: eyeSize, height: eyeSize, borderRadius: eyeSize / 2, backgroundColor: colors.background }]} />
               </Animated.View>
-              <Animated.View style={[styles.eyeWrap, { right: eyeOffsetX - eyeSize / 2, top: eyeY - eyeSize / 2, width: eyeSize, height: eyeSize, transform: [{ translateX: lookX }] }]}>
+              <Animated.View style={[styles.eyeWrap, { left: rightCx - rEye, top: eyeY - rEye, width: eyeSize, height: eyeSize, transform: [{ translateX: lookX }, { translateY: lookY }, { scaleY: blinkVal }] }]}>
                 <View style={[styles.eye, { width: eyeSize, height: eyeSize, borderRadius: eyeSize / 2, backgroundColor: colors.background }]} />
               </Animated.View>
-              <View style={[styles.mouth, { width: mouthWidth, left: (size - mouthWidth) / 2, top: mouthY, height: 2, borderRadius: 1, backgroundColor: colors.background }]} />
+              {showMouth ? (
+                <View style={[styles.mouth, { width: mouthWidth, left: (size - mouthWidth) / 2, top: mouthY, height: 2, borderRadius: 1, backgroundColor: colors.background }]} />
+              ) : null}
             </View>
           );
         })()}
