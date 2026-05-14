@@ -5398,9 +5398,11 @@ export function OneScreen() {
                                   {he ? `${activeCount} ${translate(language, 'preview_active_units')}` : `${activeCount} ${translate(language, 'preview_active_units')}`}
                                 </Text>
                               </View>
+                              {translate(language, 'preview_insight_common') !== '' && (
                               <Text style={[styles.previewInsight, { color: isDark ? '#999' : '#888', textAlign, writingDirection: textDir }]}>
                                 {translate(language, 'preview_insight_common')}
                               </Text>
+                              )}
                               <View style={[styles.previewButtonRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
                                 <TouchableOpacity
                                   style={[styles.previewConfirmBtn, { backgroundColor: isDark ? '#fff' : '#000' }]}
