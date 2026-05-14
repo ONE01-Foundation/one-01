@@ -2028,16 +2028,29 @@ export function OneScreen() {
       setAgentUnitCreationMode(false);
       setPendingUnitPreview(null);
       setNowValue('');
-      setTimeout(() => setChatStatusPhase('planning'), 500);
+
+      setChatSheetMessages((prev) => [
+        ...prev,
+        {
+          id: `activate_${Date.now()}`,
+          sender: 'one' as const,
+          text: translate(language, 'preview_activating'),
+          sentAt: Date.now(),
+        },
+      ]);
+      scrollOneChatToBottom();
+
+      setTimeout(() => {
+        setChatStatusPhase('planning');
+        closeChatSheetRef.current?.({
+          afterClose: () => {
+            pendingReopenUnitChatRef.current = newUnitId;
+          },
+        });
+      }, 500);
       setTimeout(() => setChatStatusPhase('ready'), 1100);
       setTimeout(() => setChatStatusPhase('agent'), 2000);
-
-      closeChatSheetRef.current?.({
-        afterClose: () => {
-          pendingReopenUnitChatRef.current = newUnitId;
-        },
-      });
-  }, [pendingUnitPreview, language, addProcess]);
+  }, [pendingUnitPreview, language, addProcess, scrollOneChatToBottom]);
 
   const dismissUnitPreview = useCallback(() => {
     setPendingUnitPreview(null);
