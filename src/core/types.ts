@@ -120,6 +120,9 @@ export interface OneProcess {
   nextAction?: string;
   emoji?: string;
   subtitle?: string;
+  visibility?: UnitVisibility;
+  ownerId?: string;
+  participants?: ParticipantRef[];
 }
 
 export interface ProcessMessage {
@@ -155,4 +158,33 @@ export interface ProductOnboardingPayload {
   firstUnitTitle: string;
   firstUnitSummary: string;
   lens: LifeLens;
+}
+
+// --- Coordination types ---
+
+export type ParticipantRole = 'owner' | 'collaborator' | 'provider' | 'observer';
+export type UnitVisibility = 'private' | 'shared' | 'public';
+export type ParticipantStatus = 'invited' | 'active' | 'declined' | 'removed';
+export type InvitationStatus = 'active' | 'used' | 'expired' | 'revoked';
+
+export interface ParticipantRef {
+  id: string;
+  userId?: string;
+  role: ParticipantRole;
+  displayName?: string;
+  status: ParticipantStatus;
+  joinedAt?: string;
+}
+
+export interface UnitInvitation {
+  id: string;
+  unitId: string;
+  token: string;
+  role: ParticipantRole;
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  maxUses: number;
+  useCount: number;
+  status: InvitationStatus;
 }
