@@ -3,6 +3,7 @@ import { storage } from '../utils/session';
 
 const DEV_PROFILE_KEY = 'one_dev_preview_profile';
 const DEV_ALL_WORLDS_EXAMPLES_KEY = 'one_dev_all_worlds_examples';
+const DEV_AI_RUNTIME_KEY = 'one_dev_ai_runtime';
 
 export type DevPreviewProfile =
   | 'new_user'
@@ -16,11 +17,13 @@ export type DevPreviewProfile =
 type DevModeStore = {
   previewProfile: DevPreviewProfile;
   showAllWorldsExamples: boolean;
+  useAiRuntime: boolean;
   syntheticHomeApplyNonce: number;
   initialized: boolean;
   initialize: () => Promise<void>;
   setPreviewProfile: (profile: DevPreviewProfile) => Promise<void>;
   setShowAllWorldsExamples: (value: boolean) => Promise<void>;
+  toggleAiRuntime: () => void;
   requestSyntheticHomeProfile: () => void;
 };
 
@@ -33,9 +36,10 @@ const isPreviewProfile = (value: unknown): value is DevPreviewProfile =>
   value === 'pro_user' ||
   value === 'max_user';
 
-export const useDevModeStore = create<DevModeStore>((set) => ({
+export const useDevModeStore = create<DevModeStore>((set, get) => ({
   previewProfile: 'new_user',
   showAllWorldsExamples: false,
+  useAiRuntime: false,
   syntheticHomeApplyNonce: 0,
   initialized: false,
   initialize: async () => {
@@ -49,9 +53,16 @@ export const useDevModeStore = create<DevModeStore>((set) => ({
       } catch {
         allWorlds = false;
       }
-      set({ previewProfile: profile, showAllWorldsExamples: allWorlds, initialized: true });
+      let aiRuntime = false;
+      try {
+        const rawAi = await storage.getItem(DEV_AI_RUNTIME_KEY);
+        aiRuntime = rawAi === '1' || rawAi === 'true';
+      } catch {
+        aiRuntime = false;
+      }
+      set({ previewProfile: profile, showAllWorldsExamples: allWorlds, useAiRuntime: aiRuntime, initialized: true });
     } catch {
-      set({ previewProfile: 'new_user', showAllWorldsExamples: false, initialized: true });
+      set({ previewProfile: 'new_user', showAllWorldsExamples: false, useAiRuntime: false, initialized: true });
     }
   },
   setPreviewProfile: async (profile) => {
@@ -69,6 +80,11 @@ export const useDevModeStore = create<DevModeStore>((set) => ({
       /* ignore */
     }
     set({ showAllWorldsExamples: value });
+  },
+  toggleAiRuntime: () => {
+    const next = !get().useAiRuntime;
+    storage.setItem(DEV_AI_RUNTIME_KEY, next ? '1' : '0').catch(() => {});
+    set({ useAiRuntime: next });
   },
   requestSyntheticHomeProfile: () =>
     set((s) => ({ syntheticHomeApplyNonce: s.syntheticHomeApplyNonce + 1 })),
