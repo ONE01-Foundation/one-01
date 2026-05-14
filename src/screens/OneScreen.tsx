@@ -55,7 +55,7 @@ import type { AppShellParamList } from '../navigation/types';
 import { useOne } from '../core/OneContext';
 import type { LifeLens, OneProcess } from '../core/types';
 import type { SpaceId, DomainId } from '../core/spaces';
-import { legacyWorldIdToSpaceDomain } from '../core/spaces';
+import { ENABLED_SPACES, getSpaceConfig, legacyWorldIdToSpaceDomain } from '../core/spaces';
 import { OrbAgent } from '../components/OrbAgent';
 import {
   UnitChatProfile,
@@ -114,6 +114,15 @@ function insertPersonalOrbsAfterOrigin(prev: OrbItem[], orbs: OrbItem[]): OrbIte
 
 type ChatLine = { id: string; sender: 'user' | 'one'; text: string; sentAt?: number };
 type AccountSpace = 'personal' | 'business';
+
+type ChatScope = {
+  scope: 'one' | 'space' | 'unit';
+  spaceId: SpaceId;
+  domainId?: DomainId;
+  unitId?: string;
+  /** @deprecated temporary bridge */
+  legacyWorldId: string;
+};
 
 function startOfLocalDayMs(t: number): number {
   const d = new Date(t);
@@ -2049,6 +2058,7 @@ export function OneScreen() {
   /** עולם נבחר (אישי / עסקים / בריאות / כלכלה) – דפדוף רק בכדור הסוכן */
   const [worldIndex, setWorldIndex] = useState(0);
   const worldIndexRef = useRef(worldIndex);
+  const [spaceIndex, setSpaceIndex] = useState(0);
   const [agentWorldLookX, setAgentWorldLookX] = useState(0);
   const worldLookResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevWorldLookIndexRef = useRef(worldIndex);
@@ -2075,6 +2085,14 @@ export function OneScreen() {
     },
     []
   );
+  useEffect(() => {
+    const sid = ENABLED_SPACES[spaceIndex]?.id;
+    if (!sid) return;
+    const wi = WORLDS.findIndex((w) => w.id === sid);
+    if (wi >= 0 && wi !== worldIndex) setWorldIndex(wi);
+    setActiveDomainId(undefined);
+  }, [spaceIndex]);
+
   /** עולם לפני כניסה לגלובל — משחזרים ביציאה ב־X */
   const preGlobalWorldIndexRef = useRef(0);
   /** 0→1: נקודות הצד בכפתור ONE נצבעות בעולם; חזרה ל־0 — רק המרכז נשאר בולט */
@@ -2191,6 +2209,17 @@ export function OneScreen() {
   const [chatPinnedWorldId, setChatPinnedWorldId] = useState<string>('personal');
   const [chatPinnedSpaceId, setChatPinnedSpaceId] = useState<SpaceId>('personal');
   const [chatPinnedDomainId, setChatPinnedDomainId] = useState<DomainId | undefined>(undefined);
+  const [chatScope, _setChatScope] = useState<ChatScope>({
+    scope: 'one',
+    spaceId: 'personal',
+    legacyWorldId: 'personal',
+  });
+  function setChatScope(next: ChatScope) {
+    _setChatScope(next);
+    setChatPinnedWorldId(next.legacyWorldId);
+    setChatPinnedSpaceId(next.spaceId);
+    setChatPinnedDomainId(next.domainId);
+  }
   /** צ׳אט סוכן: רשימת יחידות בהיסטוריה — מקופלת עד «פתח היסטוריה» */
   const [agentChatHistoryExpanded, setAgentChatHistoryExpanded] = useState(false);
   useEffect(() => {
@@ -2284,12 +2313,19 @@ export function OneScreen() {
   const globalEnterOpacity = useRef(new Animated.Value(1)).current;
   const globalEnterTranslateY = useRef(new Animated.Value(0)).current;
   const currentWorldId = WORLDS[worldIndex]?.id ?? WORLDS[0]?.id ?? 'personal';
-  const currentSpaceId: SpaceId = accountSpace as SpaceId;
+  const currentSpaceId: SpaceId = ENABLED_SPACES[spaceIndex]?.id ?? 'personal';
   const currentWorld = WORLDS[worldIndex] ?? WORLDS[0];
   const currentOrbData = useMemo(
-    () =>
-      localizedOrbDataForWorld(currentWorldId, personalOrbs, language, flowUnits, showAllWorldsExamples && accountSpace !== 'business'),
-    [currentWorldId, personalOrbs, language, flowUnits, showAllWorldsExamples, accountSpace]
+    () => {
+      const base = localizedOrbDataForWorld(currentWorldId, personalOrbs, language, flowUnits, showAllWorldsExamples && currentSpaceId !== 'business');
+      return base.filter((orb) => {
+        const unit = flowUnits.find((u) => u.id === orb.id);
+        if (!unit) return true;
+        return unit.spaceId === currentSpaceId &&
+          (!activeDomainId || unit.domainId === activeDomainId);
+      });
+    },
+    [currentWorldId, personalOrbs, language, flowUnits, showAllWorldsExamples, currentSpaceId, activeDomainId]
   );
   const globalWheelOrbItem = useMemo<OrbItem>(
     () => ({
@@ -2495,9 +2531,9 @@ export function OneScreen() {
         ];
     return { aggregate, discovery, agentSearchThemes, unitsHot, marketPulse };
   }, [currentOrbData, currentWorldId, currentSpaceId, activeDomainId, flowUnits, language]);
-  const effectiveChatWorldId = showChatSheet ? chatPinnedWorldId : currentWorldId;
-  const effectiveChatSpaceId: SpaceId = showChatSheet ? chatPinnedSpaceId : currentSpaceId;
-  const effectiveChatDomainId: DomainId | undefined = showChatSheet ? chatPinnedDomainId : activeDomainId;
+  const effectiveChatWorldId = showChatSheet ? chatScope.legacyWorldId : currentWorldId;
+  const effectiveChatSpaceId: SpaceId = showChatSheet ? chatScope.spaceId : currentSpaceId;
+  const effectiveChatDomainId: DomainId | undefined = showChatSheet ? chatScope.domainId : activeDomainId;
   const effectiveChatWorld = WORLDS.find((w) => w.id === effectiveChatWorldId) ?? WORLDS[0];
   const effectiveChatWorldColor = effectiveChatWorld.color;
   const rawFirstName = user?.name?.trim()?.split(/\s+/)[0] || 'אריאל';
@@ -2988,8 +3024,7 @@ export function OneScreen() {
     setShowAttachSheet(false);
     setShowCredits(false);
     setShowChatMenu(false);
-    setChatPinnedWorldId(currentWorldId);
-    { const _p = legacyWorldIdToSpaceDomain(currentWorldId); setChatPinnedSpaceId(_p.spaceId); setChatPinnedDomainId(_p.domainId); }
+    setChatScope({ scope: 'space', spaceId: currentSpaceId, domainId: activeDomainId, legacyWorldId: currentWorldId });
     const selectedOrb = wheelOrbData[orbIndex];
     if (selectedOrb?.id === GLOBAL_WHEEL_ORB_ID) {
       setAgentUnitCreationMode(false);
@@ -3239,16 +3274,12 @@ export function OneScreen() {
       setPersonalOrbs(seeded.personalOrbs);
       setFlowUnits(seeded.flowUnits);
       setWorldIndex(0);
-      setChatPinnedWorldId('business');
-      setChatPinnedSpaceId('business');
-      setChatPinnedDomainId(undefined);
+      setChatScope({ scope: 'space', spaceId: 'business', legacyWorldId: 'business' });
     } else {
       setPersonalOrbs([{ id: 'origin', emoji: '👤', title: language === 'he' ? 'ראשי' : 'Home', subtitle: '' }]);
       setFlowUnits([]);
       setWorldIndex(0);
-      setChatPinnedWorldId('personal');
-      setChatPinnedSpaceId('personal');
-      setChatPinnedDomainId(undefined);
+      setChatScope({ scope: 'one', spaceId: 'personal', legacyWorldId: 'personal' });
     }
     setActiveUnitId(null);
     setShowChatProfile(false);
@@ -3263,9 +3294,7 @@ export function OneScreen() {
     setFlowUnits(gen.flowUnits);
     setActiveUnitId(null);
     setWorldIndex(0);
-    setChatPinnedWorldId('personal');
-    setChatPinnedSpaceId('personal');
-    setChatPinnedDomainId(undefined);
+    setChatScope({ scope: 'one', spaceId: 'personal', legacyWorldId: 'personal' });
   }, [syntheticHomeApplyNonce, language]);
 
   const collapseProfileToChat = useCallback(() => {
@@ -3675,9 +3704,7 @@ export function OneScreen() {
       );
       const wi = WORLDS.findIndex((w) => w.id === tmpl.worldId);
       if (wi >= 0) setWorldIndex(wi);
-      setChatPinnedWorldId(tmpl.worldId);
-      setChatPinnedSpaceId(tmpl.spaceId);
-      setChatPinnedDomainId(tmpl.domainId);
+      setChatScope({ scope: 'unit', spaceId: tmpl.spaceId, domainId: tmpl.domainId, legacyWorldId: tmpl.worldId });
       setAgentUnitCreationMode(false);
       setNowValue('');
       setTimeout(() => setChatStatusPhase('planning'), 500);
@@ -3814,9 +3841,7 @@ export function OneScreen() {
       );
       const wi = WORLDS.findIndex((w) => w.id === tmpl.worldId);
       if (wi >= 0) setWorldIndex(wi);
-      setChatPinnedWorldId(tmpl.worldId);
-      setChatPinnedSpaceId(tmpl.spaceId);
-      setChatPinnedDomainId(tmpl.domainId);
+      setChatScope({ scope: 'unit', spaceId: tmpl.spaceId, domainId: tmpl.domainId, legacyWorldId: tmpl.worldId });
       setChatSheetMessages((prev) => [
         ...prev,
         userLine,
@@ -4151,8 +4176,7 @@ export function OneScreen() {
     setShowChatMenu(false);
     setAgentUnitCreationMode(false);
     setActiveUnitId(null);
-    setChatPinnedWorldId(currentWorldId);
-    { const _p = legacyWorldIdToSpaceDomain(currentWorldId); setChatPinnedSpaceId(_p.spaceId); setChatPinnedDomainId(_p.domainId); }
+    setChatScope({ scope: 'space', spaceId: currentSpaceId, domainId: activeDomainId, legacyWorldId: currentWorldId });
     // חשוב: לא להציג מקלדת בפתיחת פרופיל מה־Home.
     shouldRefocusComposerAfterChatOpenRef.current = false;
     setChatSheetMessages([
@@ -4202,8 +4226,7 @@ export function OneScreen() {
       preGlobalWorldIndexRef.current = worldIndexRef.current;
       const wi = WORLDS.findIndex((w) => w.id === worldId);
       if (wi >= 0) setWorldIndex(wi);
-      setChatPinnedWorldId(worldId);
-      { const _p = legacyWorldIdToSpaceDomain(worldId); setChatPinnedSpaceId(_p.spaceId); setChatPinnedDomainId(_p.domainId); }
+      { const _p = legacyWorldIdToSpaceDomain(worldId); setChatScope({ scope: 'space', spaceId: _p.spaceId, domainId: _p.domainId, legacyWorldId: worldId }); }
       const open = () => setViewMode('global');
       if (showChatSheetRef.current) {
         closeChatSheet({ direction: 'down', afterClose: open });
@@ -4219,8 +4242,7 @@ export function OneScreen() {
     const restoreWi = preGlobalWorldIndexRef.current;
     setWorldIndex(restoreWi);
     const _restoreWid = WORLDS[restoreWi]?.id ?? WORLDS[0]?.id ?? 'personal';
-    setChatPinnedWorldId(_restoreWid);
-    { const _rp = legacyWorldIdToSpaceDomain(_restoreWid); setChatPinnedSpaceId(_rp.spaceId); setChatPinnedDomainId(_rp.domainId); }
+    { const _rp = legacyWorldIdToSpaceDomain(_restoreWid); setChatScope({ scope: 'space', spaceId: _rp.spaceId, domainId: _rp.domainId, legacyWorldId: _restoreWid }); }
     setViewMode('orb');
     const y = AGENT_ORB_INDEX * WHEEL_ITEM_HEIGHT;
     requestAnimationFrame(() => {
@@ -4367,9 +4389,7 @@ export function OneScreen() {
       }
       setTimeout(() => {
         setActiveUnitId(uid);
-        setChatPinnedWorldId(unit.worldId);
-        setChatPinnedSpaceId(unit.spaceId);
-        setChatPinnedDomainId(unit.domainId);
+        setChatScope({ scope: 'unit', spaceId: unit.spaceId, domainId: unit.domainId, unitId: uid, legacyWorldId: unit.worldId });
         shouldRefocusComposerAfterChatOpenRef.current = true;
         setShowChatSheet(true);
       }, 380);
@@ -4732,11 +4752,20 @@ export function OneScreen() {
                         borderColor: hexToRgba(tagColor, isDark ? 0.38 : 0.28),
                       },
                     ]}
-                    onPress={() => setWorldIndex(cycleWorldNext)}
+                    onPress={() => {
+                      const domains = getSpaceConfig(currentSpaceId)?.domains ?? [];
+                      if (domains.length === 0) return;
+                      const idx = activeDomainId ? domains.findIndex((d) => d.id === activeDomainId) : -1;
+                      if (idx < 0) setActiveDomainId(domains[0].id);
+                      else if (idx >= domains.length - 1) setActiveDomainId(undefined);
+                      else setActiveDomainId(domains[idx + 1].id);
+                    }}
                     {...(orbIndex === index ? worldSwipeResponder.panHandlers : {})}
                   >
                     <Text style={[styles.agentWorldTagText, { color: tagColor }]}>
-                      {worldTitle(currentWorldId, language)}
+                      {activeDomainId
+                        ? (getSpaceConfig(currentSpaceId)?.domains.find((d) => d.id === activeDomainId)?.[language === 'he' ? 'labelHe' : 'labelEn'] ?? activeDomainId)
+                        : (language === 'he' ? 'הכל' : 'All')}
                     </Text>
                   </TouchableOpacity>
                 </Animated.View>
@@ -4800,11 +4829,11 @@ export function OneScreen() {
                         backwardRequest={agentBroadcastBackwardKick}
                         onBroadcastLoopComplete={() => {
                           if (showChatSheetRef.current || showAttachSheetRef.current) return;
-                          setWorldIndex((wi) => cycleWorldNext(wi));
+                          setSpaceIndex((i) => (i + 1) % ENABLED_SPACES.length);
                         }}
                         onBroadcastLoopBackwardComplete={() => {
                           if (showChatSheetRef.current || showAttachSheetRef.current) return;
-                          setWorldIndex((wi) => cycleWorldPrev(wi));
+                          setSpaceIndex((i) => (i - 1 + ENABLED_SPACES.length) % ENABLED_SPACES.length);
                         }}
                         titleTextAlign="center"
                         subtitleTextAlign="center"
@@ -5074,16 +5103,16 @@ export function OneScreen() {
     if (Platform.OS !== 'web' || orbIndex !== AGENT_ORB_INDEX || viewMode !== 'orb') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
-        setWorldIndex(cycleWorldPrev);
+        setSpaceIndex((i) => (i - 1 + ENABLED_SPACES.length) % ENABLED_SPACES.length);
         e.preventDefault();
       } else if (e.key === 'ArrowRight') {
-        setWorldIndex(cycleWorldNext);
+        setSpaceIndex((i) => (i + 1) % ENABLED_SPACES.length);
         e.preventDefault();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [orbIndex, viewMode, cycleWorldPrev, cycleWorldNext]);
+  }, [orbIndex, viewMode]);
 
   /** במחשב: חצי מעלה/מטה (וגם Ctrl+Tab / Ctrl+Shift+Tab) לדילוג מהיר בין כדורים */
   useEffect(() => {
@@ -5101,13 +5130,13 @@ export function OneScreen() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [viewMode, stepOrb]);
 
-  /** סוויפ אופקי (רק בכדור הסוכן) – החלפת עולם בלופ אינסופי */
+  /** סוויפ אופקי (רק בכדור הסוכן) – החלפת מרחב (Space) בלופ אינסופי */
   const worldSwipeResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderRelease: (_, g) => {
-        if (g.dx > 40) setWorldIndex(cycleWorldNext);
-        else if (g.dx < -40) setWorldIndex(cycleWorldPrev);
+        if (g.dx > 40) setSpaceIndex((i) => (i + 1) % ENABLED_SPACES.length);
+        else if (g.dx < -40) setSpaceIndex((i) => (i - 1 + ENABLED_SPACES.length) % ENABLED_SPACES.length);
       },
     })
   ).current;
@@ -5507,10 +5536,8 @@ export function OneScreen() {
                       activeOpacity={0.82}
                       onPress={() => {
                         setWorldIndex(wi);
-                        setChatPinnedWorldId(w.id);
                         const _p = legacyWorldIdToSpaceDomain(w.id);
-                        setChatPinnedSpaceId(_p.spaceId);
-                        setChatPinnedDomainId(_p.domainId);
+                        setChatScope({ scope: 'space', spaceId: _p.spaceId, domainId: _p.domainId, legacyWorldId: w.id });
                       }}
                       style={[
                         styles.globalWorldChip,
@@ -6770,10 +6797,8 @@ export function OneScreen() {
                           onPressAgentPlanBadge={() => setShowCredits(true)}
                           profileWorldId={effectiveChatWorldId}
                           onProfileWorldChange={(worldId) => {
-                            setChatPinnedWorldId(worldId);
                             const _p = legacyWorldIdToSpaceDomain(worldId);
-                            setChatPinnedSpaceId(_p.spaceId);
-                            setChatPinnedDomainId(_p.domainId);
+                            setChatScope({ scope: 'space', spaceId: _p.spaceId, domainId: _p.domainId, legacyWorldId: worldId });
                             const wi = WORLDS.findIndex((w) => w.id === worldId);
                             if (wi >= 0) setWorldIndex(wi);
                           }}
