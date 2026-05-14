@@ -24,7 +24,17 @@ export type ChatChromeKey =
   | 'chat_status_agent'
   | 'chat_status_thinking'
   | 'chat_status_planning'
-  | 'chat_status_ready';
+  | 'chat_status_ready'
+  | 'preview_header'
+  | 'preview_complexity_light'
+  | 'preview_complexity_moderate'
+  | 'preview_complexity_involved'
+  | 'preview_steps_anticipated'
+  | 'preview_active_units'
+  | 'preview_insight_common'
+  | 'preview_confirm'
+  | 'preview_dismiss'
+  | 'preview_dismissed_reply';
 
 export type AppStringKey = SettingsStringKey | ChatChromeKey;
 
@@ -74,6 +84,16 @@ const CHAT_HE: Record<ChatChromeKey, string> = {
   chat_status_thinking: 'חושב…',
   chat_status_planning: 'מתכנן…',
   chat_status_ready: 'מוכן',
+  preview_header: 'הבנתי את המטרה שלך. הנה מה שזה ידרוש:',
+  preview_complexity_light: 'קל',
+  preview_complexity_moderate: 'בינוני',
+  preview_complexity_involved: 'מורכב',
+  preview_steps_anticipated: 'שלבים צפויים',
+  preview_active_units: 'יחידות פעילות כרגע',
+  preview_insight_common: 'דפוס תפעולי נפוץ',
+  preview_confirm: 'צור יחידה',
+  preview_dismiss: 'לא עכשיו',
+  preview_dismissed_reply: 'הבנתי, נחזור לזה מאוחר יותר.',
 };
 
 const CHAT_EN: Record<ChatChromeKey, string> = {
@@ -82,6 +102,16 @@ const CHAT_EN: Record<ChatChromeKey, string> = {
   chat_status_thinking: 'Thinking...',
   chat_status_planning: 'Planning...',
   chat_status_ready: 'Ready',
+  preview_header: "I understood your goal. Here's what it would take:",
+  preview_complexity_light: 'Light',
+  preview_complexity_moderate: 'Moderate',
+  preview_complexity_involved: 'Involved',
+  preview_steps_anticipated: 'steps anticipated',
+  preview_active_units: 'active units right now',
+  preview_insight_common: 'Common operational pattern',
+  preview_confirm: 'Create Unit',
+  preview_dismiss: 'Not now',
+  preview_dismissed_reply: 'Got it, we can revisit this later.',
 };
 
 const DICT: Record<AppLanguage, Record<AppStringKey, string>> = {

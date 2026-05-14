@@ -578,6 +578,12 @@ export function OneScreen() {
     [language]
   );
   const [agentUnitCreationMode, setAgentUnitCreationMode] = useState(false);
+  const [pendingUnitPreview, setPendingUnitPreview] = useState<{
+    goalTemplate: GoalTemplate;
+    spaceId: SpaceId;
+    domainId?: DomainId;
+    userMessage: string;
+  } | null>(null);
   const pendingReopenUnitChatRef = useRef<string | null>(null);
   const nowPlaceholderPhrase = useMemo(() => (language === 'he' ? 'עכשיו?' : 'Now?'), [language]);
   /** צבע עדין ל־«עכשיו?» / Now? — בשכבת overlay וב־placeholder של השדה */
@@ -1917,10 +1923,25 @@ export function OneScreen() {
         return;
       }
 
-      setChatStatusPhase('thinking');
       const tmpl = goalTemplateFromText(text, language, effectiveChatWorldId);
-      recordGoalTemplatePublicSignal(tmpl);
-      const newUnitId = `unit_${Date.now()}`;
+      setChatSheetMessages((prev) => [
+        ...prev,
+        { id: `u_${Date.now()}`, sender: 'user' as const, text, sentAt: Date.now() },
+      ]);
+      setPendingUnitPreview({ goalTemplate: tmpl, spaceId: tmpl.spaceId, domainId: tmpl.domainId, userMessage: text });
+      setNowValue('');
+      scrollOneChatToBottom();
+    },
+    [agentUnitCreationMode, activeUnitId, flowUnits, language, effectiveChatWorldId, scrollOneChatToBottom]
+  );
+
+  const confirmUnitCreation = useCallback(() => {
+    if (!pendingUnitPreview) return;
+    const { goalTemplate: tmpl, userMessage: text } = pendingUnitPreview;
+
+    setChatStatusPhase('thinking');
+    recordGoalTemplatePublicSignal(tmpl);
+    const newUnitId = `unit_${Date.now()}`;
       const firstEmpty = tmpl.slots.find((s) => !s.optional) ?? tmpl.slots[0];
       const he = language === 'he';
       const firstAsk = he
@@ -1997,6 +2018,7 @@ export function OneScreen() {
       if (si >= 0) setSpaceIndex(si);
       setChatScope({ scope: 'unit', spaceId: tmpl.spaceId, domainId: tmpl.domainId });
       setAgentUnitCreationMode(false);
+      setPendingUnitPreview(null);
       setNowValue('');
       setTimeout(() => setChatStatusPhase('planning'), 500);
       setTimeout(() => setChatStatusPhase('ready'), 1100);
@@ -2007,9 +2029,21 @@ export function OneScreen() {
           pendingReopenUnitChatRef.current = newUnitId;
         },
       });
-    },
-    [agentUnitCreationMode, activeUnitId, flowUnits, language, effectiveChatWorldId, addProcess]
-  );
+  }, [pendingUnitPreview, language, addProcess]);
+
+  const dismissUnitPreview = useCallback(() => {
+    setPendingUnitPreview(null);
+    setChatSheetMessages((prev) => [
+      ...prev,
+      {
+        id: `dismiss_${Date.now()}`,
+        sender: 'one' as const,
+        text: translate(language, 'preview_dismissed_reply'),
+        sentAt: Date.now(),
+      },
+    ]);
+    scrollOneChatToBottom();
+  }, [language, scrollOneChatToBottom]);
 
   const submitNowValue = useCallback(() => {
     const text = nowValue.trim();
@@ -5312,6 +5346,84 @@ export function OneScreen() {
                             </View>
                           );
                         })}
+                        {pendingUnitPreview != null && !activeUnitId && (() => {
+                          const p = pendingUnitPreview;
+                          const he = language === 'he';
+                          const stepsCount = p.goalTemplate.steps;
+                          const complexityKey = stepsCount <= 3
+                            ? 'preview_complexity_light' as const
+                            : stepsCount <= 6
+                              ? 'preview_complexity_moderate' as const
+                              : 'preview_complexity_involved' as const;
+                          const complexityLabel = translate(language, complexityKey);
+                          const activeCount = flowUnits.filter((u) => u.status === 'active').length;
+                          const domainTag = p.domainId
+                            ? spaceOrDomainTitle(p.domainId, language)
+                            : spaceOrDomainTitle(p.spaceId, language);
+                          const textDir = he ? 'rtl' as const : 'ltr' as const;
+                          const textAlign = he ? 'right' as const : 'left' as const;
+                          return (
+                            <View style={[
+                              styles.previewCard,
+                              { backgroundColor: isDark ? '#1c1c1e' : '#f9f9fb', borderColor: isDark ? '#333' : '#e0e0e4' },
+                            ]}>
+                              <Text style={[styles.previewHeader, { color: colors.text, textAlign, writingDirection: textDir }]}>
+                                {translate(language, 'preview_header')}
+                              </Text>
+                              <View style={[styles.previewTitleRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                <Text style={styles.previewEmoji}>{p.goalTemplate.emoji}</Text>
+                                <Text style={[styles.previewTitle, { color: colors.text, textAlign, writingDirection: textDir }]}>
+                                  {p.goalTemplate.title}
+                                </Text>
+                              </View>
+                              {domainTag ? (
+                                <View style={[styles.previewDomainTagWrap, { alignSelf: he ? 'flex-end' : 'flex-start' }]}>
+                                  <Text style={[styles.previewDomainTag, { color: isDark ? '#aaa' : '#666' }]}>
+                                    {domainTag}
+                                  </Text>
+                                </View>
+                              ) : null}
+                              <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                <Text style={[styles.previewMetaLabel, { color: isDark ? '#bbb' : '#555', textAlign, writingDirection: textDir }]}>
+                                  {he ? `מורכבות: ${complexityLabel}` : `Complexity: ${complexityLabel}`}
+                                </Text>
+                              </View>
+                              <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                <Text style={[styles.previewMetaLabel, { color: isDark ? '#bbb' : '#555', textAlign, writingDirection: textDir }]}>
+                                  {he ? `~${stepsCount} ${translate(language, 'preview_steps_anticipated')}` : `~${stepsCount} ${translate(language, 'preview_steps_anticipated')}`}
+                                </Text>
+                              </View>
+                              <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                <Text style={[styles.previewMetaLabel, { color: isDark ? '#bbb' : '#555', textAlign, writingDirection: textDir }]}>
+                                  {he ? `${activeCount} ${translate(language, 'preview_active_units')}` : `${activeCount} ${translate(language, 'preview_active_units')}`}
+                                </Text>
+                              </View>
+                              <Text style={[styles.previewInsight, { color: isDark ? '#999' : '#888', textAlign, writingDirection: textDir }]}>
+                                {translate(language, 'preview_insight_common')}
+                              </Text>
+                              <View style={[styles.previewButtonRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                <TouchableOpacity
+                                  style={[styles.previewConfirmBtn, { backgroundColor: isDark ? '#fff' : '#000' }]}
+                                  activeOpacity={0.8}
+                                  onPress={confirmUnitCreation}
+                                >
+                                  <Text style={[styles.previewConfirmLabel, { color: isDark ? '#000' : '#fff' }]}>
+                                    {translate(language, 'preview_confirm')}
+                                  </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.previewDismissBtn, { borderColor: isDark ? '#555' : '#ccc' }]}
+                                  activeOpacity={0.8}
+                                  onPress={dismissUnitPreview}
+                                >
+                                  <Text style={[styles.previewDismissLabel, { color: isDark ? '#bbb' : '#555' }]}>
+                                    {translate(language, 'preview_dismiss')}
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          );
+                        })()}
                         {!nowInputHasText ? (
                           <View style={styles.chatSuggestionsInThreadWrap}>
                             <ScrollView
@@ -7370,5 +7482,83 @@ const styles = StyleSheet.create({
   spacePickerCreateTxt: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  previewCard: {
+    alignSelf: 'flex-start',
+    maxWidth: '88%',
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+    gap: 6,
+    marginTop: 4,
+  },
+  previewHeader: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '400',
+    marginBottom: 4,
+  },
+  previewTitleRow: {
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  previewEmoji: {
+    fontSize: 22,
+  },
+  previewTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  previewDomainTagWrap: {
+    backgroundColor: 'rgba(120,120,128,0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 2,
+  },
+  previewDomainTag: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  previewMetaRow: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  previewMetaLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  previewInsight: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  previewButtonRow: {
+    gap: 10,
+    marginTop: 4,
+  },
+  previewConfirmBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  previewConfirmLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  previewDismissBtn: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  previewDismissLabel: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
