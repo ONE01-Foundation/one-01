@@ -2087,6 +2087,14 @@ export function OneScreen() {
             profileSlots: updatedUnit.profileSlots,
             progress: updatedUnit.progress,
             nextAction: updatedUnit.nextAction,
+            emoji: updatedUnit.emoji,
+            subtitle: updatedUnit.subtitle,
+            steps: (updatedUnit.milestones ?? []).map((m, i) => ({
+              id: m.id,
+              title: m.title,
+              completed: m.done,
+              order: i,
+            })),
           });
         }
       }

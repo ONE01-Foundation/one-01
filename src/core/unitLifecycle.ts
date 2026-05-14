@@ -2,7 +2,7 @@ import type { AppLanguage } from '../stores/localeStore';
 import type { LifeLens, OneProcess } from './types';
 import type { SpaceId, DomainId } from './spaces';
 import { legacyWorldIdToSpaceDomain } from './spaces';
-import type { FlowUnit, OrbItem } from './flowUnit';
+import type { FlowUnit, OrbItem, ChatLine } from './flowUnit';
 import { goalTemplateFromText, recordGoalTemplatePublicSignal } from './goalEngine';
 import { formatUnitLogStatusLine } from './displayHelpers';
 
@@ -54,6 +54,37 @@ export function processToFlowUnit(p: OneProcess, language: AppLanguage): FlowUni
   const usePersistedSlots = (p.profileSlots?.length ?? 0) > 0;
   const slots = usePersistedSlots ? p.profileSlots! : tmpl.slots.map((s) => ({ ...s }));
 
+  const introMessage: ChatLine = {
+    id: `reg_${p.id}`,
+    sender: 'one',
+    text:
+      intro +
+      (firstEmpty
+        ? he
+          ? `\n\nכשתרצה נשלים את ${firstEmpty.label} — או תכתוב בחופשיות ואזין לפרופיל.`
+          : `\n\nWhen you want we will complete ${firstEmpty.label}—or write freely and I will map it to the profile.`
+        : ''),
+    sentAt: Date.now(),
+  };
+
+  let messages: ChatLine[];
+  if (p.messages?.length > 0) {
+    const restoredMessages: ChatLine[] = p.messages.map(m => ({
+      id: m.id,
+      sender: m.sender === 'agent' ? 'one' as const : 'user' as const,
+      text: m.text,
+      sentAt: new Date(m.createdAt).getTime(),
+    }));
+    const hasIntro = restoredMessages.length > 0 && restoredMessages[0].sender === 'one';
+    messages = hasIntro ? restoredMessages : [introMessage, ...restoredMessages];
+  } else {
+    messages = [introMessage];
+  }
+
+  const milestones = p.steps?.length
+    ? p.steps.map(s => ({ id: s.id, title: s.title, done: s.completed }))
+    : [];
+
   return {
     id: p.id,
     spaceId: resolvedSpaceId,
@@ -63,22 +94,10 @@ export function processToFlowUnit(p: OneProcess, language: AppLanguage): FlowUni
     emoji: p.emoji ?? tmpl.emoji,
     status: p.status,
     progress: p.progress ?? 14,
-    steps: tmpl.steps,
+    steps: p.steps?.length ?? tmpl.steps,
     profileSlots: slots,
-    messages: [
-      {
-        id: `reg_${p.id}`,
-        sender: 'one',
-        text:
-          intro +
-          (firstEmpty
-            ? he
-              ? `\n\nכשתרצה נשלים את ${firstEmpty.label} — או תכתוב בחופשיות ואזין לפרופיל.`
-              : `\n\nWhen you want we will complete ${firstEmpty.label}—or write freely and I will map it to the profile.`
-            : ''),
-        sentAt: Date.now(),
-      },
-    ],
+    messages,
+    milestones,
     goal: p.fields?.goal ?? (he ? `להגשים: ${p.title}` : `Achieve: ${p.title}`),
     city: he ? 'לא צוין' : 'Not set',
     etaWeeks: 8,
