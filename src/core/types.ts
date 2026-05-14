@@ -107,7 +107,7 @@ export interface OneProcess {
   lens: LifeLens;
   spaceId: SpaceId;
   domainId?: DomainId;
-  status: 'active' | 'done';
+  status: 'active' | 'waiting' | 'done';
   createdAt: string;
   summary: string;
   messages: ProcessMessage[];

@@ -101,7 +101,7 @@ export interface OriginPerson {
 export interface WorldProcessSummary {
   id: string;
   title: string;
-  status: 'active' | 'done' | 'paused';
+  status: 'active' | 'waiting' | 'done' | 'paused';
   stage?: string;
   nextAction?: string;
   completionPercent?: number;

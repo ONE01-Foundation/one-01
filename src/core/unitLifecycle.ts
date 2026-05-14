@@ -6,6 +6,26 @@ import type { FlowUnit, OrbItem } from './flowUnit';
 import { goalTemplateFromText, recordGoalTemplatePublicSignal } from './goalEngine';
 import { formatUnitLogStatusLine } from './displayHelpers';
 
+// ---------------------------------------------------------------------------
+// Unit Lifecycle – derived phase & transition vocabulary
+// ---------------------------------------------------------------------------
+
+export type UnitPhase = 'profiling' | 'operating';
+
+export function deriveUnitPhase(unit: { profileSlots?: Array<{ optional?: boolean; value?: string }> }): UnitPhase {
+  const required = (unit.profileSlots ?? []).filter(s => !s.optional);
+  const allFilled = required.length > 0 && required.every(s => s.value?.trim());
+  return allFilled ? 'operating' : 'profiling';
+}
+
+export const LIFECYCLE_TRANSITIONS = {
+  INTENT_TO_CREATED: 'intent_to_created',
+  PROFILING_TO_OPERATING: 'profiling_to_operating',
+  TO_WAITING: 'to_waiting',
+  WAITING_TO_ACTIVE: 'waiting_to_active',
+  TO_DONE: 'to_done',
+} as const;
+
 export function lensToWorldId(lens: LifeLens): string {
   return lens;
 }
