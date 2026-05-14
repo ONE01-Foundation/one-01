@@ -43,6 +43,9 @@ import { useLocaleStore, type AppLanguage } from '../stores/localeStore';
 import { useLoadingStore } from '../stores/loadingStore';
 import { useDevModeStore, type DevPreviewProfile } from '../stores/devModeStore';
 import { useGlobalIntentSignalsStore } from '../stores/globalIntentSignalsStore';
+import { buildPreviewEnrichmentPrompt, parseAiEnrichmentResponse } from '../core/aiPreviewEnrichment';
+import type { AiPreviewEnrichment } from '../core/aiPreviewEnrichment';
+import { chatCompletion } from '../services/ai';
 import {
   translate,
   embedLatinRunsForRtlDisplay,
@@ -572,6 +575,7 @@ export function OneScreen() {
   const previewProfile = useDevModeStore((s) => s.previewProfile);
   const showAllWorldsExamples = useDevModeStore((s) => s.showAllWorldsExamples);
   const syntheticHomeApplyNonce = useDevModeStore((s) => s.syntheticHomeApplyNonce);
+  const useAiRuntime = useDevModeStore((s) => s.useAiRuntime);
   const isRtlLayout = layoutDirection === 'rtl';
   const chatMenuRows = useMemo(
     () => CHAT_MENU_ROWS.map((row) => ({ ...row, label: translate(language, row.labelKey) })),
@@ -583,6 +587,15 @@ export function OneScreen() {
     spaceId: SpaceId;
     domainId?: DomainId;
     userMessage: string;
+  } | null>(null);
+  /**
+   * Ephemeral AI enrichment — display-only, never persisted.
+   * confirmUnitCreation and addProcess must never read this state.
+   * Cleared on confirm, dismiss, or preview change.
+   */
+  const [aiEnrichment, setAiEnrichment] = useState<{
+    status: 'loading' | 'done' | 'error';
+    data?: AiPreviewEnrichment;
   } | null>(null);
   const pendingReopenUnitChatRef = useRef<string | null>(null);
   const nowPlaceholderPhrase = useMemo(() => (language === 'he' ? 'עכשיו?' : 'Now?'), [language]);
@@ -1965,6 +1978,26 @@ export function OneScreen() {
       setTimeout(() => {
         setPendingUnitPreview({ goalTemplate: tmpl, spaceId: tmpl.spaceId, domainId: tmpl.domainId, userMessage: text });
         scrollOneChatToBottom();
+
+        if (useDevModeStore.getState().useAiRuntime) {
+          setAiEnrichment({ status: 'loading' });
+          const enrichMessages = buildPreviewEnrichmentPrompt(
+            text, tmpl.spaceId, tmpl.domainId, language
+          );
+          Promise.race([
+            chatCompletion({ messages: enrichMessages, temperature: 0.3, maxTokens: 600 }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('AI enrichment timeout')), 5000)
+            ),
+          ])
+            .then((res) => {
+              const parsed = parseAiEnrichmentResponse(res.text);
+              setAiEnrichment(parsed ? { status: 'done', data: parsed } : { status: 'error' });
+            })
+            .catch(() => {
+              setAiEnrichment({ status: 'error' });
+            });
+        }
       }, 800);
     },
     [agentUnitCreationMode, activeUnitId, flowUnits, language, effectiveChatWorldId, scrollOneChatToBottom]
@@ -2054,6 +2087,7 @@ export function OneScreen() {
       setChatScope({ scope: 'unit', spaceId: tmpl.spaceId, domainId: tmpl.domainId });
       setAgentUnitCreationMode(false);
       setPendingUnitPreview(null);
+      setAiEnrichment(null);
       setNowValue('');
 
       setChatSheetMessages((prev) => [
@@ -2081,6 +2115,7 @@ export function OneScreen() {
 
   const dismissUnitPreview = useCallback(() => {
     setPendingUnitPreview(null);
+    setAiEnrichment(null);
     setChatSheetMessages((prev) => [
       ...prev,
       {
