@@ -95,32 +95,38 @@ import {
   BUSINESS_ACCOUNT_ORBS_EN,
   businessAccountOrbs,
 } from '../data/orbCatalog';
+import {
+  MAX_CONTENT_WIDTH,
+  INACTIVITY_HIDE_MS,
+  UNIT_ORB_STATUS_BAR_IDLE_MS,
+  IDLE_CHROME_FADE_MS,
+  type ChatStatusPhase,
+  CHAT_PHASE_KEY,
+  CHAT_MENU_ROWS,
+  UPGRADE_GOLD,
+  UPGRADE_GOLD_ON,
+  GLOBAL_WHEEL_ORB_ID,
+  GLOBAL_ORB_INDEX,
+  AGENT_ORB_INDEX,
+  GLOBAL_PULL_ENTER_PX,
+  GLOBAL_WHEEL_EARLY_OPEN_SCROLL_PX,
+  ORB_SIZE_RATIO,
+  SMALL_ORB_RATIO,
+  WHEEL_ITEM_HEIGHT,
+  SHOW_ORB_DEBUG_OUTLINE,
+  EMOJI_CIRCLE_BORDER_WIDTH,
+  EMOJI_CIRCLE_BORDER_COLOR,
+  EMOJI_CIRCLE_LIGHT,
+  EMOJI_CIRCLE_DARK,
+  EMOJI_CIRCLE_SIZE,
+  AGENT_CIRCLE_SIZE_OTHER_WORLDS,
+  WHEEL_AGENT_FACE_BASE_TRANSLATE_Y,
+  WHEEL_AGENT_FACE_EXTRA_LIFT_WHEN_CENTERED_PX,
+  WHEEL_AGENT_CENTER_ORB_EXTRA_PX,
+  WHEEL_AGENT_BROADCAST_PRIMARY_TITLE_OFFSET_Y,
+  WHEEL_AGENT_BROADCAST_SUBTITLE_MARGIN_TOP,
+} from './oneScreenConstants';
 
-const MAX_CONTENT_WIDTH = 428;
-const INACTIVITY_HIDE_MS = 3000;
-/** כדור יחידה: אחרי חוסר תזוזה – שורת מצב + כדורים שכנים (fade משותף) */
-const UNIT_ORB_STATUS_BAR_IDLE_MS = 4000;
-/** משך fade לכדורים שכנים ולסנכרון עם אנימציית שורת המצב */
-const IDLE_CHROME_FADE_MS = 280;
-type ChatStatusPhase = 'agent' | 'thinking' | 'planning' | 'ready';
-
-const CHAT_PHASE_KEY: Record<ChatStatusPhase, ChatChromeKey> = {
-  agent: 'chat_status_agent',
-  thinking: 'chat_status_thinking',
-  planning: 'chat_status_planning',
-  ready: 'chat_status_ready',
-};
-
-const CHAT_MENU_ROWS: { id: 'Share' | 'Profile' | 'History' | 'Settings'; labelKey: SettingsStringKey }[] = [
-  { id: 'Share', labelKey: 'menu_share' },
-  { id: 'Profile', labelKey: 'menu_profile' },
-  { id: 'History', labelKey: 'menu_history' },
-  { id: 'Settings', labelKey: 'menu_settings' },
-];
-
-/** זהב כפתור שדרוג – עקביות לקרדיטים, תג PRO וכפתורי ארנק */
-const UPGRADE_GOLD = '#e6bf3f';
-const UPGRADE_GOLD_ON = '#111111';
 
 
 /** כדורי יחידה חדשים מיד מתחת לשורת הבית (origin), לא בסוף הגלגל */
@@ -158,15 +164,6 @@ function sortFlowUnitsHistoryOldestFirst(units: FlowUnit[]): FlowUnit[] {
 }
 
 
-/** כדור גלובל מלאכותי בראש הגלגל — מעל הסוכן; אינדקס 0 = גלובל, 1 = סוכן */
-const GLOBAL_WHEEL_ORB_ID = '__wheel_global__';
-const GLOBAL_ORB_INDEX = 0;
-const AGENT_ORB_INDEX = 1;
-
-/** גרירה מעבר לראש הגלגל בכדור הסוכן → מעבר לגלובל מוד */
-const GLOBAL_PULL_ENTER_PX = 56;
-/** גלילה למעלה מתחת לעמדת הסוכן — פתיחת גלובל בלי להמתין למרכוז מלא של כדור הגלובל */
-const GLOBAL_WHEEL_EARLY_OPEN_SCROLL_PX = 36;
 
 
 /** ברודקאסט גלובלי — מרקט דיסקברי + אגרגט אנונימי של רצונות/יחידות שנפתחו בעולם */
@@ -1028,33 +1025,6 @@ const DEV_PROFILE_PRESETS: Record<DevPreviewProfile, { personalOrbs: OrbItem[]; 
 };
 
 
-/** כמו Background-Ovarly: עיגול r=160.5 ב-viewBox 375 → קוטר 321/375 של המסך */
-const ORB_SIZE_RATIO = 321 / 375;
-// הכדור הקטן ~שליש מהגדול, כדי שירגיש משמעותי אבל עדיין משני
-const SMALL_ORB_RATIO = 0.32;
-/** גובה שורה אחת בגלגל הפיקר – רווח בין כדורים; 240 = הכדורים הקטנים 10px קרוב יותר למרכז */
-const WHEEL_ITEM_HEIGHT = 240;
-/** true = קווי מיתר (מסגרת) סביב הכדורים לראות מידות/גודל. להחליף ל־false כדי לכבות. */
-const SHOW_ORB_DEBUG_OUTLINE = true;
-/** עיגול האימוג'י בתוך הכדור – רק מילוי (ללא מסגרת); שליטה כאן */
-const EMOJI_CIRCLE_BORDER_WIDTH = 0;
-const EMOJI_CIRCLE_BORDER_COLOR = 'transparent';
-/** צבע כדור הסוכן – מתאים למוד כהה/בהיר (בכהה גוון רך יותר) */
-const EMOJI_CIRCLE_LIGHT = '#000000';
-const EMOJI_CIRCLE_DARK = '#2a2a2a';
-/** עיגול הסוכן (אימוג'י) – גודל מלא בעולם ראשי */
-const EMOJI_CIRCLE_SIZE = 72;
-/** עיגול הסוכן בעולמות עסקים/בריאות/כלכלה – קטן יותר */
-const AGENT_CIRCLE_SIZE_OTHER_WORLDS = 56;
-/** היסט אנימטיבי של פרצוף הסוכן/איקון העולם בתוך הכדור; במרכז בלבד — הרמה נוספת כדי שלא ייחתך כשהכדור קטן */
-const WHEEL_AGENT_FACE_BASE_TRANSLATE_Y = -10;
-const WHEEL_AGENT_FACE_EXTRA_LIFT_WHEN_CENTERED_PX = 30;
-/** כשכדור הסוכן במרכז — הגדלת קוטר מעט כדי שהפרצוף ייראה טוב */
-const WHEEL_AGENT_CENTER_ORB_EXTRA_PX = 18;
-/** ברודקאסט כדור סוכן — היסט אנכי לכותרת ראשית (שם עולם / ברכה); שלילי = למעלה, חיובי = למטה */
-const WHEEL_AGENT_BROADCAST_PRIMARY_TITLE_OFFSET_Y = 0;
-/** מרווח מעל כותרת משנית — רק בכדור סוכן (יחידות נשארות marginTop מה־StyleSheet) */
-const WHEEL_AGENT_BROADCAST_SUBTITLE_MARGIN_TOP = 8;
 
 
 /** אייקון פלוס מ־assets/icons/plus-icon.svg (viewBox 0 0 46 46) */
