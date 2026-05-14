@@ -867,6 +867,9 @@ export function OneScreen() {
   const currentOrbData = useMemo(
     () => {
       const base = localizedOrbDataForSpace(currentWorldId, personalOrbs, language, flowUnits, showAllWorldsExamples && currentSpaceId !== 'business');
+      // localizedOrbDataForSpace filters by legacy worldId internally.
+      // Post-filter applies canonical spaceId + domainId check.
+      // TODO: unify by passing SpaceId + DomainId directly to the catalog function.
       return base.filter((orb) => {
         const unit = flowUnits.find((u) => u.id === orb.id);
         if (!unit) return true;
@@ -894,6 +897,8 @@ export function OneScreen() {
     wheelOrbDataRef.current = wheelOrbData;
   }, [wheelOrbData]);
   const currentWorldColor = WORLDS[worldIndex]?.color ?? WORLDS[0].color;
+  // Re-derives unit→world→color via flowUnits.find + WORLDS.find.
+  // Future: cache color on OrbItem or derive from spaceId directly.
   /** צבע הבזק נקודות ברודקאסט: בעולמות = עולם נוכחי; בכדור יחידה = צבע העולם של היחידה */
   const broadcastDotFlashColor = useMemo(() => {
     if (orbIndex > AGENT_ORB_INDEX) {
