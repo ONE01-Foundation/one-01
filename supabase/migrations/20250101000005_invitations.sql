@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 CREATE TABLE IF NOT EXISTS public.invitations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   unit_id text NOT NULL REFERENCES public.units(id) ON DELETE CASCADE,
-  token text NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(24), 'hex'),
+  token text NOT NULL UNIQUE DEFAULT encode(extensions.gen_random_bytes(24), 'hex'),
   role text NOT NULL DEFAULT 'collaborator'
     CHECK (role IN ('collaborator', 'provider', 'observer')),
   created_by uuid NOT NULL REFERENCES auth.users(id),
