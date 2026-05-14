@@ -4,11 +4,12 @@ ALTER TABLE public.units
   ADD COLUMN IF NOT EXISTS visibility text NOT NULL DEFAULT 'private' 
     CHECK (visibility IN ('private', 'shared', 'public'));
 
--- Backfill owner_id from user_id (cast text to uuid if user_id is text)
--- Only if user_id column exists and contains valid UUIDs
+-- Backfill owner_id from user_id, skipping non-UUID values (e.g. local session IDs)
 UPDATE public.units 
   SET owner_id = user_id::uuid 
-  WHERE owner_id IS NULL AND user_id IS NOT NULL;
+  WHERE owner_id IS NULL 
+    AND user_id IS NOT NULL
+    AND user_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 
 -- Enable RLS
 ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
