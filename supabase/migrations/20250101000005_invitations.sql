@@ -1,3 +1,6 @@
+-- Ensure pgcrypto is available for gen_random_bytes()
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
 -- Invitations table for sharing units with non-users
 CREATE TABLE IF NOT EXISTS public.invitations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
