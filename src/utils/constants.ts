@@ -12,8 +12,7 @@ const getEnvVar = (key: string, defaultValue: string = ''): string => {
 export const SOCKET_SERVER_URL = getEnvVar('EXPO_PUBLIC_SOCKET_SERVER_URL', 'http://localhost:3000');
 export const SUPABASE_URL = getEnvVar('EXPO_PUBLIC_SUPABASE_URL', '');
 export const SUPABASE_ANON_KEY = getEnvVar('EXPO_PUBLIC_SUPABASE_ANON_KEY', '');
-export const ELEVENLABS_API_KEY = getEnvVar('EXPO_PUBLIC_ELEVENLABS_API_KEY', '');
-export const ELEVENLABS_VOICE_ID = getEnvVar('EXPO_PUBLIC_ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM'); // Default voice
+export const ELEVENLABS_VOICE_ID = getEnvVar('EXPO_PUBLIC_ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM');
 
 export const APP_NAME = 'ONE Platform';
 export const APP_VERSION = '1.0.0';

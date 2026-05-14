@@ -4,7 +4,8 @@
 
 import { Audio } from 'expo-av';
 import { AudioRecording, VoiceConfig } from '../types';
-import { ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID } from '../utils/constants';
+import { ELEVENLABS_VOICE_ID } from '../utils/constants';
+import { supabaseService } from './supabaseService';
 
 class VoiceService {
   private recording: Audio.Recording | null = null;
@@ -40,7 +41,7 @@ class VoiceService {
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       this.recording = recording;
-      return null; // Recording is in progress
+      return null;
     } catch (error) {
       console.error('Failed to start recording:', error);
       return null;
@@ -75,11 +76,8 @@ class VoiceService {
   async playTextToSpeech(text: string, config?: Partial<VoiceConfig>): Promise<void> {
     try {
       const finalConfig = { ...this.voiceConfig, ...config };
-      
-      // This would integrate with your TTS provider (ElevenLabs, Azure, OpenAI)
-      // For now, this is a placeholder
       const audioUrl = await this.generateTTS(text, finalConfig);
-      
+
       if (audioUrl) {
         const { sound } = await Audio.Sound.createAsync(
           { uri: audioUrl },
@@ -98,48 +96,37 @@ class VoiceService {
     if (config.provider === 'elevenlabs') {
       return await this.generateElevenLabsTTS(text, config);
     }
-    
+
     console.log('TTS provider not implemented:', config.provider);
     return null;
   }
 
   private async generateElevenLabsTTS(text: string, config: VoiceConfig): Promise<string | null> {
     try {
-      if (!ELEVENLABS_API_KEY) {
-        console.warn('ElevenLabs API key not configured');
+      const client = supabaseService.getClient();
+      if (!client) {
+        console.warn('Supabase not initialized — cannot call TTS edge function');
         return null;
       }
 
       const voiceId = config.voiceId || ELEVENLABS_VOICE_ID;
-      
-      const response = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-        {
-          method: 'POST',
-          headers: {
-            'Accept': 'audio/mpeg',
-            'Content-Type': 'application/json',
-            'xi-api-key': ELEVENLABS_API_KEY
-          },
-          body: JSON.stringify({
-            text: text,
-            model_id: 'eleven_monolingual_v1',
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.5,
-              speed: config.speed || 1.0
-            }
-          })
-        }
-      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`ElevenLabs API error: ${response.status} ${response.statusText} - ${errorText}`);
+      const { data, error } = await client.functions.invoke('tts', {
+        body: {
+          text,
+          voice_id: voiceId,
+          model_id: 'eleven_monolingual_v1',
+          stability: 0.5,
+          similarity_boost: 0.5,
+          speed: config.speed || 1.0,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message ?? 'TTS request failed');
       }
 
-      // Convert response to blob and create object URL
-      const blob = await response.blob();
+      const blob = data instanceof Blob ? data : new Blob([data], { type: 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
       return url;
     } catch (error) {
