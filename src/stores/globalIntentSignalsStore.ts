@@ -1,5 +1,5 @@
 /**
- * אגרגט אנונימי: איזה סוגי יחידות/רצונות נפתחים בעולם — לגלובל בלבד (בלי זהות משתמש).
+ * אגרגט אנונימי: איזה סוגי יחידות/רצונות נפתחים במרחב — לגלובל בלבד (בלי זהות משתמש).
  */
 import { create } from 'zustand';
 
@@ -11,15 +11,15 @@ export type GlobalIntentSignal = {
 };
 
 type GlobalIntentSignalsState = {
-  byWorld: Record<string, GlobalIntentSignal[]>;
-  recordUnitIntent: (worldId: string, signalKey: string, labelHe: string, labelEn: string) => void;
+  bySpace: Record<string, GlobalIntentSignal[]>;
+  recordUnitIntent: (spaceId: string, signalKey: string, labelHe: string, labelEn: string) => void;
 };
 
 export const useGlobalIntentSignalsStore = create<GlobalIntentSignalsState>((set) => ({
-  byWorld: {},
-  recordUnitIntent: (worldId, signalKey, labelHe, labelEn) => {
+  bySpace: {},
+  recordUnitIntent: (spaceId, signalKey, labelHe, labelEn) => {
     set((s) => {
-      const prev = s.byWorld[worldId] ?? [];
+      const prev = s.bySpace[spaceId] ?? [];
       const idx = prev.findIndex((x) => x.key === signalKey);
       let next: GlobalIntentSignal[];
       if (idx >= 0) {
@@ -30,7 +30,7 @@ export const useGlobalIntentSignalsStore = create<GlobalIntentSignalsState>((set
         next = [...prev, { key: signalKey, labelHe, labelEn, count: 1 }];
       }
       next.sort((a, b) => b.count - a.count);
-      return { byWorld: { ...s.byWorld, [worldId]: next } };
+      return { bySpace: { ...s.bySpace, [spaceId]: next } };
     });
   },
 }));

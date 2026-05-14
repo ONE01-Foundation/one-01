@@ -6,6 +6,7 @@
 export type ViewMode = 'orb' | 'card' | 'global';
 
 export interface CardContext {
-  worldId: string;
+  spaceId: string;
+  domainId?: string;
   orbId: string;
 }

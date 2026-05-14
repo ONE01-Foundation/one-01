@@ -45,9 +45,9 @@ type ThemeColors = {
 export type AttachSheetContext = {
   /** צ׳אט פתוח — יש יחידה פעילה כשמוגדר */
   chatSheetOpen: boolean;
-  worldId: string;
-  /** תווית עולם לכותרת (מגלגל או מצ׳אט) */
-  worldLabel?: string;
+  spaceId: string;
+  /** תווית מרחב לכותרת (מגלגל או מצ׳אט) */
+  spaceLabel?: string;
   /** כותרת יחידה כשהפרופיל/צ׳אט על יחידה */
   unitTitle: string | null;
 };
@@ -158,8 +158,8 @@ function groupChromeBg(colors: ThemeColors): string {
   return colors.surface;
 }
 
-function worldTipRow(worldId: string): { id: AttachActionId; emoji: string; he: string; en: string } {
-  switch (worldId) {
+function spaceTipRow(spaceId: string): { id: AttachActionId; emoji: string; he: string; en: string } {
+  switch (spaceId) {
     case 'health':
       return {
         id: 'attach_ctx_world_tip',
@@ -218,8 +218,8 @@ function buildListRows(
 ): { id: AttachActionId; emoji: string; he: string; en: string }[] {
   const chat = hideChatRow ? [] : [CHAT_ROW];
   const inUnit = ctx.chatSheetOpen && !!ctx.unitTitle?.trim();
-  /** המלצת עולם גם מהגלגל כשהצ׳אט סגור */
-  const inWorldOnly = !inUnit && ctx.worldId !== 'personal';
+  /** המלצת מרחב גם מהגלגל כשהצ׳אט סגור */
+  const inWorldOnly = !inUnit && ctx.spaceId !== 'personal';
 
   if (inUnit) {
     const t = ctx.unitTitle!.trim();
@@ -248,7 +248,7 @@ function buildListRows(
   }
 
   if (inWorldOnly) {
-    return [...chat, worldTipRow(ctx.worldId), ...LIST_ACTIONS];
+    return [...chat, spaceTipRow(ctx.spaceId), ...LIST_ACTIONS];
   }
 
   return [...chat, ...LIST_ACTIONS];
@@ -267,8 +267,8 @@ export function AttachActionSheet({
 }: Props) {
   const ctx: AttachSheetContext = attachContext ?? {
     chatSheetOpen: false,
-    worldId: 'personal',
-    worldLabel: undefined,
+    spaceId: 'personal',
+    spaceLabel: undefined,
     unitTitle: null,
   };
 
@@ -392,7 +392,7 @@ export function AttachActionSheet({
 
   const groupBg = groupChromeBg(colors);
 
-  const listRows = useMemo(() => buildListRows(hideChatRow, ctx), [hideChatRow, ctx.chatSheetOpen, ctx.worldId, ctx.unitTitle]);
+  const listRows = useMemo(() => buildListRows(hideChatRow, ctx), [hideChatRow, ctx.chatSheetOpen, ctx.spaceId, ctx.unitTitle]);
 
   const label = (row: { he: string; en: string }) => (language === 'he' ? row.he : row.en);
 
@@ -401,12 +401,12 @@ export function AttachActionSheet({
       const t = ctx.unitTitle.trim();
       return language === 'he' ? `צירוף · ${t}` : `Attach · ${t}`;
     }
-    if (ctx.worldId !== 'personal' && ctx.worldLabel?.trim()) {
-      const w = ctx.worldLabel.trim();
+    if (ctx.spaceId !== 'personal' && ctx.spaceLabel?.trim()) {
+      const w = ctx.spaceLabel.trim();
       return language === 'he' ? `צירוף · ${w}` : `Attach · ${w}`;
     }
     return language === 'he' ? 'מה לצרף?' : 'Attach';
-  }, [ctx.chatSheetOpen, ctx.unitTitle, ctx.worldId, ctx.worldLabel, language]);
+  }, [ctx.chatSheetOpen, ctx.unitTitle, ctx.spaceId, ctx.spaceLabel, language]);
 
   if (!visible && !presented) return null;
 

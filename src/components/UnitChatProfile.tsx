@@ -102,12 +102,12 @@ type UnitChatProfileProps = {
   agentPlanBadgePaid?: boolean;
   onPressAgentPlanBadge?: () => void;
   /** פרופיל סוכן: בחירת מרחב — מסנכרן צ׳אט ומסנן נתונים */
-  profileWorldId?: string;
-  onProfileWorldChange?: (worldId: string) => void;
+  profileSpaceId?: string;
+  onProfileSpaceChange?: (spaceId: string) => void;
   /** לחיצה על פרצוף הסוכן / אימוג׳י יחידה במרכז — פותחת גלובל למרחב */
   onPressHeroOpenGlobal?: () => void;
   /** לחיצה על שבב עולם — פותחת גלובל לאותו מרחב (דורס בחירת מרחב בפרופיל כשמועבר) */
-  onPressWorldChipOpenGlobal?: (worldId: string) => void;
+  onPressSpaceChipOpenGlobal?: (spaceId: string) => void;
 };
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -355,10 +355,10 @@ export function UnitChatProfile({
   agentPlanBadgeLabel,
   agentPlanBadgePaid,
   onPressAgentPlanBadge,
-  profileWorldId,
-  onProfileWorldChange,
+  profileSpaceId,
+  onProfileSpaceChange,
   onPressHeroOpenGlobal,
-  onPressWorldChipOpenGlobal,
+  onPressSpaceChipOpenGlobal,
 }: UnitChatProfileProps) {
   const language = useLocaleStore((s) => s.language);
   const agentLang: 'he' | 'en' = language === 'he' ? 'he' : 'en';
@@ -610,7 +610,7 @@ export function UnitChatProfile({
             contentContainerStyle={styles.agentWorldChipsRow}
           >
             {ap.worlds.map((w) => {
-              const selected = profileWorldId != null && w.id === profileWorldId;
+              const selected = profileSpaceId != null && w.id === profileSpaceId;
               return (
                 <TouchableOpacity
                   key={w.id}
@@ -619,7 +619,7 @@ export function UnitChatProfile({
                     selected ? styles.agentWorldChipSelected : { backgroundColor: hexToRgba(colors.textSecondary, isDark ? 0.2 : 0.12) },
                   ]}
                   onPress={() =>
-                    onPressWorldChipOpenGlobal ? onPressWorldChipOpenGlobal(w.id) : onProfileWorldChange?.(w.id)
+                    onPressSpaceChipOpenGlobal ? onPressSpaceChipOpenGlobal(w.id) : onProfileSpaceChange?.(w.id)
                   }
                   activeOpacity={0.85}
                   accessibilityRole="button"
