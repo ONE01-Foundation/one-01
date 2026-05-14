@@ -3,6 +3,15 @@ import { spaceOrDomainTitle } from './displayHelpers';
 import { formatUnitLogStatusLine } from './displayHelpers';
 import type { FlowUnit, OrbItem, BroadcastMessage } from './flowUnit';
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function lastActivityMs(unit: FlowUnit): number {
+  const msgs = unit.messages ?? [];
+  const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1].sentAt : 0;
+  return lastMsg || 0;
+}
+
 export function getGlobalBroadcastMessages(
   spaceId: string,
   language: AppLanguage,
@@ -74,18 +83,43 @@ export function broadcastMessagesForOrbItem(item: OrbItem, units: FlowUnit[], la
     chatHint: he ? 'פתחו בצ׳אט למעקב אחר צעדים' : 'Open chat to track steps',
     need: he ? 'צריך ממך' : 'Need from you',
     status: he ? 'סטטוס' : 'Status',
+    signal: he ? 'סיגנל' : 'Signal',
   };
   const unit = units.find((u) => u.id === item.id);
   if (unit) {
     const out: BroadcastMessage[] = [];
-    const slots = unit.profileSlots?.filter((s) => !s.optional) ?? [];
-    const missing = slots.filter((s) => !s.value?.trim());
-    if (missing.length > 0) {
+    const now = Date.now();
+
+    if (unit.status === 'waiting') {
+      const hint = unit.nextAction?.trim() || (he ? 'ממתין להמשך' : 'awaiting next step');
+      out.push({ type: t.signal, body: he ? `«${unit.title}» ממתינה — ${hint}` : `«${unit.title}» waiting — ${hint}` });
+    }
+
+    const lastActive = lastActivityMs(unit);
+    if (lastActive > 0 && now - lastActive > SEVEN_DAYS_MS && unit.status !== 'done') {
+      out.push({ type: t.signal, body: he ? `«${unit.title}» — לא היה עדכון כבר שבוע` : `«${unit.title}» — no updates for a week` });
+    }
+
+    if (unit.progress >= 80 && unit.status === 'active') {
+      out.push({ type: t.signal, body: he ? `«${unit.title}» קרוב לסיום — ${unit.progress}%` : `«${unit.title}» near completion — ${unit.progress}%` });
+    }
+
+    const requiredSlots = unit.profileSlots?.filter((s) => !s.optional) ?? [];
+    const missingSlots = requiredSlots.filter((s) => !s.value?.trim());
+    if (requiredSlots.length > 0 && missingSlots.length === 0) {
+      out.push({ type: t.signal, body: he ? `«${unit.title}» — הפרופיל מלא, מוכן להתקדם` : `«${unit.title}» — profile complete, ready to advance` });
+    }
+
+    if (lastActive > 0 && now - lastActive < ONE_DAY_MS) {
+      out.push({ type: t.signal, body: he ? `«${unit.title}» — יחידה חדשה, בואו נתחיל` : `«${unit.title}» — new unit, let's begin` });
+    }
+
+    if (missingSlots.length > 0) {
       out.push({
         type: t.need,
-        body: he ? `${missing.length} שדות חסרים בפרופיל — ${missing[0].label}` : `${missing.length} profile fields missing — ${missing[0].label}`,
+        body: he ? `${missingSlots.length} שדות חסרים בפרופיל — ${missingSlots[0].label}` : `${missingSlots.length} profile fields missing — ${missingSlots[0].label}`,
       });
-      for (const s of missing.slice(1, 4)) {
+      for (const s of missingSlots.slice(1, 4)) {
         out.push({ type: t.need, body: s.label });
       }
     }
@@ -134,19 +168,66 @@ export const BROADCAST_BY_SPACE_EN: Record<string, BroadcastMessage[]> = {
 
 export function broadcastMessagesForSpace(spaceId: string, language: AppLanguage, units: FlowUnit[]): BroadcastMessage[] {
   const he = language === 'he';
-  const open = units
-    .filter((u) => u.spaceId === spaceId && u.status !== 'done')
-    .sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0));
-  if (open.length === 0) {
-    return he
-      ? [{ type: 'סטטוס', body: 'אין עדיין יחידות פתוחות במרחב הזה. פתחו יחידה חדשה מהצ׳אט.' }]
-      : [{ type: 'Status', body: 'No active units in this space yet. Create one from chat.' }];
+  const now = Date.now();
+  const spaceUnits = units.filter((u) => u.spaceId === spaceId);
+  const activeUnits = spaceUnits.filter((u) => u.status === 'active');
+  const waitingUnits = spaceUnits.filter((u) => u.status === 'waiting');
+  const staleUnits = spaceUnits.filter((u) => {
+    if (u.status === 'done') return false;
+    const last = lastActivityMs(u);
+    return last > 0 && now - last > SEVEN_DAYS_MS;
+  });
+  let totalMissingSlots = 0;
+  for (const u of spaceUnits) {
+    const req = u.profileSlots?.filter((s) => !s.optional) ?? [];
+    totalMissingSlots += req.filter((s) => !s.value?.trim()).length;
   }
-  const top = open.slice(0, 3);
-  return top.map((u) => ({
-    type: he ? 'יחידה פעילה' : 'Active unit',
-    body: he
-      ? `${u.title} · ${u.progress}% · ${u.nextAction || 'ממתין לצעד הבא'}`
-      : `${u.title} · ${u.progress}% · ${u.nextAction || 'Waiting for next action'}`,
-  }));
+
+  if (spaceUnits.length === 0) {
+    return he
+      ? [{ type: 'סטטוס', body: 'ONE לומד את הקצב שלך — היחידות שלך יזינו את התמונה.' }]
+      : [{ type: 'status', body: 'ONE is learning your rhythm — your units will shape the picture.' }];
+  }
+
+  const out: BroadcastMessage[] = [];
+
+  if (activeUnits.length > 0) {
+    out.push({
+      type: he ? 'סיכום' : 'Summary',
+      body: he ? `${activeUnits.length} יחידות פעילות` : `${activeUnits.length} active units`,
+    });
+  }
+  if (waitingUnits.length > 0) {
+    out.push({
+      type: he ? 'סיכום' : 'Summary',
+      body: he ? `${waitingUnits.length} יחידות ממתינות` : `${waitingUnits.length} units waiting`,
+    });
+  }
+  if (totalMissingSlots > 0) {
+    out.push({
+      type: he ? 'סיכום' : 'Summary',
+      body: he ? `${totalMissingSlots} שדות חסרים בסה"כ` : `${totalMissingSlots} total missing fields`,
+    });
+  }
+  if (staleUnits.length > 0) {
+    out.push({
+      type: he ? 'תשומת לב' : 'Attention',
+      body: he ? `${staleUnits.length} יחידות ללא עדכון שבוע+` : `${staleUnits.length} units with no update for a week+`,
+    });
+  }
+
+  const recentlyActive = [...spaceUnits]
+    .filter((u) => u.status !== 'done')
+    .sort((a, b) => lastActivityMs(b) - lastActivityMs(a))
+    .slice(0, 2);
+  for (const u of recentlyActive) {
+    out.push({
+      type: he ? 'יחידה פעילה' : 'Active unit',
+      body: he
+        ? `${u.title} · ${u.progress}% · ${u.nextAction || 'ממתין לצעד הבא'}`
+        : `${u.title} · ${u.progress}% · ${u.nextAction || 'Waiting for next action'}`,
+    });
+  }
+
+  return out;
 }
