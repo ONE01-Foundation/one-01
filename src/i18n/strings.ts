@@ -36,7 +36,13 @@ export type ChatChromeKey =
   | 'preview_dismiss'
   | 'preview_dismissed_reply'
   | 'preview_thinking'
-  | 'preview_activating';
+  | 'preview_activating'
+  | 'preview_ai_thinking'
+  | 'preview_ai_analysis'
+  | 'preview_ai_steps'
+  | 'preview_ai_questions'
+  | 'preview_ai_risks'
+  | 'preview_ai_notes';
 
 export type AppStringKey = SettingsStringKey | ChatChromeKey;
 
@@ -98,6 +104,12 @@ const CHAT_HE: Record<ChatChromeKey, string> = {
   preview_dismissed_reply: 'הבנתי, נחזור לזה מאוחר יותר.',
   preview_thinking: 'רגע, אני מעבד את זה...',
   preview_activating: 'מוכן. מפעיל.',
+  preview_ai_thinking: 'ONE מנתח...',
+  preview_ai_analysis: 'ניתוח ONE',
+  preview_ai_steps: 'שלבים מוצעים',
+  preview_ai_questions: 'לבירור',
+  preview_ai_risks: 'שימו לב',
+  preview_ai_notes: 'כדאי לדעת',
 };
 
 const CHAT_EN: Record<ChatChromeKey, string> = {
@@ -118,6 +130,12 @@ const CHAT_EN: Record<ChatChromeKey, string> = {
   preview_dismissed_reply: 'Got it, we can revisit this later.',
   preview_thinking: 'One moment, processing this...',
   preview_activating: 'Ready. Activating.',
+  preview_ai_thinking: 'ONE is analyzing...',
+  preview_ai_analysis: "ONE's analysis",
+  preview_ai_steps: 'Suggested steps',
+  preview_ai_questions: 'To clarify',
+  preview_ai_risks: 'Watch out',
+  preview_ai_notes: 'Good to know',
 };
 
 const DICT: Record<AppLanguage, Record<AppStringKey, string>> = {

@@ -5525,6 +5525,64 @@ export function OneScreen() {
                                 {translate(language, 'preview_insight_common')}
                               </Text>
                               )}
+                              {aiEnrichment?.status === 'loading' && (
+                                <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? '#333' : '#e0e0e4', marginTop: 12, paddingTop: 10 }}>
+                                  <Text style={{ fontSize: 12, color: isDark ? '#888' : '#999', textAlign: 'center', fontStyle: 'italic' }}>
+                                    {translate(language, 'preview_ai_thinking')}
+                                  </Text>
+                                </View>
+                              )}
+                              {aiEnrichment?.status === 'done' && aiEnrichment.data && (
+                                <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? '#333' : '#e0e0e4', marginTop: 12, paddingTop: 10, backgroundColor: isDark ? 'rgba(100,100,255,0.04)' : 'rgba(80,80,200,0.03)', borderRadius: 8, padding: 10 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '600', color: isDark ? '#aaa' : '#888', textAlign: 'center', marginBottom: 8 }}>
+                                    {'✦ '}{translate(language, 'preview_ai_analysis')}
+                                  </Text>
+                                  <Text style={{ fontSize: 13, color: isDark ? '#ccc' : '#444', marginBottom: 8, textAlign, writingDirection: textDir }}>
+                                    {aiEnrichment.data.description}
+                                  </Text>
+                                  {aiEnrichment.data.suggestedSteps.length > 0 && (
+                                    <View style={{ marginBottom: 8 }}>
+                                      <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? '#aaa' : '#666', marginBottom: 4, textAlign, writingDirection: textDir }}>
+                                        {'📌 '}{translate(language, 'preview_ai_steps')}
+                                      </Text>
+                                      {aiEnrichment.data.suggestedSteps.map((step, i) => (
+                                        <Text key={i} style={{ fontSize: 12, color: isDark ? '#bbb' : '#555', marginLeft: he ? 0 : 12, marginRight: he ? 12 : 0, marginBottom: 2, textAlign, writingDirection: textDir }}>
+                                          {`${i + 1}. ${step}`}
+                                        </Text>
+                                      ))}
+                                    </View>
+                                  )}
+                                  {aiEnrichment.data.clarifyingQuestions.length > 0 && (
+                                    <View style={{ marginBottom: 8 }}>
+                                      <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? '#aaa' : '#666', marginBottom: 4, textAlign, writingDirection: textDir }}>
+                                        {'❓ '}{translate(language, 'preview_ai_questions')}
+                                      </Text>
+                                      {aiEnrichment.data.clarifyingQuestions.map((q, i) => (
+                                        <Text key={i} style={{ fontSize: 12, color: isDark ? '#bbb' : '#555', marginLeft: he ? 0 : 12, marginRight: he ? 12 : 0, marginBottom: 2, textAlign, writingDirection: textDir }}>
+                                          {`• ${q}`}
+                                        </Text>
+                                      ))}
+                                    </View>
+                                  )}
+                                  {aiEnrichment.data.risksOrBlockers.length > 0 && (
+                                    <View style={{ marginBottom: 8 }}>
+                                      <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? '#aaa' : '#666', marginBottom: 4, textAlign, writingDirection: textDir }}>
+                                        {'⚠️ '}{translate(language, 'preview_ai_risks')}
+                                      </Text>
+                                      {aiEnrichment.data.risksOrBlockers.map((r, i) => (
+                                        <Text key={i} style={{ fontSize: 12, color: isDark ? '#bbb' : '#555', marginLeft: he ? 0 : 12, marginRight: he ? 12 : 0, marginBottom: 2, textAlign, writingDirection: textDir }}>
+                                          {`• ${r}`}
+                                        </Text>
+                                      ))}
+                                    </View>
+                                  )}
+                                  {aiEnrichment.data.realWorldNotes ? (
+                                    <Text style={{ fontSize: 12, color: isDark ? '#bbb' : '#555', fontStyle: 'italic', textAlign, writingDirection: textDir }}>
+                                      {'💡 '}{aiEnrichment.data.realWorldNotes}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                              )}
                               <View style={[styles.previewButtonRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
                                 <TouchableOpacity
                                   style={[styles.previewConfirmBtn, { backgroundColor: isDark ? '#fff' : '#000' }]}
