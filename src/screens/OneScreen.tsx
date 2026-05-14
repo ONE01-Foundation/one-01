@@ -1005,7 +1005,8 @@ export function OneScreen() {
     [language]
   );
   const globalDiscoverySections = useMemo(() => {
-    const { aggregate, discovery, marketPulse } = getStaticGlobalSections(language);
+    const processes = user?.processes ?? [];
+    const { aggregate, discovery, marketPulse } = getStaticGlobalSections(language, processes, flowUnits);
     const agentSearchThemes = currentOrbData
       .filter((o) => o.id !== 'origin')
       .slice(0, 4)
@@ -1016,7 +1017,7 @@ export function OneScreen() {
       .slice(0, 3)
       .map((u) => ({ key: u.id, title: u.goal?.trim() || u.title, sub: `${u.progress}%` }));
     return { aggregate, discovery, agentSearchThemes, unitsHot, marketPulse };
-  }, [currentOrbData, currentWorldId, currentSpaceId, activeDomainId, flowUnits, language]);
+  }, [currentOrbData, currentWorldId, currentSpaceId, activeDomainId, flowUnits, language, user]);
   const effectiveChatWorldId = showChatSheet ? (chatScope.domainId ?? chatScope.spaceId) : currentWorldId;
   const effectiveChatSpaceId: SpaceId = showChatSheet ? chatScope.spaceId : currentSpaceId;
   const effectiveChatDomainId: DomainId | undefined = showChatSheet ? chatScope.domainId : activeDomainId;
