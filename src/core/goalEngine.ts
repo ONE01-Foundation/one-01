@@ -6,6 +6,8 @@ import { useGlobalIntentSignalsStore } from '../stores/globalIntentSignalsStore'
 import { spaceOrDomainTitle } from './displayHelpers';
 import type { FlowUnit } from './flowUnit';
 
+export type UnitType = 'process' | 'simple' | 'note' | 'entity';
+
 export type GoalTemplate = {
   title: string;
   spaceId: SpaceId;
@@ -14,6 +16,7 @@ export type GoalTemplate = {
   subtitle: string;
   slots: UnitProfileSlot[];
   steps: number;
+  unitType: UnitType;
   publicSignalKey: string;
   publicSignalLabelHe: string;
   publicSignalLabelEn: string;
@@ -69,6 +72,7 @@ export function _goalTemplateCore(goal: string, language: AppLanguage, fallbackW
             { id: 'constraints', label: 'Medical notes / constraints', optional: true },
           ],
       steps: 12,
+      unitType: 'process',
       publicSignalKey: 'intent_weight_loss',
       publicSignalLabelHe: 'ירידה במשקל',
       publicSignalLabelEn: 'Losing weight',
@@ -92,6 +96,7 @@ export function _goalTemplateCore(goal: string, language: AppLanguage, fallbackW
             { id: 'exam_target', label: 'Target test date (optional)', optional: true },
           ],
       steps: 25,
+      unitType: 'process',
       publicSignalKey: 'intent_drivers_license',
       publicSignalLabelHe: 'רישיון נהיגה',
       publicSignalLabelEn: "Driver's license",
@@ -115,6 +120,7 @@ export function _goalTemplateCore(goal: string, language: AppLanguage, fallbackW
             { id: 'hours_week', label: 'Hours per week?', optional: true },
           ],
       steps: 15,
+      unitType: 'process',
       publicSignalKey: 'intent_exam_prep',
       publicSignalLabelHe: 'הכנה למבחן / לימודים',
       publicSignalLabelEn: 'Exam / study prep',
@@ -136,6 +142,7 @@ export function _goalTemplateCore(goal: string, language: AppLanguage, fallbackW
             { id: 'timeline', label: 'What time window?' },
           ],
       steps: 14,
+      unitType: 'process',
       publicSignalKey: 'intent_business_goal',
       publicSignalLabelHe: 'יעד עסקי / מכירות',
       publicSignalLabelEn: 'Business / sales goal',
@@ -157,11 +164,63 @@ export function _goalTemplateCore(goal: string, language: AppLanguage, fallbackW
             { id: 'horizon', label: 'By when?' },
           ],
       steps: 12,
+      unitType: 'process',
       publicSignalKey: 'intent_finance_goal',
       publicSignalLabelHe: 'יעד כספי / חיסכון',
       publicSignalLabelEn: 'Money / savings goal',
     };
   }
+
+  if (/(לקוח|ספק|עובד|תלמיד|דירה|חברה|client|supplier|employee|student|apartment|company|provider|person|organization)/.test(g)) {
+    return {
+      title: trimTitle || (he ? 'ישות חדשה' : 'New entity'),
+      ...legacyWorldIdToSpaceDomain(inferWorldForIntent(goal, fallbackWorld)),
+      emoji: '🏷️',
+      subtitle: he ? 'ניהול מתמשך — אנשי קשר, סטטוס, פעולות' : 'Ongoing management — contacts, status, actions',
+      slots: he
+        ? [
+            { id: 'name', label: 'שם' },
+            { id: 'contact', label: 'פרטי קשר', optional: true },
+            { id: 'status', label: 'סטטוס' },
+            { id: 'notes', label: 'הערות', optional: true },
+          ]
+        : [
+            { id: 'name', label: 'Name' },
+            { id: 'contact', label: 'Contact info', optional: true },
+            { id: 'status', label: 'Status' },
+            { id: 'notes', label: 'Notes', optional: true },
+          ],
+      steps: 4,
+      unitType: 'entity',
+      publicSignalKey: 'intent_entity',
+      publicSignalLabelHe: 'ישות תפעולית',
+      publicSignalLabelEn: 'Operational entity',
+    };
+  }
+
+  if (/(עקוב|הערה|רשימה|אסוף|מחקר|נושא|track|note|list|collect|research|topic)/.test(g)) {
+    return {
+      title: trimTitle || (he ? 'הערה / מעקב' : 'Note / tracking'),
+      ...legacyWorldIdToSpaceDomain(inferWorldForIntent(goal, fallbackWorld)),
+      emoji: '📝',
+      subtitle: he ? 'התחל להוסיף מה שידוע' : 'Start adding what you know',
+      slots: he
+        ? [
+            { id: 'topic', label: 'נושא' },
+            { id: 'details', label: 'פרטים ידועים', optional: true },
+          ]
+        : [
+            { id: 'topic', label: 'Topic' },
+            { id: 'details', label: 'Known details', optional: true },
+          ],
+      steps: 2,
+      unitType: 'note',
+      publicSignalKey: 'intent_note',
+      publicSignalLabelHe: 'הערה / מעקב',
+      publicSignalLabelEn: 'Note / tracking',
+    };
+  }
+
   const inferred = inferWorldForIntent(goal, fallbackWorld);
   return {
     title: trimTitle || (he ? 'יחידה חדשה' : 'New unit'),
@@ -178,6 +237,7 @@ export function _goalTemplateCore(goal: string, language: AppLanguage, fallbackW
           { id: 'first_step', label: 'First small step this week?' },
         ],
     steps: 10,
+    unitType: 'process',
     publicSignalKey: `intent_${inferred}_custom`,
     publicSignalLabelHe: 'תהליך אישי חדש',
     publicSignalLabelEn: 'New personal process',
