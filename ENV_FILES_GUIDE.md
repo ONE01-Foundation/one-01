@@ -21,8 +21,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=
 # OpenAI (for AI responses - Phase 3)
 # OPENAI_API_KEY=  (not needed yet)
 
-# ElevenLabs (for voice - Phase 4)
-# EXPO_PUBLIC_ELEVENLABS_API_KEY=
+# ElevenLabs voice ID (API key is server-side in Supabase Edge Function secrets)
+# EXPO_PUBLIC_ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
 
 # Socket.io Backend (only if using backend - Phase 6)
 # EXPO_PUBLIC_SOCKET_SERVER_URL=

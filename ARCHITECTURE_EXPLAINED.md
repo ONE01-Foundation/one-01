@@ -25,8 +25,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_key
 # Socket.io Backend (OPTIONAL - only if using backend)
 EXPO_PUBLIC_SOCKET_SERVER_URL=http://172.20.10.2:3000
 
-# ElevenLabs TTS (OPTIONAL - for voice)
-EXPO_PUBLIC_ELEVENLABS_API_KEY=your_key
+# ElevenLabs voice ID (API key is server-side in Supabase Edge Function secrets)
+EXPO_PUBLIC_ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
 ```
 
 **Backend `.env` (if using backend):**
