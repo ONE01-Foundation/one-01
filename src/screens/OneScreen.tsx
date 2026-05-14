@@ -1191,6 +1191,14 @@ function lensToWorldId(lens: LifeLens): string {
   return lens;
 }
 
+function spaceAndDomainToLens(spaceId: SpaceId, domainId?: DomainId): LifeLens {
+  if (domainId === 'health') return 'health';
+  if (domainId === 'finance') return 'finance';
+  if (domainId === 'learning') return 'knowledge';
+  if (spaceId === 'business') return 'business';
+  return 'business';
+}
+
 function processToFlowUnit(p: OneProcess, language: AppLanguage): FlowUnit {
   const worldId = lensToWorldId(p.lens);
   const seed = `${p.fields?.goal ?? p.title} ${p.summary ?? ''}`;
@@ -2005,7 +2013,7 @@ export function OneScreen() {
     () => translate(language, CHAT_PHASE_KEY[chatStatusPhase]),
     [language, chatStatusPhase]
   );
-  const { user } = useOne();
+  const { user, addProcess, addProcessMessage, updateProcess } = useOne();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -3663,6 +3671,23 @@ export function OneScreen() {
               { id: newUnitId, emoji: newUnit.emoji, title: newUnit.title, subtitle: newUnit.subtitle },
             ])
       );
+
+      const now = new Date().toISOString();
+      const persistedProcess: OneProcess = {
+        id: newUnitId,
+        title: tmpl.title,
+        lens: spaceAndDomainToLens(tmpl.spaceId, tmpl.domainId),
+        spaceId: tmpl.spaceId,
+        domainId: tmpl.domainId,
+        status: 'active',
+        createdAt: now,
+        summary: newUnit.goal ?? `Goal: ${tmpl.title}`,
+        messages: [],
+        fields: { goal: newUnit.goal ?? tmpl.title },
+        timeline: [],
+      };
+      addProcess(persistedProcess);
+
       const si = ENABLED_SPACES.findIndex((s) => s.id === tmpl.spaceId);
       if (si >= 0) setSpaceIndex(si);
       setChatScope({ scope: 'unit', spaceId: tmpl.spaceId, domainId: tmpl.domainId });
@@ -3678,7 +3703,7 @@ export function OneScreen() {
         },
       });
     },
-    [agentUnitCreationMode, activeUnitId, flowUnits, language, effectiveChatWorldId]
+    [agentUnitCreationMode, activeUnitId, flowUnits, language, effectiveChatWorldId, addProcess]
   );
 
   const submitNowValue = useCallback(() => {
@@ -3693,10 +3718,13 @@ export function OneScreen() {
     const userLine: ChatLine = { id: `u_${Date.now()}`, sender: 'user', text, sentAt: Date.now() };
 
     if (activeUnitId) {
+      let agentReplyText = '';
+      let slotsUpdated = false;
       setFlowUnits((prev) =>
         prev.map((unit) => {
           if (unit.id !== activeUnitId) return unit;
           if (!unit.profileSlots?.length) {
+            agentReplyText = buildAgentUnitChatReply(unit, text, language);
             return {
               ...unit,
               messages: [
@@ -3705,13 +3733,15 @@ export function OneScreen() {
                 {
                   id: `o_${Date.now() + 1}`,
                   sender: 'one',
-                  text: buildAgentUnitChatReply(unit, text, language),
+                  text: agentReplyText,
                   sentAt: Date.now(),
                 },
               ],
             };
           }
           const updated = applyProfileSlotsFromMessage(unit, text, language);
+          slotsUpdated = updated !== unit;
+          agentReplyText = buildAdaptiveProfileReply(unit, updated, text, language);
           return {
             ...updated,
             messages: [
@@ -3720,13 +3750,44 @@ export function OneScreen() {
               {
                 id: `o_${Date.now() + 1}`,
                 sender: 'one',
-                text: buildAdaptiveProfileReply(unit, updated, text, language),
+                text: agentReplyText,
                 sentAt: Date.now(),
               },
             ],
           };
         })
       );
+
+      addProcessMessage(activeUnitId, 'user', text);
+      if (agentReplyText) {
+        addProcessMessage(activeUnitId, 'agent', agentReplyText);
+      }
+      if (slotsUpdated) {
+        const updatedUnit = flowUnits.find((u) => u.id === activeUnitId);
+        if (updatedUnit) {
+          const fields: import('../core/types').ProcessFields = {
+            goal: updatedUnit.goal,
+          };
+          const filledSlots = (updatedUnit.profileSlots ?? []).filter((s) => s.value?.trim());
+          for (const s of filledSlots) {
+            (fields as Record<string, unknown>)[s.id] = s.value;
+          }
+          updateProcess(activeUnitId, {
+            id: activeUnitId,
+            title: updatedUnit.title,
+            lens: spaceAndDomainToLens(updatedUnit.spaceId, updatedUnit.domainId),
+            spaceId: updatedUnit.spaceId,
+            domainId: updatedUnit.domainId,
+            status: updatedUnit.status === 'done' ? 'done' : 'active',
+            createdAt: new Date().toISOString(),
+            summary: updatedUnit.goal ?? updatedUnit.title,
+            messages: [],
+            fields,
+            timeline: [],
+          });
+        }
+      }
+
       setNowValue('');
       setTimeout(() => setChatStatusPhase('planning'), 700);
       setTimeout(() => setChatStatusPhase('ready'), 1400);
@@ -3799,6 +3860,23 @@ export function OneScreen() {
               { id: newUnitId, emoji: newUnit.emoji, title: newUnit.title, subtitle: newUnit.subtitle },
             ])
       );
+
+      const nowIso = new Date().toISOString();
+      const persistedProcess: OneProcess = {
+        id: newUnitId,
+        title: tmpl.title,
+        lens: spaceAndDomainToLens(tmpl.spaceId, tmpl.domainId),
+        spaceId: tmpl.spaceId,
+        domainId: tmpl.domainId,
+        status: 'active',
+        createdAt: nowIso,
+        summary: newUnit.goal ?? `Goal: ${tmpl.title}`,
+        messages: [],
+        fields: { goal: newUnit.goal ?? tmpl.title },
+        timeline: [],
+      };
+      addProcess(persistedProcess);
+
       const si = ENABLED_SPACES.findIndex((s) => s.id === tmpl.spaceId);
       if (si >= 0) setSpaceIndex(si);
       setChatScope({ scope: 'unit', spaceId: tmpl.spaceId, domainId: tmpl.domainId });
@@ -3829,6 +3907,9 @@ export function OneScreen() {
     language,
     agentUnitCreationMode,
     commitAgentCreationGoal,
+    addProcess,
+    addProcessMessage,
+    updateProcess,
   ]);
 
   const appendUserAttachmentMessage = useCallback(
