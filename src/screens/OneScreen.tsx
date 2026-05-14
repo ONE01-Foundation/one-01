@@ -1,4 +1,4 @@
-/**
+﻿/**
  * OneScreen – דף אחד נקי.
  * פטרון: overlay טופ/בוטום – גרדיאנט בלבד (צבע רקע, 100% בקצה המכשיר → 0% בקצה התוכן).
  * התוכן נגלל מתחת לבר; הגרדיאנט יוצר מעבר רך בלי חיתוך חד.
@@ -1953,8 +1953,8 @@ export function OneScreen() {
       const firstEmpty = tmpl.slots.find((s) => !s.optional) ?? tmpl.slots[0];
       const he = language === 'he';
       const firstAsk = he
-        ? `היחידה «${tmpl.title}» מוכנה. מה ${firstEmpty?.label ?? 'הפרט הבא'}? (הנתונים נשמרים בפרופיל היחידה.)`
-        : `Unit “${tmpl.title}” is ready. What is ${firstEmpty?.label ?? 'the next detail'}? (Saved on the unit profile.)`;
+        ? `«${tmpl.title}» — התחלנו. מה ${firstEmpty?.label ?? 'הפרט הבא'}?`
+        : `"${tmpl.title}" — we're on. What's your ${firstEmpty?.label ?? 'next detail'}?`;
 
       const newUnit: FlowUnit = {
         id: newUnitId,
@@ -2189,8 +2189,8 @@ export function OneScreen() {
             id: `created_${Date.now()}`,
             sender: 'one',
             text: he
-              ? `היחידה «${tmpl.title}» נפתחה. מה ${firstEmpty?.label ?? 'הפרט הבא'}?`
-              : `Unit “${tmpl.title}” is open. What is ${firstEmpty?.label ?? 'next'}?`,
+              ? `«${tmpl.title}» — התחלנו. מה ${firstEmpty?.label ?? 'הפרט הבא'}?`
+              : `“${tmpl.title}” — we’re on. What’s your ${firstEmpty?.label ?? 'next detail'}?`,
             sentAt: Date.now(),
           },
         ],
