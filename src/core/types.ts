@@ -5,6 +5,7 @@
  */
 
 import type { SpaceId, DomainId } from './spaces';
+import type { UnitProfileSlot } from '../components/UnitChatProfile';
 
 /** v0.1: exactly 4 Life Lenses */
 export type LifeLens = 'health' | 'finance' | 'knowledge' | 'business';
@@ -114,6 +115,11 @@ export interface OneProcess {
   timeline: ProcessEvent[];
   steps?: ProcessStep[];
   reality?: ProcessReality;
+  profileSlots?: UnitProfileSlot[];
+  progress?: number;
+  nextAction?: string;
+  emoji?: string;
+  subtitle?: string;
 }
 
 export interface ProcessMessage {

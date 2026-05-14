@@ -31,17 +31,20 @@ export function processToFlowUnit(p: OneProcess, language: AppLanguage): FlowUni
     ? `אני ONE — מתחילים את «${tmpl.title}» אחרי ההרשמה.\n${p.summary ? `סיכום מה שכתבת: ${p.summary.slice(0, 200)}${p.summary.length > 200 ? '…' : ''}\n` : ''}נבנה כאן תהליך אמיתי: מה שתשלח נשמר בפרופיל היחידה (מספרים, תאריכים, סטטוסים) — לא רק בועות שמתפזרות.`
     : `I'm ONE—we're starting "${tmpl.title}" after signup.\n${p.summary ? `What you wrote: ${p.summary.slice(0, 200)}${p.summary.length > 200 ? '…' : ''}\n` : ''}We will build a real flow here: what you send is stored on the unit profile, not only as chat bubbles.`;
 
+  const usePersistedSlots = (p.profileSlots?.length ?? 0) > 0;
+  const slots = usePersistedSlots ? p.profileSlots! : tmpl.slots.map((s) => ({ ...s }));
+
   return {
     id: p.id,
     spaceId: resolvedSpaceId,
     domainId: resolvedDomainId,
-    title: tmpl.title,
-    subtitle: tmpl.subtitle,
-    emoji: tmpl.emoji,
+    title: p.title,
+    subtitle: p.subtitle ?? tmpl.subtitle,
+    emoji: p.emoji ?? tmpl.emoji,
     status: p.status,
-    progress: 14,
+    progress: p.progress ?? 14,
     steps: tmpl.steps,
-    profileSlots: tmpl.slots.map((s) => ({ ...s })),
+    profileSlots: slots,
     messages: [
       {
         id: `reg_${p.id}`,
@@ -63,7 +66,7 @@ export function processToFlowUnit(p: OneProcess, language: AppLanguage): FlowUni
       { id: 'p1', role: he ? 'סוכן' : 'Agent', name: 'ONE' },
       { id: 'p2', role: he ? 'אחראי/ת' : 'Owner', name: he ? 'את/ה' : 'You' },
     ],
-    nextAction: firstEmpty ? (he ? `פרופיל: ${firstEmpty.label}` : `Profile: ${firstEmpty.label}`) : undefined,
+    nextAction: p.nextAction ?? (firstEmpty ? (he ? `פרופיל: ${firstEmpty.label}` : `Profile: ${firstEmpty.label}`) : undefined),
     lastUpdatedLabel: he ? 'נוצר מהרשמה' : 'Created from signup',
     blockCount: 5,
   };

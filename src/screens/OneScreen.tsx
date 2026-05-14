@@ -589,7 +589,7 @@ export function OneScreen() {
     () => translate(language, CHAT_PHASE_KEY[chatStatusPhase]),
     [language, chatStatusPhase]
   );
-  const { user, addProcess, addProcessMessage, updateProcess } = useOne();
+  const { user, addProcess, addProcessMessage, updateProcess, getProcess } = useOne();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -2261,6 +2261,11 @@ export function OneScreen() {
         messages: [],
         fields: { goal: newUnit.goal ?? tmpl.title },
         timeline: [],
+        profileSlots: newUnit.profileSlots,
+        progress: newUnit.progress,
+        nextAction: newUnit.nextAction,
+        emoji: newUnit.emoji,
+        subtitle: newUnit.subtitle,
       };
       addProcess(persistedProcess);
 
@@ -2340,26 +2345,24 @@ export function OneScreen() {
       }
       if (slotsUpdated) {
         const updatedUnit = flowUnits.find((u) => u.id === activeUnitId);
-        if (updatedUnit) {
-          const fields: import('../core/types').ProcessFields = {
-            goal: updatedUnit.goal,
-          };
-          const filledSlots = (updatedUnit.profileSlots ?? []).filter((s) => s.value?.trim());
-          for (const s of filledSlots) {
-            (fields as Record<string, unknown>)[s.id] = s.value;
+        const existingProcess = getProcess(activeUnitId);
+        if (existingProcess && updatedUnit) {
+          const fields: Record<string, unknown> = { ...existingProcess.fields };
+          fields.goal = updatedUnit.goal ?? updatedUnit.title;
+          for (const s of updatedUnit.profileSlots ?? []) {
+            if (s.value?.trim()) fields[s.id] = s.value;
           }
           updateProcess(activeUnitId, {
-            id: activeUnitId,
+            ...existingProcess,
             title: updatedUnit.title,
-            lens: spaceAndDomainToLens(updatedUnit.spaceId, updatedUnit.domainId),
             spaceId: updatedUnit.spaceId,
             domainId: updatedUnit.domainId,
             status: updatedUnit.status === 'done' ? 'done' : 'active',
-            createdAt: new Date().toISOString(),
             summary: updatedUnit.goal ?? updatedUnit.title,
-            messages: [],
-            fields,
-            timeline: [],
+            fields: fields as any,
+            profileSlots: updatedUnit.profileSlots,
+            progress: updatedUnit.progress,
+            nextAction: updatedUnit.nextAction,
           });
         }
       }
@@ -2450,6 +2453,11 @@ export function OneScreen() {
         messages: [],
         fields: { goal: newUnit.goal ?? tmpl.title },
         timeline: [],
+        profileSlots: newUnit.profileSlots,
+        progress: newUnit.progress,
+        nextAction: newUnit.nextAction,
+        emoji: newUnit.emoji,
+        subtitle: newUnit.subtitle,
       };
       addProcess(persistedProcess);
 
@@ -2486,6 +2494,7 @@ export function OneScreen() {
     addProcess,
     addProcessMessage,
     updateProcess,
+    getProcess,
   ]);
 
   const appendUserAttachmentMessage = useCallback(
@@ -2522,7 +2531,9 @@ export function OneScreen() {
     if (!trimmed) return;
     setFlowUnits((prev) => prev.map((u) => (u.id === activeUnitId ? { ...u, title: trimmed } : u)));
     setPersonalOrbs((prev) => prev.map((o) => (o.id === activeUnitId ? { ...o, title: trimmed } : o)));
-  }, [activeUnitId]);
+    const proc = getProcess(activeUnitId);
+    if (proc) updateProcess(activeUnitId, { ...proc, title: trimmed });
+  }, [activeUnitId, getProcess, updateProcess]);
 
   const handleAttachPick = useCallback(
     (id: AttachActionId) => {
