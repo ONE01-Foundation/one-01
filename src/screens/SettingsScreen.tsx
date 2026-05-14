@@ -67,7 +67,7 @@ export function SettingsScreen() {
   const navigation = useNavigation<Nav>();
   const { colors, theme, preference, setPreference } = useThemeStore();
   const { language, layoutDirection, setLanguage } = useLocaleStore();
-  const { previewProfile, setPreviewProfile, showAllWorldsExamples, setShowAllWorldsExamples, requestSyntheticHomeProfile } =
+  const { previewProfile, setPreviewProfile, showAllWorldsExamples, setShowAllWorldsExamples, useAiRuntime, toggleAiRuntime, requestSyntheticHomeProfile } =
     useDevModeStore();
   const { clearUser } = useOne();
   const resetOnboardingDraft = useOnboardingDraftStore((s) => s.reset);
@@ -307,6 +307,25 @@ export function SettingsScreen() {
           {language === 'he'
             ? 'במרחב אישי: דפדוף בין כל העולמות, וכדורי דוגמה מהקטלוג בכל עולם (יחידות אמיתיות שלך נשארות).'
             : 'In General: cycle all worlds and show catalog example orbs per world (your real units stay).'}
+        </Text>
+
+        <View style={[styles.settingRow, { borderColor: colors.border, marginTop: 14 }]}>
+          <Text style={[styles.settingRowLabel, { color: colors.text, textAlign: ta, writingDirection: wd }]}>
+            {'AI Runtime (Supabase)'}
+          </Text>
+          <Switch
+            value={useAiRuntime}
+            onValueChange={() => toggleAiRuntime()}
+            trackColor={{ false: colors.border, true: `${colors.primary}55` }}
+            thumbColor={useAiRuntime ? colors.primary : colors.surface}
+            ios_backgroundColor={colors.border}
+            accessibilityLabel="AI Runtime (Supabase)"
+          />
+        </View>
+        <Text style={[styles.hint, styles.blockText, { color: colors.textSecondary, marginTop: 10, textAlign: ta, writingDirection: wd }]}>
+          {language === 'he'
+            ? 'כשדלוק — ONE מבקש מ-AI העשרה אופרטיבית בעת יצירת יחידה. היחידה עצמה לא משתנה.'
+            : 'When on — ONE asks AI for operational enrichment during unit creation. The created unit itself is unchanged.'}
         </Text>
 
         <TouchableOpacity
