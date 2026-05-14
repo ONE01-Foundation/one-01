@@ -1000,6 +1000,29 @@ export function OneScreen() {
     return map;
   }, [WORLDS, language, flowUnits]);
 
+  const agentPresence = useMemo<{ state: 'calm' | 'attentive' | 'idle'; glowColor?: string; breathingDuration: number }>(() => {
+    if (flowUnits.length === 0) return { state: 'idle', breathingDuration: 2500 };
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    const hasWaiting = flowUnits.some((u) => u.status === 'waiting');
+    const hasStale = flowUnits.some((u) => {
+      if (u.status === 'done') return false;
+      const msgs = u.messages ?? [];
+      const last = msgs.length > 0 ? (msgs[msgs.length - 1]?.sentAt ?? 0) : 0;
+      return last > 0 && now - last > sevenDays;
+    });
+    const hasMissingCritical = flowUnits.some((u) => {
+      if (u.status === 'done') return false;
+      const req = u.profileSlots?.filter((s) => !s.optional) ?? [];
+      const missing = req.filter((s) => !s.value?.trim());
+      return missing.length > 0 && req.length > 0 && missing.length >= req.length;
+    });
+    if (hasWaiting || hasStale || hasMissingCritical) {
+      return { state: 'attentive', glowColor: '#FF9F0A', breathingDuration: 1600 };
+    }
+    return { state: 'calm', breathingDuration: 2000 };
+  }, [flowUnits]);
+
   const globalNewInOneTitle = useMemo(
     () => (language === 'he' ? 'גילוי בשוק' : 'Market discovery'),
     [language]
@@ -3149,6 +3172,8 @@ export function OneScreen() {
                           labelLines={[]}
                           tappable={orbIndex === index}
                           onPress={openAgentProfileFromHomeOrb}
+                          glowColor={agentPresence.glowColor}
+                          breathingDuration={agentPresence.breathingDuration}
                         />
                       </View>
                   ) : index === AGENT_ORB_INDEX + 1 && firstNeighborScrollHintArrowOpacity && firstNeighborScrollHintEmojiOpacity ? (

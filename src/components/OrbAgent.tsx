@@ -31,6 +31,8 @@ export interface OrbAgentProps {
   gazeX?: number | Animated.AnimatedInterpolation<number>;
   /** Optional vertical eye gaze override in px (positive = look down) */
   gazeY?: number | Animated.AnimatedInterpolation<number>;
+  /** Half-period of idle breathing in ms (default 2000). Lower = faster pulse. */
+  breathingDuration?: number;
 }
 
 export function OrbAgent({
@@ -46,6 +48,7 @@ export function OrbAgent({
   showMouth = false,
   gazeX,
   gazeY,
+  breathingDuration = 2000,
 }: OrbAgentProps) {
   const { colors } = useThemeStore();
   const scale = useRef(new Animated.Value(1)).current;
@@ -66,13 +69,13 @@ export function OrbAgent({
           Animated.sequence([
             Animated.timing(breathe, {
               toValue: 1,
-              duration: 2000,
+              duration: breathingDuration,
               useNativeDriver: true,
               easing: Easing.inOut(Easing.ease),
             }),
             Animated.timing(breathe, {
               toValue: 0,
-              duration: 2000,
+              duration: breathingDuration,
               useNativeDriver: true,
               easing: Easing.inOut(Easing.ease),
             }),
@@ -142,7 +145,7 @@ export function OrbAgent({
         return () => loop.stop();
       }
     }
-  }, [state, scale, breathe, bounce]);
+  }, [state, scale, breathe, bounce, breathingDuration]);
 
   // Reset scale when not listening
   useEffect(() => {
