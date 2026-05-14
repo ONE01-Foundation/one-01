@@ -1928,9 +1928,17 @@ export function OneScreen() {
         ...prev,
         { id: `u_${Date.now()}`, sender: 'user' as const, text, sentAt: Date.now() },
       ]);
-      setPendingUnitPreview({ goalTemplate: tmpl, spaceId: tmpl.spaceId, domainId: tmpl.domainId, userMessage: text });
       setNowValue('');
+      setChatStatusPhase('thinking');
+      setChatSheetMessages((prev) => [
+        ...prev,
+        { id: `think_${Date.now()}`, sender: 'one' as const, text: translate(language, 'preview_thinking'), sentAt: Date.now() },
+      ]);
       scrollOneChatToBottom();
+      setTimeout(() => {
+        setPendingUnitPreview({ goalTemplate: tmpl, spaceId: tmpl.spaceId, domainId: tmpl.domainId, userMessage: text });
+        scrollOneChatToBottom();
+      }, 800);
     },
     [agentUnitCreationMode, activeUnitId, flowUnits, language, effectiveChatWorldId, scrollOneChatToBottom]
   );

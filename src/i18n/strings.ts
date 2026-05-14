@@ -34,7 +34,8 @@ export type ChatChromeKey =
   | 'preview_insight_common'
   | 'preview_confirm'
   | 'preview_dismiss'
-  | 'preview_dismissed_reply';
+  | 'preview_dismissed_reply'
+  | 'preview_thinking';
 
 export type AppStringKey = SettingsStringKey | ChatChromeKey;
 
@@ -94,6 +95,7 @@ const CHAT_HE: Record<ChatChromeKey, string> = {
   preview_confirm: 'צור יחידה',
   preview_dismiss: 'לא עכשיו',
   preview_dismissed_reply: 'הבנתי, נחזור לזה מאוחר יותר.',
+  preview_thinking: 'רגע, אני מעבד את זה...',
 };
 
 const CHAT_EN: Record<ChatChromeKey, string> = {
@@ -112,6 +114,7 @@ const CHAT_EN: Record<ChatChromeKey, string> = {
   preview_confirm: 'Create Unit',
   preview_dismiss: 'Not now',
   preview_dismissed_reply: 'Got it, we can revisit this later.',
+  preview_thinking: 'One moment, processing this...',
 };
 
 const DICT: Record<AppLanguage, Record<AppStringKey, string>> = {
