@@ -134,6 +134,7 @@ import {
   goalTemplateFromText,
   buildAgentGoalPromptMessage,
   creationGoalChipsForSpace,
+  buildChatContextSuggestions,
 } from '../core/goalEngine';
 import { buildAgentChatProfileModel } from '../core/agentProfileBuilder';
 import {
@@ -1128,75 +1129,9 @@ export function OneScreen() {
   const chatProfileHeaderLabel = activeUnit
     ? (language === 'he' ? 'פרופיל יחידה' : 'Unit Profile')
     : (language === 'he' ? 'פרופיל סוכן' : 'Agent Profile');
-  const chatContextSuggestions = useMemo(() => {
-    const he = language === 'he';
-    if (!activeUnit && agentUnitCreationMode) {
-      return creationGoalChipsForSpace(effectiveChatWorldId, language);
-    }
-    if (activeUnit?.profileSlots?.length) {
-      return [];
-    }
-    if (activeUnit) {
-      const nextStepLabel = activeUnit.nextAction?.trim() || (he ? 'מה הצעד הבא?' : 'What is the next step?');
-      if ((activeUnit.domainId ?? activeUnit.spaceId) === 'health') {
-        return he
-          ? ['קבע תור', 'תזכורת יומית', nextStepLabel]
-          : ['Schedule appointment', 'Daily reminder', nextStepLabel];
-      }
-      if ((activeUnit.domainId ?? activeUnit.spaceId) === 'finance') {
-        return he
-          ? ['בדיקת תקציב', 'עדכון הוצאות', nextStepLabel]
-          : ['Budget check', 'Update expenses', nextStepLabel];
-      }
-      if ((activeUnit.domainId ?? activeUnit.spaceId) === 'knowledge') {
-        return he
-          ? ['תרגול יומי', 'סיכום חומר', nextStepLabel]
-          : ['Daily practice', 'Study summary', nextStepLabel];
-      }
-      if ((activeUnit.domainId ?? activeUnit.spaceId) === 'business') {
-        return he
-          ? ['משימת לקוח', 'עדכון סטטוס', nextStepLabel]
-          : ['Client task', 'Status update', nextStepLabel];
-      }
-      if ((activeUnit.domainId ?? activeUnit.spaceId) === 'leisure') {
-        return he
-          ? ['רעיון לסופ״ש', 'רשימת ציוד', nextStepLabel]
-          : ['Weekend idea', 'Packing list', nextStepLabel];
-      }
-      if ((activeUnit.domainId ?? activeUnit.spaceId) === 'relations') {
-        return he
-          ? ['תזכורת לפגישה', 'רשימת אורחים', nextStepLabel]
-          : ['Meet-up reminder', 'Guest list', nextStepLabel];
-      }
-      if (/רישיון|license/i.test(activeUnit.title)) {
-        return he
-          ? ['קבע שיעור', 'תרגול תיאוריה', nextStepLabel]
-          : ['Schedule lesson', 'Theory practice', nextStepLabel];
-      }
-      return he
-        ? ['עדכן TODO', 'מה סטטוס היחידה?', nextStepLabel]
-        : ['Update TODO', 'What is unit status?', nextStepLabel];
-    }
-    if (effectiveChatWorldId === 'business') {
-      return he ? ['פתח TODO לעבודה', 'עדכון לקוחות', 'מה הכי דחוף היום?'] : ['Open work TODO', 'Client update', 'Top priority today?'];
-    }
-    if (effectiveChatWorldId === 'health') {
-      return he ? ['TODO בריאות יומי', 'מעקב בדיקות', 'תזכורת תרופה'] : ['Daily health TODO', 'Track tests', 'Medication reminder'];
-    }
-    if (effectiveChatWorldId === 'finance') {
-      return he ? ['TODO כלכלי', 'עדכון הוצאות', 'יעד חיסכון חודשי'] : ['Finance TODO', 'Update expenses', 'Monthly savings target'];
-    }
-    if (effectiveChatWorldId === 'knowledge') {
-      return he ? ['TODO לימודים', 'תרגול יומי', 'סיכום שיעור'] : ['Study TODO', 'Daily practice', 'Lesson summary'];
-    }
-    if (effectiveChatWorldId === 'leisure') {
-      return he ? ['תכנון סופ״ש', 'רשימת ציוד', 'תזכורת לאירוע'] : ['Weekend plan', 'Gear checklist', 'Event reminder'];
-    }
-    if (effectiveChatWorldId === 'relations') {
-      return he ? ['TODO למשפחה', 'תזכורת ליום הולדת', 'מעקב אחר חברים'] : ['Family TODO', 'Birthday reminder', 'Friends check-in'];
-    }
-    return he ? ['פתח יחידה חדשה', 'הראה היסטוריה', 'מה עושים עכשיו?'] : ['Open new unit', 'Show history', 'What now?'];
-  }, [activeUnit, effectiveChatWorldId, language, agentUnitCreationMode]);
+  const chatContextSuggestions = useMemo(() => buildChatContextSuggestions({
+    language, activeUnit, effectiveChatWorldId, agentUnitCreationMode,
+  }), [activeUnit, effectiveChatWorldId, language, agentUnitCreationMode]);
   const historyUnitsForWorld = useMemo(() => {
     const list =
       effectiveChatSpaceId === 'personal' && !effectiveChatDomainId
