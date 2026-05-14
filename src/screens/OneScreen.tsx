@@ -967,6 +967,27 @@ export function OneScreen() {
       ),
     [currentWorldId, language, globalIntentBySpace]
   );
+  const agentBroadcastMessages = useMemo(
+    () => broadcastMessagesForSpace(currentWorldId, language, flowUnits),
+    [currentWorldId, language, flowUnits]
+  );
+
+  const orbBroadcastMessagesMap = useMemo(() => {
+    const map = new Map<string, BroadcastMessage[]>();
+    for (const orb of currentOrbData) {
+      map.set(orb.id, broadcastMessagesForOrbItem(orb, flowUnits, language));
+    }
+    return map;
+  }, [currentOrbData, flowUnits, language]);
+
+  const worldBroadcastMessagesMap = useMemo(() => {
+    const map = new Map<string, BroadcastMessage[]>();
+    for (const world of WORLDS) {
+      map.set(world.id, broadcastMessagesForSpace(world.id, language, flowUnits));
+    }
+    return map;
+  }, [WORLDS, language, flowUnits]);
+
   const globalNewInOneTitle = useMemo(
     () => (language === 'he' ? 'גילוי בשוק' : 'Market discovery'),
     [language]
@@ -3456,7 +3477,7 @@ export function OneScreen() {
                     >
                     {isAgentSlot ? (
                       <FadeBroadcastBlock
-                        messages={broadcastMessagesForSpace(currentWorldId, language, flowUnits)}
+                        messages={agentBroadcastMessages}
                         visible={orbIndex === index}
                         titleColor={theme === 'dark' ? '#ffffff' : colors.text}
                         subtitleColor={colors.textSecondary}
@@ -3481,7 +3502,7 @@ export function OneScreen() {
                       />
                     ) : (
                       <FadeBroadcastBlock
-                        messages={broadcastMessagesForOrbItem(item, flowUnits, language)}
+                        messages={orbBroadcastMessagesMap.get(item.id) ?? []}
                         visible={orbIndex === index}
                         titleColor={colors.text}
                         subtitleColor={colors.textSecondary}
@@ -3540,6 +3561,8 @@ export function OneScreen() {
     cycleWorldNext,
     cycleWorldPrev,
     openAgentProfileFromHomeOrb,
+    agentBroadcastMessages,
+    orbBroadcastMessagesMap,
   ]);
 
   /** כדור־שליח אחרי האורב האחרון: ממורכז או לחיצה → קפיצה לכדור הסוכן */
@@ -4457,7 +4480,7 @@ export function OneScreen() {
               style={styles.agentCardScroll}
             >
               {WORLDS.map((world, idx) => {
-                const broadcasts = broadcastMessagesForSpace(world.id, language, flowUnits);
+                const broadcasts = worldBroadcastMessagesMap.get(world.id) ?? [];
                 /** personal = לבן ב־WORLDS — על surface בהיר לא קריא; שאר העולמות משאירים צבע עולם */
                 const agentCardWorldTextOnSurface =
                   world.id === 'personal' ? colors.textSecondary : world.color;
