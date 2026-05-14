@@ -42,7 +42,13 @@ export type ChatChromeKey =
   | 'preview_ai_steps'
   | 'preview_ai_questions'
   | 'preview_ai_risks'
-  | 'preview_ai_notes';
+  | 'preview_ai_notes'
+  | 'preview_type_simple_hint'
+  | 'preview_type_note_hint'
+  | 'preview_type_entity_title'
+  | 'preview_type_entity_hint'
+  | 'preview_type_next'
+  | 'preview_type_whats_known';
 
 export type AppStringKey = SettingsStringKey | ChatChromeKey;
 
@@ -110,6 +116,12 @@ const CHAT_HE: Record<ChatChromeKey, string> = {
   preview_ai_questions: 'לבירור',
   preview_ai_risks: 'שימו לב',
   preview_ai_notes: 'כדאי לדעת',
+  preview_type_simple_hint: 'הגדרה מהירה — פרט או שניים',
+  preview_type_note_hint: 'התחל להוסיף מה שידוע — ONE יארגן',
+  preview_type_entity_title: 'ישות תפעולית',
+  preview_type_entity_hint: 'ניהול מתמשך — אנשי קשר, סטטוס, פעולות',
+  preview_type_next: 'הבא',
+  preview_type_whats_known: 'מה ידוע',
 };
 
 const CHAT_EN: Record<ChatChromeKey, string> = {
@@ -136,6 +148,12 @@ const CHAT_EN: Record<ChatChromeKey, string> = {
   preview_ai_questions: 'To clarify',
   preview_ai_risks: 'Watch out',
   preview_ai_notes: 'Good to know',
+  preview_type_simple_hint: 'Quick setup — a detail or two',
+  preview_type_note_hint: 'Start adding what you know — ONE will organize',
+  preview_type_entity_title: 'Operational entity',
+  preview_type_entity_hint: 'Ongoing management — contacts, status, actions',
+  preview_type_next: 'Next',
+  preview_type_whats_known: 'What\'s known',
 };
 
 const DICT: Record<AppLanguage, Record<AppStringKey, string>> = {

@@ -5483,7 +5483,8 @@ export function OneScreen() {
                         {pendingUnitPreview != null && !activeUnitId && (() => {
                           const p = pendingUnitPreview;
                           const he = language === 'he';
-                          const stepsCount = p.goalTemplate.steps;
+                          const tmpl = p.goalTemplate;
+                          const stepsCount = tmpl.steps;
                           const complexityKey = stepsCount <= 3
                             ? 'preview_complexity_light' as const
                             : stepsCount <= 6
@@ -5517,16 +5518,72 @@ export function OneScreen() {
                                   </Text>
                                 </View>
                               ) : null}
-                              <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
-                                <Text style={[styles.previewMetaLabel, { color: isDark ? '#bbb' : '#555', textAlign, writingDirection: textDir }]}>
-                                  {he ? `מורכבות: ${complexityLabel}` : `Complexity: ${complexityLabel}`}
-                                </Text>
-                              </View>
-                              <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
-                                <Text style={[styles.previewMetaLabel, { color: isDark ? '#bbb' : '#555', textAlign, writingDirection: textDir }]}>
-                                  {he ? `~${stepsCount} ${translate(language, 'preview_steps_anticipated')}` : `~${stepsCount} ${translate(language, 'preview_steps_anticipated')}`}
-                                </Text>
-                              </View>
+                              {(() => {
+                                const metaColor = isDark ? '#bbb' : '#555';
+                                const metaStyle = [styles.previewMetaLabel, { color: metaColor, textAlign, writingDirection: textDir }];
+                                switch (tmpl.unitType) {
+                                  case 'process':
+                                    return (
+                                      <>
+                                        <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                          <Text style={metaStyle}>
+                                            {he ? `מורכבות: ${complexityLabel}` : `Complexity: ${complexityLabel}`}
+                                          </Text>
+                                        </View>
+                                        <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                          <Text style={metaStyle}>
+                                            {he ? `~${stepsCount} ${translate(language, 'preview_steps_anticipated')}` : `~${stepsCount} ${translate(language, 'preview_steps_anticipated')}`}
+                                          </Text>
+                                        </View>
+                                      </>
+                                    );
+                                  case 'simple':
+                                    return (
+                                      <>
+                                        <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                          <Text style={metaStyle}>
+                                            {translate(language, 'preview_type_next')}: {tmpl.slots[0]?.label ?? '...'}
+                                          </Text>
+                                        </View>
+                                        <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                          <Text style={metaStyle}>
+                                            {translate(language, 'preview_type_simple_hint')}
+                                          </Text>
+                                        </View>
+                                      </>
+                                    );
+                                  case 'note':
+                                    return (
+                                      <>
+                                        <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                          <Text style={metaStyle}>
+                                            {translate(language, 'preview_type_whats_known')}: {tmpl.title}
+                                          </Text>
+                                        </View>
+                                        <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                          <Text style={metaStyle}>
+                                            {translate(language, 'preview_type_note_hint')}
+                                          </Text>
+                                        </View>
+                                      </>
+                                    );
+                                  case 'entity':
+                                    return (
+                                      <>
+                                        <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                          <Text style={metaStyle}>
+                                            {translate(language, 'preview_type_entity_title')}
+                                          </Text>
+                                        </View>
+                                        <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
+                                          <Text style={metaStyle}>
+                                            {translate(language, 'preview_type_entity_hint')}
+                                          </Text>
+                                        </View>
+                                      </>
+                                    );
+                                }
+                              })()}
                               <View style={[styles.previewMetaRow, { flexDirection: he ? 'row-reverse' : 'row' }]}>
                                 <Text style={[styles.previewMetaLabel, { color: isDark ? '#bbb' : '#555', textAlign, writingDirection: textDir }]}>
                                   {he ? `${activeCount} ${translate(language, 'preview_active_units')}` : `${activeCount} ${translate(language, 'preview_active_units')}`}
