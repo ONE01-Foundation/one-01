@@ -71,6 +71,21 @@ import { ShareIcon } from '../components/icons/ShareIcon';
 import { ChatBackArrowIcon } from '../components/icons/ChatBackArrowIcon';
 import { SettingsIcon } from '../components/icons/SettingsIcon';
 import { BackgroundOvarly } from '../components/icons/BackgroundOvarly';
+import {
+  startOfLocalDayMs,
+  inferMessageSentAt,
+  formatChatDayStickyLabel,
+  formatUnitLogStatusLine,
+  hexToRgba,
+  SPACE_LABEL_HE,
+  SPACE_LABEL_EN,
+  spaceOrDomainTitle,
+  getTimeGreeting,
+  progressColorByPct,
+  contactInitials,
+  filterUnitChatParticipants,
+  type ChatLine,
+} from '../core/displayHelpers';
 
 const MAX_CONTENT_WIDTH = 428;
 const INACTIVITY_HIDE_MS = 3000;
@@ -112,8 +127,6 @@ function insertPersonalOrbsAfterOrigin(prev: OrbItem[], orbs: OrbItem[]): OrbIte
   return [...without.slice(0, originIdx + 1), ...orbs, ...without.slice(originIdx + 1)];
 }
 
-type ChatLine = { id: string; sender: 'user' | 'one'; text: string; sentAt?: number };
-
 type ChatScope = {
   scope: 'one' | 'space' | 'unit';
   spaceId: SpaceId;
@@ -121,56 +134,7 @@ type ChatScope = {
   unitId?: string;
 };
 
-function startOfLocalDayMs(t: number): number {
-  const d = new Date(t);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
 
-function inferMessageSentAt(line: ChatLine, index: number, total: number): number {
-  if (line.sentAt != null) return line.sentAt;
-  const daysBack = Math.max(0, total - 1 - index);
-  const d = new Date();
-  d.setHours(12, 0, 0, 0);
-  d.setDate(d.getDate() - daysBack);
-  return d.getTime();
-}
-
-function formatChatDayStickyLabel(sentAt: number, he: boolean): string {
-  const now = Date.now();
-  const sodNow = startOfLocalDayMs(now);
-  const sodMsg = startOfLocalDayMs(sentAt);
-  const diffDays = Math.round((sodNow - sodMsg) / 86400000);
-  if (diffDays === 0) return he ? 'היום' : 'Today';
-  if (diffDays === 1) return he ? 'אתמול' : 'Yesterday';
-  if (diffDays === 2) return he ? 'שלשום' : '2 days ago';
-  if (he) {
-    return new Date(sentAt).toLocaleDateString('he-IL', {
-      day: 'numeric',
-      month: 'short',
-      ...(new Date(sentAt).getFullYear() !== new Date(now).getFullYear() ? { year: 'numeric' } : {}),
-    });
-  }
-  return new Date(sentAt).toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    ...(new Date(sentAt).getFullYear() !== new Date(now).getFullYear() ? { year: 'numeric' } : {}),
-  });
-}
-
-function formatUnitLogStatusLine(
-  status: UnitChatProfileModel['status'],
-  progress: number,
-  steps: number,
-  language: AppLanguage,
-): string {
-  if (language === 'he') {
-    const statusHe = status === 'active' ? 'פעיל' : status === 'waiting' ? 'ממתין' : 'הושלם';
-    return `${statusHe} · ${progress}% · ${steps} צעדים`;
-  }
-  return `${status} · ${progress}% · ${steps} steps`;
-}
 
 type FlowUnit = UnitChatProfileModel & {
   messages: ChatLine[];
@@ -198,46 +162,6 @@ function sortFlowUnitsHistoryOldestFirst(units: FlowUnit[]): FlowUnit[] {
   });
 }
 
-const SPACE_LABEL_HE: Record<string, string> = {
-  personal: 'ראשי',
-  business: 'עבודה',
-  health: 'בריאות',
-  finance: 'כסף',
-  knowledge: 'לימודים',
-  learning: 'לימודים',
-  leisure: 'פנאי',
-  relations: 'קשרים',
-  relationships: 'קשרים',
-  clients: 'לקוחות',
-  marketing: 'שיווק',
-  sales: 'מכירות',
-  operations: 'תפעול',
-  team: 'צוות',
-  personal_growth: 'צמיחה',
-};
-
-const SPACE_LABEL_EN: Record<string, string> = {
-  personal: 'General',
-  business: 'Work',
-  health: 'Health',
-  finance: 'Finance',
-  knowledge: 'Learning',
-  learning: 'Learning',
-  leisure: 'Leisure',
-  relations: 'Relationships',
-  relationships: 'Relationships',
-  clients: 'Clients',
-  marketing: 'Marketing',
-  sales: 'Sales',
-  operations: 'Operations',
-  team: 'Team',
-  personal_growth: 'Personal Growth',
-};
-
-function spaceOrDomainTitle(id: string, language: AppLanguage): string {
-  if (language === 'he') return SPACE_LABEL_HE[id] ?? id;
-  return SPACE_LABEL_EN[id] ?? id;
-}
 
 /** כדור גלובל מלאכותי בראש הגלגל — מעל הסוכן; אינדקס 0 = גלובל, 1 = סוכן */
 const GLOBAL_WHEEL_ORB_ID = '__wheel_global__';
@@ -1385,12 +1309,6 @@ const WHEEL_AGENT_BROADCAST_PRIMARY_TITLE_OFFSET_Y = 0;
 /** מרווח מעל כותרת משנית — רק בכדור סוכן (יחידות נשארות marginTop מה־StyleSheet) */
 const WHEEL_AGENT_BROADCAST_SUBTITLE_MARGIN_TOP = 8;
 
-function hexToRgba(hex: string, alpha: number): string {
-  const match = hex.replace(/^#/, '').match(/.{2}/g);
-  if (!match) return hex;
-  const [r, g, b] = match.map((x) => parseInt(x, 16));
-  return `rgba(${r},${g},${b},${alpha})`;
-}
 
 /** אייקון פלוס מ־assets/icons/plus-icon.svg (viewBox 0 0 46 46) */
 function PlusIconSvg({ size, color }: { size: number; color: string }) {
@@ -1847,32 +1765,6 @@ function WorldMiniIcon({ worldId, color, size }: { worldId: string; color: strin
   );
 }
 
-function contactInitials(name: string): string {
-  const t = name.trim();
-  if (!t) return '?';
-  const parts = t.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    const a = parts[0][0] ?? '';
-    const b = parts[1][0] ?? '';
-    return `${a}${b}`.toUpperCase();
-  }
-  return t.slice(0, Math.min(2, t.length)).toUpperCase();
-}
-
-function filterUnitChatParticipants(roles: UnitProfilePerson[] | undefined): UnitProfilePerson[] {
-  if (!roles?.length) return [];
-  return roles.filter((p) => {
-    const rawName = (p.name ?? '').trim();
-    const name = rawName.toLowerCase();
-    const role = (p.role ?? '').trim().toLowerCase();
-    if (role === 'סוכן' || role === 'agent') {
-      if (name === 'one') return false;
-    }
-    /** מציין משתמש בתכנון — לא "איש קשר" חיצוני; כפתור ההדר משתמש ב־add-contact-icon.svg */
-    if (rawName === 'את/ה' || name === 'you') return false;
-    return true;
-  });
-}
 
 function UnitChatHeaderContacts({
   participants,
@@ -1968,23 +1860,6 @@ const COMPOSER_LINE_HEIGHT = 20;
 const COMPOSER_MIN_LINES = 1;
 const COMPOSER_MAX_LINES = 8;
 
-function getTimeGreeting(hour: number, name: string, language: AppLanguage): string {
-  if (language === 'en') {
-    if (hour >= 5 && hour < 12) return `Good morning, ${name}`;
-    if (hour >= 12 && hour < 18) return `Good afternoon, ${name}`;
-    return `Good evening, ${name}`;
-  }
-  if (hour >= 5 && hour < 12) return `בוקר טוב, ${name}`;
-  if (hour >= 12 && hour < 18) return `צהריים טובים, ${name}`;
-  return `ערב טוב, ${name}`;
-}
-
-function progressColorByPct(pct: number, isDark: boolean): string {
-  if (pct < 0.15) return isDark ? '#71717a' : '#a1a1aa';
-  if (pct < 0.4) return '#f97316';
-  if (pct < 0.7) return '#eab308';
-  return '#22c55e';
-}
 
 type Nav = NativeStackNavigationProp<AppShellParamList, 'Home'>;
 
