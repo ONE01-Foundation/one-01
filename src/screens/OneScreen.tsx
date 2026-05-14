@@ -1979,22 +1979,34 @@ export function OneScreen() {
         setPendingUnitPreview({ goalTemplate: tmpl, spaceId: tmpl.spaceId, domainId: tmpl.domainId, userMessage: text });
         scrollOneChatToBottom();
 
+        console.log('[AI-PREVIEW] useAiRuntime =', useDevModeStore.getState().useAiRuntime);
         if (useDevModeStore.getState().useAiRuntime) {
+          console.log('[AI-PREVIEW] starting enrichment');
           setAiEnrichment({ status: 'loading' });
           const enrichMessages = buildPreviewEnrichmentPrompt(
             text, tmpl.spaceId, tmpl.domainId, language
           );
+          console.log('[AI-PREVIEW] request messages:', JSON.stringify(enrichMessages).slice(0, 200));
           Promise.race([
             chatCompletion({ messages: enrichMessages, temperature: 0.3, maxTokens: 600 }),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('AI enrichment timeout')), 5000)
+              setTimeout(() => reject(new Error('AI enrichment timeout')), 8000)
             ),
           ])
             .then((res) => {
+              console.log('[AI-PREVIEW] response received:', JSON.stringify(res).slice(0, 300));
+              console.log('[AI-PREVIEW] raw text:', res.text?.slice(0, 500));
               const parsed = parseAiEnrichmentResponse(res.text);
-              setAiEnrichment(parsed ? { status: 'done', data: parsed } : { status: 'error' });
+              if (parsed) {
+                console.log('[AI-PREVIEW] parse success:', Object.keys(parsed));
+                setAiEnrichment({ status: 'done', data: parsed });
+              } else {
+                console.log('[AI-PREVIEW] parse FAILED — raw text was:', res.text);
+                setAiEnrichment({ status: 'error' });
+              }
             })
-            .catch(() => {
+            .catch((err) => {
+              console.error('[AI-PREVIEW] error:', err?.message || err);
               setAiEnrichment({ status: 'error' });
             });
         }

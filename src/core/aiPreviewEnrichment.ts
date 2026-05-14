@@ -55,10 +55,12 @@ export function buildPreviewEnrichmentPrompt(
 }
 
 export function parseAiEnrichmentResponse(raw: string): AiPreviewEnrichment | null {
+  console.log('[AI-PARSE] attempting to parse:', raw?.slice(0, 200));
   try {
     let cleaned = raw.trim();
-    if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+    const fenceMatch = cleaned.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
+    if (fenceMatch) {
+      cleaned = fenceMatch[1].trim();
     }
     const parsed = JSON.parse(cleaned);
     if (
@@ -76,8 +78,10 @@ export function parseAiEnrichmentResponse(raw: string): AiPreviewEnrichment | nu
         realWorldNotes: parsed.realWorldNotes,
       };
     }
+    console.warn('[AI-PARSE] schema mismatch — keys:', Object.keys(parsed));
     return null;
-  } catch {
+  } catch (e) {
+    console.error('[AI-PARSE] JSON.parse failed:', (e as Error).message);
     return null;
   }
 }
