@@ -30,5 +30,8 @@
   "include": [
     "**/*.ts",
     "**/*.tsx"
+  ],
+  "exclude": [
+    "supabase/functions/**"
   ]
 }
