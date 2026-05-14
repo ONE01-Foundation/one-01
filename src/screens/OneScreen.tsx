@@ -717,7 +717,7 @@ export function OneScreen() {
     const domains = currentSpaceConfig.domains.map((d) => ({ id: d.id as string, label: d.labelHe, color: d.color }));
     return [...base, ...domains];
   }, [currentSpaceConfig]);
-  const [businessName, setBusinessName] = useState('Nova Studio');
+  const [businessName, setBusinessName] = useState('');
   const [isVoiceTrayOpen, setIsVoiceTrayOpen] = useState(false);
   const [isMicHoldActive, setIsMicHoldActive] = useState(false);
   const [chatSheetMessages, setChatSheetMessages] = useState<ChatLine[]>([
@@ -1565,9 +1565,12 @@ export function OneScreen() {
 
   useEffect(() => {
     if (currentSpaceId === 'business') {
-      const seeded = generateBusinessWorkspaceSeed(language);
-      setPersonalOrbs(seeded.personalOrbs);
-      setFlowUnits(seeded.flowUnits);
+      const hasRealBusinessUnits = flowUnits.some((u) => u.spaceId === 'business');
+      if (!hasRealBusinessUnits && showAllWorldsExamples) {
+        const seeded = generateBusinessWorkspaceSeed(language);
+        setPersonalOrbs(seeded.personalOrbs);
+        setFlowUnits(seeded.flowUnits);
+      }
       setWorldIndex(0);
       setChatScope({ scope: 'space', spaceId: 'business' });
     } else {
@@ -3248,7 +3251,7 @@ export function OneScreen() {
                     <Text style={[styles.agentWorldTagText, { color: tagColor }]}>
                       {activeDomainId
                         ? (getSpaceConfig(currentSpaceId)?.domains.find((d) => d.id === activeDomainId)?.[language === 'he' ? 'labelHe' : 'labelEn'] ?? activeDomainId)
-                        : (language === 'he' ? 'הכל' : 'All')}
+                        : (language === 'he' ? (getSpaceConfig(currentSpaceId)?.labelHe ?? 'אישי') : (getSpaceConfig(currentSpaceId)?.labelEn ?? 'Personal'))}
                     </Text>
                   </TouchableOpacity>
                 </Animated.View>
