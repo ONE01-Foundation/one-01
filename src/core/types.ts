@@ -90,7 +90,7 @@ export type ProcessFields = {
   outcome?: string;
 };
 
-export type ProcessEventType = 'note' | 'compile' | 'status' | 'field_update';
+export type ProcessEventType = 'note' | 'compile' | 'status' | 'field_update' | 'slot_filled' | 'milestone_reached' | 'renamed' | 'progress_update';
 
 export interface ProcessEvent {
   id: string;

@@ -2131,6 +2131,29 @@ export function OneScreen() {
           for (const s of updatedUnit.profileSlots ?? []) {
             if (s.value?.trim()) fields[s.id] = s.value;
           }
+          const timelineAdditions: import('../core/types').ProcessEvent[] = [];
+          const evId = () => `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const nowIso = new Date().toISOString();
+
+          const filledLabel = findNewlyFilledSlotLabel(
+            existingProcess.profileSlots ?? [],
+            updatedUnit.profileSlots ?? []
+          );
+          if (filledLabel) {
+            const filledSlot = (updatedUnit.profileSlots ?? []).find(s => s.label === filledLabel);
+            timelineAdditions.push({
+              id: evId(), at: nowIso, type: 'slot_filled',
+              payload: { slotLabel: filledLabel, value: filledSlot?.value ?? '' },
+            });
+          }
+
+          if (existingProcess.progress !== updatedUnit.progress) {
+            timelineAdditions.push({
+              id: evId(), at: nowIso, type: 'progress_update',
+              payload: { progress: updatedUnit.progress },
+            });
+          }
+
           updateProcess(activeUnitId, {
             ...existingProcess,
             title: updatedUnit.title,
@@ -2150,6 +2173,7 @@ export function OneScreen() {
               completed: m.done,
               order: i,
             })),
+            timeline: [...existingProcess.timeline, ...timelineAdditions],
           });
         }
       }
@@ -2321,11 +2345,24 @@ export function OneScreen() {
     if (!activeUnitId) return;
     const trimmed = nextTitle.trim();
     if (!trimmed) return;
+    const oldTitle = flowUnits.find((u) => u.id === activeUnitId)?.title ?? '';
     setFlowUnits((prev) => prev.map((u) => (u.id === activeUnitId ? { ...u, title: trimmed } : u)));
     setPersonalOrbs((prev) => prev.map((o) => (o.id === activeUnitId ? { ...o, title: trimmed } : o)));
     const proc = getProcess(activeUnitId);
-    if (proc) updateProcess(activeUnitId, { ...proc, title: trimmed });
-  }, [activeUnitId, getProcess, updateProcess]);
+    if (proc) {
+      const renameEvent: import('../core/types').ProcessEvent = {
+        id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        at: new Date().toISOString(),
+        type: 'renamed',
+        payload: { from: oldTitle, to: trimmed },
+      };
+      updateProcess(activeUnitId, {
+        ...proc,
+        title: trimmed,
+        timeline: [...proc.timeline, renameEvent],
+      });
+    }
+  }, [activeUnitId, flowUnits, getProcess, updateProcess]);
 
   const handleAttachPick = useCallback(
     (id: AttachActionId) => {
