@@ -1334,57 +1334,77 @@ export function OneScreen() {
     });
   }, [walletSlideAnim, windowHeight]);
 
+  const resolveFlowUnitForOrb = useCallback(
+    (selectedOrb: OrbItem): FlowUnit => {
+      const existing = flowUnits.find((u) => u.id === selectedOrb.id);
+      if (existing) return existing;
+      const isLicenseOrb = selectedOrb.id === 'license';
+      const synthetic: FlowUnit = {
+        id: selectedOrb.id,
+        spaceId: currentSpaceId,
+        domainId: activeDomainId,
+        title: selectedOrb.title,
+        subtitle: selectedOrb.subtitle || 'תהליך עם ליווי ONE',
+        emoji: selectedOrb.emoji || '🧩',
+        status: 'active',
+        progress: 0,
+        steps: isLicenseOrb ? 25 : 12,
+        messages: [
+          {
+            id: `seed_${selectedOrb.id}`,
+            sender: 'one',
+            text: `פתחת את «${selectedOrb.title}». כתוב מה כבר נעשה — ואעדכן צעדים.`,
+            sentAt: Date.now(),
+          },
+        ],
+        goal: `להשלים את «${selectedOrb.title}» בצורה מסודרת — צעד אחר צעד.`,
+        city: 'ישראל',
+        etaWeeks: isLicenseOrb ? 8 : 6,
+        budgetMinIls: isLicenseOrb ? 4500 : undefined,
+        budgetMaxIls: isLicenseOrb ? 7500 : undefined,
+        peopleRoles: [
+          { id: 'np1', role: 'סוכן', name: 'ONE' },
+          { id: 'np2', role: 'אחראי/ת', name: 'את/ה' },
+        ],
+        nextAction: 'לפרט בצ׳אט מה כבר בוצע ומה חסר — אכין רשימת צעדים מדויקת.',
+        lastUpdatedLabel: 'נפתח עכשיו',
+        blockCount: isLicenseOrb ? 6 : 5,
+      };
+      setFlowUnits((prev) => [synthetic, ...prev.filter((u) => u.id !== synthetic.id)]);
+      return synthetic;
+    },
+    [flowUnits, currentSpaceId, activeDomainId]
+  );
+
   const openChatSheet = useCallback(() => {
     setShowAttachSheet(false);
     setShowCredits(false);
     setShowChatMenu(false);
-    setChatScope({ scope: 'space', spaceId: currentSpaceId, domainId: activeDomainId });
+    setShowChatProfile(false);
+    setChatProfileEditMode(false);
     const selectedOrb = wheelOrbData[orbIndex];
     if (selectedOrb?.id === GLOBAL_WHEEL_ORB_ID) {
       setAgentUnitCreationMode(false);
       setActiveUnitId(null);
+      setUnitPreviewTarget(null);
+      setChatScope({ scope: 'space', spaceId: currentSpaceId, domainId: activeDomainId });
       setChatSheetMessages([
         { id: `seed_${Date.now()}`, sender: 'one', text: buildSpaceAgentWelcome(currentWorldId), sentAt: Date.now() },
       ]);
     } else if (selectedOrb && selectedOrb.id !== 'origin') {
       setAgentUnitCreationMode(false);
-      let target = flowUnits.find((u) => u.id === selectedOrb.id);
-      if (!target) {
-        const isLicenseOrb = selectedOrb.id === 'license';
-        target = {
-          id: selectedOrb.id,
-          spaceId: effectiveChatSpaceId,
-          domainId: effectiveChatDomainId,
-          title: selectedOrb.title,
-          subtitle: selectedOrb.subtitle || 'תהליך עם ליווי ONE',
-          emoji: selectedOrb.emoji || '🧩',
-          status: 'active',
-          progress: 0,
-          steps: isLicenseOrb ? 25 : 12,
-          messages: [
-            {
-              id: `seed_${selectedOrb.id}`,
-              sender: 'one',
-              text: `פתחת את «${selectedOrb.title}». כתוב מה כבר נעשה — ואעדכן צעדים.`,
-            },
-          ],
-          goal: `להשלים את «${selectedOrb.title}» בצורה מסודרת — צעד אחר צעד.`,
-          city: 'ישראל',
-          etaWeeks: isLicenseOrb ? 8 : 6,
-          budgetMinIls: isLicenseOrb ? 4500 : undefined,
-          budgetMaxIls: isLicenseOrb ? 7500 : undefined,
-          peopleRoles: [
-            { id: 'np1', role: 'סוכן', name: 'ONE' },
-            { id: 'np2', role: 'אחראי/ת', name: 'את/ה' },
-          ],
-          nextAction: 'לפרט בצ׳אט מה כבר בוצע ומה חסר — אכין רשימת צעדים מדויקת.',
-          lastUpdatedLabel: 'נפתח עכשיו',
-          blockCount: isLicenseOrb ? 6 : 5,
-        };
-        setFlowUnits((prev) => [target!, ...prev.filter((u) => u.id !== target!.id)]);
-      }
-      setActiveUnitId(target.id);
+      setActiveUnitId(null);
+      const target = resolveFlowUnitForOrb(selectedOrb);
+      setUnitPreviewTarget(target);
+      setChatScope({
+        scope: 'unit',
+        unitId: target.id,
+        spaceId: target.spaceId,
+        domainId: target.domainId,
+      });
     } else {
+      setUnitPreviewTarget(null);
+      setChatScope({ scope: 'space', spaceId: currentSpaceId, domainId: activeDomainId });
       setActiveUnitId(null);
       setAgentUnitCreationMode(true);
       setChatSheetMessages([
@@ -1398,8 +1418,9 @@ export function OneScreen() {
   }, [
     wheelOrbData,
     orbIndex,
-    flowUnits,
-    effectiveChatWorldId,
+    currentSpaceId,
+    activeDomainId,
+    resolveFlowUnitForOrb,
     windowHeight,
     chatBackdropOpacity,
     chatSheetTranslateY,
@@ -1486,6 +1507,7 @@ export function OneScreen() {
       setIsMicHoldActive(false);
         setChatOpenedFromOrbProfileShortcut(false);
         setShowCredits(false);
+        setUnitPreviewTarget(null);
         /** אחרי שהקלף נסגר — לא לפני, כדי שלא יבזק מסך «My One» בזמן האנימציה */
         setActiveUnitId(null);
         opts?.afterClose?.();
@@ -1749,24 +1771,20 @@ export function OneScreen() {
     [language]
   );
 
-  /** Commit 2 wires full chat path; stub until orb tap interception lands. */
-  const openUnitPreviewChat = useCallback(() => {}, []);
-
   const openUnitPreviewProfile = useCallback(() => {
     const unit = unitPreviewTarget;
     if (!unit) return;
-    setActiveUnitId(unit.id);
+    const live = flowUnits.find((u) => u.id === unit.id) ?? unit;
+    setActiveUnitId(live.id);
     setUnitPreviewTarget(null);
+    setChatScope({
+      scope: 'unit',
+      unitId: live.id,
+      spaceId: live.spaceId,
+      domainId: live.domainId,
+    });
     openChatProfile();
-  }, [unitPreviewTarget, openChatProfile]);
-
-  const openUnitPreviewContinue = useCallback(() => {
-    const unit = unitPreviewTarget;
-    if (!unit) return;
-    setActiveUnitId(unit.id);
-    setUnitPreviewTarget(null);
-    shouldRefocusComposerAfterChatOpenRef.current = true;
-  }, [unitPreviewTarget]);
+  }, [unitPreviewTarget, flowUnits, openChatProfile]);
 
   const shareChatUnitProfile = useCallback(async () => {
     try {
@@ -1785,6 +1803,28 @@ export function OneScreen() {
       });
     });
   }, []);
+
+  const openUnitPreviewFullChat = useCallback(() => {
+    const unit = unitPreviewTarget;
+    if (!unit) return;
+    const live = flowUnits.find((u) => u.id === unit.id) ?? unit;
+    setUnitPreviewTarget(null);
+    setAgentUnitCreationMode(false);
+    setShowChatProfile(false);
+    setChatProfileEditMode(false);
+    setActiveUnitId(live.id);
+    setChatScope({
+      scope: 'unit',
+      unitId: live.id,
+      spaceId: live.spaceId,
+      domainId: live.domainId,
+    });
+    shouldRefocusComposerAfterChatOpenRef.current = true;
+    requestAnimationFrame(() => scrollOneChatToBottom());
+  }, [unitPreviewTarget, flowUnits, scrollOneChatToBottom]);
+
+  const openUnitPreviewChat = openUnitPreviewFullChat;
+  const openUnitPreviewContinue = openUnitPreviewFullChat;
 
   useEffect(() => {
     if (!showChatSheet || !showChatProfile) return;
@@ -4724,10 +4764,6 @@ export function OneScreen() {
                       setShowAgentCard(true);
                     } else {
                       openChatSheet();
-                      setChatOpenedFromOrbProfileShortcut(true);
-                      requestAnimationFrame(() => {
-                        openChatProfile();
-                      });
                     }
                   }}
                 >
