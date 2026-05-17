@@ -3279,7 +3279,7 @@ export function OneScreen() {
               openAgentProfileFromHomeOrb();
               return;
             }
-            /** סוכן/יחידה: קידום ברודקאסט רק מלחיצה על אזור הטקסט (חצי שמאל/ימין) */
+            openUnitPeekPreview(item.id);
             return;
           }
           scrollToOrb(index);
@@ -4809,11 +4809,8 @@ export function OneScreen() {
                       setAgentCardWorldIndex(worldIndex);
                       setShowAgentCard(true);
                     } else {
-                      openChatSheet();
-                      setChatOpenedFromOrbProfileShortcut(true);
-                      requestAnimationFrame(() => {
-                        openChatProfile();
-                      });
+                      const selectedOrb = wheelOrbData[orbIndex];
+                      if (selectedOrb?.id) openUnitPeekPreview(selectedOrb.id);
                     }
                   }}
                 >
