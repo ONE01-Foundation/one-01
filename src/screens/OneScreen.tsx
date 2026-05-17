@@ -1382,20 +1382,19 @@ export function OneScreen() {
     setShowChatMenu(false);
     setShowChatProfile(false);
     setChatProfileEditMode(false);
+    setUnitPreviewTarget(null);
     const selectedOrb = wheelOrbData[orbIndex];
     if (selectedOrb?.id === GLOBAL_WHEEL_ORB_ID) {
       setAgentUnitCreationMode(false);
       setActiveUnitId(null);
-      setUnitPreviewTarget(null);
       setChatScope({ scope: 'space', spaceId: currentSpaceId, domainId: activeDomainId });
       setChatSheetMessages([
         { id: `seed_${Date.now()}`, sender: 'one', text: buildSpaceAgentWelcome(currentWorldId), sentAt: Date.now() },
       ]);
     } else if (selectedOrb && selectedOrb.id !== 'origin') {
       setAgentUnitCreationMode(false);
-      setActiveUnitId(null);
       const target = resolveFlowUnitForOrb(selectedOrb);
-      setUnitPreviewTarget(target);
+      setActiveUnitId(target.id);
       setChatScope({
         scope: 'unit',
         unitId: target.id,
@@ -1771,20 +1770,16 @@ export function OneScreen() {
     [language]
   );
 
-  const openUnitPreviewProfile = useCallback(() => {
-    const unit = unitPreviewTarget;
-    if (!unit) return;
-    const live = flowUnits.find((u) => u.id === unit.id) ?? unit;
-    setActiveUnitId(live.id);
-    setUnitPreviewTarget(null);
-    setChatScope({
-      scope: 'unit',
-      unitId: live.id,
-      spaceId: live.spaceId,
-      domainId: live.domainId,
-    });
-    openChatProfile();
-  }, [unitPreviewTarget, flowUnits, openChatProfile]);
+  const focusOrbForUnitId = useCallback(
+    (unitId: string) => {
+      const idx = wheelOrbData.findIndex((o) => o.id === unitId);
+      if (idx >= 0) {
+        setOrbIndex(idx);
+        orbIndexForPullRef.current = idx;
+      }
+    },
+    [wheelOrbData]
+  );
 
   const shareChatUnitProfile = useCallback(async () => {
     try {
@@ -1804,27 +1799,34 @@ export function OneScreen() {
     });
   }, []);
 
-  const openUnitPreviewFullChat = useCallback(() => {
+  const openUnitPreviewChat = useCallback(() => {
     const unit = unitPreviewTarget;
     if (!unit) return;
-    const live = flowUnits.find((u) => u.id === unit.id) ?? unit;
-    setUnitPreviewTarget(null);
-    setAgentUnitCreationMode(false);
-    setShowChatProfile(false);
-    setChatProfileEditMode(false);
-    setActiveUnitId(live.id);
-    setChatScope({
-      scope: 'unit',
-      unitId: live.id,
-      spaceId: live.spaceId,
-      domainId: live.domainId,
-    });
-    shouldRefocusComposerAfterChatOpenRef.current = true;
-    requestAnimationFrame(() => scrollOneChatToBottom());
-  }, [unitPreviewTarget, flowUnits, scrollOneChatToBottom]);
+    focusOrbForUnitId(unit.id);
+    setChatOpenedFromOrbProfileShortcut(false);
+    openChatSheet();
+  }, [unitPreviewTarget, focusOrbForUnitId, openChatSheet]);
 
-  const openUnitPreviewChat = openUnitPreviewFullChat;
-  const openUnitPreviewContinue = openUnitPreviewFullChat;
+  const openUnitPreviewProfile = useCallback(() => {
+    const unit = unitPreviewTarget;
+    if (!unit) return;
+    focusOrbForUnitId(unit.id);
+    setChatOpenedFromOrbProfileShortcut(true);
+    openChatSheet();
+    requestAnimationFrame(() => {
+      openChatProfile();
+    });
+  }, [unitPreviewTarget, focusOrbForUnitId, openChatSheet, openChatProfile]);
+
+  const openUnitPreviewContinue = useCallback(() => {
+    const unit = unitPreviewTarget;
+    if (!unit) return;
+    focusOrbForUnitId(unit.id);
+    setChatOpenedFromOrbProfileShortcut(false);
+    shouldRefocusComposerAfterChatOpenRef.current = true;
+    openChatSheet();
+    requestAnimationFrame(() => scrollOneChatToBottom());
+  }, [unitPreviewTarget, focusOrbForUnitId, openChatSheet, scrollOneChatToBottom]);
 
   useEffect(() => {
     if (!showChatSheet || !showChatProfile) return;
@@ -2788,6 +2790,49 @@ export function OneScreen() {
     resetInactivityTimer({ orbIndex: AGENT_ORB_INDEX });
   }, [resetInactivityTimer]);
 
+  const openUnitPeekPreview = useCallback(
+    (orbId: string) => {
+      resetInactivityTimer();
+      Keyboard.dismiss();
+      setShowAttachSheet(false);
+      setShowCredits(false);
+      setShowChatMenu(false);
+      const selectedOrb = wheelOrbData.find((o) => o.id === orbId);
+      if (!selectedOrb || selectedOrb.id === GLOBAL_WHEEL_ORB_ID || selectedOrb.id === 'origin') return;
+      const idx = wheelOrbData.findIndex((o) => o.id === orbId);
+      if (idx >= 0) {
+        setOrbIndex(idx);
+        orbIndexForPullRef.current = idx;
+      }
+      const target = resolveFlowUnitForOrb(selectedOrb);
+      setChatScope({
+        scope: 'unit',
+        spaceId: target.spaceId,
+        domainId: target.domainId,
+        unitId: target.id,
+      });
+      setAgentUnitCreationMode(false);
+      setActiveUnitId(null);
+      setUnitPreviewTarget(target);
+      setChatOpenedFromOrbProfileShortcut(false);
+      setShowChatProfile(false);
+      setChatProfileEditMode(false);
+      if (!showChatSheetRef.current) {
+        chatBackdropOpacity.setValue(0);
+        chatSheetTranslateY.setValue(windowHeight + 180);
+        setShowChatSheet(true);
+      }
+    },
+    [
+      resetInactivityTimer,
+      wheelOrbData,
+      resolveFlowUnitForOrb,
+      chatBackdropOpacity,
+      chatSheetTranslateY,
+      windowHeight,
+    ]
+  );
+
   /** לחיצה על פרצוף הסוכן בגלגל הבית → קלף פרופיל סוכן (כמו קיצור מיחידה) */
   const openAgentProfileFromHomeOrb = useCallback(() => {
     if (viewMode !== 'orb') return;
@@ -3527,6 +3572,7 @@ export function OneScreen() {
     cycleWorldNext,
     cycleWorldPrev,
     openAgentProfileFromHomeOrb,
+    openUnitPeekPreview,
     agentBroadcastMessages,
     orbBroadcastMessagesMap,
   ]);
@@ -4764,6 +4810,10 @@ export function OneScreen() {
                       setShowAgentCard(true);
                     } else {
                       openChatSheet();
+                      setChatOpenedFromOrbProfileShortcut(true);
+                      requestAnimationFrame(() => {
+                        openChatProfile();
+                      });
                     }
                   }}
                 >
