@@ -49,6 +49,7 @@ import { chatCompletion } from '../services/ai';
 import {
   translate,
   embedLatinRunsForRtlDisplay,
+  formatChatUnitProgressLine,
   type SettingsStringKey,
   type ChatChromeKey,
 } from '../i18n/strings';
@@ -154,6 +155,7 @@ import {
   lensToWorldId,
   spaceAndDomainToLens,
   buildAgentUnitChatReply,
+  deriveUnitPhase,
 } from '../core/unitLifecycle';
 import {
   getGlobalBroadcastMessages,
@@ -781,6 +783,7 @@ export function OneScreen() {
     if (wi >= 0 && wi !== worldIndex) setWorldIndex(wi);
   }, [activeHomeWorldIds, worldIndex, currentSpaceConfig.id]);
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
+  const [unitPreviewTarget, setUnitPreviewTarget] = useState<FlowUnit | null>(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showChatProfile, setShowChatProfile] = useState(false);
   const [chatProfileEditMode, setChatProfileEditMode] = useState(false);
@@ -1091,6 +1094,7 @@ export function OneScreen() {
   const chatComposerLineCount = Math.max(COMPOSER_MIN_LINES, Math.round(chatComposerVisibleHeight / COMPOSER_LINE_HEIGHT));
   const chatComposerCanExpand = chatComposerMeasuredHeight > chatComposerMaxHeight + 2;
   const activeUnit = activeUnitId ? flowUnits.find((unit) => unit.id === activeUnitId) ?? null : null;
+  const chatHeaderUnit = activeUnit ?? unitPreviewTarget;
   const isDark = theme === 'dark';
   const chatSheetBg = isDark ? '#121212' : colors.background;
   const chatCardBg = isDark ? '#121317' : colors.surface;
@@ -1715,6 +1719,54 @@ export function OneScreen() {
       }).start();
     });
   }, [isRtlLayout, profileDismissSlideX]);
+
+  const dismissFlowUnitPreview = useCallback(() => {
+    setUnitPreviewTarget(null);
+  }, []);
+
+  const unitPreviewPhaseKey = useCallback((unit: FlowUnit): ChatChromeKey => {
+    if (unit.status === 'done') return 'unit_preview_phase_done';
+    if (unit.status === 'waiting') return 'unit_preview_phase_waiting';
+    return deriveUnitPhase(unit) === 'profiling' ? 'unit_preview_phase_profiling' : 'unit_preview_phase_operating';
+  }, []);
+
+  const formatUnitPreviewMissingFields = useCallback(
+    (count: number) => translate(language, 'unit_preview_missing_fields').replace('{n}', String(count)),
+    [language]
+  );
+
+  const unitPreviewLastUpdateLine = useCallback(
+    (unit: FlowUnit): string | null => {
+      const withTime = (unit.messages ?? []).filter((m) => m.sentAt != null);
+      if (withTime.length > 0) {
+        const last = withTime.reduce((a, b) => ((a.sentAt ?? 0) > (b.sentAt ?? 0) ? a : b));
+        return `${translate(language, 'unit_preview_last_update')} · ${formatChatDayStickyLabel(last.sentAt!, language === 'he')}`;
+      }
+      const label = unit.lastUpdatedLabel?.trim();
+      if (label) return `${translate(language, 'unit_preview_last_update')} · ${label}`;
+      return null;
+    },
+    [language]
+  );
+
+  /** Commit 2 wires full chat path; stub until orb tap interception lands. */
+  const openUnitPreviewChat = useCallback(() => {}, []);
+
+  const openUnitPreviewProfile = useCallback(() => {
+    const unit = unitPreviewTarget;
+    if (!unit) return;
+    setActiveUnitId(unit.id);
+    setUnitPreviewTarget(null);
+    openChatProfile();
+  }, [unitPreviewTarget, openChatProfile]);
+
+  const openUnitPreviewContinue = useCallback(() => {
+    const unit = unitPreviewTarget;
+    if (!unit) return;
+    setActiveUnitId(unit.id);
+    setUnitPreviewTarget(null);
+    shouldRefocusComposerAfterChatOpenRef.current = true;
+  }, [unitPreviewTarget]);
 
   const shareChatUnitProfile = useCallback(async () => {
     try {
@@ -5040,13 +5092,14 @@ export function OneScreen() {
                         styles.chatSheetTopBar,
                         {
                           borderBottomColor: colors.border,
-                          borderBottomWidth: activeUnit ? 0 : StyleSheet.hairlineWidth,
+                          borderBottomWidth: chatHeaderUnit ? 0 : StyleSheet.hairlineWidth,
                         },
                       ]}
                     >
                       <TouchableOpacity
                         style={styles.chatModalIconBtn}
                         onPress={() => {
+                          if (unitPreviewTarget) dismissFlowUnitPreview();
                           closeChatSheet({ direction: 'down' });
                         }}
                         hitSlop={8}
@@ -5058,17 +5111,17 @@ export function OneScreen() {
                         <TouchableOpacity
                           activeOpacity={0.75}
                           onPress={() =>
-                            navigateToGlobalForContext(activeUnit ? (activeUnit.domainId ?? activeUnit.spaceId) : effectiveChatWorldId)
+                            navigateToGlobalForContext(chatHeaderUnit ? (chatHeaderUnit.domainId ?? chatHeaderUnit.spaceId) : effectiveChatWorldId)
                           }
                         >
                           <View
                             style={[
                               styles.chatModalAvatar,
-                              { backgroundColor: activeUnit ? colors.surface : chatAgentAvatarBg },
+                              { backgroundColor: chatHeaderUnit ? colors.surface : chatAgentAvatarBg },
                             ]}
                           >
-                            {activeUnit ? (
-                              <Text style={styles.chatModalUnitEmoji}>{activeUnit.emoji}</Text>
+                            {chatHeaderUnit ? (
+                              <Text style={styles.chatModalUnitEmoji}>{chatHeaderUnit.emoji}</Text>
                             ) : (
                               <OrbAgent
                                 size={36}
@@ -5086,7 +5139,7 @@ export function OneScreen() {
                             language === 'he' ? styles.chatModalHeaderTextAlignHe : styles.chatModalHeaderTextAlignEn,
                           ]}
                           activeOpacity={0.75}
-                          onPress={openChatProfile}
+                          onPress={unitPreviewTarget ? openUnitPreviewProfile : openChatProfile}
                         >
                           <Text
                             style={[
@@ -5099,11 +5152,11 @@ export function OneScreen() {
                               },
                             ]}
                           >
-                            {activeUnit
-                              ? embedLatinRunsForRtlDisplay(activeUnit.title, language)
+                            {chatHeaderUnit
+                              ? embedLatinRunsForRtlDisplay(chatHeaderUnit.title, language)
                               : chatAgentHeaderTitle}
                           </Text>
-                          {activeUnit ? (
+                          {chatHeaderUnit ? (
                             <Text
                               style={[
                                 styles.chatModalSubtitle,
@@ -5115,9 +5168,9 @@ export function OneScreen() {
                                 },
                               ]}
                             >
-                              <Text style={{ color: headerProgressColor }}>{`${activeUnit.progress}%`}</Text>
+                              <Text style={{ color: headerProgressColor }}>{`${chatHeaderUnit.progress}%`}</Text>
                               <Text style={{ color: colors.textSecondary }}>
-                                {language === 'he' ? ` · ${activeUnit.steps} צעדים` : ` · ${activeUnit.steps} Steps`}
+                                {language === 'he' ? ` · ${chatHeaderUnit.steps} צעדים` : ` · ${chatHeaderUnit.steps} Steps`}
                               </Text>
                             </Text>
                           ) : (
@@ -5137,7 +5190,7 @@ export function OneScreen() {
                           )}
                         </TouchableOpacity>
                       </View>
-                      {!activeUnit ? (
+                      {!chatHeaderUnit ? (
                         <TouchableOpacity
                           style={[
                             styles.chatHeaderUpgradeBtn,
@@ -5178,9 +5231,17 @@ export function OneScreen() {
                       </TouchableOpacity>
                     </View>
                   )}
-                  {activeUnit ? (
+                  {chatHeaderUnit ? (
                     <View style={[styles.chatHeaderProgressTrack, { backgroundColor: hexToRgba(colors.textSecondary, isDark ? 0.24 : 0.16) }]}>
-                      <View style={[styles.chatHeaderProgressFill, { width: `${Math.max(2, headerProgressPct * 100)}%`, backgroundColor: headerProgressColor }]} />
+                      <View
+                        style={[
+                          styles.chatHeaderProgressFill,
+                          {
+                            width: `${Math.max(2, (Math.max(0, Math.min(100, chatHeaderUnit.progress)) / 100) * 100)}%`,
+                            backgroundColor: progressColorByPct(Math.max(0, Math.min(100, chatHeaderUnit.progress)) / 100, isDark),
+                          },
+                        ]}
+                      />
                     </View>
                   ) : null}
                   {showChatMenu && (
@@ -5247,6 +5308,180 @@ export function OneScreen() {
                       requestAnimationFrame(() => recomputeChatStickyDateLabel(lastChatScrollYRef.current));
                     }}
                   >
+                    {unitPreviewTarget && !showChatProfile ? (
+                      <View
+                        {...chatSheetHeaderDownPan.panHandlers}
+                        style={[
+                          styles.unitPreviewCard,
+                          {
+                            backgroundColor: hexToRgba(colors.surface, theme === 'dark' ? 0.55 : 0.98),
+                            borderColor: colors.border,
+                          },
+                          isRtlLayout ? ({ direction: 'rtl' } as const) : null,
+                        ]}
+                      >
+                        <View style={styles.unitPreviewCardTopRow}>
+                          <View style={styles.unitPreviewTitleRow}>
+                            <Text style={styles.unitPreviewEmoji}>{unitPreviewTarget.emoji}</Text>
+                            <Text
+                              style={[
+                                styles.unitPreviewTitle,
+                                {
+                                  color: colors.text,
+                                  textAlign: language === 'he' ? 'right' : 'left',
+                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                },
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {embedLatinRunsForRtlDisplay(unitPreviewTarget.title, language)}
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.unitPreviewDismissBtn}
+                            onPress={dismissFlowUnitPreview}
+                            hitSlop={10}
+                            activeOpacity={0.75}
+                            accessibilityRole="button"
+                            accessibilityLabel={language === 'he' ? 'סגור' : 'Close'}
+                          >
+                            <Text style={[styles.unitPreviewDismissGlyph, { color: colors.textSecondary }]}>×</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <Text
+                          style={[
+                            styles.unitPreviewPhase,
+                            {
+                              color: colors.textSecondary,
+                              textAlign: language === 'he' ? 'right' : 'left',
+                              writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                            },
+                          ]}
+                        >
+                          {translate(language, unitPreviewPhaseKey(unitPreviewTarget))}
+                        </Text>
+                        <View
+                          style={[
+                            styles.unitPreviewProgressTrack,
+                            { backgroundColor: hexToRgba(colors.textSecondary, isDark ? 0.28 : 0.14) },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.unitPreviewProgressFill,
+                              {
+                                width: `${Math.max(2, Math.max(0, Math.min(100, unitPreviewTarget.progress)))}%`,
+                                backgroundColor: progressColorByPct(
+                                  Math.max(0, Math.min(100, unitPreviewTarget.progress)) / 100,
+                                  isDark
+                                ),
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            styles.unitPreviewProgressLabel,
+                            {
+                              color: colors.textSecondary,
+                              textAlign: language === 'he' ? 'right' : 'left',
+                              writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                            },
+                          ]}
+                        >
+                          {formatChatUnitProgressLine(language, unitPreviewTarget.progress, unitPreviewTarget.steps)}
+                        </Text>
+                        {unitPreviewTarget.nextAction?.trim() ? (
+                          <View style={styles.unitPreviewSection}>
+                            <Text
+                              style={[
+                                styles.unitPreviewSectionLabel,
+                                {
+                                  color: colors.textSecondary,
+                                  textAlign: language === 'he' ? 'right' : 'left',
+                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                },
+                              ]}
+                            >
+                              {translate(language, 'unit_preview_next_action')}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.unitPreviewSectionBody,
+                                {
+                                  color: colors.text,
+                                  textAlign: language === 'he' ? 'right' : 'left',
+                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                                },
+                              ]}
+                            >
+                              {unitPreviewTarget.nextAction}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {(unitPreviewTarget.profileSlots ?? []).filter((s) => !s.optional && !s.value?.trim()).length >
+                        0 ? (
+                          <Text
+                            style={[
+                              styles.unitPreviewMeta,
+                              {
+                                color: colors.textSecondary,
+                                textAlign: language === 'he' ? 'right' : 'left',
+                                writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                              },
+                            ]}
+                          >
+                            {formatUnitPreviewMissingFields(
+                              (unitPreviewTarget.profileSlots ?? []).filter((s) => !s.optional && !s.value?.trim())
+                                .length
+                            )}
+                          </Text>
+                        ) : null}
+                        {unitPreviewLastUpdateLine(unitPreviewTarget) ? (
+                          <Text
+                            style={[
+                              styles.unitPreviewMeta,
+                              {
+                                color: colors.textSecondary,
+                                textAlign: language === 'he' ? 'right' : 'left',
+                                writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
+                              },
+                            ]}
+                          >
+                            {unitPreviewLastUpdateLine(unitPreviewTarget)}
+                          </Text>
+                        ) : null}
+                        <View style={[styles.unitPreviewActions, isRtlLayout ? styles.unitPreviewActionsRtl : null]}>
+                          <TouchableOpacity
+                            style={[styles.unitPreviewActionBtn, { backgroundColor: hexToRgba(colors.text, isDark ? 0.12 : 0.06) }]}
+                            activeOpacity={0.82}
+                            onPress={openUnitPreviewChat}
+                          >
+                            <Text style={[styles.unitPreviewActionText, { color: colors.text }]}>
+                              {translate(language, 'unit_preview_chat')}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.unitPreviewActionBtn, { backgroundColor: hexToRgba(colors.text, isDark ? 0.12 : 0.06) }]}
+                            activeOpacity={0.82}
+                            onPress={openUnitPreviewProfile}
+                          >
+                            <Text style={[styles.unitPreviewActionText, { color: colors.text }]}>
+                              {translate(language, 'unit_preview_profile')}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.unitPreviewActionBtn, styles.unitPreviewActionBtnPrimary, { backgroundColor: colors.primary }]}
+                            activeOpacity={0.82}
+                            onPress={openUnitPreviewContinue}
+                          >
+                            <Text style={[styles.unitPreviewActionText, styles.unitPreviewActionTextPrimary, { color: '#ffffff' }]}>
+                              {translate(language, 'unit_preview_continue')}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
                     {showChatProfile && (
                       <Animated.View style={{ transform: [{ translateX: profileDismissSlideX }] }}>
                         <UnitChatProfile
@@ -5300,7 +5535,7 @@ export function OneScreen() {
                         />
                       </Animated.View>
                     )}
-                    {!showChatProfile && (
+                    {!showChatProfile && !unitPreviewTarget && (
                       <>
                         {!activeUnit && (
                           <>
@@ -5768,7 +6003,7 @@ export function OneScreen() {
                 </View>
                 </Animated.View>
               )}
-              {showChatSheet && (
+              {showChatSheet && !unitPreviewTarget && (
               <Animated.View
                 style={{
                   transform: [{ translateY: chatComposerTranslateY }, { translateX: chatSheetTranslateX }],
@@ -7422,6 +7657,108 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   /** היסטוריית יחידות בצ׳אט ONE — רקע שחור, ללא מסגרת */
+  unitPreviewCard: {
+    marginHorizontal: 4,
+    marginTop: 8,
+    marginBottom: 12,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  unitPreviewCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  unitPreviewTitleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  unitPreviewEmoji: {
+    fontSize: 28,
+  },
+  unitPreviewTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  unitPreviewDismissBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitPreviewDismissGlyph: {
+    fontSize: 28,
+    lineHeight: 28,
+    fontWeight: '300',
+  },
+  unitPreviewPhase: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  unitPreviewProgressTrack: {
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+  },
+  unitPreviewProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  unitPreviewProgressLabel: {
+    fontSize: 12,
+    marginTop: -4,
+  },
+  unitPreviewSection: {
+    gap: 4,
+  },
+  unitPreviewSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  unitPreviewSectionBody: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  unitPreviewMeta: {
+    fontSize: 12,
+  },
+  unitPreviewActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  unitPreviewActionsRtl: {
+    flexDirection: 'row-reverse',
+  },
+  unitPreviewActionBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    minWidth: 88,
+    alignItems: 'center',
+  },
+  unitPreviewActionBtnPrimary: {
+    minWidth: 96,
+  },
+  unitPreviewActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  unitPreviewActionTextPrimary: {
+    color: '#ffffff',
+  },
   unitLogCard: {
     borderRadius: 14,
     paddingHorizontal: 12,

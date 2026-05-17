@@ -48,7 +48,17 @@ export type ChatChromeKey =
   | 'preview_type_entity_title'
   | 'preview_type_entity_hint'
   | 'preview_type_next'
-  | 'preview_type_whats_known';
+  | 'preview_type_whats_known'
+  | 'unit_preview_chat'
+  | 'unit_preview_profile'
+  | 'unit_preview_continue'
+  | 'unit_preview_missing_fields'
+  | 'unit_preview_phase_profiling'
+  | 'unit_preview_phase_operating'
+  | 'unit_preview_phase_waiting'
+  | 'unit_preview_phase_done'
+  | 'unit_preview_next_action'
+  | 'unit_preview_last_update';
 
 export type AppStringKey = SettingsStringKey | ChatChromeKey;
 
@@ -122,6 +132,16 @@ const CHAT_HE: Record<ChatChromeKey, string> = {
   preview_type_entity_hint: 'ניהול מתמשך — אנשי קשר, סטטוס, פעולות',
   preview_type_next: 'הבא',
   preview_type_whats_known: 'מה ידוע',
+  unit_preview_chat: "צ'אט",
+  unit_preview_profile: 'פרופיל',
+  unit_preview_continue: 'המשך',
+  unit_preview_missing_fields: '{n} שדות חסרים',
+  unit_preview_phase_profiling: 'פרופיל',
+  unit_preview_phase_operating: 'בתהליך',
+  unit_preview_phase_waiting: 'ממתין',
+  unit_preview_phase_done: 'הושלם',
+  unit_preview_next_action: 'הפעולה הבאה',
+  unit_preview_last_update: 'עודכן',
 };
 
 const CHAT_EN: Record<ChatChromeKey, string> = {
@@ -154,6 +174,16 @@ const CHAT_EN: Record<ChatChromeKey, string> = {
   preview_type_entity_hint: 'Ongoing management — contacts, status, actions',
   preview_type_next: 'Next',
   preview_type_whats_known: 'What\'s known',
+  unit_preview_chat: 'Chat',
+  unit_preview_profile: 'Profile',
+  unit_preview_continue: 'Continue',
+  unit_preview_missing_fields: '{n} missing fields',
+  unit_preview_phase_profiling: 'Profiling',
+  unit_preview_phase_operating: 'Operating',
+  unit_preview_phase_waiting: 'Waiting',
+  unit_preview_phase_done: 'Done',
+  unit_preview_next_action: 'Next action',
+  unit_preview_last_update: 'Updated',
 };
 
 const DICT: Record<AppLanguage, Record<AppStringKey, string>> = {
