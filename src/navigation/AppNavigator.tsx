@@ -1,5 +1,13 @@
 /**
- * Root: onboarding (first-time) vs AppShell (Home + Process + Profile + Discovery + ProviderProfile + ShareCard).
+ * Root navigator.
+ *
+ * MVP path (active): mvp-new-one-spec branch — routes through MvpStack
+ *   Home (entry) → SignIn (optional via "Sign in" CTA under input bar)
+ *
+ * Splash + Welcome + FirstConversation + SaveYourONE were removed; the
+ * Home surface itself adapts to first-time / signed-in / not-signed-in
+ * via `hasCompletedOnboarding`. Archived screens remain under
+ * src/_archive/screens/ for reference.
  */
 
 import React from 'react';
@@ -7,12 +15,11 @@ import { View, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useThemeStore } from '../stores/themeStore';
 import { useOne } from '../core/OneContext';
-import { OnboardingNavigator } from './OnboardingNavigator';
-import { AppShell } from './AppShell';
+import { MvpStack } from './MvpStack';
 
 export function AppNavigator() {
   const { colors } = useThemeStore();
-  const { initialized, isOnboarded } = useOne();
+  const { initialized } = useOne();
 
   if (!initialized) {
     return <View style={[styles.placeholder, { backgroundColor: colors.background }]} />;
@@ -20,7 +27,7 @@ export function AppNavigator() {
 
   return (
     <NavigationContainer>
-      {isOnboarded ? <AppShell /> : <OnboardingNavigator />}
+      <MvpStack />
     </NavigationContainer>
   );
 }

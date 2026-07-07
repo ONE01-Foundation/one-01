@@ -263,6 +263,46 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     supabaseService.initialize();
+
+    // Wire the MVP store ↔ Supabase auth state.
+    // - on SIGNED_IN  → pull profiles.one_user.mvp and hydrate useMvpStore.
+    //                   markOnboardingComplete is implicit (the JSON likely
+    //                   has hasCompletedOnboarding=true from a prior session).
+    // - on SIGNED_OUT → reset the local MVP store to the seeded mock data.
+    let unsub: (() => void) | undefined;
+    (async () => {
+      const [{ subscribeToAuthChanges, pullMvpFromSupabase }, { useMvpStore }] =
+        await Promise.all([
+          import('../stores/mvpSupabaseSync'),
+          import('../stores/mvpStore'),
+        ]);
+      unsub = subscribeToAuthChanges(async (event) => {
+        if (event === 'SIGNED_IN') {
+          const remote = await pullMvpFromSupabase();
+          if (remote) {
+            useMvpStore.getState().hydrateFromSync({
+              name: remote.name,
+              identities: remote.identities as never,
+              activeIdentityId: remote.activeIdentityId,
+              units: remote.units as never,
+              hasCompletedOnboarding: remote.hasCompletedOnboarding,
+              homeChat: remote.homeChat as never,
+              unitChats: remote.unitChats as never,
+            });
+          } else {
+            // Fresh signed-in user with no cloud state — mark onboarded
+            // so the home greets them rather than showing the "I'm ONE"
+            // intro loop.
+            useMvpStore.getState().markOnboardingComplete();
+          }
+        } else if (event === 'SIGNED_OUT') {
+          useMvpStore.getState().reset();
+        }
+      });
+    })();
+    return () => {
+      unsub?.();
+    };
   }, []);
 
   const completeOnboarding = useCallback(async () => {
@@ -453,24 +493,13 @@ export function OneProvider({ children }: { children: React.ReactNode }) {
     [state.user, persistUser]
   );
 
+  // Legacy entry point for the archived Discovery screen. Now a no-op so the
+  // MVP path doesn't pull in archived `src/_archive/data/protocols.ts`.
   const startProcessFromProtocol = useCallback(
-    async (protocolId: string): Promise<OneProcess | null> => {
-      const { getProtocolById } = await import('../data/protocols');
-      const protocol = getProtocolById(protocolId);
-      if (!protocol || !state.user) return null;
-      const process = await createProcess({ lens: protocol.lens, title: protocol.title });
-      const updated: OneProcess = {
-        ...process,
-        fields: {
-          ...process.fields,
-          context: protocol.description,
-          nextSteps: [...protocol.stepsPreview],
-        },
-      };
-      await updateProcess(process.id, updated);
-      return updated;
+    async (_protocolId: string): Promise<OneProcess | null> => {
+      return null;
     },
-    [state.user, createProcess, updateProcess]
+    [],
   );
 
   const setAgentStatusText = useCallback((text: string) => {

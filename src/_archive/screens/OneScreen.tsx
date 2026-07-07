@@ -61,6 +61,7 @@ import type { LifeLens, OneProcess } from '../core/types';
 import type { SpaceId, DomainId } from '../core/spaces';
 import { ENABLED_SPACES, getSpaceConfig, legacyWorldIdToSpaceDomain } from '../core/spaces';
 import { OrbAgent } from '../components/OrbAgent';
+import { AnimatedUnitEmoji } from '../components/AnimatedUnitEmoji';
 import {
   UnitChatProfile,
   type UnitChatProfileModel,
@@ -783,7 +784,12 @@ export function OneScreen() {
     if (wi >= 0 && wi !== worldIndex) setWorldIndex(wi);
   }, [activeHomeWorldIds, worldIndex, currentSpaceConfig.id]);
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
-  const [unitPreviewTarget, setUnitPreviewTarget] = useState<FlowUnit | null>(null);
+  /** Increment per unit to replay emoji pulse on center / chat / profile. */
+  const [unitEmojiPlayKeys, setUnitEmojiPlayKeys] = useState<Record<string, number>>({});
+  const bumpUnitEmojiPlay = useCallback((unitId: string) => {
+    setUnitEmojiPlayKeys((prev) => ({ ...prev, [unitId]: (prev[unitId] ?? 0) + 1 }));
+  }, []);
+  const unitEmojiPlayKey = useCallback((unitId: string) => unitEmojiPlayKeys[unitId] ?? 0, [unitEmojiPlayKeys]);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showChatProfile, setShowChatProfile] = useState(false);
   const [chatProfileEditMode, setChatProfileEditMode] = useState(false);
@@ -1094,7 +1100,7 @@ export function OneScreen() {
   const chatComposerLineCount = Math.max(COMPOSER_MIN_LINES, Math.round(chatComposerVisibleHeight / COMPOSER_LINE_HEIGHT));
   const chatComposerCanExpand = chatComposerMeasuredHeight > chatComposerMaxHeight + 2;
   const activeUnit = activeUnitId ? flowUnits.find((unit) => unit.id === activeUnitId) ?? null : null;
-  const chatHeaderUnit = activeUnit ?? unitPreviewTarget;
+  const chatHeaderUnit = activeUnit;
   const isDark = theme === 'dark';
   const chatSheetBg = isDark ? '#121212' : colors.background;
   const chatCardBg = isDark ? '#121317' : colors.surface;
@@ -1382,7 +1388,6 @@ export function OneScreen() {
     setShowChatMenu(false);
     setShowChatProfile(false);
     setChatProfileEditMode(false);
-    setUnitPreviewTarget(null);
     const selectedOrb = wheelOrbData[orbIndex];
     if (selectedOrb?.id === GLOBAL_WHEEL_ORB_ID) {
       setAgentUnitCreationMode(false);
@@ -1395,6 +1400,7 @@ export function OneScreen() {
       setAgentUnitCreationMode(false);
       const target = resolveFlowUnitForOrb(selectedOrb);
       setActiveUnitId(target.id);
+      bumpUnitEmojiPlay(target.id);
       setChatScope({
         scope: 'unit',
         unitId: target.id,
@@ -1402,7 +1408,6 @@ export function OneScreen() {
         domainId: target.domainId,
       });
     } else {
-      setUnitPreviewTarget(null);
       setChatScope({ scope: 'space', spaceId: currentSpaceId, domainId: activeDomainId });
       setActiveUnitId(null);
       setAgentUnitCreationMode(true);
@@ -1426,6 +1431,7 @@ export function OneScreen() {
     currentWorldId,
     buildSpaceAgentWelcome,
     language,
+    bumpUnitEmojiPlay,
   ]);
 
   const closeAttachSheet = useCallback(() => {
@@ -1506,7 +1512,6 @@ export function OneScreen() {
       setIsMicHoldActive(false);
         setChatOpenedFromOrbProfileShortcut(false);
         setShowCredits(false);
-        setUnitPreviewTarget(null);
         /** אחרי שהקלף נסגר — לא לפני, כדי שלא יבזק מסך «My One» בזמן האנימציה */
         setActiveUnitId(null);
         opts?.afterClose?.();
@@ -1729,6 +1734,7 @@ export function OneScreen() {
     Keyboard.dismiss();
     setShowChatMenu(false);
     setChatProfileEditMode(false);
+    if (activeUnitId) bumpUnitEmojiPlay(activeUnitId);
     profileDismissSlideX.setValue(isRtlLayout ? -56 : 56);
     setShowChatProfile(true);
     requestAnimationFrame(() => {
@@ -1739,36 +1745,7 @@ export function OneScreen() {
         useNativeDriver: true,
       }).start();
     });
-  }, [isRtlLayout, profileDismissSlideX]);
-
-  const dismissFlowUnitPreview = useCallback(() => {
-    setUnitPreviewTarget(null);
-  }, []);
-
-  const unitPreviewPhaseKey = useCallback((unit: FlowUnit): ChatChromeKey => {
-    if (unit.status === 'done') return 'unit_preview_phase_done';
-    if (unit.status === 'waiting') return 'unit_preview_phase_waiting';
-    return deriveUnitPhase(unit) === 'profiling' ? 'unit_preview_phase_profiling' : 'unit_preview_phase_operating';
-  }, []);
-
-  const formatUnitPreviewMissingFields = useCallback(
-    (count: number) => translate(language, 'unit_preview_missing_fields').replace('{n}', String(count)),
-    [language]
-  );
-
-  const unitPreviewLastUpdateLine = useCallback(
-    (unit: FlowUnit): string | null => {
-      const withTime = (unit.messages ?? []).filter((m) => m.sentAt != null);
-      if (withTime.length > 0) {
-        const last = withTime.reduce((a, b) => ((a.sentAt ?? 0) > (b.sentAt ?? 0) ? a : b));
-        return `${translate(language, 'unit_preview_last_update')} · ${formatChatDayStickyLabel(last.sentAt!, language === 'he')}`;
-      }
-      const label = unit.lastUpdatedLabel?.trim();
-      if (label) return `${translate(language, 'unit_preview_last_update')} · ${label}`;
-      return null;
-    },
-    [language]
-  );
+  }, [isRtlLayout, profileDismissSlideX, activeUnitId, bumpUnitEmojiPlay]);
 
   const focusOrbForUnitId = useCallback(
     (unitId: string) => {
@@ -1798,35 +1775,6 @@ export function OneScreen() {
       });
     });
   }, []);
-
-  const openUnitPreviewChat = useCallback(() => {
-    const unit = unitPreviewTarget;
-    if (!unit) return;
-    focusOrbForUnitId(unit.id);
-    setChatOpenedFromOrbProfileShortcut(false);
-    openChatSheet();
-  }, [unitPreviewTarget, focusOrbForUnitId, openChatSheet]);
-
-  const openUnitPreviewProfile = useCallback(() => {
-    const unit = unitPreviewTarget;
-    if (!unit) return;
-    focusOrbForUnitId(unit.id);
-    setChatOpenedFromOrbProfileShortcut(true);
-    openChatSheet();
-    requestAnimationFrame(() => {
-      openChatProfile();
-    });
-  }, [unitPreviewTarget, focusOrbForUnitId, openChatSheet, openChatProfile]);
-
-  const openUnitPreviewContinue = useCallback(() => {
-    const unit = unitPreviewTarget;
-    if (!unit) return;
-    focusOrbForUnitId(unit.id);
-    setChatOpenedFromOrbProfileShortcut(false);
-    shouldRefocusComposerAfterChatOpenRef.current = true;
-    openChatSheet();
-    requestAnimationFrame(() => scrollOneChatToBottom());
-  }, [unitPreviewTarget, focusOrbForUnitId, openChatSheet, scrollOneChatToBottom]);
 
   useEffect(() => {
     if (!showChatSheet || !showChatProfile) return;
@@ -2790,49 +2738,6 @@ export function OneScreen() {
     resetInactivityTimer({ orbIndex: AGENT_ORB_INDEX });
   }, [resetInactivityTimer]);
 
-  const openUnitPeekPreview = useCallback(
-    (orbId: string) => {
-      resetInactivityTimer();
-      Keyboard.dismiss();
-      setShowAttachSheet(false);
-      setShowCredits(false);
-      setShowChatMenu(false);
-      const selectedOrb = wheelOrbData.find((o) => o.id === orbId);
-      if (!selectedOrb || selectedOrb.id === GLOBAL_WHEEL_ORB_ID || selectedOrb.id === 'origin') return;
-      const idx = wheelOrbData.findIndex((o) => o.id === orbId);
-      if (idx >= 0) {
-        setOrbIndex(idx);
-        orbIndexForPullRef.current = idx;
-      }
-      const target = resolveFlowUnitForOrb(selectedOrb);
-      setChatScope({
-        scope: 'unit',
-        spaceId: target.spaceId,
-        domainId: target.domainId,
-        unitId: target.id,
-      });
-      setAgentUnitCreationMode(false);
-      setActiveUnitId(null);
-      setUnitPreviewTarget(target);
-      setChatOpenedFromOrbProfileShortcut(false);
-      setShowChatProfile(false);
-      setChatProfileEditMode(false);
-      if (!showChatSheetRef.current) {
-        chatBackdropOpacity.setValue(0);
-        chatSheetTranslateY.setValue(windowHeight + 180);
-        setShowChatSheet(true);
-      }
-    },
-    [
-      resetInactivityTimer,
-      wheelOrbData,
-      resolveFlowUnitForOrb,
-      chatBackdropOpacity,
-      chatSheetTranslateY,
-      windowHeight,
-    ]
-  );
-
   /** לחיצה על פרצוף הסוכן בגלגל הבית → קלף פרופיל סוכן (כמו קיצור מיחידה) */
   const openAgentProfileFromHomeOrb = useCallback(() => {
     if (viewMode !== 'orb') return;
@@ -2979,6 +2884,15 @@ export function OneScreen() {
       }
       const index = Math.max(0, Math.min(raw, wheelOrbData.length - 1));
       setOrbIndex(index);
+      const centered = wheelOrbData[index];
+      if (
+        centered &&
+        centered.id !== 'origin' &&
+        centered.id !== GLOBAL_WHEEL_ORB_ID &&
+        index !== AGENT_ORB_INDEX
+      ) {
+        bumpUnitEmojiPlay(centered.id);
+      }
       resetInactivityTimer({ orbIndex: index });
       if (
         index === GLOBAL_ORB_INDEX &&
@@ -2999,6 +2913,7 @@ export function OneScreen() {
       navigateToGlobalForContext,
       currentWorldId,
       showSplashOverlay,
+      bumpUnitEmojiPlay,
     ]
   );
 
@@ -3279,7 +3194,7 @@ export function OneScreen() {
               openAgentProfileFromHomeOrb();
               return;
             }
-            openUnitPeekPreview(item.id);
+            /** יחידה ממורכזת — גלילה בלבד; צ׳אט/פרופיל דרך כפתור ONE */
             return;
           }
           scrollToOrb(index);
@@ -3394,11 +3309,21 @@ export function OneScreen() {
                           opacity: firstNeighborScrollHintEmojiOpacity,
                         }}
                       >
-                        <Text style={styles.wheelOrbEmoji}>{item.emoji}</Text>
+                        <AnimatedUnitEmoji
+                          emoji={item.emoji}
+                          size={44}
+                          playKey={unitEmojiPlayKey(item.id)}
+                          textStyle={styles.wheelOrbEmoji}
+                        />
                       </Animated.View>
                     </View>
                   ) : (
-                    <Text style={styles.wheelOrbEmoji}>{item.emoji}</Text>
+                    <AnimatedUnitEmoji
+                      emoji={item.emoji}
+                      size={44}
+                      playKey={unitEmojiPlayKey(item.id)}
+                      textStyle={styles.wheelOrbEmoji}
+                    />
                   )}
                 </Animated.View>
               </Animated.View>
@@ -3572,7 +3497,7 @@ export function OneScreen() {
     cycleWorldNext,
     cycleWorldPrev,
     openAgentProfileFromHomeOrb,
-    openUnitPeekPreview,
+    unitEmojiPlayKey,
     agentBroadcastMessages,
     orbBroadcastMessagesMap,
   ]);
@@ -4809,8 +4734,11 @@ export function OneScreen() {
                       setAgentCardWorldIndex(worldIndex);
                       setShowAgentCard(true);
                     } else {
-                      const selectedOrb = wheelOrbData[orbIndex];
-                      if (selectedOrb?.id) openUnitPeekPreview(selectedOrb.id);
+                      openChatSheet();
+                      setChatOpenedFromOrbProfileShortcut(true);
+                      requestAnimationFrame(() => {
+                        openChatProfile();
+                      });
                     }
                   }}
                 >
@@ -5045,7 +4973,12 @@ export function OneScreen() {
                               ]}
                             >
                               {activeUnit ? (
-                                <Text style={styles.chatModalUnitEmoji}>{activeUnit.emoji}</Text>
+                                <AnimatedUnitEmoji
+                                  emoji={activeUnit.emoji}
+                                  size={36}
+                                  playKey={unitEmojiPlayKey(activeUnit.id)}
+                                  textStyle={styles.chatModalUnitEmoji}
+                                />
                               ) : (
                                 <OrbAgent
                                   size={36}
@@ -5182,7 +5115,6 @@ export function OneScreen() {
                       <TouchableOpacity
                         style={styles.chatModalIconBtn}
                         onPress={() => {
-                          if (unitPreviewTarget) dismissFlowUnitPreview();
                           closeChatSheet({ direction: 'down' });
                         }}
                         hitSlop={8}
@@ -5204,7 +5136,12 @@ export function OneScreen() {
                             ]}
                           >
                             {chatHeaderUnit ? (
-                              <Text style={styles.chatModalUnitEmoji}>{chatHeaderUnit.emoji}</Text>
+                              <AnimatedUnitEmoji
+                                emoji={chatHeaderUnit.emoji}
+                                size={36}
+                                playKey={unitEmojiPlayKey(chatHeaderUnit.id)}
+                                textStyle={styles.chatModalUnitEmoji}
+                              />
                             ) : (
                               <OrbAgent
                                 size={36}
@@ -5222,7 +5159,7 @@ export function OneScreen() {
                             language === 'he' ? styles.chatModalHeaderTextAlignHe : styles.chatModalHeaderTextAlignEn,
                           ]}
                           activeOpacity={0.75}
-                          onPress={unitPreviewTarget ? openUnitPreviewProfile : openChatProfile}
+                          onPress={openChatProfile}
                         >
                           <Text
                             style={[
@@ -5391,180 +5328,6 @@ export function OneScreen() {
                       requestAnimationFrame(() => recomputeChatStickyDateLabel(lastChatScrollYRef.current));
                     }}
                   >
-                    {unitPreviewTarget && !showChatProfile ? (
-                      <View
-                        {...chatSheetHeaderDownPan.panHandlers}
-                        style={[
-                          styles.unitPreviewCard,
-                          {
-                            backgroundColor: hexToRgba(colors.surface, theme === 'dark' ? 0.55 : 0.98),
-                            borderColor: colors.border,
-                          },
-                          isRtlLayout ? ({ direction: 'rtl' } as const) : null,
-                        ]}
-                      >
-                        <View style={styles.unitPreviewCardTopRow}>
-                          <View style={styles.unitPreviewTitleRow}>
-                            <Text style={styles.unitPreviewEmoji}>{unitPreviewTarget.emoji}</Text>
-                            <Text
-                              style={[
-                                styles.unitPreviewTitle,
-                                {
-                                  color: colors.text,
-                                  textAlign: language === 'he' ? 'right' : 'left',
-                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
-                                },
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {embedLatinRunsForRtlDisplay(unitPreviewTarget.title, language)}
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            style={styles.unitPreviewDismissBtn}
-                            onPress={dismissFlowUnitPreview}
-                            hitSlop={10}
-                            activeOpacity={0.75}
-                            accessibilityRole="button"
-                            accessibilityLabel={language === 'he' ? 'סגור' : 'Close'}
-                          >
-                            <Text style={[styles.unitPreviewDismissGlyph, { color: colors.textSecondary }]}>×</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <Text
-                          style={[
-                            styles.unitPreviewPhase,
-                            {
-                              color: colors.textSecondary,
-                              textAlign: language === 'he' ? 'right' : 'left',
-                              writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
-                            },
-                          ]}
-                        >
-                          {translate(language, unitPreviewPhaseKey(unitPreviewTarget))}
-                        </Text>
-                        <View
-                          style={[
-                            styles.unitPreviewProgressTrack,
-                            { backgroundColor: hexToRgba(colors.textSecondary, isDark ? 0.28 : 0.14) },
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.unitPreviewProgressFill,
-                              {
-                                width: `${Math.max(2, Math.max(0, Math.min(100, unitPreviewTarget.progress)))}%`,
-                                backgroundColor: progressColorByPct(
-                                  Math.max(0, Math.min(100, unitPreviewTarget.progress)) / 100,
-                                  isDark
-                                ),
-                              },
-                            ]}
-                          />
-                        </View>
-                        <Text
-                          style={[
-                            styles.unitPreviewProgressLabel,
-                            {
-                              color: colors.textSecondary,
-                              textAlign: language === 'he' ? 'right' : 'left',
-                              writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
-                            },
-                          ]}
-                        >
-                          {formatChatUnitProgressLine(language, unitPreviewTarget.progress, unitPreviewTarget.steps)}
-                        </Text>
-                        {unitPreviewTarget.nextAction?.trim() ? (
-                          <View style={styles.unitPreviewSection}>
-                            <Text
-                              style={[
-                                styles.unitPreviewSectionLabel,
-                                {
-                                  color: colors.textSecondary,
-                                  textAlign: language === 'he' ? 'right' : 'left',
-                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
-                                },
-                              ]}
-                            >
-                              {translate(language, 'unit_preview_next_action')}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.unitPreviewSectionBody,
-                                {
-                                  color: colors.text,
-                                  textAlign: language === 'he' ? 'right' : 'left',
-                                  writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
-                                },
-                              ]}
-                            >
-                              {unitPreviewTarget.nextAction}
-                            </Text>
-                          </View>
-                        ) : null}
-                        {(unitPreviewTarget.profileSlots ?? []).filter((s) => !s.optional && !s.value?.trim()).length >
-                        0 ? (
-                          <Text
-                            style={[
-                              styles.unitPreviewMeta,
-                              {
-                                color: colors.textSecondary,
-                                textAlign: language === 'he' ? 'right' : 'left',
-                                writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
-                              },
-                            ]}
-                          >
-                            {formatUnitPreviewMissingFields(
-                              (unitPreviewTarget.profileSlots ?? []).filter((s) => !s.optional && !s.value?.trim())
-                                .length
-                            )}
-                          </Text>
-                        ) : null}
-                        {unitPreviewLastUpdateLine(unitPreviewTarget) ? (
-                          <Text
-                            style={[
-                              styles.unitPreviewMeta,
-                              {
-                                color: colors.textSecondary,
-                                textAlign: language === 'he' ? 'right' : 'left',
-                                writingDirection: language === 'he' ? ('rtl' as const) : ('ltr' as const),
-                              },
-                            ]}
-                          >
-                            {unitPreviewLastUpdateLine(unitPreviewTarget)}
-                          </Text>
-                        ) : null}
-                        <View style={[styles.unitPreviewActions, isRtlLayout ? styles.unitPreviewActionsRtl : null]}>
-                          <TouchableOpacity
-                            style={[styles.unitPreviewActionBtn, { backgroundColor: hexToRgba(colors.text, isDark ? 0.12 : 0.06) }]}
-                            activeOpacity={0.82}
-                            onPress={openUnitPreviewChat}
-                          >
-                            <Text style={[styles.unitPreviewActionText, { color: colors.text }]}>
-                              {translate(language, 'unit_preview_chat')}
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.unitPreviewActionBtn, { backgroundColor: hexToRgba(colors.text, isDark ? 0.12 : 0.06) }]}
-                            activeOpacity={0.82}
-                            onPress={openUnitPreviewProfile}
-                          >
-                            <Text style={[styles.unitPreviewActionText, { color: colors.text }]}>
-                              {translate(language, 'unit_preview_profile')}
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.unitPreviewActionBtn, styles.unitPreviewActionBtnPrimary, { backgroundColor: colors.primary }]}
-                            activeOpacity={0.82}
-                            onPress={openUnitPreviewContinue}
-                          >
-                            <Text style={[styles.unitPreviewActionText, styles.unitPreviewActionTextPrimary, { color: '#ffffff' }]}>
-                              {translate(language, 'unit_preview_continue')}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ) : null}
                     {showChatProfile && (
                       <Animated.View style={{ transform: [{ translateX: profileDismissSlideX }] }}>
                         <UnitChatProfile
@@ -5593,7 +5356,12 @@ export function OneScreen() {
                           }}
                           centerContent={
                             activeUnit ? (
-                              <Text style={styles.chatProfileRingEmoji}>{activeUnit.emoji}</Text>
+                              <AnimatedUnitEmoji
+                                emoji={activeUnit.emoji}
+                                size={40}
+                                playKey={unitEmojiPlayKey(activeUnit.id)}
+                                textStyle={styles.chatProfileRingEmoji}
+                              />
                             ) : (
                               <View style={[styles.chatProfileAgentHeroOrb, { backgroundColor: 'transparent' }]}>
                                 <OrbAgent
@@ -5618,7 +5386,7 @@ export function OneScreen() {
                         />
                       </Animated.View>
                     )}
-                    {!showChatProfile && !unitPreviewTarget && (
+                    {!showChatProfile && (
                       <>
                         {!activeUnit && (
                           <>
@@ -6086,7 +5854,7 @@ export function OneScreen() {
                 </View>
                 </Animated.View>
               )}
-              {showChatSheet && !unitPreviewTarget && (
+              {showChatSheet && (
               <Animated.View
                 style={{
                   transform: [{ translateY: chatComposerTranslateY }, { translateX: chatSheetTranslateX }],

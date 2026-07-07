@@ -1,5 +1,10 @@
 /**
  * שפה וכיוון ממשק (RTL/LTR) — נשמרים במכשיר, משפיעים על כל האפליקציה.
+ *
+ * MVP default is English/LTR — the canonical spec copy and mockups are English,
+ * the new UnitCard layout is built for LTR (emoji+title on left, timestamp on
+ * right). Hebrew/RTL stays a first-class option but is opt-in via Settings,
+ * not the boot default.
  */
 import { create } from 'zustand';
 import { storage } from '../utils/session';
@@ -23,18 +28,19 @@ type LocaleStore = {
 };
 
 export const useLocaleStore = create<LocaleStore>((set) => ({
-  language: 'he',
-  layoutDirection: 'rtl',
+  language: 'en',
+  layoutDirection: 'ltr',
   initialized: false,
 
   initialize: async () => {
     try {
       const langRaw = await storage.getItem(LANGUAGE_KEY);
-      const language: AppLanguage = langRaw === 'en' ? 'en' : 'he';
+      // Honor an explicit prior pick; otherwise default to English.
+      const language: AppLanguage = langRaw === 'he' ? 'he' : 'en';
       const layoutDirection = layoutDirectionForLanguage(language);
       set({ language, layoutDirection, initialized: true });
     } catch {
-      set({ language: 'he', layoutDirection: 'rtl', initialized: true });
+      set({ language: 'en', layoutDirection: 'ltr', initialized: true });
     }
   },
 

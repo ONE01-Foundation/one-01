@@ -4,6 +4,8 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 import { Agent, Goal, ConversationMessage, Lens } from '../types';
 import type { OneUser } from '../core/types';
@@ -100,19 +102,65 @@ class SupabaseService {
     return await this.client.auth.signInAnonymously();
   }
 
-  /** OAuth — נוח בעיקר בווב; בנייטיב דורש הגדרת deep link בפרויקט */
-  async signInWithOAuth(provider: 'google' | 'apple') {
-    if (!this.client) {
-      throw new Error('Supabase client not initialized');
-    }
-    const redirectTo =
-      typeof window !== 'undefined' && window.location?.origin
-        ? `${window.location.origin}`
-        : undefined;
-    return await this.client.auth.signInWithOAuth({
+  /**
+   * OAuth on native (Expo Go compatible) — opens the provider's consent page in
+   * an in-app browser (ASWebAuthenticationSession on iOS) and returns the
+   * session to the app via a deep link.
+   *
+   * Flow:
+   *   1. redirectTo = Linking.createURL('/')  → `exp://…` in Expo Go,
+   *      `one://…` in a standalone/dev build. Whatever it is, this exact URL
+   *      must be in Supabase → Auth → URL Configuration → Redirect URLs.
+   *   2. Ask Supabase for the provider URL (skipBrowserRedirect so WE open it).
+   *   3. Open it; the browser bounces back to `redirectTo` after consent.
+   *   4. The returned URL carries either a PKCE `code` (→ exchangeCodeForSession)
+   *      or implicit `access_token`+`refresh_token` (→ setSession). We handle
+   *      both so it works regardless of the client's flowType.
+   *
+   * Returns a discriminated result instead of throwing, so the caller can show
+   * a friendly message (e.g. provider-not-enabled) without a red screen.
+   */
+  async signInWithProviderNative(
+    provider: 'google' | 'apple'
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!this.client) return { ok: false, error: 'no_client' };
+
+    const redirectTo = Linking.createURL('/');
+    // Surfaced so the developer can copy the exact value into Supabase's
+    // Redirect URLs allow-list (it changes with the LAN IP in Expo Go).
+    console.log('[auth] OAuth redirectTo =', redirectTo);
+
+    const { data, error } = await this.client.auth.signInWithOAuth({
       provider,
-      options: redirectTo ? { redirectTo } : undefined,
+      options: { redirectTo, skipBrowserRedirect: true },
     });
+    if (error) return { ok: false, error: error.message };
+    if (!data?.url) return { ok: false, error: 'no_oauth_url' };
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== 'success' || !result.url) {
+      // 'cancel' / 'dismiss' = user backed out; don't treat as a hard error.
+      return {
+        ok: false,
+        error: result.type === 'success' ? 'no_return_url' : 'cancelled',
+      };
+    }
+
+    const params = parseUrlParams(result.url);
+    if (params.error_description) return { ok: false, error: params.error_description };
+
+    if (params.code) {
+      const { error: exErr } = await this.client.auth.exchangeCodeForSession(params.code);
+      return exErr ? { ok: false, error: exErr.message } : { ok: true };
+    }
+    if (params.access_token && params.refresh_token) {
+      const { error: setErr } = await this.client.auth.setSession({
+        access_token: params.access_token,
+        refresh_token: params.refresh_token,
+      });
+      return setErr ? { ok: false, error: setErr.message } : { ok: true };
+    }
+    return { ok: false, error: 'no_tokens' };
   }
 
   /**
@@ -212,6 +260,32 @@ class SupabaseService {
       )
       .subscribe();
   }
+}
+
+/**
+ * Pull query + fragment params out of an OAuth callback URL without relying on
+ * RN's partial `URL`/`URLSearchParams` polyfill. Handles both
+ * `redirect?code=…` (PKCE) and `redirect#access_token=…&refresh_token=…`
+ * (implicit) — everything after the first `?` or `#` is treated as params,
+ * and any additional `#` is flattened to `&`.
+ */
+function parseUrlParams(url: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const start = url.search(/[?#]/);
+  if (start === -1) return out;
+  const raw = url.slice(start + 1).replace(/#/g, '&');
+  for (const pair of raw.split('&')) {
+    if (!pair) continue;
+    const eq = pair.indexOf('=');
+    const key = eq === -1 ? pair : pair.slice(0, eq);
+    const val = eq === -1 ? '' : pair.slice(eq + 1);
+    try {
+      out[decodeURIComponent(key)] = decodeURIComponent(val);
+    } catch {
+      out[key] = val;
+    }
+  }
+  return out;
 }
 
 export const supabaseService = new SupabaseService();

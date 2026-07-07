@@ -1,172 +1,113 @@
-# ONE Platform - AI Agent Operating System
+# ONE
 
-A React Native (Expo) application - a personal AI operating system where users collaborate with their AI agent in real-time.
+> One AI agent. Your identities, your processes, what matters next.
 
-## 🚀 Quick Start
+ONE is a personal operating layer where a single AI agent turns intentions
+into living processes — across personal, business, and family identities.
+
+Not a chatbot. Not a task manager. Not a dashboard.
+
+This repo holds the Expo / React Native app, a marketing landing page, and a
+static deploy pipeline that bundles both into a single host-anywhere folder.
+
+---
+
+## Quick start
+
+### Run the live demo (web)
 
 ```bash
-npm install
-npm start
-```
-
-See [ARCHITECTURE_EXPLAINED.md](./ARCHITECTURE_EXPLAINED.md) for setup details and roadmap.
-
-## 🎯 Core Philosophy
-
-- **Not a chatbot** - This is a collaborative workspace where UI builds progressively during conversation
-- **Not an app** - This is an operating system for human-AI agency
-- **Zoom-like feel** - User sees the agent "building" UI components in real-time, similar to collaborative design tools
-
-## 🏗️ Architecture
-
-### Modular Agent System ("Lenses")
-
-Each lens is a capability module that can be attached to the main agent:
-
-- **HealthLens**: nutrition, fitness, sleep, medical
-- **FinanceLens**: budgeting, investing, savings, debt
-- **CareerLens**: job search, skills, networking, projects
-- **HomeLens**: maintenance, renovation, organization
-- **SocialLens**: relationships, events, communication
-
-## 🛠️ Tech Stack
-
-### Frontend
-- **Framework**: Expo (React Native) - latest stable version
-- **Language**: TypeScript (strict mode)
-- **State Management**: Zustand (lightweight, modular)
-- **Real-time Communication**: Socket.io-client
-- **Animations**: Reanimated 3 + Moti
-- **Voice**: expo-av (recording) + Web Audio API polyfills
-- **Storage**: expo-secure-store (encrypted local vault)
-
-### Backend
-- **Database & Auth**: Supabase
-  - PostgreSQL with Row Level Security (RLS)
-  - Real-time subscriptions
-  - Edge Functions for API logic
-  - Storage for audio/media files
-
-- **AI Services**:
-  - OpenAI API (GPT-4 for orchestration, Whisper for STT)
-  - ElevenLabs API (or Azure TTS) for voice synthesis
-  - Custom agent orchestration layer
-
-- **Real-time**: Socket.io server (Node.js/Express or Supabase Edge Functions)
-
-## 📦 Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
+git clone <this-repo>
 cd one-01
+npm install
+npm run web         # http://localhost:8081  → app only (dev)
 ```
 
-2. Install dependencies:
+Or to see the production build (landing + app at the same origin):
+
 ```bash
 npm install
+npx expo export --platform web --output-dir dist
+mkdir -p dist-deploy/app
+cp -r dist/* dist-deploy/app/
+cp landing/index.html dist-deploy/index.html
+npx serve dist-deploy -l 3030
+# open http://localhost:3030
 ```
 
-3. Set up environment variables:
+### Run on iPhone / Android (Expo Go)
+
 ```bash
-cp .env.example .env
+npm start            # prints a QR code
+# Open Expo Go on your phone (App Store / Play Store) and scan
 ```
 
-Edit `.env` and add your configuration:
-- Supabase URL and keys
-- Socket.io server URL
-- API keys (OpenAI, ElevenLabs)
+> Requires Expo Go for SDK 54. The repo pins Reanimated 3.16 specifically so
+> Expo Go works without a custom dev client.
 
-4. Start the development server:
-```bash
-npm start
-```
+---
 
-## 🚀 Usage
-
-### Running on Different Platforms
-
-- **iOS**: `npm run ios`
-- **Android**: `npm run android`
-- **Web**: `npm run web`
-
-### Development
-
-The app uses Expo's development tools. Press:
-- `i` to open iOS simulator
-- `a` to open Android emulator
-- `w` to open web browser
-
-## 📁 Project Structure
+## What's in here
 
 ```
 one-01/
-├── src/
-│   ├── components/      # React Native UI components
-│   │   ├── AgentWorkspace.tsx
-│   │   ├── DynamicUI.tsx
-│   │   ├── ConversationView.tsx
-│   │   └── ...
-│   ├── stores/          # Zustand state management
-│   │   ├── agentStore.ts
-│   │   ├── conversationStore.ts
-│   │   ├── uiStore.ts
-│   │   └── ...
-│   ├── services/        # External service integrations
-│   │   ├── socketService.ts
-│   │   ├── supabaseService.ts
-│   │   ├── voiceService.ts
-│   │   └── ...
-│   ├── lenses/          # Modular agent capabilities
-│   │   ├── baseLens.ts
-│   │   ├── healthLens.ts
-│   │   ├── financeLens.ts
-│   │   └── ...
-│   ├── types/           # TypeScript type definitions
-│   │   ├── index.ts
-│   │   └── lenses.ts
-│   └── utils/           # Utility functions
-│       ├── constants.ts
-│       └── session.ts
-├── App.tsx              # Main app component
+├── App.tsx                  ← entry: theme init → AppNavigator
+├── app.json                 ← Expo config (icon, splash, bundle ID)
+├── babel.config.js
 ├── package.json
-└── README.md
+├── README.md                ← this file
+├── HANDOFF.md               ← submit-to-store checklist
+├── DECISIONS.md             ← architectural log (D-001 .. D-016)
+├── TODO.md                  ← outstanding work
+├── docs/
+│   ├── spec/                ← 5-doc canonical product spec (source of truth)
+│   ├── privacy-policy.md    ← ready to host
+│   └── screens/             ← screenshot evidence
+├── src/
+│   ├── core/mvp/            ← canonical types + attention score
+│   ├── data/mvp/            ← seed: 2 identities, 5 processes, broadcast loop
+│   ├── stores/              ← zustand: theme, locale, mvp
+│   ├── screens/mvp/         ← the 9 MVP surfaces
+│   ├── components/mvp/      ← Orb, UnitCard, ErrorBoundary
+│   ├── navigation/          ← AppNavigator + MvpStack
+│   ├── utils/               ← desire→unit inference
+│   └── _archive/            ← legacy screens, kept for reference
+├── landing/
+│   └── index.html           ← marketing site (light theme, spec-matched)
+├── dist/                    ← static export of Expo web app (gitignored)
+└── dist-deploy/             ← production folder: landing + dist combined
 ```
 
-## 🔧 Configuration
+---
 
-### Supabase Setup
+## The product, in one paragraph
 
-1. Create a Supabase project at [supabase.com](https://supabase.com)
-2. Get your project URL and anon key
-3. Set up database tables (see backend documentation)
-4. Configure Row Level Security policies
+A user opens ONE and speaks. ONE turns the user's intentions into structured,
+living Processes — each with memory, people, files, metrics, a next step, and
+a 2-line broadcast. The Home surface shows what matters now; scrolling down
+reveals the full Process list. Tapping a Process opens a sheet (Preview →
+Profile → Chat) without leaving the screen. Long-press the agent's Orb to
+switch identities (Personal / Business / Family). Read the full spec in
+[docs/spec/ONE_MASTER_SPEC.md](docs/spec/ONE_MASTER_SPEC.md).
 
-### Socket.io Server
+---
 
-The app expects a Socket.io server running for real-time communication. You'll need to set up a backend server that:
-- Handles Socket.io connections
-- Processes AI agent requests
-- Manages protocol execution
-- Sends UI updates to clients
+## The 9 surfaces (all built)
 
-## 🎨 Features
+1. Welcome — "Hi, I'm ONE." + rotating subtitle + "Start with ONE"
+2. First Conversation — "What matters most right now?" + multi-intention parse
+3. Save Your ONE — Apple / Google / Email (deferred login)
+4. Home Broadcast — single screen, scroll-snap to Processes
+5. Processes List — sorted by attention score, cards per spec §8
+6. Process Preview Sheet — kebab, X, metrics grid, quick actions, next steps
+7. Process Profile (expanded) — assets, timeline, insights, history, settings
+8. Process Chat (mode) — same sheet, conversation mode
+9. ONE Profile + Identity Switch + Settings
 
-- **Real-time UI Building**: Watch the agent build UI components as you converse
-- **Modular Lenses**: Activate different capability modules (health, finance, career, etc.)
-- **Protocol Execution**: Agents execute structured protocols to accomplish goals
-- **Voice Integration**: Record audio and receive text-to-speech responses
-- **Secure Storage**: Encrypted local storage for sensitive data
+See HANDOFF.md for verification proof and what's still mocked.
 
-## 📝 License
+---
 
-[Add your license here]
+## License
 
-## 🤝 Contributing
-
-[Add contribution guidelines here]
-
-## 📧 Contact
-
-[Add contact information here]
-
+Copyright © 2026 ONE01 Foundation. All rights reserved.

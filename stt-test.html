@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ONE · בדיקת זיהוי דיבור</title>
+<style>
+  :root { --bg:#F4F2EC; --ink:#1A1A18; --muted:#8A887F; --green:#22C55E; --surface:#FFFFFF; }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    padding:32px 18px 48px;
+  }
+  h1 { font-size:20px; font-weight:600; margin:6px 0 2px; }
+  .sub { color:var(--muted); font-size:14px; margin:0 0 22px; text-align:center; line-height:1.5; }
+  .langs { display:flex; gap:8px; margin-bottom:18px; }
+  .langs button {
+    border:1px solid #ddd9cf; background:var(--surface); color:var(--ink);
+    border-radius:999px; padding:7px 16px; font-size:14px; cursor:pointer;
+  }
+  .langs button.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .box {
+    width:100%; max-width:520px; min-height:140px; background:var(--surface);
+    border:1px solid #e7e3d9; border-radius:18px; padding:16px 18px; font-size:18px;
+    line-height:1.6; resize:vertical; color:var(--ink); outline:none;
+  }
+  .status { color:var(--muted); font-size:14px; height:20px; margin:14px 0 18px; }
+  .mic {
+    width:96px; height:96px; border-radius:50%; background:var(--ink); border:none;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,.18); transition:transform .12s, background .12s;
+    touch-action:none; user-select:none; -webkit-user-select:none;
+  }
+  .mic:active { transform:scale(.96); }
+  .mic.on { background:var(--green); transform:scale(1.06); }
+  .mic span { display:block; width:5px; height:22px; margin:0 3px; background:#fff; border-radius:3px; }
+  .mic.on span { animation:wave .6s ease-in-out infinite alternate; }
+  .mic span:nth-child(1){ height:14px; animation-delay:0s; }
+  .mic span:nth-child(2){ height:26px; animation-delay:.12s; }
+  .mic span:nth-child(3){ height:10px; animation-delay:.24s; }
+  @keyframes wave { from { transform:scaleY(.5);} to { transform:scaleY(1.3);} }
+  .hint { color:var(--muted); font-size:13px; margin-top:14px; text-align:center; }
+  .err { color:#C0392B; }
+</style>
+</head>
+<body>
+  <h1>ONE · בדיקת זיהוי דיבור</h1>
+  <p class="sub">החזק את הכפתור, דבר, ושחרר — מה שאמרת מופיע למטה (לא נשלח).<br>זה בדיוק זיהוי הדיבור של הדפדפן שמשמש את האפליקציה.</p>
+
+  <div class="langs">
+    <button id="he" class="active">עברית</button>
+    <button id="en">English</button>
+  </div>
+
+  <textarea class="box" id="box" placeholder="כאן יופיע מה שתאמר…"></textarea>
+  <div class="status" id="status">מוכן — החזק כדי לדבר</div>
+
+  <button class="mic" id="mic" aria-label="החזק כדי לדבר">
+    <span></span><span></span><span></span>
+  </button>
+  <p class="hint" id="hint">לחיצה ארוכה = הקלטה · שחרור = עצירה</p>
+
+<script>
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var box = document.getElementById('box');
+  var mic = document.getElementById('mic');
+  var statusEl = document.getElementById('status');
+  var hint = document.getElementById('hint');
+  var lang = 'he-IL';
+  var rec = null, recording = false, finalText = '';
+
+  function status(t, err){ statusEl.textContent = t; statusEl.className = 'status' + (err ? ' err' : ''); }
+
+  document.getElementById('he').onclick = function(){ lang='he-IL'; this.classList.add('active'); document.getElementById('en').classList.remove('active'); box.dir='rtl'; };
+  document.getElementById('en').onclick = function(){ lang='en-US'; this.classList.add('active'); document.getElementById('he').classList.remove('active'); box.dir='ltr'; };
+
+  if (!SR) {
+    status('הדפדפן הזה לא תומך בזיהוי דיבור. פתח ב-Chrome או Edge.', true);
+    mic.style.opacity = .4; mic.style.pointerEvents = 'none';
+  }
+
+  function start(){
+    if (!SR || recording) return;
+    rec = new SR();
+    rec.lang = lang;
+    rec.continuous = true;
+    rec.interimResults = true;
+    finalText = box.value ? (box.value + ' ') : '';
+    rec.onresult = function(e){
+      var interim = '';
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        var t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += t; else interim += t;
+      }
+      box.value = (finalText + interim).trim();
+    };
+    rec.onerror = function(e){
+      if (e.error === 'no-speech') { status('לא נשמע דיבור — נסה שוב'); return; }
+      if (e.error === 'not-allowed') { status('צריך לאשר גישה למיקרופון', true); return; }
+      status('שגיאה: ' + e.error, true);
+    };
+    rec.onend = function(){ recording = false; mic.classList.remove('on'); if (statusEl.className.indexOf('err')<0) status('מוכן — החזק כדי לדבר'); };
+    try { rec.start(); recording = true; mic.classList.add('on'); status('🔴 מקליט… דבר עכשיו'); }
+    catch (err) { status('לא ניתן להתחיל: ' + err, true); }
+  }
+  function stop(){ if (rec) { try { rec.stop(); } catch (e) {} } }
+
+  mic.addEventListener('pointerdown', function(e){ e.preventDefault(); start(); });
+  mic.addEventListener('pointerup', function(e){ e.preventDefault(); stop(); });
+  mic.addEventListener('pointerleave', function(){ if (recording) stop(); });
+  mic.addEventListener('pointercancel', function(){ if (recording) stop(); });
+</script>
+</body>
+</html>

@@ -1,529 +1,1148 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ONE — המערכת שמארגנת לך את החיים</title>
-  <meta name="description" content="ONE is a modular AI system that converts goals, services, and workflows into structured, living processes — all managed in one place." />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ONE — move things forward</title>
+  <meta name="description" content="Your digital representative for turning intentions into living processes. ONE is the layer between what you want and what needs to happen." />
+  <meta property="og:title" content="ONE — move things forward" />
+  <meta property="og:description" content="Your digital representative for turning intentions into living processes." />
+  <meta name="theme-color" content="#FAFAFA" />
+  <link rel="icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%230A0A0A'/%3E%3Ccircle cx='25' cy='29' r='4.5' fill='%23fff'/%3E%3Ccircle cx='39' cy='29' r='4.5' fill='%23fff'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
   <style>
+    /* ─── tokens ────────────────────────────────────────────── */
     :root {
-      --bg: #0a0a0f;
-      --bg-card: #12121a;
-      --text: #f0f0f5;
-      --text-muted: #8888a0;
-      --accent: #6366f1;
-      --accent-soft: rgba(99, 102, 241, 0.15);
-      --border: rgba(255,255,255,0.08);
-      --radius: 16px;
-      --font: 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif;
+      --bg: #FAFAFA;
+      --bg-card: #FFFFFF;
+      --bg-soft: #F0F0EB;
+      --text: #0A0A0A;
+      --text-2: #404040;
+      --text-3: #767676;
+      --line: rgba(10, 10, 10, 0.08);
+      --line-strong: rgba(10, 10, 10, 0.2);
+      --accent: #C7AC78;
+      --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --max: 1080px;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
     body {
-      font-family: var(--font);
       background: var(--bg);
       color: var(--text);
+      font-family: var(--sans);
+      font-size: 17px;
       line-height: 1.6;
-      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    button { font-family: inherit; cursor: pointer; }
+    ::selection { background: var(--accent); color: var(--bg); }
 
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    /* ─── Nav ───────────────────────────────────────────────────────────── */
+    /* ─── nav ───────────────────────────────────────────────── */
     .nav {
-      position: fixed;
+      position: sticky;
       top: 0;
-      left: 0;
-      right: 0;
-      z-index: 100;
+      z-index: 50;
+      background: transparent;
+      border-bottom: 1px solid transparent;
+      transition: background 220ms ease, border-color 220ms ease, backdrop-filter 220ms ease;
+    }
+    /* When the hero is no longer in view, the nav gains backdrop + border
+       and the brand logo fades in. */
+    .nav.is-scrolled {
+      background: rgba(250, 250, 250, 0.88);
+      backdrop-filter: saturate(180%) blur(14px);
+      -webkit-backdrop-filter: saturate(180%) blur(14px);
+      border-bottom-color: var(--line);
+    }
+    .nav-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 16px 28px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 20px 32px;
-      background: rgba(10,10,15,0.85);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
     }
-
-    .nav-logo {
-      font-size: 1.5rem;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-
-    .nav-links {
+    /* Brand wordmark in the nav: hidden until past the hero. */
+    .nav-brand {
       display: flex;
       align-items: center;
-      gap: 32px;
+      opacity: 0;
+      transform: translateY(-4px);
+      pointer-events: none;
+      transition: opacity 240ms ease, transform 240ms ease;
+    }
+    .nav.is-scrolled .nav-brand {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .nav-brand svg {
+      height: 22px;
+      width: auto;
+      display: block;
     }
 
-    .nav-links a {
-      font-size: 0.95rem;
+    .nav-actions { display: flex; gap: 26px; align-items: center; }
+    .nav-link {
+      font-size: 14px;
       font-weight: 500;
-      color: var(--text-muted);
-      transition: color 0.2s;
+      color: var(--text-2);
+      transition: color 160ms;
+    }
+    .nav-link:hover { color: var(--text); }
+    @media (max-width: 720px) {
+      .nav-link { display: none; }
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 20px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: transform 160ms, background 160ms, color 160ms;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      letter-spacing: -0.005em;
+    }
+    .btn-primary { background: var(--text); color: var(--bg); }
+    .btn-primary:hover { transform: translateY(-1px); }
+    .btn-ghost { background: transparent; color: var(--text); border-color: var(--line-strong); }
+    .btn-ghost:hover { background: rgba(0, 0, 0, 0.04); }
+    .btn-lg { padding: 16px 32px; font-size: 16px; }
+
+    /* ─── shell ─────────────────────────────────────────────── */
+    .shell { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
+    .eyebrow {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 24px;
     }
 
-    .nav-links a:hover {
+    /* ─── typography ───────────────────────────────────────── */
+    h1, h2, h3 {
+      font-family: var(--sans);
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.05;
+      color: var(--text);
+    }
+    .accent-italic {
+      font-style: italic;
+      font-weight: 600;
       color: var(--text);
     }
 
-    .nav-cta {
-      display: inline-flex;
-      align-items: center;
-      padding: 10px 20px;
-      background: var(--accent);
-      color: #fff;
-      border-radius: 999px;
-      font-weight: 600;
-      font-size: 0.95rem;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .nav-cta:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
-    }
-
-    /* ─── Hero ──────────────────────────────────────────────────────────── */
+    /* ─── hero ──────────────────────────────────────────────── */
     .hero {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
+      padding: 104px 0 96px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 56px;
       align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 120px 24px 80px;
+    }
+    @media (max-width: 880px) {
+      .hero { grid-template-columns: 1fr; padding: 64px 0 56px; gap: 40px; }
+    }
+    .hero h1 {
+      font-size: clamp(46px, 6.4vw, 76px);
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+    .hero .lede {
+      margin-top: 26px;
+      font-size: 20px;
+      line-height: 1.5;
+      color: var(--text-2);
+      max-width: 500px;
+      font-weight: 400;
+    }
+    .hero-ctas {
+      margin-top: 36px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .hero-meta {
+      margin-top: 22px;
+      font-size: 14px;
+      color: var(--text-3);
+      font-weight: 500;
+    }
+    .hero-meta b { font-weight: 600; color: var(--text-2); }
+
+    /* iPhone-style frame ------------------------------------ */
+    .phone {
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto;
+      aspect-ratio: 9 / 19.5;
+      border-radius: 44px;
+      background: #0A0A0A;
+      padding: 12px;
+      box-shadow:
+        0 1px 0 0 rgba(255,255,255,0.06) inset,
+        0 30px 80px -20px rgba(0,0,0,0.35),
+        0 8px 28px -10px rgba(0,0,0,0.18);
       position: relative;
     }
-
-    .hero-bg {
+    .phone::before {
+      content: '';
       position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse 80% 50% at 50% 20%, var(--accent-soft), transparent 60%);
-      pointer-events: none;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 96px;
+      height: 26px;
+      background: #0A0A0A;
+      border-radius: 14px;
+      z-index: 2;
     }
-
-    .hero h1 {
-      font-size: clamp(2.5rem, 6vw, 4rem);
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      line-height: 1.15;
-      max-width: 720px;
-      margin-bottom: 24px;
+    .phone-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 32px;
+      overflow: hidden;
+      background: #FAFAFA;
     }
+    .phone-inner img { width: 100%; height: 100%; object-fit: cover; }
+    .phone-sm { max-width: 320px; }
 
-    .hero h1 span {
-      color: var(--accent);
-    }
-
-    .hero p {
-      font-size: 1.25rem;
-      color: var(--text-muted);
-      max-width: 520px;
-      margin-bottom: 40px;
-    }
-
-    .hero-cta {
-      display: inline-flex;
-      align-items: center;
-      padding: 16px 32px;
-      background: var(--accent);
-      color: #fff;
-      border-radius: 999px;
-      font-weight: 700;
-      font-size: 1.1rem;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .hero-cta:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 32px rgba(99, 102, 241, 0.4);
-    }
-
-    /* ─── Section block ──────────────────────────────────────────────────── */
+    /* ─── section base ──────────────────────────────────────── */
     .section {
-      padding: 100px 24px;
-      max-width: 1100px;
-      margin: 0 auto;
+      padding: 120px 0;
+      border-top: 1px solid var(--line);
     }
-
-    .section-header {
-      text-align: center;
-      margin-bottom: 64px;
+    .section.soft { background: var(--bg-soft); }
+    @media (max-width: 880px) {
+      .section { padding: 80px 0; }
     }
-
-    .section-header h2 {
-      font-size: clamp(2rem, 4vw, 2.75rem);
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      margin-bottom: 16px;
-    }
-
-    .section-header p {
-      font-size: 1.1rem;
-      color: var(--text-muted);
-      max-width: 560px;
-      margin: 0 auto;
-    }
-
-    /* ─── Features grid ──────────────────────────────────────────────────── */
-    .features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 24px;
-    }
-
-    .feature-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px;
-      transition: border-color 0.2s, transform 0.2s;
-    }
-
-    .feature-card:hover {
-      border-color: rgba(99, 102, 241, 0.3);
-      transform: translateY(-2px);
-    }
-
-    .feature-card h3 {
-      font-size: 1.25rem;
+    .section h2 {
+      font-size: clamp(34px, 4.4vw, 52px);
       font-weight: 700;
-      margin-bottom: 12px;
+      letter-spacing: -0.035em;
+      line-height: 1.05;
+      max-width: 720px;
     }
-
-    .feature-card p {
-      font-size: 0.95rem;
-      color: var(--text-muted);
+    .section .lede {
+      margin-top: 22px;
+      font-size: 19px;
+      color: var(--text-2);
+      max-width: 580px;
+      line-height: 1.55;
+      font-weight: 400;
     }
+    .section .lede.center { margin-left: auto; margin-right: auto; text-align: center; }
 
-    .feature-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      background: var(--accent-soft);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      margin-bottom: 16px;
-    }
-
-    /* ─── One place section ──────────────────────────────────────────────── */
-    .one-place {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 64px;
-      align-items: center;
-    }
-
-    @media (max-width: 768px) {
-      .one-place { grid-template-columns: 1fr; }
-    }
-
-    .one-place h2 {
-      font-size: clamp(1.75rem, 3vw, 2.25rem);
-      font-weight: 800;
-      margin-bottom: 20px;
-    }
-
-    .one-place p {
-      color: var(--text-muted);
-      margin-bottom: 24px;
-    }
-
-    .one-place ul {
-      list-style: none;
-    }
-
-    .one-place li {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--border);
-      font-weight: 500;
-    }
-
-    .one-place li::before {
-      content: "✓";
-      color: var(--accent);
-      font-weight: 700;
-    }
-
-    .one-place-visual {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      aspect-ratio: 4/3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 4rem;
-      color: var(--accent);
-    }
-
-    /* ─── Security / Control ────────────────────────────────────────────── */
-    .control-cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 24px;
-    }
-
-    .control-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 32px;
-    }
-
-    .control-card h3 {
-      font-size: 1.15rem;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-
-    .control-card p {
-      font-size: 0.95rem;
-      color: var(--text-muted);
-    }
-
-    /* ─── CTA strip ─────────────────────────────────────────────────────── */
-    .cta-strip {
-      text-align: center;
-      padding: 80px 24px;
-    }
-
-    .cta-strip h2 {
-      font-size: clamp(1.75rem, 3vw, 2.5rem);
-      font-weight: 800;
-      margin-bottom: 16px;
-    }
-
-    .cta-strip p {
-      color: var(--text-muted);
-      margin-bottom: 32px;
-    }
-
-    /* ─── Footer ─────────────────────────────────────────────────────────── */
-    .footer {
-      border-top: 1px solid var(--border);
-      padding: 64px 24px 32px;
-    }
-
-    .footer-inner {
-      max-width: 1100px;
-      margin: 0 auto;
-    }
-
-    .footer-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 40px;
-      margin-bottom: 48px;
-    }
-
-    .footer-col h4 {
-      font-size: 0.75rem;
+    /* ─── problem section ───────────────────────────────────── */
+    .problem-quote {
+      font-size: 26px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      margin-bottom: 16px;
+      color: var(--text);
+      border-left: 3px solid var(--accent);
+      padding: 8px 0 8px 22px;
+      margin-top: 40px;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+    }
+    .problem-list {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+      margin-top: 40px;
+    }
+    @media (max-width: 760px) { .problem-list { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 480px) { .problem-list { grid-template-columns: repeat(2, 1fr); } }
+    .chip {
+      padding: 12px 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      text-align: center;
     }
 
-    .footer-col a {
-      display: block;
-      font-size: 0.95rem;
-      color: var(--text-muted);
-      margin-bottom: 10px;
-      transition: color 0.2s;
+    /* ─── intention flow ────────────────────────────────────── */
+    .flow {
+      margin: 64px auto 0;
+      max-width: 560px;
+      padding: 40px 28px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      text-align: center;
     }
-
-    .footer-col a:hover {
+    .flow-row {
+      font-size: 22px;
+      font-weight: 600;
+      padding: 8px 0;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+    .flow-row.muted {
+      color: var(--text-3);
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .flow-row.middle {
       color: var(--text);
     }
+    .flow-row.middle em {
+      color: var(--accent);
+      font-style: italic;
+      font-weight: 700;
+    }
+    .flow-row.reality { color: var(--accent); }
+    .flow-arr {
+      color: var(--text-3);
+      font-size: 18px;
+      padding: 4px 0;
+    }
 
-    .footer-bottom {
+    /* ─── four moves ────────────────────────────────────────── */
+    .moves {
+      margin-top: 64px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+    }
+    @media (max-width: 880px) { .moves { grid-template-columns: 1fr 1fr; } }
+    .move-card {
+      padding: 28px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+    }
+    .move-num {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--text-3);
+      margin-bottom: 16px;
+    }
+    .move-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    .move-body {
+      font-size: 15px;
+      color: var(--text-2);
+      line-height: 1.55;
+    }
+
+    /* ─── scene block (alt phone + text) ────────────────────── */
+    .scene-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .scene-grid.reverse > :first-child { order: 2; }
+    @media (max-width: 880px) {
+      .scene-grid { grid-template-columns: 1fr; gap: 40px; }
+      .scene-grid.reverse > :first-child { order: 0; }
+    }
+
+    /* ─── process card mockup (inline) ──────────────────────── */
+    .pc-card {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 24px;
+      max-width: 440px;
+      margin-top: 32px;
+      position: relative;
+      box-shadow: 0 14px 30px -16px rgba(0,0,0,0.12);
+    }
+    .pc-head {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
-      padding-top: 24px;
-      border-top: 1px solid var(--border);
+      margin-bottom: 14px;
+    }
+    .pc-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+    }
+    .pc-emoji { font-size: 22px; }
+    .pc-time {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-3);
+      position: relative;
+    }
+    .pc-badge {
+      position: absolute;
+      right: 0;
+      top: 24px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #10B981;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pc-body {
+      font-size: 15px;
+      color: var(--text);
+      line-height: 1.55;
+      margin-bottom: 20px;
+      font-weight: 400;
+    }
+    .pc-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .pc-relation {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-2);
+    }
+    .pc-progress {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 60%;
+    }
+    .pc-track { flex: 1; height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; }
+    .pc-fill { height: 100%; background: #10B981; width: 65%; }
+    .pc-count {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    .pc-line { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: #10B981; border-bottom-left-radius: 22px; border-bottom-right-radius: 22px; }
+
+    /* ─── connection diagram ────────────────────────────────── */
+    .connect {
+      margin-top: 56px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 48px 32px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 28px;
+      align-items: center;
+    }
+    @media (max-width: 760px) {
+      .connect { grid-template-columns: 1fr; }
+    }
+    .connect-side { text-align: center; }
+    .connect-orb {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #0A0A0A;
+      margin: 0 auto 18px;
+      position: relative;
+    }
+    .connect-orb::before, .connect-orb::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 11px;
+      height: 11px;
+      background: #fff;
+      border-radius: 50%;
+      transform: translateY(-50%);
+    }
+    .connect-orb::before { left: 14px; }
+    .connect-orb::after { left: 37px; }
+    .connect-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .connect-role {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-3);
+      margin-top: 4px;
+    }
+    .connect-sub {
+      margin-top: 16px;
+      padding: 10px 14px;
+      background: var(--bg-soft);
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      display: inline-block;
+    }
+    .connect-bridge { text-align: center; }
+    .connect-bridge-line {
+      font-size: 28px;
+      color: var(--text-3);
+    }
+    .connect-bridge-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-2);
+      margin-top: 8px;
+    }
+    @media (max-width: 760px) {
+      .connect-bridge-line { transform: rotate(90deg); display: inline-block; padding: 8px 0; }
     }
 
-    .footer-logo {
-      font-weight: 800;
-      font-size: 1.1rem;
+    /* ─── compare tables ────────────────────────────────────── */
+    .compare {
+      margin-top: 56px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      overflow: hidden;
+    }
+    .compare-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-top: 1px solid var(--line);
+    }
+    .compare-row:first-child { border-top: 0; }
+    .compare-cell {
+      padding: 20px 24px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .compare-cell.head {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      background: var(--bg-soft);
+    }
+    .compare-cell.left { color: var(--text-2); }
+    .compare-cell.right {
+      color: var(--text);
+      font-weight: 500;
+      border-left: 1px solid var(--line);
     }
 
-    .footer-copy {
-      font-size: 0.9rem;
-      color: var(--text-muted);
+    /* ─── status ────────────────────────────────────────────── */
+    .status-cols {
+      margin-top: 56px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+    }
+    @media (max-width: 760px) { .status-cols { grid-template-columns: 1fr; gap: 32px; } }
+    .status-col h3 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 18px;
+    }
+    .status-list { list-style: none; padding: 0; margin: 0; }
+    .status-list li {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .status-list li:last-child { border-bottom: 0; }
+    .status-list .mark {
+      flex-shrink: 0;
+      width: 18px;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.6;
+      color: var(--text-3);
+    }
+    .status-list .mark.live { color: #1F8F4F; }
+
+    /* ─── final CTA ─────────────────────────────────────────── */
+    .final {
+      text-align: center;
+      padding: 140px 28px;
+    }
+    .final h2 {
+      font-size: clamp(44px, 6.4vw, 72px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .final .lede {
+      margin: 26px auto 0;
+      font-size: 20px;
+      color: var(--text-2);
+      max-width: 480px;
+      line-height: 1.5;
+    }
+    .final-ctas {
+      margin-top: 40px;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
     }
 
-    .footer-legal a {
-      font-size: 0.9rem;
-      color: var(--text-muted);
-      margin-left: 24px;
+    /* ─── footer ────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 64px 0 44px;
+      background: var(--bg);
+    }
+    .foot-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 28px;
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 48px;
+    }
+    @media (max-width: 760px) {
+      .foot-inner { grid-template-columns: 1fr 1fr; gap: 32px; }
+    }
+    .foot-brand { display: flex; flex-direction: column; gap: 16px; }
+    .foot-brand-logo svg {
+      height: 24px;
+      width: auto;
+      display: block;
+    }
+    .foot-brand p {
+      font-size: 14px;
+      color: var(--text-2);
+      max-width: 300px;
+      line-height: 1.55;
+      font-weight: 400;
+    }
+    .foot-col h4 {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 16px;
+    }
+    .foot-col a {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-2);
+      padding: 6px 0;
+    }
+    .foot-col a:hover { color: var(--text); }
+    .foot-bottom {
+      max-width: var(--max);
+      margin: 64px auto 0;
+      padding: 28px 28px 0;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-3);
     }
   </style>
 </head>
 <body>
-  <nav class="nav">
-    <a href="#" class="nav-logo">ONE</a>
-    <div class="nav-links">
-      <a href="#features">תכונות</a>
-      <a href="#how">איך זה עובד</a>
-      <a href="#security">בטיחות</a>
-      <a href="#">תמיכה</a>
+
+  <!-- ── nav ─────────────────────────────────────────────────── -->
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand" aria-label="ONE01">
+        <!-- Brand wordmark — hidden until the hero scrolls out of view. -->
+        <svg viewBox="0 0 147 36" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M145.194 2.72289C145.703 2.93253 146.108 3.26944 146.407 3.73363C146.707 4.18285 146.856 4.67699 146.856 5.21606V32.2815C146.856 33.0302 146.587 33.6741 146.048 34.2131C145.524 34.7372 144.887 34.9993 144.139 34.9993C143.39 34.9993 142.746 34.7372 142.207 34.2131C141.683 33.6741 141.421 33.0302 141.421 32.2815V11.7746L138.321 14.8518C137.752 15.3909 137.101 15.6604 136.367 15.6604C135.648 15.6454 135.012 15.3759 134.458 14.8518C133.934 14.2828 133.672 13.6389 133.672 12.9202C133.672 12.2014 133.941 11.5575 134.48 10.9885L142.229 3.28441C143.098 2.50577 144.086 2.31859 145.194 2.72289Z" fill="#222222" fill-opacity="0.31"/>
+          <path d="M124.175 7.62109C126.361 10.8704 127.454 14.584 127.454 18.7617C127.454 22.9245 126.361 26.6305 124.175 29.8799C123.007 31.512 121.644 32.7773 120.087 33.6758C118.545 34.5592 116.92 35.001 115.213 35.001C113.521 35.001 111.896 34.5592 110.339 33.6758C108.782 32.7773 107.426 31.512 106.273 29.8799C104.087 26.6305 102.994 22.9245 102.994 18.7617C102.994 14.584 104.087 10.8704 106.273 7.62109C107.426 5.98893 108.782 4.73112 110.339 3.84766C111.896 2.94922 113.521 2.5 115.213 2.5C116.92 2.5 118.545 2.94922 120.087 3.84766C121.644 4.73112 123.007 5.98893 124.175 7.62109ZM115.213 29.5654C116.441 29.5654 117.571 29.0713 118.604 28.083C119.638 27.0947 120.461 25.7845 121.075 24.1523C121.689 22.5052 121.996 20.7083 121.996 18.7617C121.996 16.8001 121.689 15.0033 121.075 13.3711C120.461 11.724 119.638 10.4137 118.604 9.44043C117.571 8.45215 116.441 7.95801 115.213 7.95801C113.985 7.95801 112.854 8.45215 111.821 9.44043C110.803 10.4137 109.979 11.724 109.351 13.3711C108.737 15.0033 108.43 16.8001 108.43 18.7617C108.43 20.7083 108.737 22.5052 109.351 24.1523C109.979 25.7845 110.803 27.0947 111.821 28.083C112.854 29.0713 113.985 29.5654 115.213 29.5654Z" fill="#222222" fill-opacity="0.31"/>
+          <path d="M94.0811 7.95801H78.6504V15.2803H92.4189C93.1676 15.2803 93.804 15.5498 94.3281 16.0889C94.8672 16.613 95.1367 17.2568 95.1367 18.0205C95.1367 18.7692 94.8672 19.4131 94.3281 19.9521C93.804 20.4762 93.1676 20.7383 92.4189 20.7383H78.6504V29.5654H94.0811C94.8298 29.5654 95.4661 29.835 95.9902 30.374C96.5293 30.8981 96.7988 31.5345 96.7988 32.2832C96.7988 33.0319 96.5293 33.6758 95.9902 34.2148C95.4661 34.7389 94.8298 35.001 94.0811 35.001H75.9326C75.1839 35.001 74.54 34.7389 74.001 34.2148C73.4769 33.6758 73.2148 33.0319 73.2148 32.2832V19.5703V18.0205V5.21777C73.2148 4.46908 73.4769 3.83268 74.001 3.30859C74.54 2.76953 75.1839 2.5 75.9326 2.5H94.0811C94.8298 2.5 95.4661 2.76953 95.9902 3.30859C96.5293 3.83268 96.7988 4.46908 96.7988 5.21777C96.7988 5.98145 96.5293 6.63281 95.9902 7.17188C95.4661 7.69596 94.8298 7.95801 94.0811 7.95801Z" fill="#222222"/>
+          <path d="M64.5039 2.5C65.2526 2.5 65.889 2.76953 66.4131 3.30859C66.9521 3.83268 67.2217 4.46908 67.2217 5.21777V32.2832C67.2217 32.8672 67.057 33.3913 66.7275 33.8555C66.3981 34.3197 65.9489 34.6491 65.3799 34.8438C65.0954 34.9486 64.8034 35.001 64.5039 35.001C63.6803 35.001 62.9616 34.6491 62.3477 33.9453L46.1309 13.1465V32.2832C46.1309 33.0319 45.8613 33.6758 45.3223 34.2148C44.7982 34.7389 44.1618 35.001 43.4131 35.001C42.6644 35.001 42.0205 34.7389 41.4814 34.2148C40.9574 33.6758 40.6953 33.0319 40.6953 32.2832V5.21777C40.6953 4.64876 40.86 4.13216 41.1895 3.66797C41.5339 3.1888 41.9831 2.85189 42.5371 2.65723C43.735 2.31283 44.7458 2.6123 45.5693 3.55566L61.7861 24.3545V5.21777C61.7861 4.46908 62.0482 3.83268 62.5723 3.30859C63.1113 2.76953 63.7552 2.5 64.5039 2.5Z" fill="#222222"/>
+          <path d="M19.3838 2.5C22.3786 2.5 25.1038 3.23372 27.5596 4.70117C30.0153 6.16862 31.9769 8.13021 33.4443 10.5859C34.9118 13.0417 35.6455 15.7669 35.6455 18.7617C35.6455 21.7415 34.9118 24.4668 33.4443 26.9375C31.9769 29.3932 30.0153 31.3548 27.5596 32.8223C25.1038 34.2747 22.3786 35.001 19.3838 35.001C16.404 35.001 13.6787 34.2747 11.208 32.8223C8.75228 31.3548 6.79069 29.3932 5.32324 26.9375C3.87077 24.4668 3.14453 21.7415 3.14453 18.7617C3.14453 15.7669 3.87077 13.0417 5.32324 10.5859C6.79069 8.13021 8.75228 6.16862 11.208 4.70117C13.6787 3.23372 16.404 2.5 19.3838 2.5ZM19.3838 29.5654C21.3753 29.5654 23.1872 29.0788 24.8193 28.1055C26.4515 27.1322 27.7542 25.8294 28.7275 24.1973C29.7008 22.5501 30.1875 20.7383 30.1875 18.7617C30.1875 16.7702 29.7008 14.9583 28.7275 13.3262C27.7542 11.694 26.4515 10.3913 24.8193 9.41797C23.1872 8.44466 21.3753 7.95801 19.3838 7.95801C17.4072 7.95801 15.5954 8.44466 13.9482 9.41797C12.3161 10.3913 11.0133 11.694 10.04 13.3262C9.06673 14.9583 8.58008 16.7702 8.58008 18.7617C8.58008 20.7383 9.06673 22.5501 10.04 24.1973C11.0133 25.8294 12.3161 27.1322 13.9482 28.1055C15.5954 29.0788 17.4072 29.5654 19.3838 29.5654Z" fill="#A0A0A0"/>
+          <circle cx="18" cy="18" r="18" fill="#222222"/>
+        </svg>
+      </a>
+      <div class="nav-actions">
+        <a class="nav-link" href="#problem">Why ONE</a>
+        <a class="nav-link" href="#concept">How it works</a>
+        <a class="nav-link" href="#connections">Connections</a>
+        <a class="nav-link" href="#status">Where we are</a>
+        <a class="btn btn-primary" href="/app/">Start with ONE</a>
+      </div>
     </div>
-    <a href="#download" class="nav-cta">הורדה</a>
   </nav>
 
-  <section class="hero">
-    <div class="hero-bg" aria-hidden="true"></div>
-    <h1>המערכת שמארגנת לך את <span>החיים</span></h1>
-    <p>ONE ממיר מטרות, שירותים ותהליכים למערכת אחת חיה — כולם במקום אחד. סוכן אחד. עולמות. תהליכים.</p>
-    <a href="#download" class="hero-cta">הורד את ONE</a>
-  </section>
-
-  <section class="section" id="features">
-    <div class="section-header">
-      <h2>בנוי בשביל כולם</h2>
-      <p>מערכת מודולרית אחת: זהות (Origin), עולמות (בריאות, עסקים, פיננסים), תהליכים חיים וסוכן AI.</p>
+  <!-- ── hero ────────────────────────────────────────────────── -->
+  <section class="shell hero">
+    <div>
+      <div class="eyebrow">ONE — your digital representative</div>
+      <h1>
+        Move things<br/>
+        <span class="accent-italic">forward.</span>
+      </h1>
+      <p class="lede">
+        ONE turns intentions into living processes — and connects them to
+        the right people, businesses, and information. Talk to ONE. It
+        knows where to go next.
+      </p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary btn-lg" href="/app/">Start with ONE →</a>
+        <a class="btn btn-ghost btn-lg" href="#concept">See how it works</a>
+      </div>
+      <p class="hero-meta">
+        Open preview · No account required · <b>Real interface, mock data</b>
+      </p>
     </div>
-    <div class="features">
-      <div class="feature-card">
-        <div class="feature-icon">◇</div>
-        <h3>Origin</h3>
-        <p>פרופיל השורש — Worlds, Connectors, Skills, מדדים. הכל מתחיל מכאן.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">◐</div>
-        <h3>עולמות</h3>
-        <p>בריאות, עסקים, פיננסים, למידה — כל תחום עם Metrics, Processes ו-Assets משלו.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">▸</div>
-        <h3>תהליכים חיים</h3>
-        <p>מטרה → פרוטוקול → כרטיס תהליך → תוצאה. הכל במעקב ובסטייט עדכני.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">●</div>
-        <h3>סוכן ONE</h3>
-        <p>סוכן AI אחד עם כובעים — עוזר בתכנון, תזכורות, טיוטות והחלטות בכל עולם.</p>
+
+    <div class="phone" aria-hidden="true">
+      <div class="phone-inner">
+        <img src="/screens/One%20-%20Home%20(3).png" alt="ONE Home — a personal AI agent surface" />
       </div>
     </div>
   </section>
 
-  <section class="section" id="how">
-    <div class="section-header">
-      <h2>מקום אחד. סוכן אחד.</h2>
-      <p>בית אחד לכל הזהות, העולמות והתהליכים שלך.</p>
+  <!-- ── problem ─────────────────────────────────────────────── -->
+  <section class="section soft" id="problem">
+    <div class="shell">
+      <div class="eyebrow">The problem</div>
+      <h2>
+        Life and work don't happen in one app.<br/>
+        They happen across <span class="accent-italic">everything</span>.
+      </h2>
+      <p class="lede">
+        Your goals live in your head. Your conversations are in five chat
+        apps. Your documents are in cloud drives. Your appointments are
+        scattered between calendars, emails, and screenshots. Reality is
+        held together by your memory.
+      </p>
+
+      <div class="problem-list">
+        <div class="chip">📅 Calendar</div>
+        <div class="chip">💬 WhatsApp</div>
+        <div class="chip">📧 Email</div>
+        <div class="chip">📂 Drive</div>
+        <div class="chip">📝 Notes</div>
+        <div class="chip">🧠 Your head</div>
+      </div>
+
+      <p class="problem-quote">
+        ONE gives every intention a place to live.
+      </p>
     </div>
-    <div class="one-place">
+  </section>
+
+  <!-- ── concept: intent flow ────────────────────────────────── -->
+  <section class="section" id="concept">
+    <div class="shell">
+      <div class="eyebrow">How it works</div>
+      <h2>
+        The layer between intention and reality.
+      </h2>
+      <p class="lede">
+        You speak. ONE turns that into a structured process. That process
+        connects to the people, businesses, and information needed to make
+        it real.
+      </p>
+
+      <div class="flow">
+        <div class="flow-row muted">A wish, a goal, a need</div>
+        <div class="flow-row">Intention</div>
+        <div class="flow-arr">↓</div>
+        <div class="flow-row middle"><em>ONE</em> — your representative</div>
+        <div class="flow-arr">↓</div>
+        <div class="flow-row">Process</div>
+        <div class="flow-arr">↓</div>
+        <div class="flow-row muted">People · Businesses · Files · Time · Money · Decisions</div>
+        <div class="flow-arr">↓</div>
+        <div class="flow-row reality">Reality</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── four moves ──────────────────────────────────────────── -->
+  <section class="section soft">
+    <div class="shell">
+      <div class="eyebrow">What ONE does</div>
+      <h2>
+        Talk to ONE. It turns what you want into a process.
+      </h2>
+
+      <div class="moves">
+        <div class="move-card">
+          <div class="move-num">01</div>
+          <div class="move-title">Creates structure</div>
+          <div class="move-body">
+            One sentence becomes a living process with goals, metrics, and a clear next step.
+          </div>
+        </div>
+        <div class="move-card">
+          <div class="move-num">02</div>
+          <div class="move-title">Keeps context</div>
+          <div class="move-body">
+            ONE remembers what was said, what was decided, what's missing, and what matters now.
+          </div>
+        </div>
+        <div class="move-card">
+          <div class="move-num">03</div>
+          <div class="move-title">Connects people</div>
+          <div class="move-body">
+            Coaches, lawyers, salons, clinics — ONE links your process to who can help move it.
+          </div>
+        </div>
+        <div class="move-card">
+          <div class="move-num">04</div>
+          <div class="move-title">Shows the next step</div>
+          <div class="move-body">
+            Not the whole list. The one thing you should do next — based on real signals.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── scene: process is alive ─────────────────────────────── -->
+  <section class="section">
+    <div class="shell scene-grid">
       <div>
-        <h2>הכל מתחבר</h2>
-        <p>חיבורים חיצוניים (לוח שנה, מייל, בנק), Skills פנימיים (סיכום, תכנון, תזכורות) ומדדים חיים — כולם תחת פרופיל Origin אחד.</p>
-        <ul>
-          <li>מדדי Origin: תהליכים פעילים, Completion Rate, Alerts</li>
-          <li>מדדי World: Health Score, Business Score, Trends</li>
-          <li>תהליכים עם שלבים, מציאות וטיוטות</li>
-        </ul>
+        <div class="eyebrow">A process is alive</div>
+        <h2>Every process has memory, updates, people, files, and a timeline.</h2>
+        <p class="lede">
+          A process is not a task. It's the small living structure around
+          something you want to move forward — with everything it needs to
+          stay alive.
+        </p>
+
+        <div class="pc-card" aria-label="Process card example">
+          <div class="pc-head">
+            <div class="pc-title">
+              <span class="pc-emoji">💪</span>
+              <span>Weight Gain</span>
+            </div>
+            <div class="pc-time">
+              14:20
+              <span class="pc-badge">2</span>
+            </div>
+          </div>
+          <div class="pc-body">
+            Next workout today at 2:00 PM.<br/>
+            Protein goal reached yesterday.
+          </div>
+          <div class="pc-foot">
+            <div class="pc-relation">Coach Eli +1</div>
+            <div class="pc-progress">
+              <div class="pc-track"><div class="pc-fill"></div></div>
+              <div class="pc-count">21/32</div>
+            </div>
+          </div>
+          <div class="pc-line"></div>
+        </div>
       </div>
-      <div class="one-place-visual" aria-hidden="true">ONE</div>
+
+      <div class="phone phone-sm" aria-hidden="true">
+        <div class="phone-inner">
+          <img src="/screens/One%20-%20Processes%20(1).png" alt="Weight Gain process profile with metrics, next steps, and people" />
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="section" id="security">
-    <div class="section-header">
-      <h2>בשליטתך. מאובטח.</h2>
-      <p>הנתונים שלך שייכים לך. המערכת רצה אצלך ומתעדכנת בסטייט חי.</p>
+  <!-- ── scene: personal + business ──────────────────────────── -->
+  <section class="section soft" id="identity">
+    <div class="shell scene-grid reverse">
+      <div class="phone phone-sm" aria-hidden="true">
+        <div class="phone-inner">
+          <img src="/screens/One%20-%20Processes%20(3).png" alt="Identity switch — Ariel personal and ONE01 business" />
+        </div>
+      </div>
+      <div>
+        <div class="eyebrow">Personal and business</div>
+        <h2>One agent. Many identities.</h2>
+        <p class="lede">
+          Use ONE for your personal life — health, learning, home, family,
+          legal. Use the same ONE through a business identity — appointments,
+          clients, projects, operations. Different worlds, same agent.
+        </p>
+      </div>
     </div>
-    <div class="control-cards">
-      <div class="control-card">
-        <h3>נתונים אצלך</h3>
-        <p>סטייט ותהליכים נשמרים אצלך; סנכרון אופציונלי עם שירותים שבחרת.</p>
+  </section>
+
+  <!-- ── connection: identity ↔ identity ─────────────────────── -->
+  <section class="section" id="connections">
+    <div class="shell">
+      <div class="eyebrow">The network</div>
+      <h2>
+        Your ONE can <span class="accent-italic">connect</span> with other ONEs.
+      </h2>
+      <p class="lede">
+        Communication doesn't have to happen in one big chat with a business.
+        Each side has its own ONE. They connect around the specific process —
+        a haircut, a clinic visit, a trip — not the whole relationship.
+      </p>
+
+      <div class="connect">
+        <div class="connect-side">
+          <div class="connect-orb"></div>
+          <div class="connect-name">Ariel's ONE</div>
+          <div class="connect-role">Personal</div>
+          <div class="connect-sub">💈 Hair Appointment</div>
+        </div>
+        <div class="connect-bridge">
+          <div class="connect-bridge-line">↔</div>
+          <div class="connect-bridge-label">connected around the process</div>
+        </div>
+        <div class="connect-side">
+          <div class="connect-orb"></div>
+          <div class="connect-name">Sarah Salon's ONE</div>
+          <div class="connect-role">Business</div>
+          <div class="connect-sub">📅 Booking · Tuesday 18:00</div>
+        </div>
       </div>
-      <div class="control-card">
-        <h3>תמיכה</h3>
-        <p>מדריכים, תיעוד וקהילה — כדי שתתמקד במה שחשוב.</p>
-      </div>
-      <div class="control-card">
-        <h3>מודולרי</h3>
-        <p>Skills ו-Connectors נדלקים לפי צורך. לא להעמיס — רק מה שבאמת בשימוש.</p>
+
+      <div class="connect" style="margin-top: 24px;">
+        <div class="connect-side">
+          <div class="connect-orb"></div>
+          <div class="connect-name">Your ONE</div>
+          <div class="connect-role">Personal</div>
+          <div class="connect-sub">🏜️ Join Desert Trip</div>
+        </div>
+        <div class="connect-bridge">
+          <div class="connect-bridge-line">↔</div>
+          <div class="connect-bridge-label">linked to the official process</div>
+        </div>
+        <div class="connect-side">
+          <div class="connect-orb"></div>
+          <div class="connect-name">Desert Trips' ONE</div>
+          <div class="connect-role">Business</div>
+          <div class="connect-sub">🏜️ Night Trip — March 12</div>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="download">
-    <div class="section-header">
-      <h2>הורד את ONE</h2>
-      <p>זמין ל־iOS ו־Android. הרץ את הפרויקט עם Expo והתקן על המכשיר.</p>
-    </div>
-    <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: center;">
-      <a href="#" class="hero-cta" style="padding: 14px 28px;">App Store</a>
-      <a href="#" class="hero-cta" style="padding: 14px 28px; background: var(--bg-card); border: 2px solid var(--border);">Google Play</a>
+  <!-- ── verified sources + aggregate intelligence ───────────── -->
+  <section class="section soft">
+    <div class="shell">
+      <div class="eyebrow">Verified sources · Aggregate intelligence</div>
+      <h2>
+        Information from real processes, not static pages.
+      </h2>
+      <p class="lede">
+        Generic AI gets its answers from a model and the web. ONE can also
+        pull from the official ONE of the business or service involved —
+        and from anonymized signals across thousands of similar processes.
+      </p>
+
+      <div class="compare">
+        <div class="compare-row">
+          <div class="compare-cell head">Generic AI chat</div>
+          <div class="compare-cell head">ONE</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell left">Answers from a language model.</div>
+          <div class="compare-cell right">Answers from verified, official identity processes.</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell left">Information is whatever's on the web.</div>
+          <div class="compare-cell right">Information is the real state of a real process.</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell left">Doesn't know what 1,000 people before you did.</div>
+          <div class="compare-cell right">Learns from aggregate signals — what usually works, where things get stuck.</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell left">A chat ends when you close the tab.</div>
+          <div class="compare-cell right">The process keeps living after the conversation.</div>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="cta-strip">
-    <h2>מוכנים להתחיל?</h2>
-    <p>ONE — מערכת אחת. סוכן אחד. כל החיים במקום אחד.</p>
-    <a href="#download" class="hero-cta">הורד את ONE</a>
+  <!-- ── why not just chat ───────────────────────────────────── -->
+  <section class="section">
+    <div class="shell">
+      <div class="eyebrow">Why not just chat?</div>
+      <h2>
+        <span class="accent-italic">Chat</span> is where it starts.<br/>
+        The <span class="accent-italic">process</span> is where it lives.
+      </h2>
+      <p class="lede">
+        In WhatsApp, one chat with a business contains questions, payments,
+        complaints, bookings, documents, and updates — all mixed together.
+        ONE separates the noise by intention.
+      </p>
+
+      <div class="compare">
+        <div class="compare-row">
+          <div class="compare-cell head">WhatsApp</div>
+          <div class="compare-cell head">ONE</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell left">Organized by who you talked to.</div>
+          <div class="compare-cell right">Organized by what needs to happen.</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell left">"Chat with Sarah Salon" — one giant thread.</div>
+          <div class="compare-cell right">Hair Appointment · Wedding Styling · Price Question — separate processes.</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell left">Important details buried in scroll.</div>
+          <div class="compare-cell right">Files, decisions, next step, people — pinned to the process.</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell left">Closing the chat is closing the memory.</div>
+          <div class="compare-cell right">The process keeps the memory after the chat.</div>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <footer class="footer">
-    <div class="footer-inner">
-      <div class="footer-grid">
-        <div class="footer-col">
-          <h4>מוצר</h4>
-          <a href="#download">הורדה</a>
-          <a href="#features">תכונות</a>
-          <a href="#">בטיחות</a>
-          <a href="#">תמיכה</a>
+  <!-- ── status ──────────────────────────────────────────────── -->
+  <section class="section soft" id="status">
+    <div class="shell">
+      <div class="eyebrow">Where we are</div>
+      <h2>An honest map of what ships today.</h2>
+      <p class="lede">
+        ONE is in open preview. The interface is real, the gestures are
+        native, and the flow is complete. The intelligence and the network
+        layer are mocked for review — and shipping next.
+      </p>
+
+      <div class="status-cols">
+        <div class="status-col">
+          <h3>Live in this preview</h3>
+          <ul class="status-list">
+            <li><span class="mark live">✓</span> 12-surface interface — drag, swipe, snap</li>
+            <li><span class="mark live">✓</span> Multi-identity (Personal · Business · Family)</li>
+            <li><span class="mark live">✓</span> Process lifecycle: card → preview → profile → chat</li>
+            <li><span class="mark live">✓</span> Attention-sorted feed with broadcast loop</li>
+            <li><span class="mark live">✓</span> In-app Privacy, Terms, Account, deletion</li>
+            <li><span class="mark live">✓</span> Native bottom-sheet gestures</li>
+            <li><span class="mark live">✓</span> Light/dark theme · English / Hebrew RTL</li>
+          </ul>
         </div>
-        <div class="footer-col">
-          <h4>משאבים</h4>
-          <a href="#">חקור</a>
-          <a href="#">בלוג</a>
-          <a href="#">תיעוד</a>
-        </div>
-        <div class="footer-col">
-          <h4>חברה</h4>
-          <a href="#">אודות</a>
-          <a href="#">קריירה</a>
-        </div>
-        <div class="footer-col">
-          <h4>רשתות</h4>
-          <a href="#">X</a>
-          <a href="#">LinkedIn</a>
+        <div class="status-col">
+          <h3>Coming with v1.0</h3>
+          <ul class="status-list">
+            <li><span class="mark">○</span> Live LLM responses (secured backend)</li>
+            <li><span class="mark">○</span> Cross-device sync</li>
+            <li><span class="mark">○</span> Identity-to-identity connections</li>
+            <li><span class="mark">○</span> Verified business sources (ONE01 network)</li>
+            <li><span class="mark">○</span> Aggregate process signals — anonymized</li>
+            <li><span class="mark">○</span> Connectors: Calendar, Email, Drive, Bank</li>
+            <li><span class="mark">○</span> Native builds on App Store + Play Store</li>
+          </ul>
         </div>
       </div>
-      <div class="footer-bottom">
-        <span class="footer-logo">ONE</span>
-        <span class="footer-copy">© ONE 2025</span>
-        <div class="footer-legal">
-          <a href="#">תנאים</a>
-          <a href="#">פרטיות</a>
-        </div>
+    </div>
+  </section>
+
+  <!-- ── final CTA ───────────────────────────────────────────── -->
+  <section class="final">
+    <h2>
+      Start with <span class="accent-italic">one thing</span>.
+    </h2>
+    <p class="lede">
+      Tell ONE what matters. It will help move it forward.
+    </p>
+    <div class="final-ctas">
+      <a class="btn btn-primary btn-lg" href="/app/">Start with ONE →</a>
+      <a class="btn btn-ghost btn-lg" href="#problem">Read more</a>
+    </div>
+  </section>
+
+  <!-- ── footer ──────────────────────────────────────────────── -->
+  <footer>
+    <div class="foot-inner">
+      <div class="foot-brand">
+        <a href="/" class="foot-brand-logo" aria-label="ONE01">
+          <svg viewBox="0 0 147 36" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M145.194 2.72289C145.703 2.93253 146.108 3.26944 146.407 3.73363C146.707 4.18285 146.856 4.67699 146.856 5.21606V32.2815C146.856 33.0302 146.587 33.6741 146.048 34.2131C145.524 34.7372 144.887 34.9993 144.139 34.9993C143.39 34.9993 142.746 34.7372 142.207 34.2131C141.683 33.6741 141.421 33.0302 141.421 32.2815V11.7746L138.321 14.8518C137.752 15.3909 137.101 15.6604 136.367 15.6604C135.648 15.6454 135.012 15.3759 134.458 14.8518C133.934 14.2828 133.672 13.6389 133.672 12.9202C133.672 12.2014 133.941 11.5575 134.48 10.9885L142.229 3.28441C143.098 2.50577 144.086 2.31859 145.194 2.72289Z" fill="#222222" fill-opacity="0.31"/>
+            <path d="M124.175 7.62109C126.361 10.8704 127.454 14.584 127.454 18.7617C127.454 22.9245 126.361 26.6305 124.175 29.8799C123.007 31.512 121.644 32.7773 120.087 33.6758C118.545 34.5592 116.92 35.001 115.213 35.001C113.521 35.001 111.896 34.5592 110.339 33.6758C108.782 32.7773 107.426 31.512 106.273 29.8799C104.087 26.6305 102.994 22.9245 102.994 18.7617C102.994 14.584 104.087 10.8704 106.273 7.62109C107.426 5.98893 108.782 4.73112 110.339 3.84766C111.896 2.94922 113.521 2.5 115.213 2.5C116.92 2.5 118.545 2.94922 120.087 3.84766C121.644 4.73112 123.007 5.98893 124.175 7.62109ZM115.213 29.5654C116.441 29.5654 117.571 29.0713 118.604 28.083C119.638 27.0947 120.461 25.7845 121.075 24.1523C121.689 22.5052 121.996 20.7083 121.996 18.7617C121.996 16.8001 121.689 15.0033 121.075 13.3711C120.461 11.724 119.638 10.4137 118.604 9.44043C117.571 8.45215 116.441 7.95801 115.213 7.95801C113.985 7.95801 112.854 8.45215 111.821 9.44043C110.803 10.4137 109.979 11.724 109.351 13.3711C108.737 15.0033 108.43 16.8001 108.43 18.7617C108.43 20.7083 108.737 22.5052 109.351 24.1523C109.979 25.7845 110.803 27.0947 111.821 28.083C112.854 29.0713 113.985 29.5654 115.213 29.5654Z" fill="#222222" fill-opacity="0.31"/>
+            <path d="M94.0811 7.95801H78.6504V15.2803H92.4189C93.1676 15.2803 93.804 15.5498 94.3281 16.0889C94.8672 16.613 95.1367 17.2568 95.1367 18.0205C95.1367 18.7692 94.8672 19.4131 94.3281 19.9521C93.804 20.4762 93.1676 20.7383 92.4189 20.7383H78.6504V29.5654H94.0811C94.8298 29.5654 95.4661 29.835 95.9902 30.374C96.5293 30.8981 96.7988 31.5345 96.7988 32.2832C96.7988 33.0319 96.5293 33.6758 95.9902 34.2148C95.4661 34.7389 94.8298 35.001 94.0811 35.001H75.9326C75.1839 35.001 74.54 34.7389 74.001 34.2148C73.4769 33.6758 73.2148 33.0319 73.2148 32.2832V19.5703V18.0205V5.21777C73.2148 4.46908 73.4769 3.83268 74.001 3.30859C74.54 2.76953 75.1839 2.5 75.9326 2.5H94.0811C94.8298 2.5 95.4661 2.76953 95.9902 3.30859C96.5293 3.83268 96.7988 4.46908 96.7988 5.21777C96.7988 5.98145 96.5293 6.63281 95.9902 7.17188C95.4661 7.69596 94.8298 7.95801 94.0811 7.95801Z" fill="#222222"/>
+            <path d="M64.5039 2.5C65.2526 2.5 65.889 2.76953 66.4131 3.30859C66.9521 3.83268 67.2217 4.46908 67.2217 5.21777V32.2832C67.2217 32.8672 67.057 33.3913 66.7275 33.8555C66.3981 34.3197 65.9489 34.6491 65.3799 34.8438C65.0954 34.9486 64.8034 35.001 64.5039 35.001C63.6803 35.001 62.9616 34.6491 62.3477 33.9453L46.1309 13.1465V32.2832C46.1309 33.0319 45.8613 33.6758 45.3223 34.2148C44.7982 34.7389 44.1618 35.001 43.4131 35.001C42.6644 35.001 42.0205 34.7389 41.4814 34.2148C40.9574 33.6758 40.6953 33.0319 40.6953 32.2832V5.21777C40.6953 4.64876 40.86 4.13216 41.1895 3.66797C41.5339 3.1888 41.9831 2.85189 42.5371 2.65723C43.735 2.31283 44.7458 2.6123 45.5693 3.55566L61.7861 24.3545V5.21777C61.7861 4.46908 62.0482 3.83268 62.5723 3.30859C63.1113 2.76953 63.7552 2.5 64.5039 2.5Z" fill="#222222"/>
+            <path d="M19.3838 2.5C22.3786 2.5 25.1038 3.23372 27.5596 4.70117C30.0153 6.16862 31.9769 8.13021 33.4443 10.5859C34.9118 13.0417 35.6455 15.7669 35.6455 18.7617C35.6455 21.7415 34.9118 24.4668 33.4443 26.9375C31.9769 29.3932 30.0153 31.3548 27.5596 32.8223C25.1038 34.2747 22.3786 35.001 19.3838 35.001C16.404 35.001 13.6787 34.2747 11.208 32.8223C8.75228 31.3548 6.79069 29.3932 5.32324 26.9375C3.87077 24.4668 3.14453 21.7415 3.14453 18.7617C3.14453 15.7669 3.87077 13.0417 5.32324 10.5859C6.79069 8.13021 8.75228 6.16862 11.208 4.70117C13.6787 3.23372 16.404 2.5 19.3838 2.5ZM19.3838 29.5654C21.3753 29.5654 23.1872 29.0788 24.8193 28.1055C26.4515 27.1322 27.7542 25.8294 28.7275 24.1973C29.7008 22.5501 30.1875 20.7383 30.1875 18.7617C30.1875 16.7702 29.7008 14.9583 28.7275 13.3262C27.7542 11.694 26.4515 10.3913 24.8193 9.41797C23.1872 8.44466 21.3753 7.95801 19.3838 7.95801C17.4072 7.95801 15.5954 8.44466 13.9482 9.41797C12.3161 10.3913 11.0133 11.694 10.04 13.3262C9.06673 14.9583 8.58008 16.7702 8.58008 18.7617C8.58008 20.7383 9.06673 22.5501 10.04 24.1973C11.0133 25.8294 12.3161 27.1322 13.9482 28.1055C15.5954 29.0788 17.4072 29.5654 19.3838 29.5654Z" fill="#A0A0A0"/>
+            <circle cx="18" cy="18" r="18" fill="#222222"/>
+          </svg>
+        </a>
+        <p>
+          A digital representative that turns intentions into living processes.
+          One agent. Many identities. Connected to reality.
+        </p>
       </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="/app/">Open ONE</a>
+        <a href="#problem">Why ONE</a>
+        <a href="#concept">How it works</a>
+        <a href="#connections">Connections</a>
+        <a href="#status">Where we are</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="mailto:hello@one01.io">Contact</a>
+        <a href="#status">Roadmap</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+      </div>
+      <div class="foot-col">
+        <h4>Build</h4>
+        <a href="#status">Open preview</a>
+        <a href="mailto:hello@one01.io?subject=ONE%20feedback">Feedback</a>
+        <a href="mailto:hello@one01.io?subject=ONE%20press">Press</a>
+        <a href="mailto:hello@one01.io?subject=ONE%20partner">Partnerships</a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© <script>document.write(new Date().getFullYear())</script> ONE01 Foundation</span>
+      <span>From intention to reality.</span>
     </div>
   </footer>
+
+  <!-- ── reveal nav brand on scroll past hero ─────────────────── -->
+  <script>
+    (function () {
+      var nav = document.getElementById('nav');
+      var hero = document.querySelector('.hero');
+      if (!nav || !hero || !('IntersectionObserver' in window)) {
+        // Fallback: always show the brand
+        if (nav) nav.classList.add('is-scrolled');
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        // When the hero is fully out of the viewport, isIntersecting === false.
+        nav.classList.toggle('is-scrolled', !entries[0].isIntersecting);
+      }, { threshold: 0, rootMargin: '0px' });
+      io.observe(hero);
+    })();
+  </script>
 </body>
 </html>

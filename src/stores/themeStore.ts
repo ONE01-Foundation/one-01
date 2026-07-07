@@ -28,10 +28,13 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
 
   initialize: async () => {
     try {
-      // Load saved preference
+      // Load saved preference. Default to 'light' for first-time users — the
+      // ONE_UI_UX_SPEC visual language is built around a white/off-white surface
+      // with black text, so light is the canonical mode. Auto/dark remain
+      // available via Settings.
       const savedPreference = await storage.getItem(THEME_PREFERENCE_KEY);
-      const preference = (savedPreference as 'auto' | 'light' | 'dark') || 'auto';
-      
+      const preference = (savedPreference as 'auto' | 'light' | 'dark') || 'light';
+
       // Resolve theme based on preference
       const theme = resolveTheme(preference);
       const colors = getThemeColors(theme);
@@ -48,7 +51,7 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
       set({
         theme: 'light',
         colors: getThemeColors('light'),
-        preference: 'auto',
+        preference: 'light',
         initialized: true,
       });
     }
