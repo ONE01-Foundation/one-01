@@ -2,14 +2,14 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ONE — move things forward",
+  title: "ONE — from intention to done",
   description:
     "Your digital representative for turning intentions into living processes. ONE is the layer between what you want and what needs to happen.",
   icons: {
     icon: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%230A0A0A'/%3E%3Ccircle cx='25' cy='29' r='4.5' fill='%23fff'/%3E%3Ccircle cx='39' cy='29' r='4.5' fill='%23fff'/%3E%3C/svg%3E",
   },
   openGraph: {
-    title: "ONE — move things forward",
+    title: "ONE — from intention to done",
     description:
       "Your digital representative for turning intentions into living processes.",
   },

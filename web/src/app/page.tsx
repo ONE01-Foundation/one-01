@@ -65,106 +65,6 @@ function PlusIcon() {
   );
 }
 
-/* ── live product mock rendered inside the phone frame ─────────── */
-function PhoneMock({ variant = "home" }: { variant?: "home" | "process" | "identity" }) {
-  if (variant === "process") {
-    return (
-      <div className="phone phone-sm" aria-hidden="true">
-        <div className="phone-inner">
-          <div className="mock">
-            <div className="mock-orb" />
-            <div className="mock-name">Weight Gain</div>
-            <div className="mock-line">On track · Coach Eli +1</div>
-            <div className="mock-cards" style={{ marginTop: 8 }}>
-              <div className="mock-card">
-                <div className="mock-card-top">
-                  <span className="mock-card-title">Next step</span>
-                  <span className="mock-card-time">2:00 PM</span>
-                </div>
-                <div className="mock-card-sub">Workout — upper body, then log protein.</div>
-              </div>
-              <div className="mock-card">
-                <div className="mock-card-top">
-                  <span className="mock-card-title">Metric</span>
-                  <span className="mock-card-time">21 / 32</span>
-                </div>
-                <div className="mock-card-sub">Weeks completed toward your goal.</div>
-              </div>
-            </div>
-            <div className="mock-input">Ask ONE about this process…</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (variant === "identity") {
-    return (
-      <div className="phone phone-sm" aria-hidden="true">
-        <div className="phone-inner">
-          <div className="mock">
-            <div className="mock-orb" />
-            <div className="mock-name">ONE</div>
-            <div className="mock-line">Switch identity</div>
-            <div className="mock-cards" style={{ marginTop: 8 }}>
-              <div className="mock-card">
-                <div className="mock-card-top">
-                  <span className="mock-card-title">👤 Ariel</span>
-                  <span className="mock-card-time">Personal</span>
-                </div>
-                <div className="mock-card-sub">Health · Learning · Home · Legal</div>
-              </div>
-              <div className="mock-card">
-                <div className="mock-card-top">
-                  <span className="mock-card-title">🏢 ONE01</span>
-                  <span className="mock-card-time">Business</span>
-                </div>
-                <div className="mock-card-sub">Clients · Projects · Operations</div>
-              </div>
-            </div>
-            <div className="mock-input">+ Add identity</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  // home
-  return (
-    <div className="phone" aria-hidden="true">
-      <div className="phone-inner">
-        <div className="mock">
-          <div className="mock-orb" />
-          <div className="mock-name">ONE</div>
-          <div className="mock-line">Good evening, Ariel. 2 things are waiting.</div>
-          <div className="mock-cards">
-            <div className="mock-card">
-              <div className="mock-card-top">
-                <span className="mock-card-title">💪 Weight Gain</span>
-                <span className="mock-card-time">14:20</span>
-              </div>
-              <div className="mock-card-sub">Next workout today at 2:00 PM.</div>
-            </div>
-            <div className="mock-card">
-              <div className="mock-card-top">
-                <span className="mock-card-title">💈 Hair Appointment</span>
-                <span className="mock-card-time">Tue 18:00</span>
-              </div>
-              <div className="mock-card-sub">Sarah Salon confirmed your booking.</div>
-            </div>
-            <div className="mock-card">
-              <div className="mock-card-top">
-                <span className="mock-card-title">📋 Driver&apos;s License</span>
-                <span className="mock-card-time">3 left</span>
-              </div>
-              <div className="mock-card-sub">Theory test scheduled — 2 forms to sign.</div>
-            </div>
-          </div>
-          <div className="mock-input">Talk to ONE</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function LandingPage() {
   const navRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
@@ -244,7 +144,7 @@ export default function LandingPage() {
             <Logo height={22} />
           </Link>
           <div className="nav-actions">
-            <a className="nav-link" href="#concept">ONE</a>
+            <a className="nav-link" href="#problem">ONE</a>
             <a className="nav-link" href="#identity">Life</a>
             <a className="nav-link" href="#connections">Business</a>
             <a className="nav-link" href="#status">Vision</a>
@@ -338,70 +238,60 @@ export default function LandingPage() {
         </div>
       </Sheet>
 
-      {/* ── problem ── */}
-      <section className="section soft" id="problem">
-        <div className="shell">
-          <div className="eyebrow">The problem</div>
+      {/* ── thesis ── */}
+      <section className="section soft center" id="problem">
+        <div className="shell narrow">
+          <div className="eyebrow">Why ONE</div>
           <h2>
-            Life and work don&apos;t happen in one app.<br />
-            They happen across <span className="accent-italic">everything</span>.
+            Life doesn&apos;t happen in one app.<br />
+            It happens across <span className="accent-italic">everything</span>.
           </h2>
           <p className="lede">
-            Your goals live in your head. Your conversations are in five chat apps.
-            Your documents are in cloud drives. Your appointments are scattered
-            between calendars, emails, and screenshots. Reality is held together by
-            your memory.
+            Your goals, chats, files, and appointments are scattered across a dozen
+            places — held together by your memory. ONE gives every intention one
+            place to live, and quietly moves it forward.
           </p>
-          <div className="problem-list">
-            <div className="chip">📅 Calendar</div>
-            <div className="chip">💬 WhatsApp</div>
-            <div className="chip">📧 Email</div>
-            <div className="chip">📂 Drive</div>
-            <div className="chip">📝 Notes</div>
-            <div className="chip">🧠 Your head</div>
-          </div>
-          <p className="problem-quote">ONE gives every intention a place to live.</p>
         </div>
       </section>
 
-      {/* ── concept ── */}
-      <section className="section" id="concept">
+      {/* ── three steps ── */}
+      <section className="section center" id="concept">
         <div className="shell">
           <div className="eyebrow">How it works</div>
-          <h2>The layer between intention and reality.</h2>
-          <p className="lede">
-            You speak. ONE turns that into a structured process. That process
-            connects to the people, businesses, and information needed to make it
-            real.
-          </p>
-          <div className="flow">
-            <div className="flow-row muted">A wish, a goal, a need</div>
-            <div className="flow-row">Intention</div>
-            <div className="flow-arr">↓</div>
-            <div className="flow-row middle"><em>ONE</em> — your representative</div>
-            <div className="flow-arr">↓</div>
-            <div className="flow-row">Process</div>
-            <div className="flow-arr">↓</div>
-            <div className="flow-row muted">People · Businesses · Files · Time · Money · Decisions</div>
-            <div className="flow-arr">↓</div>
-            <div className="flow-row reality">Reality</div>
+          <h2>Say it once. ONE carries it to done.</h2>
+          <div className="steps">
+            <div className="step">
+              <span className="step-n">1</span>
+              <h3>You say it</h3>
+              <p>“Book me a haircut Tuesday.” “Plan the move.” One sentence, in plain words.</p>
+            </div>
+            <div className="step">
+              <span className="step-n">2</span>
+              <h3>It becomes a process</h3>
+              <p>ONE turns it into a living process — a goal, the steps, the people, and the next thing to do.</p>
+            </div>
+            <div className="step">
+              <span className="step-n">3</span>
+              <h3>It moves forward</h3>
+              <p>ONE remembers, connects, and surfaces the one next step — until it&apos;s actually done.</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── what ONE does — bento grid ── */}
-      <section className="section soft">
+      {/* ── what you get — bento ── */}
+      <section className="section soft center" id="identity">
         <div className="shell">
-          <div className="eyebrow">What ONE does</div>
-          <h2>Say it once. ONE carries it to done.</h2>
-          <div className="bento">
+          <div className="eyebrow">What you get</div>
+          <h2>An agent that remembers and follows through.</h2>
+          <div className="bento" style={{ marginTop: 56 }}>
             <div className="bento-card span-3 dark">
               <div className="bento-visual">
                 <Orb size={40} eyeR={12} faceColor="#ffffff" eyeColor="#0f0f0f" />
                 <div className="bento-bubble">“Book me a haircut Tuesday.”</div>
               </div>
               <h3>One sentence becomes a process</h3>
-              <p>ONE turns what you say into a living process — with a goal, the steps, and the next thing to do.</p>
+              <p>What you say turns into a living process — with a goal, the steps, and the next thing to do.</p>
             </div>
 
             <div className="bento-card span-3">
@@ -423,7 +313,7 @@ export default function LandingPage() {
             <div className="bento-card span-2">
               <div className="bento-icon">➡️</div>
               <h3>Shows the next step</h3>
-              <p>Not the whole list. The one thing to do now — based on what’s actually happening.</p>
+              <p>Not the whole list — the one thing to do now, based on what&apos;s actually happening.</p>
             </div>
 
             <div className="bento-card span-2">
@@ -431,102 +321,26 @@ export default function LandingPage() {
               <h3>Yours, and private</h3>
               <p>No account needed to start. Sign in when you want ONE to follow you across devices.</p>
             </div>
-
-            <div className="bento-card span-6 row">
-              <div className="bento-side">
-                <div className="bento-icon">🤝</div>
-                <h3>Businesses have a ONE, too</h3>
-                <p>
-                  Book a haircut, a driving lesson, a move — your ONE talks to the business’s ONE.
-                  The booking becomes a card for both of you, and the business sees its customers and followers.
-                </p>
-              </div>
-              <div className="bento-booking" aria-hidden="true">
-                <div className="bk-row">
-                  <span>💈 Sarah Salon</span>
-                  <span className="bk-tag">Tue 18:00</span>
-                </div>
-                <div className="bk-sub">Booking confirmed · added to both ONEs</div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
 
-      {/* ── scene: process is alive ── */}
-      <section className="section">
-        <div className="shell scene-grid">
-          <div>
-            <div className="eyebrow">A process is alive</div>
-            <h2>Every process has memory, updates, people, files, and a timeline.</h2>
-            <p className="lede">
-              A process is not a task. It&apos;s the small living structure around
-              something you want to move forward — with everything it needs to stay
-              alive.
-            </p>
-            <div className="pc-card" aria-label="Process card example">
-              <div className="pc-head">
-                <div className="pc-title">
-                  <span className="pc-emoji">💪</span>
-                  <span>Weight Gain</span>
-                </div>
-                <div className="pc-time">
-                  14:20
-                  <span className="pc-badge">2</span>
-                </div>
-              </div>
-              <div className="pc-body">
-                Next workout today at 2:00 PM.<br />
-                Protein goal reached yesterday.
-              </div>
-              <div className="pc-foot">
-                <div className="pc-relation">Coach Eli +1</div>
-                <div className="pc-progress">
-                  <div className="pc-track"><div className="pc-fill" /></div>
-                  <div className="pc-count">21/32</div>
-                </div>
-              </div>
-              <div className="pc-line" />
-            </div>
-          </div>
-          <PhoneMock variant="process" />
-        </div>
-      </section>
-
-      {/* ── scene: personal + business ── */}
-      <section className="section soft" id="identity">
-        <div className="shell scene-grid reverse">
-          <PhoneMock variant="identity" />
-          <div>
-            <div className="eyebrow">Personal and business</div>
-            <h2>One agent. Many identities.</h2>
-            <p className="lede">
-              Use ONE for your personal life — health, learning, home, family,
-              legal. Use the same ONE through a business identity — appointments,
-              clients, projects, operations. Different worlds, same agent.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── connections ── */}
-      <section className="section" id="connections">
-        <div className="shell">
+      {/* ── businesses ── */}
+      <section className="section center" id="connections">
+        <div className="shell narrow">
           <div className="eyebrow">The network</div>
           <h2>
-            Your ONE can <span className="accent-italic">connect</span> with other ONEs.
+            Businesses have a <span className="accent-italic">ONE</span>, too.
           </h2>
           <p className="lede">
-            Communication doesn&apos;t have to happen in one big chat with a
-            business. Each side has its own ONE. They connect around the specific
-            process — a haircut, a clinic visit, a trip — not the whole
-            relationship.
+            Book a haircut, a driving lesson, a move — your ONE talks to the
+            business&apos;s ONE. The booking becomes a card for both of you, around
+            the process itself, not one endless chat.
           </p>
-
-          <div className="connect">
+          <div className="connect" style={{ marginTop: 48 }}>
             <div className="connect-side">
               <div className="connect-orb" />
-              <div className="connect-name">Ariel&apos;s ONE</div>
+              <div className="connect-name">Your ONE</div>
               <div className="connect-role">Personal</div>
               <div className="connect-sub">💈 Hair Appointment</div>
             </div>
@@ -541,105 +355,19 @@ export default function LandingPage() {
               <div className="connect-sub">📅 Booking · Tuesday 18:00</div>
             </div>
           </div>
-
-          <div className="connect" style={{ marginTop: 24 }}>
-            <div className="connect-side">
-              <div className="connect-orb" />
-              <div className="connect-name">Your ONE</div>
-              <div className="connect-role">Personal</div>
-              <div className="connect-sub">🏜️ Join Desert Trip</div>
-            </div>
-            <div className="connect-bridge">
-              <div className="connect-bridge-line">↔</div>
-              <div className="connect-bridge-label">linked to the official process</div>
-            </div>
-            <div className="connect-side">
-              <div className="connect-orb" />
-              <div className="connect-name">Desert Trips&apos; ONE</div>
-              <div className="connect-role">Business</div>
-              <div className="connect-sub">🏜️ Night Trip — March 12</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── why not just chat ── */}
-      <section className="section soft">
-        <div className="shell">
-          <div className="eyebrow">Why not just a chatbot?</div>
-          <h2>
-            A chatbot answers and forgets.<br />
-            <span className="accent-italic">ONE</span> remembers and follows through.
-          </h2>
-          <p className="lede">
-            A chat ends when you close the tab. A process keeps living — holding the
-            files, decisions, people, and the next step until the thing is actually
-            done.
-          </p>
-          <div className="compare">
-            <div className="compare-row">
-              <div className="compare-cell head">A chat / chatbot</div>
-              <div className="compare-cell head">ONE</div>
-            </div>
-            {[
-              ["Organized by who you talked to.", "Organized by what needs to happen."],
-              ["Answers from the web, in the moment.", "Works from the real state of your process — and the business's own ONE."],
-              ["Important details buried in scroll.", "Files, decisions, next step, people — pinned to the process."],
-              ["Closing the chat closes the memory.", "The process keeps the memory, and moves it forward."],
-            ].map(([l, r]) => (
-              <div className="compare-row" key={l}>
-                <div className="compare-cell left">{l}</div>
-                <div className="compare-cell right">{r}</div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
       {/* ── status ── */}
-      <section className="section soft" id="status">
-        <div className="shell">
+      <section className="section soft center" id="status">
+        <div className="shell narrow">
           <div className="eyebrow">Where we are</div>
-          <h2>An honest map of what ships today.</h2>
+          <h2>Open preview.</h2>
           <p className="lede">
-            ONE is in open preview. The interface is real, the gestures are native,
-            and the flow is complete. The intelligence and the network layer are
-            mocked for review — and shipping next.
+            The interface is real and complete — every screen, gesture, and flow.
+            The intelligence and the connected network are shipping next. No account
+            needed to try it today.
           </p>
-          <div className="status-cols">
-            <div className="status-col">
-              <h3>Live in this preview</h3>
-              <ul className="status-list">
-                {[
-                  "12-surface interface — drag, swipe, snap",
-                  "Multi-identity (Personal · Business · Family)",
-                  "Process lifecycle: card → preview → profile → chat",
-                  "Attention-sorted feed with broadcast loop",
-                  "In-app Privacy, Terms, Account, deletion",
-                  "Native bottom-sheet gestures",
-                  "Light/dark theme · English / Hebrew RTL",
-                ].map((t) => (
-                  <li key={t}><span className="mark live">✓</span> {t}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="status-col">
-              <h3>Coming with v1.0</h3>
-              <ul className="status-list">
-                {[
-                  "Live LLM responses (secured backend)",
-                  "Cross-device sync",
-                  "Identity-to-identity connections",
-                  "Verified business sources (ONE01 network)",
-                  "Aggregate process signals — anonymized",
-                  "Connectors: Calendar, Email, Drive, Bank",
-                  "Native builds on App Store + Play Store",
-                ].map((t) => (
-                  <li key={t}><span className="mark">○</span> {t}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -651,46 +379,22 @@ export default function LandingPage() {
         <p className="lede">Tell ONE what matters. It will help move it forward.</p>
         <div className="final-ctas">
           <Link className="btn btn-primary btn-lg" href="/app">Start with ONE →</Link>
-          <a className="btn btn-ghost btn-lg" href="#problem">Read more</a>
         </div>
       </section>
 
-      {/* ── footer ── */}
+      {/* ── footer — slim ── */}
       <footer>
-        <div className="foot-inner">
-          <div className="foot-brand">
-            <Link href="/" aria-label="ONE01"><Logo height={24} /></Link>
-            <p>
-              A digital representative that turns intentions into living processes.
-              One agent. Many identities. Connected to reality.
-            </p>
-          </div>
-          <div className="foot-col">
-            <h4>Product</h4>
+        <div className="foot-min">
+          <Link href="/" aria-label="ONE01" className="foot-min-brand">
+            <Logo height={22} />
+          </Link>
+          <div className="foot-min-links">
             <Link href="/app">Open ONE</Link>
-            <a href="#problem">Why ONE</a>
-            <a href="#concept">How it works</a>
-            <a href="#connections">Connections</a>
-            <a href="#status">Where we are</a>
-          </div>
-          <div className="foot-col">
-            <h4>Company</h4>
             <a href="mailto:hello@one01.io">Contact</a>
-            <a href="#status">Roadmap</a>
             <a href="#">Privacy</a>
             <a href="#">Terms</a>
           </div>
-          <div className="foot-col">
-            <h4>Build</h4>
-            <a href="#status">Open preview</a>
-            <a href="mailto:hello@one01.io?subject=ONE%20feedback">Feedback</a>
-            <a href="mailto:hello@one01.io?subject=ONE%20press">Press</a>
-            <a href="mailto:hello@one01.io?subject=ONE%20partner">Partnerships</a>
-          </div>
-        </div>
-        <div className="foot-bottom">
-          <span>© 2026 ONE01 Foundation</span>
-          <span>From intention to reality.</span>
+          <span className="foot-min-copy">© 2026 ONE01 Foundation</span>
         </div>
       </footer>
     </>

@@ -1351,6 +1351,109 @@ footer {
   color: var(--text-3);
 }
 
+/* ─── clean landing: centered sections, steps, slim footer ─── */
+.shell.narrow {
+  max-width: 780px;
+}
+.section.center {
+  text-align: center;
+}
+.section.center .eyebrow,
+.section.center h2,
+.section.center .lede {
+  margin-left: auto;
+  margin-right: auto;
+}
+.section.center .bento,
+.section.center .connect,
+.section.center .steps {
+  text-align: left;
+}
+
+/* three steps */
+.steps {
+  margin-top: 56px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+@media (max-width: 880px) {
+  .steps {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+.step {
+  padding: 34px 30px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--bg);
+}
+.step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 22px;
+}
+.step h3 {
+  font-size: 21px;
+  margin-bottom: 10px;
+}
+.step p {
+  font-size: 16px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+/* slim footer */
+.foot-min {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.foot-min-brand svg {
+  height: 22px;
+  width: auto;
+  display: block;
+}
+.foot-min-links {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.foot-min-links a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.foot-min-links a:hover {
+  color: var(--text);
+}
+.foot-min-copy {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+@media (max-width: 640px) {
+  .foot-min {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+}
+
 /* ============================================================
    PRODUCT (/app) — the web version of the ONE mobile surface.
    Tokens scoped so they never touch the marketing palette.
