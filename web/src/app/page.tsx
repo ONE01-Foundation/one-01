@@ -382,19 +382,18 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── footer — slim ── */}
-      <footer>
-        <div className="foot-min">
-          <Link href="/" aria-label="ONE01" className="foot-min-brand">
-            <Logo height={22} />
+      {/* ── footer — centered: orb, quiet links, copyright ── */}
+      <footer className="foot">
+        <div className="foot-center">
+          <Link href="/" aria-label="ONE01" className="foot-orb">
+            <Orb size={38} eyeR={9} />
           </Link>
-          <div className="foot-min-links">
-            <Link href="/app">Open ONE</Link>
-            <a href="mailto:hello@one01.io">Contact</a>
-            <a href="#">Privacy</a>
-            <a href="#">Terms</a>
-          </div>
-          <span className="foot-min-copy">© 2026 ONE01 Foundation</span>
+          <nav className="foot-links">
+            <a href="#problem">About</a>
+            <a href="mailto:hello@one01.io">Support</a>
+            <a href="#">Legal</a>
+          </nav>
+          <span className="foot-copy">© 2026 ONE01</span>
         </div>
       </footer>
     </>
