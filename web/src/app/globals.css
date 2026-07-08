@@ -108,12 +108,20 @@
 }
 .lhero-chev.up {
   opacity: 0.3;
-  margin-bottom: 60px;
+  margin-bottom: 104px;
+  animation: chevFade 0.9s ease 5s forwards;
 }
 .lhero-chev.down {
   cursor: pointer;
-  margin-top: 60px;
-  animation: lheroBob 2.4s ease-in-out infinite;
+  margin-top: 104px;
+  animation:
+    lheroBob 2.4s ease-in-out infinite,
+    chevFade 0.9s ease 5s forwards;
+}
+@keyframes chevFade {
+  to {
+    opacity: 0;
+  }
 }
 .lhero-orb-btn {
   background: transparent;
@@ -156,15 +164,17 @@
      broadcast is one line vs two — and the text is TOP-aligned so a single line
      sits close to the orb (the reserved second line grows downward). */
   margin-top: 24px;
-  min-height: 2.6em;
-  max-width: 560px;
+  min-height: 2.7em;
+  max-width: 30ch;
   display: flex;
   align-items: flex-start;
   justify-content: center;
+  text-align: center;
+  text-wrap: balance;
   font-size: clamp(18px, 2.4vw, 25px);
   font-weight: 550;
   letter-spacing: -0.015em;
-  line-height: 1.3;
+  line-height: 1.35;
   color: var(--text);
   transition: opacity 300ms ease;
 }
@@ -211,9 +221,15 @@
   background: rgba(10, 10, 10, 0.05);
   color: var(--text);
 }
-.lhero-input {
+.lhero-inputwrap {
   flex: 1;
   min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.lhero-input {
+  width: 100%;
   border: none;
   outline: none;
   background: transparent;
@@ -221,6 +237,27 @@
   font-family: inherit;
   color: var(--text);
   padding: 0 4px;
+}
+/* Resting caret — ONE looks ready to type even before you click in. */
+.lhero-caret {
+  position: absolute;
+  left: 5px;
+  width: 2px;
+  height: 22px;
+  background: var(--text);
+  border-radius: 1px;
+  pointer-events: none;
+  animation: caretBlink 1.1s step-end infinite;
+}
+@keyframes caretBlink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
 }
 .lhero-voice {
   width: 52px;
@@ -1675,6 +1712,59 @@ footer {
 .plan .btn {
   margin-top: auto;
   width: 100%;
+}
+
+/* ─── theme toggle in the nav pill ─── */
+.nav-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.nav-mode:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+/* ─── logo hover: "01" fades out, ONE opens living eyes on the orb ─── */
+.logo-01 {
+  transition: opacity 0.28s ease;
+}
+.logo-eye {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 0.28s ease;
+}
+.nav-brand:hover .logo-01 {
+  opacity: 0;
+}
+.nav-brand:hover .logo-eye {
+  opacity: 1;
+  animation: orbBlink 5.4s ease-in-out infinite;
+}
+
+/* ─── footer orb: a plain circle at rest, opens living eyes on hover ─── */
+.foot-orb {
+  display: inline-flex;
+  line-height: 0;
+}
+.foot-orb .foot-eye {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 0.28s ease;
+}
+.foot-orb:hover .foot-eye {
+  opacity: 1;
+  animation: orbBlink 5.4s ease-in-out infinite;
 }
 
 /* ============================================================

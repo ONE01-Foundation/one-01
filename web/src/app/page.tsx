@@ -64,6 +64,21 @@ function PlusIcon() {
     </svg>
   );
 }
+function SunIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+function MoonIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M20 14.5A8 8 0 019.5 4a7 7 0 100 16 8 8 0 0010.5-5.5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function LandingPage() {
   const heroInputRef = useRef<HTMLInputElement>(null);
@@ -77,19 +92,50 @@ export default function LandingPage() {
     return () => clearTimeout(t);
   }, []);
 
-  // Time-of-day theme, mirroring the mobile app (dark 18:00–06:00, else light).
+  // Theme: time-of-day by default (dark 18:00–06:00, like the app), with a
+  // manual light/dark override the user can toggle from the nav.
+  const [mode, setMode] = useState<"auto" | "light" | "dark">("auto");
+  const [isDark, setIsDark] = useState(false);
+  const darkByClock = () => {
+    const h = new Date().getHours();
+    return h >= 18 || h < 6;
+  };
   useEffect(() => {
-    const apply = () => {
-      const h = new Date().getHours();
-      document.documentElement.dataset.theme = h >= 18 || h < 6 ? "dark" : "light";
-    };
-    apply();
-    const t = setInterval(apply, 60_000);
-    return () => clearInterval(t);
+    try {
+      const s = localStorage.getItem("one_web_theme");
+      if (s === "light" || s === "dark") setMode(s);
+    } catch {
+      /* ignore */
+    }
   }, []);
+  useEffect(() => {
+    const applyTheme = () => {
+      const dark = mode === "auto" ? darkByClock() : mode === "dark";
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      setIsDark(dark);
+    };
+    applyTheme();
+    if (mode === "auto") {
+      const t = setInterval(applyTheme, 60_000);
+      return () => clearInterval(t);
+    }
+  }, [mode]);
+  const toggleTheme = () => {
+    setMode((prev) => {
+      const curDark = prev === "auto" ? darkByClock() : prev === "dark";
+      const next = curDark ? "light" : "dark";
+      try {
+        localStorage.setItem("one_web_theme", next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   // The gateway: type an intention → step into the product with it in hand.
   const [heroDraft, setHeroDraft] = useState("");
+  const [heroFocused, setHeroFocused] = useState(false);
   const [greeting, setGreeting] = useState("Hello.");
 
   // Time-aware greeting, set on the client to avoid an SSR/hydration mismatch.
@@ -167,13 +213,21 @@ export default function LandingPage() {
       <nav className={`nav${scrolled ? " is-scrolled" : ""}`}>
         <div className="nav-inner">
           <Link href="/" className="nav-brand" aria-label="ONE01">
-            <Logo height={22} />
+            <Logo height={22} interactive />
           </Link>
           <div className="nav-actions">
             <a className="nav-link" href="#problem">ONE</a>
             <a className="nav-link" href="#identity">Life</a>
             <a className="nav-link" href="#connections">Business</a>
             <a className="nav-link" href="#pricing">Pricing</a>
+            <button
+              type="button"
+              className="nav-mode"
+              onClick={toggleTheme}
+              aria-label={isDark ? "Switch to light" : "Switch to dark"}
+            >
+              {isDark ? <SunIcon /> : <MoonIcon />}
+            </button>
             <Link className="btn btn-primary" href="/app">Enter</Link>
           </div>
         </div>
@@ -215,13 +269,18 @@ export default function LandingPage() {
             <button type="button" className="lhero-plus" aria-label="Start fresh" onClick={() => startWith("")}>
               <PlusIcon />
             </button>
-            <input
-              ref={heroInputRef}
-              className="lhero-input"
-              aria-label="Tell ONE what you want to move forward"
-              value={heroDraft}
-              onChange={(e) => setHeroDraft(e.target.value)}
-            />
+            <span className="lhero-inputwrap">
+              {!heroDraft && !heroFocused && <span className="lhero-caret" aria-hidden="true" />}
+              <input
+                ref={heroInputRef}
+                className="lhero-input"
+                aria-label="Tell ONE what you want to move forward"
+                value={heroDraft}
+                onChange={(e) => setHeroDraft(e.target.value)}
+                onFocus={() => setHeroFocused(true)}
+                onBlur={() => setHeroFocused(false)}
+              />
+            </span>
             <button
               type="submit"
               className="lhero-voice"
@@ -444,7 +503,11 @@ export default function LandingPage() {
       <footer className="foot">
         <div className="foot-center">
           <Link href="/" aria-label="ONE01" className="foot-orb">
-            <Orb size={38} eyeR={9} />
+            <svg width="40" height="40" viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="50" fill="var(--orb)" />
+              <circle className="foot-eye" cx="34" cy="45" r="12" fill="var(--orb-eye)" />
+              <circle className="foot-eye" cx="66" cy="45" r="12" fill="var(--orb-eye)" />
+            </svg>
           </Link>
           <nav className="foot-links">
             <a href="#problem">About</a>
