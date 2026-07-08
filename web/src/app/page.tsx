@@ -66,8 +66,6 @@ function PlusIcon() {
 }
 
 export default function LandingPage() {
-  const navRef = useRef<HTMLElement>(null);
-  const heroRef = useRef<HTMLElement>(null);
   const heroInputRef = useRef<HTMLInputElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const router = useRouter();
@@ -77,6 +75,17 @@ export default function LandingPage() {
   useEffect(() => {
     const t = setTimeout(() => heroInputRef.current?.focus({ preventScroll: true }), 300);
     return () => clearTimeout(t);
+  }, []);
+
+  // Time-of-day theme, mirroring the mobile app (dark 18:00–06:00, else light).
+  useEffect(() => {
+    const apply = () => {
+      const h = new Date().getHours();
+      document.documentElement.dataset.theme = h >= 18 || h < 6 ? "dark" : "light";
+    };
+    apply();
+    const t = setInterval(apply, 60_000);
+    return () => clearInterval(t);
   }, []);
 
   // The gateway: type an intention → step into the product with it in hand.
@@ -120,25 +129,42 @@ export default function LandingPage() {
     router.push(t ? `/app?q=${encodeURIComponent(t)}` : "/app");
   };
 
+  // Nav pill reveals a little AFTER you leave the hero — not the instant it
+  // scrolls out — so the gateway stays clean and the pill feels intentional.
   useEffect(() => {
-    const hero = heroRef.current;
-    if (!hero || !("IntersectionObserver" in window)) {
-      setScrolled(true);
+    const onScroll = () => setScrolled(window.scrollY > window.innerHeight * 1.15);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Content floats up into place as it enters the viewport (free scroll).
+  useEffect(() => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>(".reveal"));
+    if (!("IntersectionObserver" in window)) {
+      els.forEach((e) => e.classList.add("in"));
       return;
     }
     const io = new IntersectionObserver(
-      (entries) => setScrolled(!entries[0].isIntersecting),
-      { threshold: 0, rootMargin: "0px" }
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
     );
-    io.observe(hero);
+    els.forEach((e) => io.observe(e));
     return () => io.disconnect();
   }, []);
 
   return (
     <>
       <Splash bg="var(--bg)" padBottom="22vh" />
-      {/* ── nav ── */}
-      <nav ref={navRef} className={`nav${scrolled ? " is-scrolled" : ""}`}>
+      {/* ── nav — floating pill, revealed after scrolling into the content ── */}
+      <nav className={`nav${scrolled ? " is-scrolled" : ""}`}>
         <div className="nav-inner">
           <Link href="/" className="nav-brand" aria-label="ONE01">
             <Logo height={22} />
@@ -147,14 +173,14 @@ export default function LandingPage() {
             <a className="nav-link" href="#problem">ONE</a>
             <a className="nav-link" href="#identity">Life</a>
             <a className="nav-link" href="#connections">Business</a>
-            <a className="nav-link" href="#status">Vision</a>
+            <a className="nav-link" href="#pricing">Pricing</a>
             <Link className="btn btn-primary" href="/app">Enter</Link>
           </div>
         </div>
       </nav>
 
       {/* ── hero — the gateway: ONE centre-stage, ready to start ── */}
-      <section ref={heroRef} className="lhero">
+      <section className="lhero">
         <div className="lhero-core">
           <span className="lhero-chev up" aria-hidden="true">
             <ChevronUp />
@@ -239,103 +265,90 @@ export default function LandingPage() {
       </Sheet>
 
       {/* ── thesis ── */}
-      <section className="section soft center" id="problem">
+      <section className="section center reveal" id="problem">
         <div className="shell narrow">
           <div className="eyebrow">Why ONE</div>
           <h2>
-            Life doesn&apos;t happen in one app.<br />
-            It happens across <span className="accent-italic">everything</span>.
+            One for everything.<br />
+            Everything in <span className="accent-italic">one</span>.
           </h2>
           <p className="lede">
-            Your goals, chats, files, and appointments are scattered across a dozen
-            places — held together by your memory. ONE gives every intention one
-            place to live, and quietly moves it forward.
+            Your goals, chats, files, and appointments live in a dozen places —
+            held together by your memory. ONE gives every intention one place to
+            live, and quietly moves it forward.
           </p>
         </div>
       </section>
 
-      {/* ── three steps ── */}
-      <section className="section center" id="concept">
+      {/* ── concepts: the vocabulary (ONE · Units · Global) ── */}
+      <section className="section center reveal" id="concept">
         <div className="shell">
-          <div className="eyebrow">How it works</div>
-          <h2>Say it once. ONE carries it to done.</h2>
-          <div className="steps">
-            <div className="step">
-              <span className="step-n">1</span>
-              <h3>You say it</h3>
-              <p>“Book me a haircut Tuesday.” “Plan the move.” One sentence, in plain words.</p>
+          <div className="eyebrow">The idea</div>
+          <h2>Three words. One system.</h2>
+          <div className="concepts">
+            <div className="concept">
+              <div className="concept-key">ONE</div>
+              <h3>Digital representative</h3>
+              <p>Your agent. You speak in plain words; ONE understands what you mean and acts on your behalf.</p>
             </div>
-            <div className="step">
-              <span className="step-n">2</span>
-              <h3>It becomes a process</h3>
-              <p>ONE turns it into a living process — a goal, the steps, the people, and the next thing to do.</p>
+            <div className="concept">
+              <div className="concept-key">Units</div>
+              <h3>Living processes</h3>
+              <p>Each goal becomes a Unit — a small living process holding its steps, files, people, and next move.</p>
             </div>
-            <div className="step">
-              <span className="step-n">3</span>
-              <h3>It moves forward</h3>
-              <p>ONE remembers, connects, and surfaces the one next step — until it&apos;s actually done.</p>
+            <div className="concept">
+              <div className="concept-key">Global</div>
+              <h3>The network</h3>
+              <p>Units connect to other ONEs — people and businesses — so things move between you, not inside one app.</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── what you get — bento ── */}
-      <section className="section soft center" id="identity">
+      {/* ── ONE for Life / ONE for Business ── */}
+      <section className="section center reveal" id="identity">
         <div className="shell">
-          <div className="eyebrow">What you get</div>
-          <h2>An agent that remembers and follows through.</h2>
-          <div className="bento" style={{ marginTop: 56 }}>
-            <div className="bento-card span-3 dark">
-              <div className="bento-visual">
-                <Orb size={40} eyeR={12} faceColor="#ffffff" eyeColor="#0f0f0f" />
-                <div className="bento-bubble">“Book me a haircut Tuesday.”</div>
+          <div className="eyebrow">One agent, many identities</div>
+          <h2>ONE for Life. ONE for Business.</h2>
+          <p className="lede">
+            The same ONE, in different worlds — switch identities without switching apps.
+          </p>
+          <div className="duo">
+            <div className="duo-card">
+              <span className="duo-tag">👤 ONE for Life</span>
+              <h3>Your personal life, handled</h3>
+              <p>Health, learning, home, family, errands, legal. Say what you want to move forward — ONE keeps every process alive and shows you the next step.</p>
+              <div className="duo-list">
+                <span>Book appointments and track them to done</span>
+                <span>Licenses, moving, travel, health goals</span>
+                <span>Remembers your people, files, and decisions</span>
               </div>
-              <h3>One sentence becomes a process</h3>
-              <p>What you say turns into a living process — with a goal, the steps, and the next thing to do.</p>
             </div>
-
-            <div className="bento-card span-3">
-              <div className="bento-chips">
-                <span>👤 Personal</span>
-                <span>🏢 Business</span>
-                <span>👪 Family</span>
+            <div className="duo-card">
+              <span className="duo-tag">🏢 ONE for Business</span>
+              <h3>Your business has a ONE, too</h3>
+              <p>Give your business its own ONE. Customers&apos; ONEs talk to it — bookings, followers, and a customer list, without a call centre.</p>
+              <div className="duo-list">
+                <span>Bookings become cards for both sides</span>
+                <span>See your followers and customers</span>
+                <span>Describe your business once — it&apos;s live</span>
               </div>
-              <h3>One agent, many identities</h3>
-              <p>The same ONE for your health and your home — and for a business you run. Different worlds, one agent.</p>
-            </div>
-
-            <div className="bento-card span-2">
-              <div className="bento-icon">🧠</div>
-              <h3>It remembers</h3>
-              <p>Files, decisions, people, and where you left off — pinned to the process, not lost in a chat.</p>
-            </div>
-
-            <div className="bento-card span-2">
-              <div className="bento-icon">➡️</div>
-              <h3>Shows the next step</h3>
-              <p>Not the whole list — the one thing to do now, based on what&apos;s actually happening.</p>
-            </div>
-
-            <div className="bento-card span-2">
-              <div className="bento-icon">🔒</div>
-              <h3>Yours, and private</h3>
-              <p>No account needed to start. Sign in when you want ONE to follow you across devices.</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── businesses ── */}
-      <section className="section center" id="connections">
+      {/* ── businesses connect (the network in action) ── */}
+      <section className="section center reveal" id="connections">
         <div className="shell narrow">
           <div className="eyebrow">The network</div>
           <h2>
-            Businesses have a <span className="accent-italic">ONE</span>, too.
+            Your ONE talks to <span className="accent-italic">their</span> ONE.
           </h2>
           <p className="lede">
-            Book a haircut, a driving lesson, a move — your ONE talks to the
-            business&apos;s ONE. The booking becomes a card for both of you, around
-            the process itself, not one endless chat.
+            Book a haircut, a driving lesson, a move — your ONE connects to the
+            business&apos;s ONE around the process itself, and the booking becomes a
+            card for both of you.
           </p>
           <div className="connect" style={{ marginTop: 48 }}>
             <div className="connect-side">
@@ -358,8 +371,53 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── pricing ── */}
+      <section className="section center reveal" id="pricing">
+        <div className="shell">
+          <div className="eyebrow">Plans</div>
+          <h2>Start free. Grow when you&apos;re ready.</h2>
+          <div className="plans">
+            <div className="plan">
+              <div className="plan-name">ONE Free</div>
+              <div className="plan-price">$0<small> / forever</small></div>
+              <p className="plan-blurb">Move your first things forward — no account needed.</p>
+              <div className="plan-feats">
+                <span>Unlimited processes</span>
+                <span>One personal identity</span>
+                <span>Works on this device</span>
+              </div>
+              <Link className="btn btn-ghost" href="/app">Start free</Link>
+            </div>
+            <div className="plan plan-featured">
+              <div className="plan-name">ONE Plus</div>
+              <div className="plan-price">$8<small> / month</small></div>
+              <p className="plan-blurb">Your whole life, synced and remembered everywhere.</p>
+              <div className="plan-feats">
+                <span>Everything in Free</span>
+                <span>Sync across all your devices</span>
+                <span>Full memory &amp; history</span>
+                <span>Connect calendar, email, files</span>
+              </div>
+              <Link className="btn btn-primary" href="/app">Start with Plus</Link>
+            </div>
+            <div className="plan">
+              <div className="plan-name">ONE Business</div>
+              <div className="plan-price">$29<small> / month</small></div>
+              <p className="plan-blurb">Give your business a ONE customers can reach.</p>
+              <div className="plan-feats">
+                <span>Everything in Plus</span>
+                <span>Business identity + bookings</span>
+                <span>Followers &amp; customer list</span>
+                <span>Team access</span>
+              </div>
+              <Link className="btn btn-ghost" href="/app">Add Business</Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── status ── */}
-      <section className="section soft center" id="status">
+      <section className="section center reveal" id="status">
         <div className="shell narrow">
           <div className="eyebrow">Where we are</div>
           <h2>Open preview.</h2>
@@ -372,7 +430,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── final CTA ── */}
-      <section className="final">
+      <section className="final reveal">
         <h2>
           Start with <span className="accent-italic">one thing</span>.
         </h2>
