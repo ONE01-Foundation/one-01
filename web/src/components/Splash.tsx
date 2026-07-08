@@ -49,11 +49,11 @@ export function Splash({
     }
 
     const timers: number[] = [];
-    // Kick the grow on the next frame so the transition actually runs.
+    // Kick the rise on the next frame so the transition actually runs.
     const raf = requestAnimationFrame(() => setGrown(true));
-    timers.push(window.setTimeout(() => setEyes(true), 620));
-    timers.push(window.setTimeout(() => setLeaving(true), 1500));
-    timers.push(window.setTimeout(() => setMounted(false), 1980));
+    timers.push(window.setTimeout(() => setEyes(true), 780));
+    timers.push(window.setTimeout(() => setLeaving(true), 1650));
+    timers.push(window.setTimeout(() => setMounted(false), 2120));
     return () => {
       cancelAnimationFrame(raf);
       timers.forEach((t) => clearTimeout(t));
@@ -70,7 +70,12 @@ export function Splash({
     >
       <div
         className="one-splash-face"
-        style={{ transform: `scale(${grown ? 1 : 0.34})`, opacity: grown ? 1 : 0.85 }}
+        style={{
+          // Starts lower + larger (near screen centre), then rises to the
+          // page's orb spot while shrinking to size — becoming the character.
+          transform: grown ? "translateY(0) scale(1)" : "translateY(15vh) scale(1.65)",
+          opacity: 1,
+        }}
       >
         <div className="one-splash-breath">
           <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
