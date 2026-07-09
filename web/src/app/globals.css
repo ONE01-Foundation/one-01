@@ -3314,7 +3314,9 @@ footer {
   margin: 64px auto 0;
   max-width: 560px;
   background: var(--bg-card);
-  border-radius: 28px;
+  /* A clean rectangle (barely-softened corners) rather than a heavily rounded
+     card, while still floating on its shadow. */
+  border-radius: 8px;
   padding: 40px 32px 34px;
   text-align: center;
   box-shadow: 0 30px 70px -28px rgba(10, 10, 10, 0.32), 0 6px 20px -12px rgba(10, 10, 10, 0.14);
