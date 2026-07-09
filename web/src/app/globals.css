@@ -326,8 +326,8 @@
   gap: 10px;
   padding: 13px;
   border-radius: 14px;
-  border: 1px solid var(--line-strong);
-  background: var(--bg-card);
+  border: none;
+  background: var(--bg-soft);
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
@@ -335,7 +335,7 @@
   transition: background 140ms ease;
 }
 .signin-google:hover {
-  background: var(--bg-soft);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .signin-or {
   width: 100%;
@@ -595,9 +595,9 @@ button {
   background: color-mix(in srgb, var(--bg-card) 80%, transparent);
   backdrop-filter: saturate(180%) blur(18px);
   -webkit-backdrop-filter: saturate(180%) blur(18px);
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 999px;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.07);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.09);
 }
 .nav-brand {
   display: flex;
@@ -1149,7 +1149,8 @@ h3 {
 .connect {
   margin-top: 56px;
   background: var(--bg-card);
-  border: 1px solid var(--line);
+  border: none;
+  box-shadow: 0 6px 30px rgba(10, 10, 10, 0.06);
   border-radius: 28px;
   padding: 48px 32px;
   display: grid;
@@ -1169,7 +1170,7 @@ h3 {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: #0a0a0a;
+  background: var(--orb);
   margin: 0 auto 18px;
   position: relative;
 }
@@ -1180,7 +1181,7 @@ h3 {
   top: 50%;
   width: 11px;
   height: 11px;
-  background: #fff;
+  background: var(--orb-eye);
   border-radius: 50%;
   transform: translateY(-50%);
 }
@@ -1450,9 +1451,10 @@ footer {
 }
 .step {
   padding: 34px 30px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 22px;
-  background: var(--bg);
+  background: var(--bg-card);
+  box-shadow: 0 4px 24px rgba(10, 10, 10, 0.05);
 }
 .step-n {
   display: inline-flex;
@@ -1554,9 +1556,10 @@ footer {
 }
 .concept {
   padding: 34px 28px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 22px;
   background: var(--bg-card);
+  box-shadow: 0 4px 24px rgba(10, 10, 10, 0.05);
   text-align: left;
 }
 .concept-key {
@@ -1591,9 +1594,10 @@ footer {
 }
 .duo-card {
   padding: 40px 34px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 26px;
   background: var(--bg-card);
+  box-shadow: 0 6px 30px rgba(10, 10, 10, 0.06);
   text-align: left;
 }
 .duo-tag {
@@ -1603,8 +1607,9 @@ footer {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
-  padding: 6px 12px;
-  border: 1px solid var(--line);
+  padding: 7px 14px;
+  border: none;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   border-radius: 999px;
   margin-bottom: 20px;
 }
@@ -1660,16 +1665,16 @@ footer {
 }
 .plan {
   padding: 34px 30px;
-  border: 1px solid var(--line);
+  border: none;
   border-radius: 24px;
   background: var(--bg-card);
+  box-shadow: 0 4px 24px rgba(10, 10, 10, 0.05);
   text-align: left;
   display: flex;
   flex-direction: column;
 }
 .plan-featured {
-  border-color: var(--text);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 18px 48px rgba(10, 10, 10, 0.13);
 }
 .plan-name {
   font-size: 14px;
