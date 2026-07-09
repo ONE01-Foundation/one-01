@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { Orb } from "@/components/Orb";
-import { Splash } from "@/components/Splash";
 import { Sheet } from "@/components/product/Sheet";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
 import { LANDING_COPY, type Lang } from "@/lib/landingCopy";
@@ -113,6 +112,8 @@ function StoreBadge({
 export default function LandingPage() {
   const heroInputRef = useRef<HTMLInputElement>(null);
   const heroRef = useRef<HTMLElement>(null);
+  // The opening "awakening" owns --p until it finishes; scroll takes over after.
+  const introDoneRef = useRef(false);
   const [scrolled, setScrolled] = useState(false);
   const router = useRouter();
 
@@ -127,7 +128,7 @@ export default function LandingPage() {
     const apply = () => {
       raf = 0;
       const el = heroRef.current;
-      if (!el) return;
+      if (!el || !introDoneRef.current) return; // let the awakening own --p first
       const p = Math.min(1, Math.max(0, window.scrollY / (window.innerHeight * 0.68)));
       el.style.setProperty("--p", p.toFixed(4));
     };
@@ -142,6 +143,43 @@ export default function LandingPage() {
       window.removeEventListener("resize", onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
+  }, []);
+
+  // ONE's awakening — the opening IS the hero animating in, the exact reverse of
+  // the scroll-collapse: ONE starts as a dot at the centre of the screen, then
+  // grows/rises into place while its eyes open and the broadcast, input and
+  // arrows fade in. No separate splash overlay — it's the home's own elements.
+  // Runs on every load; scroll takes over the moment it finishes.
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el) return;
+    // Hand --p straight to the current scroll position (no awakening).
+    const syncToScroll = () => {
+      introDoneRef.current = true;
+      const p = Math.min(1, Math.max(0, window.scrollY / (window.innerHeight * 0.68)));
+      el.style.setProperty("--p", p.toFixed(4));
+    };
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    // Only awaken when entering at the very top; if the page loads already
+    // scrolled (or reduced-motion is on), skip the animation.
+    if (reduce || window.scrollY > 4) {
+      syncToScroll();
+      return;
+    }
+    el.style.setProperty("--p", "1"); // start collapsed: a dot at screen centre
+    const DURATION = 1050;
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // easeOutCubic
+    let raf = 0;
+    let startTs = 0;
+    const step = (ts: number) => {
+      if (!startTs) startTs = ts;
+      const t = Math.min(1, (ts - startTs) / DURATION);
+      el.style.setProperty("--p", (1 - ease(t)).toFixed(4));
+      if (t < 1) raf = requestAnimationFrame(step);
+      else introDoneRef.current = true; // ended at the top → --p=0 is correct
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   // Language: Hebrew-first product, English default on the web with a manual
@@ -423,10 +461,6 @@ export default function LandingPage() {
 
   return (
     <>
-      {/* ONE's awakening — the opening animation replays on every load/refresh
-          of the landing (theme-correct, so it never flashes the wrong colour). */}
-      <Splash always />
-
       {/* ── nav — floating pill, revealed after scrolling into the content ── */}
       <nav className={`nav${scrolled ? " is-scrolled" : ""}`}>
         <div className="nav-inner">
@@ -463,7 +497,7 @@ export default function LandingPage() {
 
       {/* ── hero — the gateway: ONE centre-stage, ready to start ── */}
       <div className="lhero-pin">
-      <section className="lhero" ref={heroRef} style={{ ["--p" as string]: 0 } as React.CSSProperties}>
+      <section className="lhero" ref={heroRef} style={{ ["--p" as string]: 1 } as React.CSSProperties}>
         <div className="lhero-core">
           <button
             type="button"
