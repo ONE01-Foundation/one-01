@@ -8,18 +8,7 @@ import { Orb } from "@/components/Orb";
 import { Splash } from "@/components/Splash";
 import { Sheet } from "@/components/product/Sheet";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
-
-// Rotating prompts ONE "says" in the hero — invites action, like the app's
-// broadcast. The first slot is filled with a time-aware greeting at runtime.
-const HERO_PROMPTS = [
-  "What would you like to move forward?",
-  "Tell me one thing you want to get done.",
-  "What's been sitting on your list too long?",
-  "A trip, a booking, a license — where do we start?",
-  "Name it. I'll carry it to done.",
-  "Say it once. I'll turn it into a process that moves.",
-  "Big or small — what should we handle first?",
-];
+import { LANDING_COPY, type Lang } from "@/lib/landingCopy";
 
 function GoogleG() {
   return (
@@ -88,6 +77,38 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const router = useRouter();
 
+  // Language: Hebrew-first product, English default on the web with a manual
+  // toggle. On first load we honour a saved choice, else the browser language.
+  const [lang, setLang] = useState<Lang>("en");
+  useEffect(() => {
+    let initial: Lang = "en";
+    try {
+      const s = localStorage.getItem("one_web_lang");
+      if (s === "en" || s === "he") initial = s;
+      else if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("he"))
+        initial = "he";
+    } catch {
+      /* ignore */
+    }
+    setLang(initial);
+  }, []);
+  const t = LANDING_COPY[lang];
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = t.dir;
+  }, [lang, t.dir]);
+  const toggleLang = () => {
+    setLang((prev) => {
+      const next = prev === "he" ? "en" : "he";
+      try {
+        localStorage.setItem("one_web_lang", next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   // Ready to type from the moment ONE appears — focus (blinking caret) without
   // yanking the page's scroll position.
   useEffect(() => {
@@ -139,16 +160,24 @@ export default function LandingPage() {
   // The gateway: type an intention → step into the product with it in hand.
   const [heroDraft, setHeroDraft] = useState("");
   const [heroFocused, setHeroFocused] = useState(false);
-  const [greeting, setGreeting] = useState("Hello.");
 
-  // Time-aware greeting, set on the client to avoid an SSR/hydration mismatch.
+  // Time-aware greeting, resolved on the client to avoid an SSR/hydration
+  // mismatch (starts as a neutral "hello" until the hour is known).
+  const [hour, setHour] = useState<number | null>(null);
   useEffect(() => {
-    const h = new Date().getHours();
-    setGreeting(h < 12 ? "Good morning." : h < 18 ? "Good afternoon." : "Good evening.");
+    setHour(new Date().getHours());
   }, []);
+  const greeting =
+    hour == null
+      ? t.hero.greetings.hello
+      : hour < 12
+      ? t.hero.greetings.morning
+      : hour < 18
+      ? t.hero.greetings.afternoon
+      : t.hero.greetings.evening;
 
   // ONE's rotating "broadcast" in the hero (fades between lines), like the app.
-  const heroLines = useMemo(() => [greeting, ...HERO_PROMPTS], [greeting]);
+  const heroLines = useMemo(() => [greeting, ...t.hero.prompts], [greeting, t]);
   const [bi, setBi] = useState(0);
   const [bfade, setBfade] = useState(false);
   useEffect(() => {
@@ -168,14 +197,14 @@ export default function LandingPage() {
   const [authMsg, setAuthMsg] = useState<string | null>(null);
   const sendMagicLink = async () => {
     if (!email.trim()) return;
-    setAuthMsg("Sending…");
+    setAuthMsg(t.signin.sending);
     const res = await signInWithEmail(email.trim());
-    setAuthMsg(res.ok ? "Check your inbox for the link." : res.error ?? "Couldn't send the link.");
+    setAuthMsg(res.ok ? t.signin.sent : res.error ?? t.signin.failed);
   };
 
   const startWith = (text: string) => {
-    const t = text.trim();
-    router.push(t ? `/app?q=${encodeURIComponent(t)}` : "/app");
+    const s = text.trim();
+    router.push(s ? `/app?q=${encodeURIComponent(s)}` : "/app");
   };
 
   // Nav pill reveals a little AFTER you leave the hero — not the instant it
@@ -219,21 +248,29 @@ export default function LandingPage() {
             <Logo height={22} interactive />
           </Link>
           <div className="nav-links">
-            <a className="nav-link" href="#problem">ONE</a>
-            <a className="nav-link" href="#identity">Life</a>
-            <a className="nav-link" href="#connections">Business</a>
-            <a className="nav-link" href="#pricing">Pricing</a>
+            <a className="nav-link" href="#problem">{t.nav.one}</a>
+            <a className="nav-link" href="#identity">{t.nav.life}</a>
+            <a className="nav-link" href="#connections">{t.nav.business}</a>
+            <a className="nav-link" href="#pricing">{t.nav.pricing}</a>
           </div>
           <div className="nav-right">
             <button
               type="button"
+              className="nav-mode nav-lang"
+              onClick={toggleLang}
+              aria-label={t.aria.switchLang}
+            >
+              {t.aria.langLabel}
+            </button>
+            <button
+              type="button"
               className="nav-mode"
               onClick={toggleTheme}
-              aria-label={isDark ? "Switch to light" : "Switch to dark"}
+              aria-label={isDark ? t.aria.toLight : t.aria.toDark}
             >
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
-            <Link className="btn btn-primary" href="/app">Enter</Link>
+            <Link className="btn btn-primary" href="/app">{t.nav.enter}</Link>
           </div>
         </div>
       </nav>
@@ -259,7 +296,7 @@ export default function LandingPage() {
               eyeColor={isDark ? "#ffffff" : "#f5f4f0"}
             />
           </button>
-          <p className={`lhero-line${bfade ? " is-fading" : ""}`}>{heroLines[bi]}</p>
+          <p className={`lhero-line${bfade ? " is-fading" : ""}`}>{heroLines[bi % heroLines.length]}</p>
           <button
             type="button"
             className="lhero-chev down"
@@ -286,7 +323,7 @@ export default function LandingPage() {
               <input
                 ref={heroInputRef}
                 className="lhero-input"
-                aria-label="Tell ONE what you want to move forward"
+                aria-label={t.hero.inputAria}
                 value={heroDraft}
                 onChange={(e) => setHeroDraft(e.target.value)}
                 onFocus={() => setHeroFocused(true)}
@@ -302,9 +339,9 @@ export default function LandingPage() {
             </button>
           </form>
           <p className="lhero-signin">
-            No account needed to start ·{" "}
+            {t.hero.noAccount} ·{" "}
             <button type="button" className="lhero-link" onClick={() => setSignInOpen(true)}>
-              Already have ONE?
+              {t.hero.haveOne}
             </button>
           </p>
         </div>
@@ -319,22 +356,22 @@ export default function LandingPage() {
             faceColor={isDark ? "#2a2a2a" : "#0a0a0a"}
             eyeColor={isDark ? "#ffffff" : "#f5f4f0"}
           />
-          <h3 className="signin-title">Continue with ONE</h3>
-          <p className="signin-sub">Save your processes and pick up on any device.</p>
+          <h3 className="signin-title">{t.signin.title}</h3>
+          <p className="signin-sub">{t.signin.sub}</p>
           <button className="signin-google" onClick={() => signInWithGoogle()}>
-            <GoogleG /> Continue with Google
+            <GoogleG /> {t.signin.google}
           </button>
-          <div className="signin-or"><span>or</span></div>
+          <div className="signin-or"><span>{t.signin.or}</span></div>
           <div className="signin-mail">
             <input
               className="signin-input"
               type="email"
-              placeholder="you@email.com"
+              placeholder={t.signin.emailPlaceholder}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMagicLink()}
             />
-            <button className="signin-send" onClick={sendMagicLink}>Send link</button>
+            <button className="signin-send" onClick={sendMagicLink}>{t.signin.send}</button>
           </div>
           {authMsg && <p className="signin-msg">{authMsg}</p>}
         </div>
@@ -343,40 +380,28 @@ export default function LandingPage() {
       {/* ── thesis ── */}
       <section className="section center reveal" id="problem">
         <div className="shell narrow">
-          <div className="eyebrow">Why ONE</div>
+          <div className="eyebrow">{t.thesis.eyebrow}</div>
           <h2>
-            One for everything.<br />
-            Everything in <span className="accent-italic">one</span>.
+            {t.thesis.line1}<br />
+            {t.thesis.line2pre}<span className="accent-italic">{t.thesis.accent}</span>{t.thesis.line2post}
           </h2>
-          <p className="lede">
-            Your goals, chats, files, and appointments live in a dozen places —
-            held together by your memory. ONE gives every intention one place to
-            live, and quietly moves it forward.
-          </p>
+          <p className="lede">{t.thesis.lede}</p>
         </div>
       </section>
 
       {/* ── concepts: the vocabulary (ONE · Units · Global) ── */}
       <section className="section center reveal" id="concept">
         <div className="shell">
-          <div className="eyebrow">The idea</div>
-          <h2>Three words. One system.</h2>
+          <div className="eyebrow">{t.concepts.eyebrow}</div>
+          <h2>{t.concepts.h2}</h2>
           <div className="concepts">
-            <div className="concept">
-              <div className="concept-key">ONE</div>
-              <h3>Digital representative</h3>
-              <p>Your agent. You speak in plain words; ONE understands what you mean and acts on your behalf.</p>
-            </div>
-            <div className="concept">
-              <div className="concept-key">Units</div>
-              <h3>Living processes</h3>
-              <p>Each goal becomes a Unit — a small living process holding its steps, files, people, and next move.</p>
-            </div>
-            <div className="concept">
-              <div className="concept-key">Global</div>
-              <h3>The network</h3>
-              <p>Units connect to other ONEs — people and businesses — so things move between you, not inside one app.</p>
-            </div>
+            {t.concepts.items.map((c) => (
+              <div className="concept" key={c.key}>
+                <div className="concept-key">{c.key}</div>
+                <h3>{c.h3}</h3>
+                <p>{c.p}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -384,30 +409,28 @@ export default function LandingPage() {
       {/* ── ONE for Life / ONE for Business ── */}
       <section className="section center reveal" id="identity">
         <div className="shell">
-          <div className="eyebrow">One agent, many identities</div>
-          <h2>ONE for Life. ONE for Business.</h2>
-          <p className="lede">
-            The same ONE, in different worlds — switch identities without switching apps.
-          </p>
+          <div className="eyebrow">{t.duo.eyebrow}</div>
+          <h2>{t.duo.h2}</h2>
+          <p className="lede">{t.duo.lede}</p>
           <div className="duo">
             <div className="duo-card">
-              <span className="duo-tag">👤 ONE for Life</span>
-              <h3>Your personal life, handled</h3>
-              <p>Health, learning, home, family, errands, legal. Say what you want to move forward — ONE keeps every process alive and shows you the next step.</p>
+              <span className="duo-tag">{t.duo.life.tag}</span>
+              <h3>{t.duo.life.h3}</h3>
+              <p>{t.duo.life.p}</p>
               <div className="duo-list">
-                <span>Book appointments and track them to done</span>
-                <span>Licenses, moving, travel, health goals</span>
-                <span>Remembers your people, files, and decisions</span>
+                {t.duo.life.list.map((li, i) => (
+                  <span key={i}>{li}</span>
+                ))}
               </div>
             </div>
             <div className="duo-card">
-              <span className="duo-tag">🏢 ONE for Business</span>
-              <h3>Your business has a ONE, too</h3>
-              <p>Give your business its own ONE. Customers&apos; ONEs talk to it — bookings, followers, and a customer list, without a call centre.</p>
+              <span className="duo-tag">{t.duo.business.tag}</span>
+              <h3>{t.duo.business.h3}</h3>
+              <p>{t.duo.business.p}</p>
               <div className="duo-list">
-                <span>Bookings become cards for both sides</span>
-                <span>See your followers and customers</span>
-                <span>Describe your business once — it&apos;s live</span>
+                {t.duo.business.list.map((li, i) => (
+                  <span key={i}>{li}</span>
+                ))}
               </div>
             </div>
           </div>
@@ -417,31 +440,27 @@ export default function LandingPage() {
       {/* ── businesses connect (the network in action) ── */}
       <section className="section center reveal" id="connections">
         <div className="shell narrow">
-          <div className="eyebrow">The network</div>
+          <div className="eyebrow">{t.network.eyebrow}</div>
           <h2>
-            Your ONE talks to <span className="accent-italic">their</span> ONE.
+            {t.network.h2pre}<span className="accent-italic">{t.network.h2accent}</span>{t.network.h2post}
           </h2>
-          <p className="lede">
-            Book a haircut, a driving lesson, a move — your ONE connects to the
-            business&apos;s ONE around the process itself, and the booking becomes a
-            card for both of you.
-          </p>
+          <p className="lede">{t.network.lede}</p>
           <div className="connect" style={{ marginTop: 48 }}>
             <div className="connect-side">
               <div className="connect-orb" />
-              <div className="connect-name">Your ONE</div>
-              <div className="connect-role">Personal</div>
-              <div className="connect-sub">💈 Hair Appointment</div>
+              <div className="connect-name">{t.network.yourOne}</div>
+              <div className="connect-role">{t.network.personal}</div>
+              <div className="connect-sub">{t.network.hairAppt}</div>
             </div>
             <div className="connect-bridge">
               <div className="connect-bridge-line">↔</div>
-              <div className="connect-bridge-label">connected around the process</div>
+              <div className="connect-bridge-label">{t.network.connectedLabel}</div>
             </div>
             <div className="connect-side">
               <div className="connect-orb" />
-              <div className="connect-name">Sarah Salon&apos;s ONE</div>
-              <div className="connect-role">Business</div>
-              <div className="connect-sub">📅 Booking · Tuesday 18:00</div>
+              <div className="connect-name">{t.network.salonOne}</div>
+              <div className="connect-role">{t.network.business}</div>
+              <div className="connect-sub">{t.network.booking}</div>
             </div>
           </div>
         </div>
@@ -450,44 +469,30 @@ export default function LandingPage() {
       {/* ── pricing ── */}
       <section className="section center reveal" id="pricing">
         <div className="shell">
-          <div className="eyebrow">Plans</div>
-          <h2>Start free. Grow when you&apos;re ready.</h2>
+          <div className="eyebrow">{t.pricing.eyebrow}</div>
+          <h2>{t.pricing.h2}</h2>
           <div className="plans">
-            <div className="plan">
-              <div className="plan-name">ONE Free</div>
-              <div className="plan-price">$0<small> / forever</small></div>
-              <p className="plan-blurb">Move your first things forward — no account needed.</p>
-              <div className="plan-feats">
-                <span>Unlimited processes</span>
-                <span>One personal identity</span>
-                <span>Works on this device</span>
-              </div>
-              <Link className="btn btn-ghost" href="/app">Start free</Link>
-            </div>
-            <div className="plan plan-featured">
-              <div className="plan-name">ONE Plus</div>
-              <div className="plan-price">$8<small> / month</small></div>
-              <p className="plan-blurb">Your whole life, synced and remembered everywhere.</p>
-              <div className="plan-feats">
-                <span>Everything in Free</span>
-                <span>Sync across all your devices</span>
-                <span>Full memory &amp; history</span>
-                <span>Connect calendar, email, files</span>
-              </div>
-              <Link className="btn btn-primary" href="/app">Start with Plus</Link>
-            </div>
-            <div className="plan">
-              <div className="plan-name">ONE Business</div>
-              <div className="plan-price">$29<small> / month</small></div>
-              <p className="plan-blurb">Give your business a ONE customers can reach.</p>
-              <div className="plan-feats">
-                <span>Everything in Plus</span>
-                <span>Business identity + bookings</span>
-                <span>Followers &amp; customer list</span>
-                <span>Team access</span>
-              </div>
-              <Link className="btn btn-ghost" href="/app">Add Business</Link>
-            </div>
+            {t.pricing.plans.map((p, i) => {
+              const featured = i === 1;
+              const per = i === 0 ? t.pricing.perForever : t.pricing.perMonth;
+              const btnClass = featured ? "btn btn-primary" : "btn btn-ghost";
+              return (
+                <div className={featured ? "plan plan-featured" : "plan"} key={p.name}>
+                  <div className="plan-name">{p.name}</div>
+                  <div className="plan-price">
+                    {p.price}
+                    <small>{per}</small>
+                  </div>
+                  <p className="plan-blurb">{p.blurb}</p>
+                  <div className="plan-feats">
+                    {p.feats.map((f, fi) => (
+                      <span key={fi}>{f}</span>
+                    ))}
+                  </div>
+                  <Link className={btnClass} href="/app">{p.cta}</Link>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -495,24 +500,20 @@ export default function LandingPage() {
       {/* ── status ── */}
       <section className="section center reveal" id="status">
         <div className="shell narrow">
-          <div className="eyebrow">Where we are</div>
-          <h2>Open preview.</h2>
-          <p className="lede">
-            The interface is real and complete — every screen, gesture, and flow.
-            The intelligence and the connected network are shipping next. No account
-            needed to try it today.
-          </p>
+          <div className="eyebrow">{t.status.eyebrow}</div>
+          <h2>{t.status.h2}</h2>
+          <p className="lede">{t.status.lede}</p>
         </div>
       </section>
 
       {/* ── final CTA ── */}
       <section className="final reveal">
         <h2>
-          Start with <span className="accent-italic">one thing</span>.
+          {t.final.pre}<span className="accent-italic">{t.final.accent}</span>{t.final.post}
         </h2>
-        <p className="lede">Tell ONE what matters. It will help move it forward.</p>
+        <p className="lede">{t.final.lede}</p>
         <div className="final-ctas">
-          <Link className="btn btn-primary btn-lg" href="/app">Start with ONE →</Link>
+          <Link className="btn btn-primary btn-lg" href="/app">{t.final.cta}</Link>
         </div>
       </section>
 
@@ -527,9 +528,9 @@ export default function LandingPage() {
             </svg>
           </Link>
           <nav className="foot-links">
-            <a href="#problem">About</a>
-            <a href="mailto:hello@one01.io">Support</a>
-            <a href="#">Legal</a>
+            <a href="#problem">{t.foot.about}</a>
+            <a href="mailto:hello@one01.io">{t.foot.support}</a>
+            <a href="#">{t.foot.legal}</a>
           </nav>
           <span className="foot-copy">© 2026 ONE01</span>
         </div>

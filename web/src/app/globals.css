@@ -1745,6 +1745,12 @@ footer {
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
 }
+/* Language toggle — text ("עב" / "EN") in the same round chip as the theme toggle. */
+.nav-lang {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 
 /* ─── logo hover: "01" fades out, ONE opens living eyes on the orb ─── */
 .logo-01 {
@@ -2840,4 +2846,18 @@ footer {
 .step-item.done .step-text {
   color: var(--p-text-3);
   text-decoration: line-through;
+}
+
+/* ─── RTL (Hebrew) ─────────────────────────────────────────
+   Most of the landing is flex/grid, so dir="rtl" mirrors it for free.
+   These are the few places that pin a physical side or align text left. */
+[dir="rtl"] .concept,
+[dir="rtl"] .duo-card,
+[dir="rtl"] .plan {
+  text-align: right;
+}
+/* Resting caret sits at the reading edge — right in RTL. */
+[dir="rtl"] .lhero-caret {
+  left: auto;
+  right: 5px;
 }
