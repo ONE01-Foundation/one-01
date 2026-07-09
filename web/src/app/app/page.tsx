@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Orb } from "@/components/Orb";
+import { Logo } from "@/components/Logo";
 import { Splash } from "@/components/Splash";
 import { Sheet } from "@/components/product/Sheet";
 import {
@@ -783,6 +784,17 @@ export default function AppHome() {
   return (
     <main className="product-root">
       <Splash bg="var(--p-bg)" />
+      {/* Floating pill header — matches the landing nav, ties the product back to
+          the site. Kept minimal (brand + back-to-site) while the desktop product
+          structure is still being decided. */}
+      <nav className="app-topbar">
+        <Link href="/" className="app-topbar-brand" aria-label="ONE01 home">
+          <Logo height={20} />
+        </Link>
+        <Link href="/" className="app-topbar-back">
+          ← Back to site
+        </Link>
+      </nav>
       <div className="app-shell">
         {/* LEFT rail — a sidebar on desktop, a compact top header on mobile */}
         <aside className="app-side">

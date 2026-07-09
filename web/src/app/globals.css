@@ -1829,6 +1829,47 @@ footer {
   justify-content: center;
 }
 
+/* Floating pill header on /app — mirrors the landing nav so the product reads
+   as part of the same site. Floats in the space above the app card; hidden on
+   phone-shaped screens where the sidebar becomes the top header. */
+.app-topbar {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: none;
+  align-items: center;
+  gap: 18px;
+  padding: 9px 12px 9px 20px;
+  background: var(--p-surface);
+  border-radius: 999px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.12);
+}
+@media (min-width: 900px) {
+  .app-topbar {
+    display: flex;
+  }
+}
+.app-topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  color: var(--p-text);
+}
+.app-topbar-back {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--p-text-2);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+  transition: background 140ms ease, color 140ms ease;
+}
+.app-topbar-back:hover {
+  background: color-mix(in srgb, var(--p-text) 10%, transparent);
+  color: var(--p-text);
+}
+
 /* App shell — a phone-shaped panel on small screens; a real two-column desktop
    workspace (sidebar + main) from 900px up. */
 .app-shell {
