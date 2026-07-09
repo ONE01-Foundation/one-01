@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 // Flaticon Uicons — regular-rounded family only (one bundled webfont, no CDN).
-// Used for the concept/network icons instead of emoji. Attribution in the footer.
+// Used for the concept/network icons instead of emoji. Covered by the account's
+// Flaticon Premium license, so no attribution credit is required.
 import "@flaticon/flaticon-uicons/css/regular/rounded.css";
 
 export const metadata: Metadata = {
