@@ -117,22 +117,20 @@
   width: 30px;
   height: 30px;
 }
+/* Quiet, always-present gateway hints — a steady subtle grey, no auto-hide. */
 .lhero-chev.up {
   top: 34px;
-  opacity: 0.3;
-  animation: chevFade 0.9s ease 5s forwards;
+  opacity: 0.28;
 }
 .lhero-chev.down {
   bottom: 34px;
   cursor: pointer;
-  animation:
-    lheroBob 2.4s ease-in-out infinite,
-    chevFade 0.9s ease 5s forwards;
+  opacity: 0.28;
+  animation: lheroBob 2.4s ease-in-out infinite;
+  transition: opacity 160ms ease;
 }
-@keyframes chevFade {
-  to {
-    opacity: 0;
-  }
+.lhero-chev.down:hover {
+  opacity: 0.55;
 }
 .lhero-orb-btn {
   background: transparent;
@@ -210,6 +208,9 @@
   border-radius: 999px;
   padding: 8px 9px;
   box-shadow: 0 16px 44px rgba(10, 10, 10, 0.1);
+  /* Keep the controls fixed — plus at the start, voice at the end — in every
+     language. The input itself follows the typed text (dir="auto"). */
+  direction: ltr;
 }
 .lhero-plus,
 .lhero-voice {
@@ -274,8 +275,10 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: var(--text);
-  color: var(--bg);
+  /* Match ONE's face (Expo): near-black in light, soft charcoal in dark — so it
+     isn't a glaring white disc in dark mode. */
+  background: var(--orb);
+  color: var(--orb-eye);
 }
 .lhero-voice:hover {
   transform: scale(1.06);
@@ -2917,11 +2920,6 @@ footer {
 [dir="rtl"] .duo-card,
 [dir="rtl"] .plan {
   text-align: right;
-}
-/* Resting caret sits at the reading edge — right in RTL. */
-[dir="rtl"] .lhero-caret {
-  left: auto;
-  right: 5px;
 }
 
 /* ─── docs pages (About / Support / Legal) — real routes in the site's style ──

@@ -323,6 +323,7 @@ export default function LandingPage() {
               <input
                 ref={heroInputRef}
                 className="lhero-input"
+                dir="auto"
                 aria-label={t.hero.inputAria}
                 value={heroDraft}
                 onChange={(e) => setHeroDraft(e.target.value)}
