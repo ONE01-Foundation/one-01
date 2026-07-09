@@ -296,6 +296,61 @@ export default function LandingPage() {
     }
   };
 
+  // Global sheet — scrolling UP at the top of the page (or tapping the ↑ chevron)
+  // pulls up a full-screen view of the network, like opening Global on mobile.
+  const [globalOpen, setGlobalOpen] = useState(false);
+  useEffect(() => {
+    if (globalOpen) return;
+    let acc = 0;
+    let t = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (window.scrollY > 2) {
+        acc = 0;
+        return;
+      }
+      if (e.deltaY < 0) {
+        acc += -e.deltaY;
+        if (acc > 130) {
+          acc = 0;
+          setGlobalOpen(true);
+        }
+      } else {
+        acc = 0;
+      }
+      window.clearTimeout(t);
+      t = window.setTimeout(() => (acc = 0), 260);
+    };
+    let startY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (window.scrollY > 2) return;
+      if ((e.touches[0]?.clientY ?? 0) - startY > 90) setGlobalOpen(true);
+    };
+    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.clearTimeout(t);
+    };
+  }, [globalOpen]);
+  useEffect(() => {
+    if (!globalOpen) return;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setGlobalOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [globalOpen]);
+
   // Nav pill reveals a little AFTER you leave the hero — not the instant it
   // scrolls out — so the gateway stays clean and the pill feels intentional.
   useEffect(() => {
@@ -367,9 +422,14 @@ export default function LandingPage() {
       <div className="lhero-pin">
       <section className="lhero" ref={heroRef} style={{ ["--p" as string]: 0 } as React.CSSProperties}>
         <div className="lhero-core">
-          <span className="lhero-chev up" aria-hidden="true">
+          <button
+            type="button"
+            className="lhero-chev up"
+            onClick={() => setGlobalOpen(true)}
+            aria-label={t.global.hint}
+          >
             <ChevronUp />
-          </span>
+          </button>
           <button
             type="button"
             className="lhero-orb-btn"
@@ -659,6 +719,49 @@ export default function LandingPage() {
           </button>
         </div>
       )}
+
+      {/* Global — a full-screen network view pulled up by scrolling up at the top. */}
+      <div className={`gsheet${globalOpen ? " open" : ""}`} aria-hidden={!globalOpen}>
+        <div className="gsheet-scrim" onClick={() => setGlobalOpen(false)} />
+        <div
+          className="gsheet-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.global.title}
+          onWheel={(e) => {
+            if (e.currentTarget.scrollTop <= 0 && e.deltaY > 40) setGlobalOpen(false);
+          }}
+        >
+          <button className="gsheet-grab" onClick={() => setGlobalOpen(false)} aria-label="Close Global" />
+          <button className="gsheet-close" onClick={() => setGlobalOpen(false)} aria-label="Close">
+            ✕
+          </button>
+          <div className="gsheet-inner">
+            <div className="eyebrow">{t.global.eyebrow}</div>
+            <h2 className="gsheet-title">{t.global.title}</h2>
+            <p className="gsheet-sub">{t.global.sub}</p>
+            <div className="connect gsheet-connect">
+              <div className="connect-side">
+                <div className="connect-orb" />
+                <div className="connect-name">{t.network.yourOne}</div>
+                <div className="connect-role">{t.network.yourRole}</div>
+                <div className="connect-sub">{t.network.yourProcess}</div>
+              </div>
+              <div className="connect-bridge">
+                <div className="connect-bridge-line">↔</div>
+                <div className="connect-bridge-label">{t.network.connectedLabel}</div>
+              </div>
+              <div className="connect-side">
+                <div className="connect-orb" />
+                <div className="connect-name">{t.network.providerName}</div>
+                <div className="connect-role">{t.network.providerRole}</div>
+                <div className="connect-sub">{t.network.providerStatus}</div>
+              </div>
+            </div>
+            <Link className="btn btn-primary btn-lg gsheet-cta" href="/app">{t.global.cta}</Link>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

@@ -69,6 +69,7 @@ export interface LandingCopy {
     googlePlayName: string;
   };
   mobileBanner: { title: string; sub: string; cta: string; dismiss: string };
+  global: { eyebrow: string; title: string; sub: string; cta: string; hint: string };
   final: { pre: string; accent: string; post: string; lede: string; cta: string };
   foot: { about: string; support: string; legal: string };
   aria: { toLight: string; toDark: string; switchLang: string; langLabel: string };
@@ -88,10 +89,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       prompts: [
         "What would you like to move forward?",
         "Name one thing you want handled.",
-        "What's been sitting on your list too long?",
+        "Scroll down and watch me fold into a dot.",
         "Point me at something big — I'll break it into a plan.",
         "Say it once. I'll carry it to done.",
-        "Tell me the outcome. I'll work out the steps.",
+        "Scroll up to open Global — the network of ONEs.",
         "Big or small — what should we start with?",
       ],
       noAccount: "No account needed to start",
@@ -229,6 +230,13 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       cta: "Open ONE",
       dismiss: "Dismiss",
     },
+    global: {
+      eyebrow: "Global",
+      title: "The network of ONEs.",
+      sub: "Your ONE doesn't work alone. It connects to the ONEs of people, businesses, and institutions — so things move between representatives, around the process itself.",
+      cta: "Step into the network →",
+      hint: "Scroll up for Global",
+    },
     final: {
       pre: "Start with ",
       accent: "one thing",
@@ -258,10 +266,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       prompts: [
         "מה תרצה לקדם?",
         "תן לי דבר אחד שאתה רוצה שיטופל.",
-        "מה יושב לך ברשימה כבר יותר מדי זמן?",
+        "גלול למטה וראה איך אני מתקפל לנקודה.",
         "כוון אותי למשהו גדול — ואני אפרק אותו לתוכנית.",
         "אמור את זה פעם אחת. אני אקח את זה עד הסוף.",
-        "תגיד לי את התוצאה. אני אבנה את הצעדים.",
+        "גלול למעלה כדי לפתוח את גלובל — רשת ה-ONEs.",
         "גדול או קטן — במה נתחיל?",
       ],
       noAccount: "אפשר להתחיל בלי חשבון",
@@ -398,6 +406,13 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       sub: "פתחו את האפליקציה והתחילו בשניות.",
       cta: "פתח את ONE",
       dismiss: "סגור",
+    },
+    global: {
+      eyebrow: "גלובל",
+      title: "רשת ה-ONEs.",
+      sub: "ה-ONE שלך לא עובד לבד. הוא מתחבר ל-ONEs של אנשים, עסקים ומוסדות — כך שדברים זזים בין נציגים, סביב התהליך עצמו.",
+      cta: "היכנס לרשת ←",
+      hint: "גלול למעלה לגלובל",
     },
     final: {
       pre: "התחל עם ",
