@@ -84,36 +84,47 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  /* The whole gateway (orb · broadcast · input) reads as ONE centred group. */
+  justify-content: center;
   text-align: center;
   padding: 0 24px;
+  position: relative;
 }
-/* The living core (chevron · orb · broadcast · chevron) — fills the space above
-   the dock so the broadcast lands around the vertical centre and the orb rides
-   a little higher. */
+/* The living core: orb + rotating broadcast, sitting tight together. */
 .lhero-core {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 0;
-  /* Bias the whole group just slightly above dead-centre. */
-  padding-bottom: 5vh;
 }
+/* Chevrons are pinned to the top/bottom edges of the hero as quiet gateway
+   hints — they frame the composition without pushing the input away from it.
+   Centred via left:50% + negative margin (a 30px icon) so the down-chevron's
+   translateY bob doesn't fight a translateX centring transform. */
 .lhero-chev {
   color: var(--text-3);
   background: transparent;
   border: none;
   line-height: 0;
+  padding: 0;
+}
+.lhero-chev.up,
+.lhero-chev.down {
+  position: absolute;
+  left: 50%;
+  margin-left: -15px;
+  width: 30px;
+  height: 30px;
 }
 .lhero-chev.up {
+  top: 34px;
   opacity: 0.3;
-  margin-bottom: 104px;
   animation: chevFade 0.9s ease 5s forwards;
 }
 .lhero-chev.down {
+  bottom: 34px;
   cursor: pointer;
-  margin-top: 104px;
   animation:
     lheroBob 2.4s ease-in-out infinite,
     chevFade 0.9s ease 5s forwards;
@@ -163,7 +174,7 @@
   /* Fixed two-line height so the orb + chevrons never shift when the rotating
      broadcast is one line vs two — and the text is TOP-aligned so a single line
      sits close to the orb (the reserved second line grows downward). */
-  margin-top: 30px;
+  margin-top: 24px;
   min-height: 2.7em;
   max-width: 30ch;
   display: flex;
@@ -181,13 +192,13 @@
 .lhero-line.is-fading {
   opacity: 0;
 }
-/* Bottom dock — mobile-style input capsule + sign-in line. */
+/* Input dock — sits directly under the broadcast as part of the centred group,
+   so "type here" reads as the next beat after ONE's prompt (not a bar stranded
+   at the bottom of the screen). */
 .lhero-dockwrap {
   width: 100%;
-  max-width: 620px;
-  margin: 0 auto;
-  /* Lift the dock + sign-in line well clear of the bottom edge. */
-  padding-bottom: 104px;
+  max-width: 600px;
+  margin: 44px auto 0;
 }
 .lhero-dock {
   width: 100%;
@@ -1501,12 +1512,19 @@ footer {
   flex-wrap: wrap;
   justify-content: center;
 }
-.foot-links a {
+.foot-links a,
+.foot-links button {
   font-size: 15px;
   font-weight: 500;
   color: var(--text-2);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
 }
-.foot-links a:hover {
+.foot-links a:hover,
+.foot-links button:hover {
   color: var(--text);
 }
 .foot-copy {
@@ -2860,4 +2878,201 @@ footer {
 [dir="rtl"] .lhero-caret {
   left: auto;
   right: 5px;
+}
+
+/* ─── docs panel (footer About / Support / Legal) — GitBook-style ─────────
+   A floating rounded card that slides in from the reading-end edge, over a
+   light scrim. Sidebar of pages + scrolling content pane. */
+.docs-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(10, 10, 10, 0);
+  transition: background 240ms ease;
+}
+.docs-scrim.in {
+  background: rgba(10, 10, 10, 0.3);
+  backdrop-filter: blur(2px);
+}
+[dir="rtl"] .docs-scrim {
+  justify-content: flex-start;
+}
+.docs-panel {
+  width: min(760px, 94vw);
+  height: calc(100vh - 40px);
+  margin: 20px;
+  background: var(--bg-card);
+  border-radius: 24px;
+  box-shadow: 0 30px 90px rgba(10, 10, 10, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(34px);
+  transition:
+    transform 320ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    opacity 240ms ease;
+}
+.docs-panel.in {
+  opacity: 1;
+  transform: none;
+}
+[dir="rtl"] .docs-panel {
+  transform: translateX(-34px);
+}
+[dir="rtl"] .docs-panel.in {
+  transform: none;
+}
+.docs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  flex-shrink: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+.docs-head-title {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.docs-close {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 140ms ease, color 140ms ease;
+}
+.docs-close:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
+.docs-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.docs-nav {
+  width: 208px;
+  flex-shrink: 0;
+  padding: 18px 14px;
+  overflow-y: auto;
+  border-right: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+[dir="rtl"] .docs-nav {
+  border-right: none;
+  border-left: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+.docs-nav-group {
+  margin-bottom: 18px;
+}
+.docs-nav-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 6px 12px;
+}
+.docs-nav-item {
+  display: block;
+  width: 100%;
+  text-align: start;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.docs-nav-item:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+.docs-nav-item.active {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+.docs-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 34px 42px 52px;
+  animation: docsFade 320ms ease;
+}
+@keyframes docsFade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.docs-title {
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 18px;
+}
+.docs-para {
+  font-size: 15.5px;
+  line-height: 1.75;
+  color: var(--text-2);
+  margin-bottom: 16px;
+  max-width: 62ch;
+}
+@media (max-width: 640px) {
+  .docs-panel {
+    width: 100vw;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+  .docs-body {
+    flex-direction: column;
+  }
+  .docs-nav {
+    width: auto;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 12px 14px;
+    border-right: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  }
+  [dir="rtl"] .docs-nav {
+    border-left: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  }
+  .docs-nav-group {
+    display: flex;
+    gap: 6px;
+    margin: 0;
+    flex-shrink: 0;
+  }
+  .docs-nav-label {
+    display: none;
+  }
+  .docs-nav-item {
+    white-space: nowrap;
+  }
+  .docs-content {
+    padding: 24px 22px 40px;
+  }
 }

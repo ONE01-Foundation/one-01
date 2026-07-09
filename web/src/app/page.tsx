@@ -7,8 +7,10 @@ import { Logo } from "@/components/Logo";
 import { Orb } from "@/components/Orb";
 import { Splash } from "@/components/Splash";
 import { Sheet } from "@/components/product/Sheet";
+import { DocsPanel } from "@/components/DocsPanel";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
 import { LANDING_COPY, type Lang } from "@/lib/landingCopy";
+import { DOCS, type DocGroupId } from "@/lib/docsContent";
 
 function GoogleG() {
   return (
@@ -191,6 +193,9 @@ export default function LandingPage() {
     return () => clearInterval(t);
   }, [heroLines.length]);
 
+  // Footer doc panel (About / Support / Legal) — GitBook-style side panel.
+  const [docsGroup, setDocsGroup] = useState<DocGroupId | null>(null);
+
   // Sign-in popup (opened by tapping the Orb), mirroring the mobile SignInSheet.
   const [signInOpen, setSignInOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -288,8 +293,8 @@ export default function LandingPage() {
             aria-label="Sign in to ONE"
           >
             <Orb
-              size={96}
-              eyeR={12}
+              size={84}
+              eyeR={11}
               alive
               className="lhero-orb"
               faceColor={isDark ? "#2a2a2a" : "#0a0a0a"}
@@ -449,8 +454,8 @@ export default function LandingPage() {
             <div className="connect-side">
               <div className="connect-orb" />
               <div className="connect-name">{t.network.yourOne}</div>
-              <div className="connect-role">{t.network.personal}</div>
-              <div className="connect-sub">{t.network.hairAppt}</div>
+              <div className="connect-role">{t.network.yourRole}</div>
+              <div className="connect-sub">{t.network.yourProcess}</div>
             </div>
             <div className="connect-bridge">
               <div className="connect-bridge-line">↔</div>
@@ -458,9 +463,9 @@ export default function LandingPage() {
             </div>
             <div className="connect-side">
               <div className="connect-orb" />
-              <div className="connect-name">{t.network.salonOne}</div>
-              <div className="connect-role">{t.network.business}</div>
-              <div className="connect-sub">{t.network.booking}</div>
+              <div className="connect-name">{t.network.providerName}</div>
+              <div className="connect-role">{t.network.providerRole}</div>
+              <div className="connect-sub">{t.network.providerStatus}</div>
             </div>
           </div>
         </div>
@@ -528,13 +533,16 @@ export default function LandingPage() {
             </svg>
           </Link>
           <nav className="foot-links">
-            <a href="#problem">{t.foot.about}</a>
-            <a href="mailto:hello@one01.io">{t.foot.support}</a>
-            <a href="#">{t.foot.legal}</a>
+            <button type="button" onClick={() => setDocsGroup("about")}>{t.foot.about}</button>
+            <button type="button" onClick={() => setDocsGroup("support")}>{t.foot.support}</button>
+            <button type="button" onClick={() => setDocsGroup("legal")}>{t.foot.legal}</button>
           </nav>
           <span className="foot-copy">© 2026 ONE01</span>
         </div>
       </footer>
+
+      {/* Footer doc panel — About / Support / Legal, GitBook-style side panel. */}
+      <DocsPanel openGroup={docsGroup} onClose={() => setDocsGroup(null)} docs={DOCS[lang]} />
     </>
   );
 }

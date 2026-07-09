@@ -45,12 +45,12 @@ export interface LandingCopy {
     h2post: string;
     lede: string;
     yourOne: string;
-    personal: string;
-    hairAppt: string;
+    yourRole: string;
+    yourProcess: string;
     connectedLabel: string;
-    salonOne: string;
-    business: string;
-    booking: string;
+    providerName: string;
+    providerRole: string;
+    providerStatus: string;
   };
   pricing: {
     eyebrow: string;
@@ -78,12 +78,12 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       },
       prompts: [
         "What would you like to move forward?",
-        "Tell me one thing you want to get done.",
+        "Name one thing you want handled.",
         "What's been sitting on your list too long?",
-        "A trip, a booking, a license — where do we start?",
-        "Name it. I'll carry it to done.",
-        "Say it once. I'll turn it into a process that moves.",
-        "Big or small — what should we handle first?",
+        "Point me at something big — I'll break it into a plan.",
+        "Say it once. I'll carry it to done.",
+        "Tell me the outcome. I'll work out the steps.",
+        "Big or small — what should we start with?",
       ],
       noAccount: "No account needed to start",
       haveOne: "Already have ONE?",
@@ -107,7 +107,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       accent: "one",
       line2post: ".",
       lede:
-        "Your goals, chats, files, and appointments live in a dozen places — held together by your memory. ONE gives every intention one place to live, and quietly moves it forward.",
+        "Getting anything done today means becoming your own integration layer — juggling apps, forms, threads, and people, holding the whole picture in your head. ONE takes that weight. It's a single representative that turns what you want into motion, and keeps it moving until it's done.",
     },
     concepts: {
       eyebrow: "The idea",
@@ -115,43 +115,43 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       items: [
         {
           key: "ONE",
-          h3: "Digital representative",
-          p: "Your agent. You speak in plain words; ONE understands what you mean and acts on your behalf.",
+          h3: "Your digital representative",
+          p: "ONE speaks for you. Say what you want in your own words; it understands the intent and acts on your behalf — deciding, arranging, and following through.",
         },
         {
           key: "Units",
           h3: "Living processes",
-          p: "Each goal becomes a Unit — a small living process holding its steps, files, people, and next move.",
+          p: "Every intention becomes a Unit — a living process that holds its own steps, files, people and decisions, and always knows the next move.",
         },
         {
           key: "Global",
           h3: "The network",
-          p: "Units connect to other ONEs — people and businesses — so things move between you, not inside one app.",
+          p: "Your ONE isn't alone. It connects to other ONEs — people, businesses, institutions — so things move between representatives instead of dying in an inbox.",
         },
       ],
     },
     duo: {
-      eyebrow: "One agent, many identities",
+      eyebrow: "One representative, many identities",
       h2: "ONE for Life. ONE for Business.",
-      lede: "The same ONE, in different worlds — switch identities without switching apps.",
+      lede: "The same representative, in every world you live in — switch between them without switching tools.",
       life: {
         tag: "👤 ONE for Life",
-        h3: "Your personal life, handled",
-        p: "Health, learning, home, family, errands, legal. Say what you want to move forward — ONE keeps every process alive and shows you the next step.",
+        h3: "Your whole personal world, represented",
+        p: "Everything you're responsible for outside of work — your health, your home, your money, the systems you're forced to navigate. State a goal and ONE turns it into a process it will carry, not a reminder you have to chase.",
         list: [
-          "Book appointments and track them to done",
-          "Licenses, moving, travel, health goals",
-          "Remembers your people, files, and decisions",
+          "Turns a goal into a plan with a real next step",
+          "Navigates the bookings, bureaucracy, and logistics for you",
+          "Remembers the people, files, and decisions behind each one",
         ],
       },
       business: {
         tag: "🏢 ONE for Business",
-        h3: "Your business has a ONE, too",
-        p: "Give your business its own ONE. Customers' ONEs talk to it — bookings, followers, and a customer list, without a call centre.",
+        h3: "Your business gets a ONE of its own",
+        p: "Give your business a representative that's always on. Customers reach it through their own ONE — it answers, schedules, and keeps a living list of who they are. Presence and operations, without a front desk.",
         list: [
-          "Bookings become cards for both sides",
-          "See your followers and customers",
-          "Describe your business once — it's live",
+          "Customers' ONEs reach yours directly",
+          "Bookings become shared cards on both sides",
+          "A living view of your followers and customers",
         ],
       },
     },
@@ -160,14 +160,14 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       h2pre: "Your ONE talks to ",
       h2accent: "their",
       h2post: " ONE.",
-      lede: "Book a haircut, a driving lesson, a move — your ONE connects to the business's ONE around the process itself, and the booking becomes a card for both of you.",
+      lede: "When a process involves someone else — a business, a service, an institution — your ONE connects to theirs around the process itself. They work out the details; each side gets one clear card. No forms, no phone tag, no lost threads.",
       yourOne: "Your ONE",
-      personal: "Personal",
-      hairAppt: "💈 Hair Appointment",
+      yourRole: "Personal",
+      yourProcess: "🏦 Mortgage approval",
       connectedLabel: "connected around the process",
-      salonOne: "Sarah Salon's ONE",
-      business: "Business",
-      booking: "📅 Booking · Tuesday 18:00",
+      providerName: "Meridian Bank's ONE",
+      providerRole: "Institution",
+      providerStatus: "📄 In review · docs received",
     },
     pricing: {
       eyebrow: "Plans",
@@ -178,14 +178,14 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         {
           name: "ONE Free",
           price: "$0",
-          blurb: "Move your first things forward — no account needed.",
-          feats: ["Unlimited processes", "One personal identity", "Works on this device"],
+          blurb: "Put your first real process in ONE's hands — no account needed.",
+          feats: ["Unlimited processes", "One personal identity", "Runs on this device"],
           cta: "Start free",
         },
         {
           name: "ONE Plus",
           price: "$8",
-          blurb: "Your whole life, synced and remembered everywhere.",
+          blurb: "Your whole life in one place — synced, remembered, everywhere you are.",
           feats: [
             "Everything in Free",
             "Sync across all your devices",
@@ -197,7 +197,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         {
           name: "ONE Business",
           price: "$29",
-          blurb: "Give your business a ONE customers can reach.",
+          blurb: "Give your business a representative customers can reach.",
           feats: [
             "Everything in Plus",
             "Business identity + bookings",
@@ -211,13 +211,13 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     status: {
       eyebrow: "Where we are",
       h2: "Open preview.",
-      lede: "The interface is real and complete — every screen, gesture, and flow. The intelligence and the connected network are shipping next. No account needed to try it today.",
+      lede: "Every screen, gesture, and flow is real and complete — you can use it today. The intelligence that acts on your behalf and the network that connects ONEs are rolling out next. No account needed to try it.",
     },
     final: {
       pre: "Start with ",
       accent: "one thing",
       post: ".",
-      lede: "Tell ONE what matters. It will help move it forward.",
+      lede: "Hand ONE a single intention. Watch it become a process that moves.",
       cta: "Start with ONE →",
     },
     foot: { about: "About", support: "Support", legal: "Legal" },
@@ -241,12 +241,12 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       },
       prompts: [
         "מה תרצה לקדם?",
-        "ספר לי דבר אחד שאתה רוצה לסגור.",
+        "תן לי דבר אחד שאתה רוצה שיטופל.",
         "מה יושב לך ברשימה כבר יותר מדי זמן?",
-        "טיול, הזמנה, רישיון — במה נתחיל?",
-        "רק תגיד. אני אקח את זה עד הסוף.",
-        "תגיד את זה פעם אחת. אני אהפוך את זה לתהליך שזז.",
-        "גדול או קטן — במה נטפל קודם?",
+        "כוון אותי למשהו גדול — ואני אפרק אותו לתוכנית.",
+        "אמור את זה פעם אחת. אני אקח את זה עד הסוף.",
+        "תגיד לי את התוצאה. אני אבנה את הצעדים.",
+        "גדול או קטן — במה נתחיל?",
       ],
       noAccount: "אפשר להתחיל בלי חשבון",
       haveOne: "כבר יש לך ONE?",
@@ -270,7 +270,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       accent: "אחד",
       line2post: ".",
       lede:
-        "המטרות, השיחות, הקבצים והפגישות שלך מפוזרים בעשרה מקומות — ומוחזקים יחד רק בזיכרון שלך. ONE נותן לכל כוונה מקום אחד לחיות בו, ומקדם אותה בשקט.",
+        "כדי לקדם משהו היום אתה הופך בעצמך לשכבת החיבור — מלהטט בין אפליקציות, טפסים, התכתבויות ואנשים, ומחזיק את כל התמונה בראש. ONE לוקח את המשקל הזה. נציג אחד שהופך את מה שאתה רוצה לתנועה, וממשיך לדחוף עד שזה נסגר.",
     },
     concepts: {
       eyebrow: "הרעיון",
@@ -278,43 +278,43 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       items: [
         {
           key: "ONE",
-          h3: "נציג דיגיטלי",
-          p: "הסוכן שלך. אתה מדבר במילים פשוטות; ONE מבין למה אתה מתכוון ופועל בשמך.",
+          h3: "הנציג הדיגיטלי שלך",
+          p: "ONE מדבר בשמך. אמור מה אתה רוצה במילים שלך; הוא מבין את הכוונה ופועל בשבילך — מחליט, מארגן ועוקב עד הסוף.",
         },
         {
           key: "יחידות",
           h3: "תהליכים חיים",
-          p: "כל מטרה הופכת ליחידה — תהליך חי קטן שמחזיק את הצעדים, הקבצים, האנשים והמהלך הבא שלו.",
+          p: "כל כוונה הופכת ליחידה — תהליך חי שמחזיק את הצעדים, הקבצים, האנשים וההחלטות שלו, ותמיד יודע מה המהלך הבא.",
         },
         {
           key: "גלובל",
           h3: "הרשת",
-          p: "יחידות מתחברות ל-ONEs אחרים — אנשים ועסקים — כך שדברים זזים בינך לבינם, לא בתוך אפליקציה אחת.",
+          p: "ה-ONE שלך לא לבד. הוא מתחבר ל-ONEs אחרים — אנשים, עסקים, מוסדות — כך שדברים זזים בין נציגים במקום להיתקע בתיבת דואר.",
         },
       ],
     },
     duo: {
-      eyebrow: "סוכן אחד, זהויות רבות",
+      eyebrow: "נציג אחד, זהויות רבות",
       h2: "ONE לחיים. ONE לעסק.",
-      lede: "אותו ONE, בעולמות שונים — החלף זהות בלי להחליף אפליקציה.",
+      lede: "אותו נציג, בכל עולם שאתה חי בו — עבור ביניהם בלי להחליף כלים.",
       life: {
         tag: "👤 ONE לחיים",
-        h3: "החיים האישיים שלך, מטופלים",
-        p: "בריאות, לימודים, בית, משפחה, סידורים, בירוקרטיה. תגיד מה אתה רוצה לקדם — ONE שומר כל תהליך חי ומראה לך את הצעד הבא.",
+        h3: "כל העולם האישי שלך, מיוצג",
+        p: "כל מה שאתה אחראי עליו מחוץ לעבודה — הבריאות, הבית, הכסף, המערכות שאתה נאלץ לנווט בהן. הצב מטרה ו-ONE הופך אותה לתהליך שהוא מוביל, לא לתזכורת שאתה צריך לרדוף אחריה.",
         list: [
-          "קבע תורים ועקוב אחריהם עד הסוף",
-          "רישיונות, מעבר דירה, טיולים, יעדי בריאות",
-          "זוכר את האנשים, הקבצים וההחלטות שלך",
+          "הופך מטרה לתוכנית עם צעד הבא אמיתי",
+          "מנווט עבורך את ההזמנות, הביורוקרטיה והלוגיסטיקה",
+          "זוכר את האנשים, הקבצים וההחלטות מאחורי כל תהליך",
         ],
       },
       business: {
         tag: "🏢 ONE לעסק",
-        h3: "גם לעסק שלך יש ONE",
-        p: "תן לעסק שלך ONE משלו. ה-ONEs של הלקוחות מדברים איתו — הזמנות, עוקבים ורשימת לקוחות, בלי מוקד טלפוני.",
+        h3: "גם לעסק שלך יש ONE משלו",
+        p: "תן לעסק שלך נציג שתמיד זמין. לקוחות מגיעים אליו דרך ה-ONE שלהם — הוא עונה, מתזמן ומנהל רשימה חיה של מי הם. נוכחות ותפעול, בלי דלפק קבלה.",
         list: [
-          "הזמנות הופכות לכרטיסים לשני הצדדים",
-          "ראה את העוקבים והלקוחות שלך",
-          "תאר את העסק שלך פעם אחת — והוא באוויר",
+          "ה-ONEs של הלקוחות מגיעים ישירות לשלך",
+          "הזמנות הופכות לכרטיסים משותפים לשני הצדדים",
+          "תצוגה חיה של העוקבים והלקוחות שלך",
         ],
       },
     },
@@ -323,14 +323,14 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       h2pre: "ה-ONE שלך מדבר עם ה-ONE ",
       h2accent: "שלהם",
       h2post: ".",
-      lede: "הזמן תספורת, שיעור נהיגה, הובלה — ה-ONE שלך מתחבר ל-ONE של העסק סביב התהליך עצמו, וההזמנה הופכת לכרטיס לשניכם.",
+      lede: "כשתהליך מערב מישהו אחר — עסק, שירות, מוסד — ה-ONE שלך מתחבר לשלהם סביב התהליך עצמו. הם מסדרים את הפרטים; כל צד מקבל כרטיס אחד וברור. בלי טפסים, בלי ריצות טלפוניות, בלי חוטים אבודים.",
       yourOne: "ה-ONE שלך",
-      personal: "אישי",
-      hairAppt: "💈 תור לתספורת",
+      yourRole: "אישי",
+      yourProcess: "🏦 אישור משכנתא",
       connectedLabel: "מחוברים סביב התהליך",
-      salonOne: "ה-ONE של מספרת שרה",
-      business: "עסק",
-      booking: "📅 הזמנה · שלישי 18:00",
+      providerName: "ה-ONE של בנק מרידיאן",
+      providerRole: "מוסד",
+      providerStatus: "📄 בבדיקה · מסמכים התקבלו",
     },
     pricing: {
       eyebrow: "תוכניות",
@@ -341,14 +341,14 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         {
           name: "ONE חינם",
           price: "$0",
-          blurb: "קדם את הדברים הראשונים שלך — בלי חשבון.",
+          blurb: "תן ל-ONE את התהליך האמיתי הראשון שלך — בלי חשבון.",
           feats: ["תהליכים ללא הגבלה", "זהות אישית אחת", "עובד במכשיר הזה"],
           cta: "התחל בחינם",
         },
         {
           name: "ONE פלוס",
           price: "$8",
-          blurb: "כל החיים שלך, מסונכרנים וזכורים בכל מקום.",
+          blurb: "כל החיים שלך במקום אחד — מסונכרנים, זכורים, בכל מקום.",
           feats: [
             "כל מה שבחינם",
             "סנכרון בכל המכשירים",
@@ -360,7 +360,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         {
           name: "ONE עסקי",
           price: "$29",
-          blurb: "תן לעסק שלך ONE שהלקוחות יכולים להגיע אליו.",
+          blurb: "תן לעסק שלך נציג שהלקוחות יכולים להגיע אליו.",
           feats: [
             "כל מה שבפלוס",
             "זהות עסקית + הזמנות",
@@ -374,13 +374,13 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     status: {
       eyebrow: "איפה אנחנו",
       h2: "תצוגה פתוחה.",
-      lede: "הממשק אמיתי ומלא — כל מסך, מחווה ותהליך. הבינה והרשת המחוברת מגיעות בהמשך. אין צורך בחשבון כדי לנסות היום.",
+      lede: "כל מסך, מחווה ותהליך אמיתיים ומלאים — אפשר להשתמש כבר היום. הבינה שפועלת בשמך והרשת שמחברת בין ה-ONEs מגיעות בשלב הבא. אין צורך בחשבון כדי לנסות.",
     },
     final: {
       pre: "התחל עם ",
       accent: "דבר אחד",
       post: ".",
-      lede: "תגיד ל-ONE מה חשוב. הוא יעזור לקדם את זה.",
+      lede: "מסור ל-ONE כוונה אחת. וראה אותה הופכת לתהליך שזז.",
       cta: "התחל עם ONE ←",
     },
     foot: { about: "אודות", support: "תמיכה", legal: "משפטי" },
