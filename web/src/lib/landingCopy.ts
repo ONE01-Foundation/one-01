@@ -60,6 +60,23 @@ export interface LandingCopy {
     plans: { name: string; price: string; blurb: string; feats: string[]; cta: string }[];
   };
   status: { eyebrow: string; h2: string; lede: string };
+  bento: {
+    eyebrow: string;
+    h2: string;
+    core: { title: string; text: string };
+    tiles: { key: string; emoji: string; title: string; span: "" | "wide" | "full" }[];
+  };
+  download: {
+    eyebrow: string;
+    title: string;
+    sub: string;
+    soon: string;
+    appStoreSmall: string;
+    appStoreName: string;
+    googlePlaySmall: string;
+    googlePlayName: string;
+  };
+  mobileBanner: { title: string; sub: string; cta: string; dismiss: string };
   final: { pre: string; accent: string; post: string; lede: string; cta: string };
   foot: { about: string; support: string; legal: string };
   aria: { toLight: string; toDark: string; switchLang: string; langLabel: string };
@@ -212,6 +229,36 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       eyebrow: "Where we are",
       h2: "Open preview.",
       lede: "Every screen, gesture, and flow is real and complete — you can use it today. The intelligence that acts on your behalf and the network that connects ONEs are rolling out next. No account needed to try it.",
+    },
+    bento: {
+      eyebrow: "What ONE does",
+      h2: "One system. Everything moves.",
+      core: {
+        title: "Every intention becomes a living process.",
+        text: "You speak in plain words; ONE turns it into something that holds its own steps, files, and next move — and keeps it going until it's done.",
+      },
+      tiles: [
+        { key: "memory", emoji: "🧠", title: "Remembers your people, files & decisions.", span: "wide" },
+        { key: "network", emoji: "🔗", title: "Talks to other ONEs.", span: "" },
+        { key: "identity", emoji: "👥", title: "Life & Business, one agent.", span: "" },
+        { key: "next", emoji: "➡️", title: "Always knows the next step — and takes it.", span: "full" },
+      ],
+    },
+    download: {
+      eyebrow: "Take it with you",
+      title: "ONE, in your pocket.",
+      sub: "Start on the web now — the mobile apps are on the way.",
+      soon: "Coming soon to iOS & Android",
+      appStoreSmall: "Download on the",
+      appStoreName: "App Store",
+      googlePlaySmall: "Get it on",
+      googlePlayName: "Google Play",
+    },
+    mobileBanner: {
+      title: "Get ONE on your phone",
+      sub: "Open the app and start in seconds.",
+      cta: "Open ONE",
+      dismiss: "Dismiss",
     },
     final: {
       pre: "Start with ",
@@ -375,6 +422,36 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       eyebrow: "איפה אנחנו",
       h2: "תצוגה פתוחה.",
       lede: "כל מסך, מחווה ותהליך אמיתיים ומלאים — אפשר להשתמש כבר היום. הבינה שפועלת בשמך והרשת שמחברת בין ה-ONEs מגיעות בשלב הבא. אין צורך בחשבון כדי לנסות.",
+    },
+    bento: {
+      eyebrow: "מה ONE עושה",
+      h2: "מערכת אחת. הכול זז.",
+      core: {
+        title: "כל כוונה הופכת לתהליך חי.",
+        text: "אתה מדבר במילים פשוטות; ONE הופך את זה למשהו שמחזיק את הצעדים, הקבצים והמהלך הבא שלו — וממשיך לדחוף עד שזה נסגר.",
+      },
+      tiles: [
+        { key: "memory", emoji: "🧠", title: "זוכר את האנשים, הקבצים וההחלטות שלך.", span: "wide" },
+        { key: "network", emoji: "🔗", title: "מדבר עם ONEs אחרים.", span: "" },
+        { key: "identity", emoji: "👥", title: "חיים ועסק, סוכן אחד.", span: "" },
+        { key: "next", emoji: "➡️", title: "תמיד יודע מה הצעד הבא — ולוקח אותו.", span: "full" },
+      ],
+    },
+    download: {
+      eyebrow: "קחו איתכם",
+      title: "ONE, בכיס שלך.",
+      sub: "התחילו בדפדפן עכשיו — אפליקציות המובייל בדרך.",
+      soon: "בקרוב ל-iOS ולאנדרואיד",
+      appStoreSmall: "הורידו דרך",
+      appStoreName: "App Store",
+      googlePlaySmall: "זמין ב־",
+      googlePlayName: "Google Play",
+    },
+    mobileBanner: {
+      title: "קבלו את ONE בטלפון",
+      sub: "פתחו את האפליקציה והתחילו בשניות.",
+      cta: "פתח את ONE",
+      dismiss: "סגור",
     },
     final: {
       pre: "התחל עם ",

@@ -71,6 +71,44 @@ function MoonIcon() {
     </svg>
   );
 }
+function AppleLogo() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.91-1.21-1.77-3.09-2.01-3.76-2.04-1.6-.16-3.12.94-3.93.94-.81 0-1.72-.92-2.83-.9-1.46.02-2.8.85-3.55 2.15-1.51 2.62-.39 6.5 1.09 8.63.72 1.04 1.58 2.21 2.71 2.17 1.09-.04 1.5-.7 2.82-.7 1.31 0 1.68.7 2.83.68 1.17-.02 1.91-1.06 2.63-2.11.83-1.21 1.17-2.38 1.19-2.44-.03-.01-2.28-.88-2.31-3.47M14.53 4.62c.6-.73 1.01-1.74.9-2.75-.87.04-1.92.58-2.54 1.3-.56.64-1.05 1.67-.92 2.65.97.08 1.96-.49 2.56-1.2" />
+    </svg>
+  );
+}
+function GooglePlayLogo() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#34A853" d="M5 3 L5 12 L13 7.5 Z" />
+      <path fill="#4285F4" d="M5 21 L5 12 L13 16.5 Z" />
+      <path fill="#FBBC04" d="M21 12 L13 7.5 L13 16.5 Z" />
+      <path fill="#EA4335" d="M5 12 L13 7.5 L13 16.5 Z" />
+    </svg>
+  );
+}
+function StoreBadge({
+  logo,
+  small,
+  name,
+  href,
+}: {
+  logo: React.ReactNode;
+  small: string;
+  name: string;
+  href: string;
+}) {
+  return (
+    <a className="store-badge" href={href}>
+      <span className="store-badge-logo">{logo}</span>
+      <span className="store-badge-text">
+        <span className="store-badge-small">{small}</span>
+        <span className="store-badge-name">{name}</span>
+      </span>
+    </a>
+  );
+}
 
 export default function LandingPage() {
   const heroInputRef = useRef<HTMLInputElement>(null);
@@ -205,6 +243,29 @@ export default function LandingPage() {
   const startWith = (text: string) => {
     const s = text.trim();
     router.push(s ? `/app?q=${encodeURIComponent(s)}` : "/app");
+  };
+
+  // Mobile "get the app" prompt — a dismissible bottom sheet-style banner shown
+  // on narrow screens a moment after load, remembered per browser.
+  const [showAppBanner, setShowAppBanner] = useState(false);
+  useEffect(() => {
+    let dismissed = false;
+    try {
+      dismissed = localStorage.getItem("one_web_dl_dismissed") === "1";
+    } catch {
+      /* ignore */
+    }
+    if (dismissed || typeof window === "undefined" || window.innerWidth > 640) return;
+    const timer = setTimeout(() => setShowAppBanner(true), 1200);
+    return () => clearTimeout(timer);
+  }, []);
+  const dismissAppBanner = () => {
+    setShowAppBanner(false);
+    try {
+      localStorage.setItem("one_web_dl_dismissed", "1");
+    } catch {
+      /* ignore */
+    }
   };
 
   // Nav pill reveals a little AFTER you leave the hero — not the instant it
@@ -407,6 +468,29 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── bento: what ONE does, at a glance ── */}
+      <section className="section center reveal" id="capabilities">
+        <div className="shell">
+          <div className="eyebrow">{t.bento.eyebrow}</div>
+          <h2>{t.bento.h2}</h2>
+          <div className="bento">
+            <div className="bento-tile bento-core">
+              <div className="bento-core-orb">
+                <Orb size={54} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
+              </div>
+              <h3>{t.bento.core.title}</h3>
+              <p>{t.bento.core.text}</p>
+            </div>
+            {t.bento.tiles.map((tile) => (
+              <div className={`bento-tile${tile.span ? ` bento-${tile.span}` : ""}`} key={tile.key}>
+                <span className="bento-emoji" aria-hidden="true">{tile.emoji}</span>
+                <h3>{tile.title}</h3>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── ONE for Life / ONE for Business ── */}
       <section className="section center reveal" id="identity">
         <div className="shell">
@@ -518,6 +602,20 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── download CTA — mobile apps, above the footer ── */}
+      <section className="download reveal">
+        <div className="shell narrow">
+          <div className="eyebrow">{t.download.eyebrow}</div>
+          <h2>{t.download.title}</h2>
+          <p className="lede">{t.download.sub}</p>
+          <div className="store-badges">
+            <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
+            <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
+          </div>
+          <p className="download-soon">{t.download.soon}</p>
+        </div>
+      </section>
+
       {/* ── footer — centered: orb, quiet links, copyright ── */}
       <footer className="foot">
         <div className="foot-center">
@@ -536,6 +634,23 @@ export default function LandingPage() {
           <span className="foot-copy">© 2026 ONE01</span>
         </div>
       </footer>
+
+      {/* Mobile-only "get the app" banner — appears a moment after load. */}
+      {showAppBanner && (
+        <div className="dl-banner" role="dialog" aria-label={t.mobileBanner.title}>
+          <span className="dl-banner-orb" aria-hidden="true">
+            <Orb size={38} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
+          </span>
+          <div className="dl-banner-text">
+            <div className="dl-banner-title">{t.mobileBanner.title}</div>
+            <div className="dl-banner-sub">{t.mobileBanner.sub}</div>
+          </div>
+          <Link className="dl-banner-cta" href="/app">{t.mobileBanner.cta}</Link>
+          <button className="dl-banner-close" onClick={dismissAppBanner} aria-label={t.mobileBanner.dismiss}>
+            ✕
+          </button>
+        </div>
+      )}
     </>
   );
 }
