@@ -142,10 +142,10 @@
   line-height: 0;
   cursor: pointer;
   border-radius: 50%;
-  /* Scroll-collapse: ONE drifts toward the vertical centre and shrinks toward
-     the splash's black dot. Driven by --p (0→1); no CSS transition so it tracks
-     the scroll frame-for-frame. */
-  transform: translateY(calc(var(--p, 0) * 12vh)) scale(calc(1 - var(--p, 0) * 0.6));
+  /* Scroll-collapse: ONE stays put and shrinks into a black dot while
+     everything around it just fades. Driven by --p (0→1); no CSS transition so
+     it tracks the scroll frame-for-frame. */
+  transform: scale(calc(1 - var(--p, 0) * 0.58));
   transform-origin: center;
   will-change: transform;
 }
@@ -194,10 +194,9 @@
   letter-spacing: -0.015em;
   line-height: 1.35;
   color: var(--text);
-  /* Fade out FAST and lift away early, so it's gone before the shrinking orb
-     drifts down through its position (avoids orb-over-text overlap). */
+  /* Fades out in place as ONE collapses (and between rotating lines) — no
+     movement, just disappears. */
   opacity: calc(1 - var(--p, 0) * 3.4);
-  transform: translateY(calc(var(--p, 0) * -48px));
   transition: opacity 300ms ease;
 }
 .lhero-line.is-fading {
@@ -210,9 +209,8 @@
   width: 100%;
   max-width: 600px;
   margin: 44px auto 0;
-  /* Sinks + fades away as ONE collapses to the dot. */
-  opacity: calc(1 - var(--p, 0) * 1.9);
-  transform: translateY(calc(var(--p, 0) * 26px));
+  /* Fades away in place as ONE collapses to the dot. */
+  opacity: calc(1 - var(--p, 0) * 2.4);
 }
 /* Reduced motion: no pin, no collapse — a plain full-height gateway. */
 @media (prefers-reduced-motion: reduce) {
@@ -3141,6 +3139,17 @@ footer {
 .bento-emoji {
   font-size: 30px;
   line-height: 1;
+}
+/* Concept label (ONE · Units · Global) inside a bento tile. */
+.bento-key {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.bento-core .bento-key {
+  margin-top: 2px;
 }
 .bento-core {
   grid-column: span 2;

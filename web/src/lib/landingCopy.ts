@@ -26,11 +26,6 @@ export interface LandingCopy {
     failed: string;
   };
   thesis: { eyebrow: string; line1: string; line2pre: string; accent: string; line2post: string; lede: string };
-  concepts: {
-    eyebrow: string;
-    h2: string;
-    items: { key: string; h3: string; p: string }[];
-  };
   duo: {
     eyebrow: string;
     h2: string;
@@ -63,13 +58,10 @@ export interface LandingCopy {
   bento: {
     eyebrow: string;
     h2: string;
-    core: { title: string; text: string };
-    tiles: { key: string; emoji: string; title: string; span: "" | "wide" | "full" }[];
+    core: { label: string; title: string; text: string };
+    tiles: { key: string; label?: string; emoji?: string; title: string; span: "" | "wide" | "full" }[];
   };
   download: {
-    eyebrow: string;
-    title: string;
-    sub: string;
     soon: string;
     appStoreSmall: string;
     appStoreName: string;
@@ -125,27 +117,6 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       line2post: ".",
       lede:
         "Getting anything done today means becoming your own integration layer — juggling apps, forms, threads, and people, holding the whole picture in your head. ONE takes that weight. It's a single representative that turns what you want into motion, and keeps it moving until it's done.",
-    },
-    concepts: {
-      eyebrow: "The idea",
-      h2: "Three words. One system.",
-      items: [
-        {
-          key: "ONE",
-          h3: "Your digital representative",
-          p: "ONE speaks for you. Say what you want in your own words; it understands the intent and acts on your behalf — deciding, arranging, and following through.",
-        },
-        {
-          key: "Units",
-          h3: "Living processes",
-          p: "Every intention becomes a Unit — a living process that holds its own steps, files, people and decisions, and always knows the next move.",
-        },
-        {
-          key: "Global",
-          h3: "The network",
-          p: "Your ONE isn't alone. It connects to other ONEs — people, businesses, institutions — so things move between representatives instead of dying in an inbox.",
-        },
-      ],
     },
     duo: {
       eyebrow: "One representative, many identities",
@@ -231,24 +202,22 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       lede: "Every screen, gesture, and flow is real and complete — you can use it today. The intelligence that acts on your behalf and the network that connects ONEs are rolling out next. No account needed to try it.",
     },
     bento: {
-      eyebrow: "What ONE does",
-      h2: "One system. Everything moves.",
+      eyebrow: "The idea",
+      h2: "Three words. One system.",
       core: {
-        title: "Every intention becomes a living process.",
-        text: "You speak in plain words; ONE turns it into something that holds its own steps, files, and next move — and keeps it going until it's done.",
+        label: "ONE",
+        title: "Your digital representative.",
+        text: "Speak in plain words; ONE understands what you mean and acts on your behalf — deciding, arranging, and following through until it's done.",
       },
       tiles: [
-        { key: "memory", emoji: "🧠", title: "Remembers your people, files & decisions.", span: "wide" },
-        { key: "network", emoji: "🔗", title: "Talks to other ONEs.", span: "" },
-        { key: "identity", emoji: "👥", title: "Life & Business, one agent.", span: "" },
+        { key: "units", label: "Units", title: "Every intention becomes a living process.", span: "wide" },
+        { key: "global", label: "Global", title: "It talks to other ONEs.", span: "" },
+        { key: "memory", emoji: "🧠", title: "Remembers your people, files & decisions.", span: "" },
         { key: "next", emoji: "➡️", title: "Always knows the next step — and takes it.", span: "full" },
       ],
     },
     download: {
-      eyebrow: "Take it with you",
-      title: "ONE, in your pocket.",
-      sub: "Start on the web now — the mobile apps are on the way.",
-      soon: "Coming soon to iOS & Android",
+      soon: "Mobile apps coming soon — iOS & Android",
       appStoreSmall: "Download on the",
       appStoreName: "App Store",
       googlePlaySmall: "Get it on",
@@ -318,27 +287,6 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       line2post: ".",
       lede:
         "כדי לקדם משהו היום אתה הופך בעצמך לשכבת החיבור — מלהטט בין אפליקציות, טפסים, התכתבויות ואנשים, ומחזיק את כל התמונה בראש. ONE לוקח את המשקל הזה. נציג אחד שהופך את מה שאתה רוצה לתנועה, וממשיך לדחוף עד שזה נסגר.",
-    },
-    concepts: {
-      eyebrow: "הרעיון",
-      h2: "שלוש מילים. מערכת אחת.",
-      items: [
-        {
-          key: "ONE",
-          h3: "הנציג הדיגיטלי שלך",
-          p: "ONE מדבר בשמך. אמור מה אתה רוצה במילים שלך; הוא מבין את הכוונה ופועל בשבילך — מחליט, מארגן ועוקב עד הסוף.",
-        },
-        {
-          key: "יחידות",
-          h3: "תהליכים חיים",
-          p: "כל כוונה הופכת ליחידה — תהליך חי שמחזיק את הצעדים, הקבצים, האנשים וההחלטות שלו, ותמיד יודע מה המהלך הבא.",
-        },
-        {
-          key: "גלובל",
-          h3: "הרשת",
-          p: "ה-ONE שלך לא לבד. הוא מתחבר ל-ONEs אחרים — אנשים, עסקים, מוסדות — כך שדברים זזים בין נציגים במקום להיתקע בתיבת דואר.",
-        },
-      ],
     },
     duo: {
       eyebrow: "נציג אחד, זהויות רבות",
@@ -424,24 +372,22 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       lede: "כל מסך, מחווה ותהליך אמיתיים ומלאים — אפשר להשתמש כבר היום. הבינה שפועלת בשמך והרשת שמחברת בין ה-ONEs מגיעות בשלב הבא. אין צורך בחשבון כדי לנסות.",
     },
     bento: {
-      eyebrow: "מה ONE עושה",
-      h2: "מערכת אחת. הכול זז.",
+      eyebrow: "הרעיון",
+      h2: "שלוש מילים. מערכת אחת.",
       core: {
-        title: "כל כוונה הופכת לתהליך חי.",
-        text: "אתה מדבר במילים פשוטות; ONE הופך את זה למשהו שמחזיק את הצעדים, הקבצים והמהלך הבא שלו — וממשיך לדחוף עד שזה נסגר.",
+        label: "ONE",
+        title: "הנציג הדיגיטלי שלך.",
+        text: "אמור מה אתה רוצה במילים פשוטות; ONE מבין למה אתה מתכוון ופועל בשבילך — מחליט, מארגן ועוקב עד שזה נסגר.",
       },
       tiles: [
-        { key: "memory", emoji: "🧠", title: "זוכר את האנשים, הקבצים וההחלטות שלך.", span: "wide" },
-        { key: "network", emoji: "🔗", title: "מדבר עם ONEs אחרים.", span: "" },
-        { key: "identity", emoji: "👥", title: "חיים ועסק, סוכן אחד.", span: "" },
+        { key: "units", label: "יחידות", title: "כל כוונה הופכת לתהליך חי.", span: "wide" },
+        { key: "global", label: "גלובל", title: "הוא מדבר עם ONEs אחרים.", span: "" },
+        { key: "memory", emoji: "🧠", title: "זוכר את האנשים, הקבצים וההחלטות שלך.", span: "" },
         { key: "next", emoji: "➡️", title: "תמיד יודע מה הצעד הבא — ולוקח אותו.", span: "full" },
       ],
     },
     download: {
-      eyebrow: "קחו איתכם",
-      title: "ONE, בכיס שלך.",
-      sub: "התחילו בדפדפן עכשיו — אפליקציות המובייל בדרך.",
-      soon: "בקרוב ל-iOS ולאנדרואיד",
+      soon: "אפליקציות המובייל בקרוב — iOS ואנדרואיד",
       appStoreSmall: "הורידו דרך",
       appStoreName: "App Store",
       googlePlaySmall: "זמין ב־",

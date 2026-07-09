@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { Orb } from "@/components/Orb";
-import { Splash } from "@/components/Splash";
 import { Sheet } from "@/components/product/Sheet";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
 import { LANDING_COPY, type Lang } from "@/lib/landingCopy";
@@ -330,7 +329,6 @@ export default function LandingPage() {
 
   return (
     <>
-      <Splash bg="var(--bg)" padBottom="22vh" />
       {/* ── nav — floating pill, revealed after scrolling into the content ── */}
       <nav className={`nav${scrolled ? " is-scrolled" : ""}`}>
         <div className="nav-inner">
@@ -482,25 +480,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── concepts: the vocabulary (ONE · Units · Global) ── */}
+      {/* ── the idea: ONE · Units · Global + capabilities, as a bento ── */}
       <section className="section center reveal" id="concept">
-        <div className="shell">
-          <div className="eyebrow">{t.concepts.eyebrow}</div>
-          <h2>{t.concepts.h2}</h2>
-          <div className="concepts">
-            {t.concepts.items.map((c) => (
-              <div className="concept" key={c.key}>
-                <div className="concept-key">{c.key}</div>
-                <h3>{c.h3}</h3>
-                <p>{c.p}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── bento: what ONE does, at a glance ── */}
-      <section className="section center reveal" id="capabilities">
         <div className="shell">
           <div className="eyebrow">{t.bento.eyebrow}</div>
           <h2>{t.bento.h2}</h2>
@@ -509,12 +490,17 @@ export default function LandingPage() {
               <div className="bento-core-orb">
                 <Orb size={54} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
               </div>
+              <div className="bento-key">{t.bento.core.label}</div>
               <h3>{t.bento.core.title}</h3>
               <p>{t.bento.core.text}</p>
             </div>
             {t.bento.tiles.map((tile) => (
               <div className={`bento-tile${tile.span ? ` bento-${tile.span}` : ""}`} key={tile.key}>
-                <span className="bento-emoji" aria-hidden="true">{tile.emoji}</span>
+                {tile.label ? (
+                  <div className="bento-key">{tile.label}</div>
+                ) : (
+                  <span className="bento-emoji" aria-hidden="true">{tile.emoji}</span>
+                )}
                 <h3>{tile.title}</h3>
               </div>
             ))}
@@ -622,7 +608,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── final CTA ── */}
+      {/* ── final CTA — start now, or grab the app (merged) ── */}
       <section className="final reveal">
         <h2>
           {t.final.pre}<span className="accent-italic">{t.final.accent}</span>{t.final.post}
@@ -631,20 +617,11 @@ export default function LandingPage() {
         <div className="final-ctas">
           <Link className="btn btn-primary btn-lg" href="/app">{t.final.cta}</Link>
         </div>
-      </section>
-
-      {/* ── download CTA — mobile apps, above the footer ── */}
-      <section className="download reveal">
-        <div className="shell narrow">
-          <div className="eyebrow">{t.download.eyebrow}</div>
-          <h2>{t.download.title}</h2>
-          <p className="lede">{t.download.sub}</p>
-          <div className="store-badges">
-            <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
-            <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
-          </div>
-          <p className="download-soon">{t.download.soon}</p>
+        <div className="store-badges">
+          <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
+          <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
         </div>
+        <p className="download-soon">{t.download.soon}</p>
       </section>
 
       {/* ── footer — centered: orb, quiet links, copyright ── */}
