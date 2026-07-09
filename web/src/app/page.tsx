@@ -7,10 +7,8 @@ import { Logo } from "@/components/Logo";
 import { Orb } from "@/components/Orb";
 import { Splash } from "@/components/Splash";
 import { Sheet } from "@/components/product/Sheet";
-import { DocsPanel } from "@/components/DocsPanel";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
 import { LANDING_COPY, type Lang } from "@/lib/landingCopy";
-import { DOCS, type DocGroupId } from "@/lib/docsContent";
 
 function GoogleG() {
   return (
@@ -192,9 +190,6 @@ export default function LandingPage() {
     }, 3800);
     return () => clearInterval(t);
   }, [heroLines.length]);
-
-  // Footer doc panel (About / Support / Legal) — GitBook-style side panel.
-  const [docsGroup, setDocsGroup] = useState<DocGroupId | null>(null);
 
   // Sign-in popup (opened by tapping the Orb), mirroring the mobile SignInSheet.
   const [signInOpen, setSignInOpen] = useState(false);
@@ -533,16 +528,13 @@ export default function LandingPage() {
             </svg>
           </Link>
           <nav className="foot-links">
-            <button type="button" onClick={() => setDocsGroup("about")}>{t.foot.about}</button>
-            <button type="button" onClick={() => setDocsGroup("support")}>{t.foot.support}</button>
-            <button type="button" onClick={() => setDocsGroup("legal")}>{t.foot.legal}</button>
+            <Link href="/about">{t.foot.about}</Link>
+            <Link href="/support">{t.foot.support}</Link>
+            <Link href="/legal">{t.foot.legal}</Link>
           </nav>
           <span className="foot-copy">© 2026 ONE01</span>
         </div>
       </footer>
-
-      {/* Footer doc panel — About / Support / Legal, GitBook-style side panel. */}
-      <DocsPanel openGroup={docsGroup} onClose={() => setDocsGroup(null)} docs={DOCS[lang]} />
     </>
   );
 }

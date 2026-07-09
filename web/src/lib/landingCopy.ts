@@ -225,7 +225,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       toLight: "Switch to light",
       toDark: "Switch to dark",
       switchLang: "Switch to Hebrew",
-      langLabel: "עב",
+      langLabel: "EN",
     },
   },
 
@@ -388,7 +388,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       toLight: "עבור למצב בהיר",
       toDark: "עבור למצב כהה",
       switchLang: "החלף לאנגלית",
-      langLabel: "EN",
+      langLabel: "עב",
     },
   },
 };
