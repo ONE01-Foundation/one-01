@@ -156,10 +156,13 @@ html {
   line-height: 0;
   cursor: pointer;
   border-radius: 50%;
-  /* Scroll-collapse: ONE stays put and shrinks into a black dot while
-     everything around it just fades. Driven by --p (0→1); no CSS transition so
-     it tracks the scroll frame-for-frame. */
-  transform: scale(calc(1 - var(--p, 0) * 0.58));
+  /* Scroll-collapse: ONE shrinks into a black dot AND drifts down to the exact
+     centre of the screen (it starts above centre, at the top of the centred
+     hero group) while everything around it fades in place. Driven by --p (0→1);
+     no CSS transition so it tracks the scroll frame-for-frame. --orb-drop is the
+     rest-to-centre distance, measured in the preview. */
+  --orb-drop: 122px;
+  transform: translateY(calc(var(--p, 0) * var(--orb-drop))) scale(calc(1 - var(--p, 0) * 0.58));
   transform-origin: center;
   will-change: transform;
 }
@@ -1553,7 +1556,9 @@ footer {
 .foot {
   border-top: none;
   padding: 84px 24px 60px;
-  background: radial-gradient(90% 130% at 50% 0%, var(--bg) 0%, var(--bg-soft) 100%);
+  /* Same flat canvas as the home/page — the footer reads as the same surface,
+     not a separate tinted band. */
+  background: var(--bg);
 }
 .foot-center {
   display: flex;
@@ -3286,6 +3291,44 @@ footer {
 .download {
   text-align: center;
   padding: 32px 24px 64px;
+}
+/* The mobile invite as a floating white card — lifts off the page on a soft
+   shadow, borderless, the "ONE in your pocket" beat given its own object. */
+.dl-card {
+  margin: 64px auto 0;
+  max-width: 560px;
+  background: var(--bg-card);
+  border-radius: 28px;
+  padding: 40px 32px 34px;
+  text-align: center;
+  box-shadow: 0 30px 70px -28px rgba(10, 10, 10, 0.32), 0 6px 20px -12px rgba(10, 10, 10, 0.14);
+}
+[data-theme="dark"] .dl-card {
+  box-shadow: 0 34px 80px -26px rgba(0, 0, 0, 0.7), 0 4px 16px -10px rgba(0, 0, 0, 0.5);
+}
+.dl-card-orb {
+  display: inline-flex;
+  line-height: 0;
+  margin-bottom: 16px;
+}
+.dl-card-title {
+  font-size: clamp(24px, 3.4vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.dl-card-sub {
+  margin: 12px auto 0;
+  max-width: 40ch;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.dl-card .store-badges {
+  margin-top: 26px;
+}
+.dl-card .download-soon {
+  margin-top: 16px;
 }
 .store-badges {
   margin-top: 30px;

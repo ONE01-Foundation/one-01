@@ -351,6 +351,44 @@ export default function LandingPage() {
     };
   }, [globalOpen]);
 
+  // Automatic gateway transition: a scroll down inside the hero zone completes
+  // the fold-to-a-dot and carries you into the site; a scroll up in that zone
+  // brings you back to the hero (re-expanding ONE). We snap to the nearest end
+  // of the pinned hero on scroll-stop, by direction, so the collapse never
+  // strands you half-way — it always resolves to hero or content.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let lastY = window.scrollY;
+    let dir: "up" | "down" = "down";
+    let snapping = false;
+    let t = 0;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y !== lastY) dir = y > lastY ? "down" : "up";
+      lastY = y;
+      if (snapping || globalOpen) return;
+      window.clearTimeout(t);
+      t = window.setTimeout(() => {
+        if (globalOpen) return;
+        const pin = document.querySelector<HTMLElement>(".lhero-pin");
+        if (!pin) return;
+        const pinH = pin.offsetHeight;
+        const y2 = window.scrollY;
+        if (y2 <= 2 || y2 >= pinH - 2) return; // already at an end — nothing to resolve
+        const target = dir === "up" ? 0 : pinH;
+        snapping = true;
+        window.scrollTo({ top: target, behavior: "smooth" });
+        window.setTimeout(() => (snapping = false), 900);
+      }, 140);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.clearTimeout(t);
+    };
+  }, [globalOpen]);
+
   // Nav pill reveals a little AFTER you leave the hero — not the instant it
   // scrolls out — so the gateway stays clean and the pill feels intentional.
   useEffect(() => {
@@ -677,11 +715,20 @@ export default function LandingPage() {
         <div className="final-ctas">
           <Link className="btn btn-primary btn-lg" href="/app">{t.final.cta}</Link>
         </div>
-        <div className="store-badges">
-          <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
-          <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
+
+        {/* the mobile invite — a floating white card that lifts off the page */}
+        <div className="dl-card">
+          <span className="dl-card-orb" aria-hidden="true">
+            <Orb size={46} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
+          </span>
+          <h3 className="dl-card-title">{t.download.title}</h3>
+          <p className="dl-card-sub">{t.download.sub}</p>
+          <div className="store-badges">
+            <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
+            <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
+          </div>
+          <p className="download-soon">{t.download.soon}</p>
         </div>
-        <p className="download-soon">{t.download.soon}</p>
       </section>
 
       {/* ── footer — centered: orb, quiet links, copyright ── */}

@@ -62,6 +62,8 @@ export interface LandingCopy {
     tiles: { key: string; label?: string; emoji?: string; title: string; span: "" | "wide" | "full" }[];
   };
   download: {
+    title: string;
+    sub: string;
     soon: string;
     appStoreSmall: string;
     appStoreName: string;
@@ -218,6 +220,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       ],
     },
     download: {
+      title: "ONE, in your pocket",
+      sub: "Carry your ONE with you — the same representative, wherever the day takes you.",
       soon: "Mobile apps coming soon — iOS & Android",
       appStoreSmall: "Download on the",
       appStoreName: "App Store",
@@ -395,6 +399,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       ],
     },
     download: {
+      title: "וואן, בכיס שלך",
+      sub: "קחו את הוואן שלכם לכל מקום — אותו נציג, לאן שהיום לא ייקח אתכם.",
       soon: "אפליקציות המובייל בקרוב — iOS ואנדרואיד",
       appStoreSmall: "הורידו דרך",
       appStoreName: "App Store",
