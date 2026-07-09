@@ -80,8 +80,15 @@
 }
 
 /* ── Landing hero — the gateway (ONE centre-stage, like the mobile Home) ── */
+/* The pin gives the sticky hero scroll room to collapse into the splash dot
+   before it releases and the content below scrolls up over it. */
+.lhero-pin {
+  height: 168vh;
+}
 .lhero {
-  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -89,7 +96,6 @@
   justify-content: center;
   text-align: center;
   padding: 0 24px;
-  position: relative;
 }
 /* The living core: orb + rotating broadcast, sitting tight together. */
 .lhero-core {
@@ -117,20 +123,17 @@
   width: 30px;
   height: 30px;
 }
-/* Quiet, always-present gateway hints — a steady subtle grey, no auto-hide. */
+/* Quiet gateway hints — a steady subtle grey that fades out early as ONE
+   collapses (browser clamps the negative value to 0). */
 .lhero-chev.up {
   top: 34px;
-  opacity: 0.28;
+  opacity: calc(0.28 - var(--p, 0) * 0.5);
 }
 .lhero-chev.down {
   bottom: 34px;
   cursor: pointer;
-  opacity: 0.28;
+  opacity: calc(0.28 - var(--p, 0) * 0.5);
   animation: lheroBob 2.4s ease-in-out infinite;
-  transition: opacity 160ms ease;
-}
-.lhero-chev.down:hover {
-  opacity: 0.55;
 }
 .lhero-orb-btn {
   background: transparent;
@@ -139,15 +142,21 @@
   line-height: 0;
   cursor: pointer;
   border-radius: 50%;
-  transition: transform 160ms ease;
-}
-.lhero-orb-btn:hover {
-  transform: scale(1.03);
+  /* Scroll-collapse: ONE drifts toward the vertical centre and shrinks toward
+     the splash's black dot. Driven by --p (0→1); no CSS transition so it tracks
+     the scroll frame-for-frame. */
+  transform: translateY(calc(var(--p, 0) * 12vh)) scale(calc(1 - var(--p, 0) * 0.6));
+  transform-origin: center;
+  will-change: transform;
 }
 .lhero-orb {
   animation: oneSplashBreath 3400ms ease-in-out infinite;
 }
-/* Living eyes — a slow, natural blink. */
+/* Eyes close as ONE collapses, so it becomes the splash's plain black dot;
+   they reopen on scroll-up. */
+.lhero-orb .orb-eye {
+  opacity: calc(1 - var(--p, 0) * 2.2);
+}
 .orb-eye {
   transform-box: fill-box;
   transform-origin: center;
@@ -185,6 +194,10 @@
   letter-spacing: -0.015em;
   line-height: 1.35;
   color: var(--text);
+  /* Fade out FAST and lift away early, so it's gone before the shrinking orb
+     drifts down through its position (avoids orb-over-text overlap). */
+  opacity: calc(1 - var(--p, 0) * 3.4);
+  transform: translateY(calc(var(--p, 0) * -48px));
   transition: opacity 300ms ease;
 }
 .lhero-line.is-fading {
@@ -197,6 +210,34 @@
   width: 100%;
   max-width: 600px;
   margin: 44px auto 0;
+  /* Sinks + fades away as ONE collapses to the dot. */
+  opacity: calc(1 - var(--p, 0) * 1.9);
+  transform: translateY(calc(var(--p, 0) * 26px));
+}
+/* Reduced motion: no pin, no collapse — a plain full-height gateway. */
+@media (prefers-reduced-motion: reduce) {
+  .lhero-pin {
+    height: auto;
+  }
+  .lhero {
+    position: static;
+    height: auto;
+    min-height: 100vh;
+  }
+  .lhero-orb-btn,
+  .lhero-line,
+  .lhero-dockwrap {
+    transform: none;
+  }
+  .lhero-line,
+  .lhero-dockwrap,
+  .lhero-orb .orb-eye {
+    opacity: 1;
+  }
+  .lhero-chev.up,
+  .lhero-chev.down {
+    opacity: 0.28;
+  }
 }
 .lhero-dock {
   width: 100%;

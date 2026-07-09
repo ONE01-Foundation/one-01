@@ -112,8 +112,37 @@ function StoreBadge({
 
 export default function LandingPage() {
   const heroInputRef = useRef<HTMLInputElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const router = useRouter();
+
+  // Hero scroll-collapse: as you scroll off the (pinned) hero, ONE centres and
+  // shrinks into the splash's black dot while the broadcast, arrows, and input
+  // fade — and it all reverses on the way back up, like coming out of the
+  // splash. Driven by a --p (0→1) CSS variable set on the hero element via a
+  // rAF-throttled scroll listener, so the animation runs in CSS with no React
+  // re-render per scroll frame.
+  useEffect(() => {
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      const el = heroRef.current;
+      if (!el) return;
+      const p = Math.min(1, Math.max(0, window.scrollY / (window.innerHeight * 0.68)));
+      el.style.setProperty("--p", p.toFixed(4));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    apply();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Language: Hebrew-first product, English default on the web with a manual
   // toggle. On first load we honour a saved choice, else the browser language.
@@ -337,7 +366,8 @@ export default function LandingPage() {
       </nav>
 
       {/* ── hero — the gateway: ONE centre-stage, ready to start ── */}
-      <section className="lhero">
+      <div className="lhero-pin">
+      <section className="lhero" ref={heroRef} style={{ ["--p" as string]: 0 } as React.CSSProperties}>
         <div className="lhero-core">
           <span className="lhero-chev up" aria-hidden="true">
             <ChevronUp />
@@ -408,6 +438,7 @@ export default function LandingPage() {
           </p>
         </div>
       </section>
+      </div>
 
       {/* Sign-in popup — opened by tapping the Orb, mirroring the mobile sheet. */}
       <Sheet open={signInOpen} onClose={() => setSignInOpen(false)}>
