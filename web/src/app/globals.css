@@ -1283,7 +1283,16 @@ h3 {
   font-size: 14px;
   font-weight: 500;
   color: var(--text);
-  display: inline-block;
+  /* inline-flex so the leading Flaticon icon sits on the text baseline and
+     lands on the correct (start) side in both LTR and RTL. */
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.connect-ico {
+  font-size: 15px;
+  line-height: 0;
+  color: var(--text-2);
 }
 .connect-bridge {
   text-align: center;
@@ -1595,6 +1604,16 @@ footer {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-3);
+}
+/* Required Flaticon attribution (free-tier Uicons license). */
+.foot-credit {
+  font-size: 12px;
+  color: var(--text-3);
+  opacity: 0.65;
+  transition: opacity 140ms ease;
+}
+.foot-credit:hover {
+  opacity: 1;
 }
 @media (max-width: 640px) {
   .foot-links {
@@ -3228,6 +3247,13 @@ footer {
 .bento-emoji {
   font-size: 30px;
   line-height: 1;
+}
+/* Flaticon Uicons glyph in a bento tile — same footprint as the emoji it
+   replaces, inherits the tile's text colour. */
+.bento-icon {
+  font-size: 32px;
+  line-height: 1;
+  color: var(--text);
 }
 /* Concept label (ONE · Units · Global) inside a bento tile. */
 .bento-key {

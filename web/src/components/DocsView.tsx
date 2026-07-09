@@ -245,6 +245,14 @@ export function DocsView({ group }: { group: DocGroupId }) {
             <Link href="/legal">{t.foot.legal}</Link>
           </nav>
           <span className="foot-copy">© 2026 ONE01</span>
+          <a
+            className="foot-credit"
+            href="https://www.flaticon.com/uicons"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Uicons by Flaticon
+          </a>
         </div>
       </footer>
     </main>

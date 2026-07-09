@@ -42,10 +42,12 @@ export interface LandingCopy {
     yourOne: string;
     yourRole: string;
     yourProcess: string;
+    yourProcessIcon: string;
     connectedLabel: string;
     providerName: string;
     providerRole: string;
     providerStatus: string;
+    providerStatusIcon: string;
   };
   pricing: {
     eyebrow: string;
@@ -59,7 +61,7 @@ export interface LandingCopy {
     eyebrow: string;
     h2: string;
     core: { label: string; title: string; text: string };
-    tiles: { key: string; label?: string; emoji?: string; title: string; span: "" | "wide" | "full" }[];
+    tiles: { key: string; label?: string; emoji?: string; icon?: string; title: string; span: "" | "wide" | "full" }[];
   };
   download: {
     title: string;
@@ -154,11 +156,13 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       lede: "When a process involves someone else — a business, a service, an institution — your ONE connects to theirs around the process itself. They work out the details; each side gets one clear card. No forms, no phone tag, no lost threads.",
       yourOne: "Your ONE",
       yourRole: "Personal",
-      yourProcess: "🏦 Mortgage approval",
+      yourProcess: "Mortgage approval",
+      yourProcessIcon: "fi-rr-bank",
       connectedLabel: "connected around the process",
       providerName: "Meridian Bank's ONE",
       providerRole: "Institution",
-      providerStatus: "📄 In review · docs received",
+      providerStatus: "In review · docs received",
+      providerStatusIcon: "fi-rr-document",
     },
     pricing: {
       eyebrow: "Plans",
@@ -215,8 +219,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       tiles: [
         { key: "units", label: "Units", title: "Every intention becomes a living process.", span: "wide" },
         { key: "global", label: "Global", title: "It talks to other ONEs.", span: "" },
-        { key: "memory", emoji: "🧠", title: "Remembers your people, files & decisions.", span: "" },
-        { key: "next", emoji: "➡️", title: "Always knows the next step — and takes it.", span: "full" },
+        { key: "memory", icon: "fi-rr-brain", title: "Remembers your people, files & decisions.", span: "" },
+        { key: "next", icon: "fi-rr-arrow-progress", title: "Always knows the next step — and takes it.", span: "full" },
       ],
     },
     download: {
@@ -333,11 +337,13 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       lede: "כשתהליך מערב מישהו אחר — עסק, שירות, מוסד — ה-ONE שלך מתחבר לשלהם סביב התהליך עצמו. הם מסדרים את הפרטים; כל צד מקבל כרטיס אחד וברור. בלי טפסים, בלי ריצות טלפוניות, בלי חוטים אבודים.",
       yourOne: "ה-ONE שלך",
       yourRole: "אישי",
-      yourProcess: "🏦 אישור משכנתא",
+      yourProcess: "אישור משכנתא",
+      yourProcessIcon: "fi-rr-bank",
       connectedLabel: "מחוברים סביב התהליך",
       providerName: "ה-ONE של בנק מרידיאן",
       providerRole: "מוסד",
-      providerStatus: "📄 בבדיקה · מסמכים התקבלו",
+      providerStatus: "בבדיקה · מסמכים התקבלו",
+      providerStatusIcon: "fi-rr-document",
     },
     pricing: {
       eyebrow: "תוכניות",
@@ -394,8 +400,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       tiles: [
         { key: "units", label: "יחידות", title: "כל כוונה הופכת לתהליך חי.", span: "wide" },
         { key: "global", label: "גלובל", title: "הוא מדבר עם ONEs אחרים.", span: "" },
-        { key: "memory", emoji: "🧠", title: "זוכר את האנשים, הקבצים וההחלטות שלך.", span: "" },
-        { key: "next", emoji: "➡️", title: "תמיד יודע מה הצעד הבא — ולוקח אותו.", span: "full" },
+        { key: "memory", icon: "fi-rr-brain", title: "זוכר את האנשים, הקבצים וההחלטות שלך.", span: "" },
+        { key: "next", icon: "fi-rr-arrow-progress", title: "תמיד יודע מה הצעד הבא — ולוקח אותו.", span: "full" },
       ],
     },
     download: {

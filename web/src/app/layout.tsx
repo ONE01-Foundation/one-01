@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+// Flaticon Uicons — regular-rounded family only (one bundled webfont, no CDN).
+// Used for the concept/network icons instead of emoji. Attribution in the footer.
+import "@flaticon/flaticon-uicons/css/regular/rounded.css";
 
 export const metadata: Metadata = {
   title: "ONE — from intention to done",

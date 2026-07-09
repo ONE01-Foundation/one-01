@@ -596,6 +596,8 @@ export default function LandingPage() {
               <div className={`bento-tile${tile.span ? ` bento-${tile.span}` : ""}`} key={tile.key}>
                 {tile.label ? (
                   <div className="bento-key">{tile.label}</div>
+                ) : tile.icon ? (
+                  <i className={`fi ${tile.icon} bento-icon`} aria-hidden="true" />
                 ) : (
                   <span className="bento-emoji" aria-hidden="true">{tile.emoji}</span>
                 )}
@@ -650,7 +652,7 @@ export default function LandingPage() {
               <div className="connect-orb" />
               <div className="connect-name">{t.network.yourOne}</div>
               <div className="connect-role">{t.network.yourRole}</div>
-              <div className="connect-sub">{t.network.yourProcess}</div>
+              <div className="connect-sub"><i className={`fi ${t.network.yourProcessIcon} connect-ico`} aria-hidden="true" />{t.network.yourProcess}</div>
             </div>
             <div className="connect-bridge">
               <div className="connect-bridge-line">↔</div>
@@ -660,7 +662,7 @@ export default function LandingPage() {
               <div className="connect-orb" />
               <div className="connect-name">{t.network.providerName}</div>
               <div className="connect-role">{t.network.providerRole}</div>
-              <div className="connect-sub">{t.network.providerStatus}</div>
+              <div className="connect-sub"><i className={`fi ${t.network.providerStatusIcon} connect-ico`} aria-hidden="true" />{t.network.providerStatus}</div>
             </div>
           </div>
         </div>
@@ -747,6 +749,14 @@ export default function LandingPage() {
             <Link href="/legal">{t.foot.legal}</Link>
           </nav>
           <span className="foot-copy">© 2026 ONE01</span>
+          <a
+            className="foot-credit"
+            href="https://www.flaticon.com/uicons"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Uicons by Flaticon
+          </a>
         </div>
       </footer>
 
@@ -792,7 +802,7 @@ export default function LandingPage() {
                 <div className="connect-orb" />
                 <div className="connect-name">{t.network.yourOne}</div>
                 <div className="connect-role">{t.network.yourRole}</div>
-                <div className="connect-sub">{t.network.yourProcess}</div>
+                <div className="connect-sub"><i className={`fi ${t.network.yourProcessIcon} connect-ico`} aria-hidden="true" />{t.network.yourProcess}</div>
               </div>
               <div className="connect-bridge">
                 <div className="connect-bridge-line">↔</div>
@@ -802,7 +812,7 @@ export default function LandingPage() {
                 <div className="connect-orb" />
                 <div className="connect-name">{t.network.providerName}</div>
                 <div className="connect-role">{t.network.providerRole}</div>
-                <div className="connect-sub">{t.network.providerStatus}</div>
+                <div className="connect-sub"><i className={`fi ${t.network.providerStatusIcon} connect-ico`} aria-hidden="true" />{t.network.providerStatus}</div>
               </div>
             </div>
             <Link className="btn btn-primary btn-lg gsheet-cta" href="/app">{t.global.cta}</Link>
