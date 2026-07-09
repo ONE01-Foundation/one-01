@@ -14,8 +14,11 @@ import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
 const HERO_PROMPTS = [
   "What would you like to move forward?",
   "Tell me one thing you want to get done.",
+  "What's been sitting on your list too long?",
   "A trip, a booking, a license — where do we start?",
+  "Name it. I'll carry it to done.",
   "Say it once. I'll turn it into a process that moves.",
+  "Big or small — what should we handle first?",
 ];
 
 function GoogleG() {
@@ -215,11 +218,13 @@ export default function LandingPage() {
           <Link href="/" className="nav-brand" aria-label="ONE01">
             <Logo height={22} interactive />
           </Link>
-          <div className="nav-actions">
+          <div className="nav-links">
             <a className="nav-link" href="#problem">ONE</a>
             <a className="nav-link" href="#identity">Life</a>
             <a className="nav-link" href="#connections">Business</a>
             <a className="nav-link" href="#pricing">Pricing</a>
+          </div>
+          <div className="nav-right">
             <button
               type="button"
               className="nav-mode"
@@ -245,7 +250,14 @@ export default function LandingPage() {
             onClick={() => setSignInOpen(true)}
             aria-label="Sign in to ONE"
           >
-            <Orb size={96} eyeR={12} alive className="lhero-orb" />
+            <Orb
+              size={96}
+              eyeR={12}
+              alive
+              className="lhero-orb"
+              faceColor={isDark ? "#2a2a2a" : "#0a0a0a"}
+              eyeColor={isDark ? "#ffffff" : "#f5f4f0"}
+            />
           </button>
           <p className={`lhero-line${bfade ? " is-fading" : ""}`}>{heroLines[bi]}</p>
           <button
@@ -301,7 +313,12 @@ export default function LandingPage() {
       {/* Sign-in popup — opened by tapping the Orb, mirroring the mobile sheet. */}
       <Sheet open={signInOpen} onClose={() => setSignInOpen(false)}>
         <div className="signin">
-          <Orb size={72} eyeR={12} />
+          <Orb
+            size={64}
+            eyeR={11}
+            faceColor={isDark ? "#2a2a2a" : "#0a0a0a"}
+            eyeColor={isDark ? "#ffffff" : "#f5f4f0"}
+          />
           <h3 className="signin-title">Continue with ONE</h3>
           <p className="signin-sub">Save your processes and pick up on any device.</p>
           <button className="signin-google" onClick={() => signInWithGoogle()}>

@@ -97,8 +97,8 @@
   align-items: center;
   justify-content: center;
   gap: 0;
-  /* Bias the whole group a little higher than dead-centre. */
-  padding-bottom: 9vh;
+  /* Bias the whole group just slightly above dead-centre. */
+  padding-bottom: 5vh;
 }
 .lhero-chev {
   color: var(--text-3);
@@ -163,7 +163,7 @@
   /* Fixed two-line height so the orb + chevrons never shift when the rotating
      broadcast is one line vs two — and the text is TOP-aligned so a single line
      sits close to the orb (the reserved second line grows downward). */
-  margin-top: 24px;
+  margin-top: 30px;
   min-height: 2.7em;
   max-width: 30ch;
   display: flex;
@@ -587,9 +587,9 @@ button {
 .nav-inner {
   pointer-events: auto;
   width: min(940px, 100%);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 20px;
   padding: 9px 10px 9px 22px;
   background: color-mix(in srgb, var(--bg-card) 80%, transparent);
@@ -603,15 +603,23 @@ button {
   display: flex;
   align-items: center;
   color: var(--text);
+  justify-self: start;
 }
 .nav-brand svg {
   height: 22px;
   width: auto;
   display: block;
 }
-.nav-actions {
+.nav-links {
+  justify-self: center;
   display: flex;
-  gap: 32px;
+  gap: 30px;
+  align-items: center;
+}
+.nav-right {
+  justify-self: end;
+  display: flex;
+  gap: 12px;
   align-items: center;
 }
 .nav-link {
@@ -2415,9 +2423,9 @@ footer {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(10, 10, 10, 0.5);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(10, 10, 10, 0.68);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -2437,8 +2445,11 @@ footer {
   position: relative;
   width: 100%;
   max-width: 100%;
-  background: var(--p-surface);
-  color: var(--p-text);
+  /* Fall back to the marketing tokens on the landing page, where the product
+     (--p-*) tokens aren't defined — otherwise the card is transparent and the
+     hero bleeds through it. */
+  background: var(--p-surface, var(--bg-card));
+  color: var(--p-text, var(--text));
   border-radius: 26px 26px 0 0;
   max-height: 92dvh;
   overflow-y: auto;
@@ -2468,7 +2479,7 @@ footer {
   width: 40px;
   height: 5px;
   border-radius: 3px;
-  background: rgba(10, 10, 10, 0.14);
+  background: color-mix(in srgb, var(--p-text, var(--text)) 16%, transparent);
   margin: 10px auto 0;
 }
 @media (min-width: 520px) {
@@ -2484,15 +2495,16 @@ footer {
   height: 34px;
   border-radius: 50%;
   border: none;
-  background: rgba(10, 10, 10, 0.05);
-  color: var(--p-text-2);
+  background: color-mix(in srgb, var(--p-text, var(--text)) 7%, transparent);
+  color: var(--p-text-2, var(--text-2));
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 2;
+  cursor: pointer;
 }
 .sheet-close:hover {
-  background: rgba(10, 10, 10, 0.1);
+  background: color-mix(in srgb, var(--p-text, var(--text)) 13%, transparent);
 }
 .sheet-body {
   padding: 24px 24px 28px;
