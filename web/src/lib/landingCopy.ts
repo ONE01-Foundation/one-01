@@ -75,7 +75,7 @@ export interface LandingCopy {
   mobileBanner: { title: string; sub: string; cta: string; dismiss: string };
   global: { eyebrow: string; title: string; sub: string; cta: string; hint: string };
   final: { pre: string; accent: string; post: string; lede: string; cta: string };
-  foot: { about: string; support: string; legal: string };
+  foot: { about: string; support: string; legal: string; copy: string };
   aria: { toLight: string; toDark: string; switchLang: string; langLabel: string };
 }
 
@@ -225,7 +225,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     download: {
       title: "ONE, in your pocket",
-      sub: "Carry your ONE with you — the same representative, wherever the day takes you.",
+      sub: "The same representative, wherever you go — every process in one place.",
       soon: "Mobile apps coming soon — iOS & Android",
       appStoreSmall: "Download on the",
       appStoreName: "App Store",
@@ -252,7 +252,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       lede: "Hand ONE a single intention. Watch it become a process that moves.",
       cta: "Start with ONE →",
     },
-    foot: { about: "About", support: "Support", legal: "Legal" },
+    foot: { about: "About", support: "Support", legal: "Legal", copy: "© 2026 ONE01 · All rights reserved" },
     aria: {
       toLight: "Switch to light",
       toDark: "Switch to dark",
@@ -406,7 +406,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     download: {
       title: "וואן, בכיס שלך",
-      sub: "קחו את הוואן שלכם לכל מקום — אותו נציג, לאן שהיום לא ייקח אתכם.",
+      sub: "אותו נציג, לכל מקום שתלכו — כל התהליכים שלכם במקום אחד.",
       soon: "אפליקציות המובייל בקרוב — iOS ואנדרואיד",
       appStoreSmall: "הורידו דרך",
       appStoreName: "App Store",
@@ -433,7 +433,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       lede: "מסור ל-ONE כוונה אחת. וראה אותה הופכת לתהליך שזז.",
       cta: "התחל עם ONE ←",
     },
-    foot: { about: "אודות", support: "תמיכה", legal: "משפטי" },
+    foot: { about: "אודות", support: "תמיכה", legal: "משפטי", copy: "© 2026 ONE01 · כל הזכויות שמורות" },
     aria: {
       toLight: "עבור למצב בהיר",
       toDark: "עבור למצב כהה",

@@ -10,7 +10,9 @@ export const metadata: Metadata = {
   description:
     "Your digital representative for turning intentions into living processes. ONE is the layer between what you want and what needs to happen.",
   icons: {
-    icon: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%230A0A0A'/%3E%3Ccircle cx='25' cy='29' r='4.5' fill='%23fff'/%3E%3Ccircle cx='39' cy='29' r='4.5' fill='%23fff'/%3E%3C/svg%3E",
+    // The real app icon (same mark shipped to the App Store / Play Store).
+    icon: "/app-icon.png",
+    apple: "/app-icon.png",
   },
   openGraph: {
     title: "ONE — from intention to done",
@@ -31,8 +33,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Set the theme BEFORE first paint (from saved choice, else time of
+            day) so nothing — including the opening splash — flashes the wrong
+            background on load/refresh. Kept in sync afterwards by the page. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var s=localStorage.getItem('one_web_theme');var d;if(s==='dark'){d=true}else if(s==='light'){d=false}else{var h=new Date().getHours();d=h>=18||h<6}document.documentElement.dataset.theme=d?'dark':'light'}catch(e){}})();",
+          }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"

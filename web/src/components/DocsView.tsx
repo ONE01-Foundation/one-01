@@ -244,7 +244,7 @@ export function DocsView({ group }: { group: DocGroupId }) {
             <Link href="/support">{t.foot.support}</Link>
             <Link href="/legal">{t.foot.legal}</Link>
           </nav>
-          <span className="foot-copy">© 2026 ONE01</span>
+          <span className="foot-copy">{t.foot.copy}</span>
         </div>
       </footer>
     </main>

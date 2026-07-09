@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { Orb } from "@/components/Orb";
+import { Splash } from "@/components/Splash";
 import { Sheet } from "@/components/product/Sheet";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
 import { LANDING_COPY, type Lang } from "@/lib/landingCopy";
@@ -422,6 +423,10 @@ export default function LandingPage() {
 
   return (
     <>
+      {/* ONE's awakening — the opening animation replays on every load/refresh
+          of the landing (theme-correct, so it never flashes the wrong colour). */}
+      <Splash always />
+
       {/* ── nav — floating pill, revealed after scrolling into the content ── */}
       <nav className={`nav${scrolled ? " is-scrolled" : ""}`}>
         <div className="nav-inner">
@@ -718,18 +723,20 @@ export default function LandingPage() {
           <Link className="btn btn-primary btn-lg" href="/app">{t.final.cta}</Link>
         </div>
 
-        {/* the mobile invite — a floating white card that lifts off the page */}
+        {/* the mobile invite — a wide floating card: the real app icon beside
+            the copy + store badges */}
         <div className="dl-card">
-          <span className="dl-card-orb" aria-hidden="true">
-            <Orb size={46} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
-          </span>
-          <h3 className="dl-card-title">{t.download.title}</h3>
-          <p className="dl-card-sub">{t.download.sub}</p>
-          <div className="store-badges">
-            <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
-            <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="dl-card-appicon" src="/app-icon.png" alt="ONE app icon" width={80} height={80} />
+          <div className="dl-card-body">
+            <h3 className="dl-card-title">{t.download.title}</h3>
+            <p className="dl-card-sub">{t.download.sub}</p>
+            <div className="store-badges">
+              <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
+              <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
+            </div>
+            <p className="download-soon">{t.download.soon}</p>
           </div>
-          <p className="download-soon">{t.download.soon}</p>
         </div>
       </section>
 
@@ -748,7 +755,7 @@ export default function LandingPage() {
             <Link href="/support">{t.foot.support}</Link>
             <Link href="/legal">{t.foot.legal}</Link>
           </nav>
-          <span className="foot-copy">© 2026 ONE01</span>
+          <span className="foot-copy">{t.foot.copy}</span>
         </div>
       </footer>
 

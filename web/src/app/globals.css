@@ -3308,45 +3308,73 @@ footer {
   text-align: center;
   padding: 32px 24px 64px;
 }
-/* The mobile invite as a floating white card — lifts off the page on a soft
-   shadow, borderless, the "ONE in your pocket" beat given its own object. */
+/* The mobile invite — a WIDE floating card (landscape banner): the real app
+   icon beside the copy + store badges. Rounded, borderless, lifts on a soft
+   shadow. Flex handles LTR/RTL (icon on the leading side). */
 .dl-card {
   margin: 64px auto 0;
-  max-width: 560px;
+  max-width: 720px;
   background: var(--bg-card);
-  /* A clean rectangle (barely-softened corners) rather than a heavily rounded
-     card, while still floating on its shadow. */
-  border-radius: 8px;
-  padding: 40px 32px 34px;
-  text-align: center;
+  border-radius: 24px;
+  padding: 30px 36px;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  text-align: start;
   box-shadow: 0 30px 70px -28px rgba(10, 10, 10, 0.32), 0 6px 20px -12px rgba(10, 10, 10, 0.14);
 }
 [data-theme="dark"] .dl-card {
   box-shadow: 0 34px 80px -26px rgba(0, 0, 0, 0.7), 0 4px 16px -10px rgba(0, 0, 0, 0.5);
 }
-.dl-card-orb {
-  display: inline-flex;
-  line-height: 0;
-  margin-bottom: 16px;
+/* The app icon as a rounded-square tile (like a home-screen icon). */
+.dl-card-appicon {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 22px -10px rgba(0, 0, 0, 0.35);
+}
+.dl-card-body {
+  min-width: 0;
+  flex: 1;
 }
 .dl-card-title {
-  font-size: clamp(24px, 3.4vw, 32px);
+  font-size: clamp(23px, 3vw, 30px);
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
 .dl-card-sub {
-  margin: 12px auto 0;
-  max-width: 40ch;
-  font-size: 15.5px;
+  margin: 8px 0 0;
+  max-width: 48ch;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--text-2);
 }
 .dl-card .store-badges {
-  margin-top: 26px;
+  margin-top: 20px;
+  justify-content: flex-start;
 }
 .dl-card .download-soon {
-  margin-top: 16px;
+  margin-top: 12px;
+}
+@media (max-width: 620px) {
+  .dl-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 20px;
+    padding: 34px 24px;
+  }
+  .dl-card-body {
+    text-align: center;
+  }
+  .dl-card-sub {
+    margin-inline: auto;
+  }
+  .dl-card .store-badges {
+    justify-content: center;
+  }
 }
 .store-badges {
   margin-top: 30px;

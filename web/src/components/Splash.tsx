@@ -18,6 +18,7 @@ export function Splash({
   bg = "var(--bg)",
   size = 96,
   padBottom,
+  always = false,
 }: {
   /** Background + eye ("cut-out") colour — match the surface it covers. */
   bg?: string;
@@ -25,6 +26,10 @@ export function Splash({
   /** Bottom padding (e.g. "25vh") to raise the centred orb so it lands exactly
    *  where the page's own orb sits — a seamless handoff. */
   padBottom?: string;
+  /** Replay on EVERY load/refresh (the landing "awakening"), ignoring the
+   *  once-per-session gate — but still mark the session so /app doesn't
+   *  double-splash right after. */
+  always?: boolean;
 }) {
   const [mounted, setMounted] = useState(true);
   const [grown, setGrown] = useState(false);
@@ -38,7 +43,8 @@ export function Splash({
     } catch {
       /* private mode — just play it */
     }
-    if (seen) {
+    // `always` replays every load; otherwise honour the once-per-session gate.
+    if (seen && !always) {
       setMounted(false);
       return;
     }
