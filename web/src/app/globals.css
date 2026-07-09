@@ -42,6 +42,20 @@
   color: var(--text);
 }
 
+/* Smooth anchor scrolling; sections leave room for the floating header so a
+   jumped-to heading is never hidden under it. */
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+.section {
+  scroll-margin-top: 86px;
+}
+
 /* ── Splash — the opening "ONE wakes up" moment (see components/Splash.tsx) ── */
 .one-splash {
   position: fixed;
@@ -3009,16 +3023,35 @@ footer {
   position: sticky;
   top: 92px;
 }
-.docs-nav-group {
-  margin-bottom: 20px;
+/* Page tabs in the header — switch between About / Support / Legal. */
+.docs-tabs {
+  display: flex;
+  gap: 6px;
 }
-.docs-nav-label {
-  font-size: 11px;
+.docs-tab {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition: background 140ms ease, color 140ms ease;
+}
+.docs-tab:hover {
+  color: var(--text);
+}
+.docs-tab.active {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+/* Sidebar — the current page's sections (scroll-spy anchors). */
+.docs-nav-title {
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-3);
-  padding: 6px 12px;
+  padding: 6px 12px 10px;
 }
 .docs-nav-item {
   display: block;
@@ -3031,6 +3064,7 @@ footer {
   font-size: 14px;
   font-family: inherit;
   color: var(--text-2);
+  text-decoration: none;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }
@@ -3046,25 +3080,25 @@ footer {
 .docs-content {
   flex: 1;
   min-width: 0;
-  max-width: 680px;
-  animation: docsFade 300ms ease;
+  max-width: 720px;
 }
-@keyframes docsFade {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+/* Sections stack down the page; scroll-margin clears the sticky header when a
+   sidebar link jumps to one. */
+.docs-section {
+  scroll-margin-top: 96px;
+  padding-bottom: 8px;
+}
+.docs-section + .docs-section {
+  margin-top: 34px;
+  padding-top: 40px;
+  border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
 }
 .docs-title {
-  font-size: clamp(28px, 4vw, 34px);
+  font-size: clamp(23px, 3vw, 28px);
   font-weight: 700;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   color: var(--text);
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 .docs-para {
   font-size: 16px;
@@ -3073,32 +3107,82 @@ footer {
   margin-bottom: 17px;
   max-width: 66ch;
 }
+/* FAQ accordion — each question collapses smoothly via grid-rows 0fr→1fr. */
+.faq {
+  border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+.faq-item {
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+.faq-q {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: start;
+  padding: 18px 2px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.faq-chev {
+  flex-shrink: 0;
+  color: var(--text-3);
+  line-height: 0;
+  transition: transform 240ms ease;
+}
+.faq-item.open .faq-chev {
+  transform: rotate(180deg);
+}
+.faq-a {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 260ms ease;
+}
+.faq-item.open .faq-a {
+  grid-template-rows: 1fr;
+}
+.faq-a > p {
+  overflow: hidden;
+  margin: 0;
+  padding: 0 2px 18px;
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--text-2);
+  max-width: 64ch;
+}
 @media (max-width: 760px) {
+  .docs-tabs {
+    display: none;
+  }
   .docs-page {
     flex-direction: column;
-    gap: 18px;
-  }
-  .docs-nav {
-    position: static;
-    width: 100%;
-    display: flex;
-    flex-wrap: wrap;
     gap: 8px;
   }
-  .docs-nav-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin: 0;
-    align-items: center;
-  }
-  .docs-nav-label {
+  .docs-nav {
+    position: sticky;
+    top: 58px;
+    z-index: 10;
     width: 100%;
-    padding: 6px 12px 0;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px 0;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: blur(10px);
+  }
+  .docs-nav-title {
+    display: none;
   }
   .docs-nav-item {
     width: auto;
     white-space: nowrap;
+    flex-shrink: 0;
     background: color-mix(in srgb, var(--text) 4%, transparent);
   }
 }

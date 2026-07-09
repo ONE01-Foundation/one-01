@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * DocsView — a real docs PAGE (not a popup) for About / Support / Legal, in the
- * site's own style: a floating-pill header, the unified background, a GitBook-
- * style section sidebar (the only "panel" — it navigates the sections inside),
- * a content pane, and the site footer. Each footer link is its own route
- * (/about, /support, /legal) that opens on that group's first section.
+ * DocsView — a real docs PAGE per route (About / Support / Legal), each standing
+ * on its own: the site header with page tabs, a sidebar of THIS page's sections
+ * (scroll-spy + smooth anchor scroll), the sections stacked in the content pane,
+ * and the site footer. The FAQ renders as an accordion. Sections carry a
+ * scroll-margin so the sticky header never covers a heading you jump to.
  */
 
 import { useEffect, useState } from "react";
@@ -29,8 +29,15 @@ function MoonIcon() {
     </svg>
   );
 }
+function Chevron() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
-export function DocsView({ initialGroup }: { initialGroup: DocGroupId }) {
+export function DocsView({ group }: { group: DocGroupId }) {
   // Language — shares the landing's choice (localStorage + browser default).
   const [lang, setLang] = useState<Lang>("en");
   useEffect(() => {
@@ -101,12 +108,35 @@ export function DocsView({ initialGroup }: { initialGroup: DocGroupId }) {
       return next;
     });
 
-  // Which section is open. Ids are language-independent, so this survives a
-  // language switch. Starts at the routed group's first section.
-  const [pageId, setPageId] = useState<string>(
-    () => DOCS.en.groups.find((g) => g.id === initialGroup)!.pages[0].id
-  );
-  const active = docs.groups.flatMap((g) => g.pages).find((p) => p.id === pageId) ?? null;
+  const g = docs.groups.find((x) => x.id === group) ?? docs.groups[0];
+
+  // Scroll-spy: the active section is the last one whose top has scrolled above
+  // a line just under the sticky header — i.e. the one you're reading now.
+  const [activeId, setActiveId] = useState<string>(g.pages[0]?.id ?? "");
+  useEffect(() => {
+    const onScroll = () => {
+      let current = g.pages[0]?.id ?? "";
+      for (const p of g.pages) {
+        const el = document.getElementById(p.id);
+        if (el && el.getBoundingClientRect().top <= 120) current = p.id;
+      }
+      setActiveId(current);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [group, lang, g]);
+
+  // FAQ accordion — first item open by default.
+  const [openFaq, setOpenFaq] = useState(0);
+
+  const jumpTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      setActiveId(id);
+    }
+  };
 
   return (
     <main className="docs-root">
@@ -114,6 +144,13 @@ export function DocsView({ initialGroup }: { initialGroup: DocGroupId }) {
         <Link href="/" className="docs-topbar-brand" aria-label="ONE01 home">
           <Logo height={20} interactive />
         </Link>
+        <nav className="docs-tabs" aria-label="Pages">
+          {docs.groups.map((gr) => (
+            <Link key={gr.id} href={`/${gr.id}`} className={`docs-tab${gr.id === group ? " active" : ""}`}>
+              {gr.title}
+            </Link>
+          ))}
+        </nav>
         <div className="docs-topbar-actions">
           <button type="button" className="nav-mode nav-lang" onClick={toggleLang} aria-label={t.aria.switchLang}>
             {t.aria.langLabel}
@@ -133,34 +170,64 @@ export function DocsView({ initialGroup }: { initialGroup: DocGroupId }) {
       </header>
 
       <div className="docs-page">
-        <nav className="docs-nav" aria-label="Sections">
-          {docs.groups.map((g) => (
-            <div className="docs-nav-group" key={g.id}>
-              <div className="docs-nav-label">{g.title}</div>
-              {g.pages.map((p) => (
-                <button
-                  key={p.id}
-                  className={`docs-nav-item${p.id === pageId ? " active" : ""}`}
-                  onClick={() => setPageId(p.id)}
-                >
-                  {p.title}
-                </button>
-              ))}
-            </div>
+        <nav className="docs-nav" aria-label={g.title}>
+          <div className="docs-nav-title">{g.title}</div>
+          {g.pages.map((p) => (
+            <a
+              key={p.id}
+              href={`#${p.id}`}
+              className={`docs-nav-item${p.id === activeId ? " active" : ""}`}
+              onClick={(e) => {
+                e.preventDefault();
+                jumpTo(p.id);
+              }}
+            >
+              {p.title}
+            </a>
           ))}
         </nav>
-        <article className="docs-content" key={pageId}>
-          {active && (
-            <>
-              <h1 className="docs-title">{active.title}</h1>
-              {active.body.map((para, i) => (
-                <p className="docs-para" key={i}>
-                  {para}
-                </p>
-              ))}
-            </>
-          )}
-        </article>
+
+        <div className="docs-content">
+          {g.pages.map((p) => (
+            <section id={p.id} className="docs-section" key={p.id}>
+              <h2 className="docs-title">{p.title}</h2>
+              {p.id === "faq" ? (
+                <div className="faq">
+                  {p.body.map((qa, i) => {
+                    const sep = qa.indexOf(" — ");
+                    const q = sep >= 0 ? qa.slice(0, sep) : qa;
+                    const a = sep >= 0 ? qa.slice(sep + 3) : "";
+                    const open = openFaq === i;
+                    return (
+                      <div className={`faq-item${open ? " open" : ""}`} key={i}>
+                        <button
+                          type="button"
+                          className="faq-q"
+                          aria-expanded={open}
+                          onClick={() => setOpenFaq(open ? -1 : i)}
+                        >
+                          <span>{q}</span>
+                          <span className="faq-chev" aria-hidden="true">
+                            <Chevron />
+                          </span>
+                        </button>
+                        <div className="faq-a">
+                          <p>{a}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                p.body.map((para, i) => (
+                  <p className="docs-para" key={i}>
+                    {para}
+                  </p>
+                ))
+              )}
+            </section>
+          ))}
+        </div>
       </div>
 
       <footer className="foot">
