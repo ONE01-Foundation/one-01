@@ -29,6 +29,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BottomSheet } from '../../components/mvp/BottomSheet';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
+import { CardLoop } from '../../components/mvp/CardLoop';
 import { CloseIcon, SearchIcon, FilterIcon } from '../../components/mvp/icons';
 import { useThemeStore } from '../../stores/themeStore';
 import type { ThemeColors } from '../../utils/theme';
@@ -36,20 +37,29 @@ import { useLanguage } from '../../i18n/useT';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
 import { useMvpStore, useActiveIdentity } from '../../stores/mvpStore';
-import {
-  buildGlobalFeed,
-  type OfficialOne,
-  type PublicProcessCard,
-  type TemplateCard,
-  type InsightCard,
-  type SignalCard,
-} from '../../data/mvp/global';
+import { buildGlobalFeed } from '../../data/mvp/global';
 import { generateRichUnitByKey, type ArchetypeKey } from '../../data/mvp/unitArchetype';
 
 interface GlobalSheetProps {
   visible: boolean;
   onClose: () => void;
 }
+
+// One unified card in the Global loop — every feed kind maps to this shape.
+interface LoopCard {
+  id: string;
+  emoji: string;
+  kind: string;
+  badge?: string;
+  title: string;
+  sub?: string;
+  meta?: string;
+  extra?: string;
+  actionLabel: string;
+  onAction: () => void;
+}
+
+const LOOP_CARD_H = 320;
 
 export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
   const { colors } = useThemeStore();
@@ -128,6 +138,73 @@ export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
   );
 
   const rtl = rtlText(lang);
+
+  // Flatten the (filtered) feed into one ordered stream of cards for the loop —
+  // highest value first: signals → officials → public → templates → insights.
+  const loopCards: LoopCard[] = useMemo(() => {
+    const out: LoopCard[] = [];
+    signals.forEach((s) =>
+      out.push({
+        id: s.id,
+        emoji: s.emoji,
+        kind: he ? 'אות שוק' : 'Signal',
+        title: s.text,
+        actionLabel: he ? 'בדוק' : 'Explore',
+        onAction: () => askOne(s.text),
+      }),
+    );
+    officials.forEach((o) =>
+      out.push({
+        id: o.id,
+        emoji: o.emoji,
+        kind: he ? 'ONE רשמי' : 'Official ONE',
+        badge: he ? 'רשמי' : 'Official',
+        title: o.name,
+        sub: o.category,
+        meta: o.status,
+        actionLabel: he ? 'הזמנה' : 'Book',
+        onAction: () => askOne(he ? `קבע תור ב-${o.name}` : `Book an appointment at ${o.name}`),
+      }),
+    );
+    publicProcesses.forEach((p) =>
+      out.push({
+        id: p.id,
+        emoji: p.emoji,
+        kind: he ? 'תהליך ציבורי' : 'Public process',
+        title: p.title,
+        sub: `${he ? 'מאת' : 'By'} ${p.by}`,
+        meta: p.meta,
+        actionLabel: he ? 'הצטרף' : 'Join',
+        onAction: () => createFromArchetype(p.archetype, p.title),
+      }),
+    );
+    templates.forEach((tpl) =>
+      out.push({
+        id: tpl.id,
+        emoji: tpl.emoji,
+        kind: he ? 'תבנית' : 'Template',
+        title: tpl.title,
+        sub: he
+          ? `בשימוש ${tpl.usedBy.toLocaleString()} אנשים`
+          : `Used by ${tpl.usedBy.toLocaleString()} people`,
+        extra: tpl.steps.join('  ·  '),
+        actionLabel: he ? 'צור תהליך' : 'Create process',
+        onAction: () => createFromArchetype(tpl.archetype, tpl.title),
+      }),
+    );
+    insights.forEach((ins) =>
+      out.push({
+        id: ins.id,
+        emoji: ins.emoji,
+        kind: he ? 'תובנה' : 'Insight',
+        title: ins.title,
+        extra: ins.points.map((pt, i) => `${i + 1}. ${pt}`).join('\n'),
+        actionLabel: he ? 'צור מזה' : 'Create from this',
+        onAction: () => createFromArchetype(ins.archetype, ins.title),
+      }),
+    );
+    return out;
+  }, [signals, officials, publicProcesses, templates, insights, he, askOne, createFromArchetype]);
 
   return (
     <BottomSheet
@@ -244,186 +321,64 @@ export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
           </Pressable>
         </View>
 
-        {/* Market signals — business identities only. Highest value at top. */}
-        {signals.length > 0 && (
-          <SectionTitle colors={colors} rtl={rtl}>
-            {he ? 'אותות שוק' : 'Market signals'}
-          </SectionTitle>
-        )}
-        {signals.map((s: SignalCard) => (
-          <View
-            key={s.id}
-            style={[styles.signalCard, { backgroundColor: colors.surface }, rtlRow(lang)]}
-          >
-            <Text style={styles.cardEmoji}>{s.emoji}</Text>
-            <Text style={[styles.signalText, { color: colors.text }, rtl]}>{s.text}</Text>
-          </View>
-        ))}
-
-        {/* Official ONEs */}
-        {officials.length > 0 && (
-          <SectionTitle colors={colors} rtl={rtl}>
-            {he ? 'ONE רשמיים' : 'Official ONEs'}
-          </SectionTitle>
-        )}
-        {officials.map((o: OfficialOne) => (
-          <View
-            key={o.id}
-            style={[styles.card, { backgroundColor: colors.surface }]}
-          >
-            <View style={[styles.cardHead, rtlRow(lang)]}>
-              <Text style={styles.cardEmoji}>{o.emoji}</Text>
-              <View style={styles.flex1}>
-                <View style={[styles.titleRow, rtlRow(lang)]}>
-                  <Text style={[styles.cardTitle, { color: colors.text }, rtl]} numberOfLines={1}>
-                    {o.name}
-                  </Text>
-                  <View style={[styles.verifiedTag, { backgroundColor: colors.text }]}>
-                    <Text style={[styles.verifiedText, { color: colors.background }]}>
-                      {he ? 'רשמי' : 'Official'}
-                    </Text>
+        {/* The world as a never-ending loop: the front card drops down and
+            cycles to the back, the next rises into place. Auto-rotates like a
+            news feed; each card's action fires without skipping it. */}
+        {loopCards.length > 0 ? (
+          <CardLoop
+            items={loopCards}
+            cardHeight={LOOP_CARD_H}
+            renderCard={(c) => (
+              <View style={[styles.loopCard, { backgroundColor: colors.surface }]}>
+                <View style={[styles.loopBadgeRow, rtlRow(lang)]}>
+                  <View style={styles.loopBadge}>
+                    <Text style={styles.loopBadgeText}>{c.kind}</Text>
                   </View>
+                  {c.badge ? (
+                    <View style={[styles.verifiedTag, { backgroundColor: colors.text }]}>
+                      <Text style={[styles.verifiedText, { color: colors.background }]}>{c.badge}</Text>
+                    </View>
+                  ) : null}
                 </View>
-                <Text style={[styles.cardSub, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
-                  {o.category}
+                <Text style={styles.loopEmoji}>{c.emoji}</Text>
+                <Text style={[styles.loopTitle, { color: colors.text }, rtl]} numberOfLines={2}>
+                  {c.title}
                 </Text>
-                <Text style={[styles.cardMeta, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
-                  {o.status}
-                </Text>
+                {c.sub ? (
+                  <Text style={[styles.cardSub, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
+                    {c.sub}
+                  </Text>
+                ) : null}
+                {c.meta ? (
+                  <Text style={[styles.cardMeta, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
+                    {c.meta}
+                  </Text>
+                ) : null}
+                {c.extra ? (
+                  <Text style={[styles.steps, { color: colors.textSecondary }, rtl]} numberOfLines={3}>
+                    {c.extra}
+                  </Text>
+                ) : null}
+                <View style={styles.flex1} />
+                <View style={[styles.actionRow, rtlRow(lang)]}>
+                  <PillAction colors={colors} primary onPress={c.onAction}>
+                    {c.actionLabel}
+                  </PillAction>
+                </View>
               </View>
-            </View>
-            <View style={[styles.actionRow, rtlRow(lang)]}>
-              <PillAction colors={colors} primary onPress={() => askOne(he ? `קבע תור ב-${o.name}` : `Book an appointment at ${o.name}`)}>
-                {he ? 'הזמנה' : 'Book'}
-              </PillAction>
-              <PillAction colors={colors} onPress={() => askOne(he ? `יש לי שאלה ל-${o.name}` : `I have a question for ${o.name}`)}>
-                {he ? 'שאל' : 'Ask'}
-              </PillAction>
-              <PillAction colors={colors} onPress={() => askOne(he ? `חבר אותי ל-${o.name}` : `Connect me with ${o.name}`)}>
-                {he ? 'התחבר' : 'Connect'}
-              </PillAction>
-            </View>
-          </View>
-        ))}
-
-        {/* Public processes */}
-        {publicProcesses.length > 0 && (
-          <SectionTitle colors={colors} rtl={rtl}>
-            {he ? 'תהליכים ציבוריים' : 'Public processes'}
-          </SectionTitle>
+            )}
+          />
+        ) : (
+          <Text style={[styles.emptyText, { color: colors.textSecondary }, rtl]}>
+            {he ? 'אין תוצאות' : 'No results'}
+          </Text>
         )}
-        {publicProcesses.map((p: PublicProcessCard) => (
-          <View
-            key={p.id}
-            style={[styles.card, { backgroundColor: colors.surface }]}
-          >
-            <View style={[styles.cardHead, rtlRow(lang)]}>
-              <Text style={styles.cardEmoji}>{p.emoji}</Text>
-              <View style={styles.flex1}>
-                <Text style={[styles.cardTitle, { color: colors.text }, rtl]} numberOfLines={1}>
-                  {p.title}
-                </Text>
-                <Text style={[styles.cardSub, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
-                  {he ? 'מאת' : 'By'} {p.by}
-                </Text>
-                <Text style={[styles.cardMeta, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
-                  {p.meta}
-                </Text>
-              </View>
-            </View>
-            <View style={[styles.actionRow, rtlRow(lang)]}>
-              <PillAction colors={colors} primary onPress={() => createFromArchetype(p.archetype, p.title)}>
-                {he ? 'הצטרף לתהליך' : 'Join process'}
-              </PillAction>
-            </View>
-          </View>
-        ))}
-
-        {/* Templates */}
-        {templates.length > 0 && (
-          <SectionTitle colors={colors} rtl={rtl}>
-            {he ? 'תבניות' : 'Templates'}
-          </SectionTitle>
-        )}
-        {templates.map((tpl: TemplateCard) => (
-          <View
-            key={tpl.id}
-            style={[styles.card, { backgroundColor: colors.surface }]}
-          >
-            <View style={[styles.cardHead, rtlRow(lang)]}>
-              <Text style={styles.cardEmoji}>{tpl.emoji}</Text>
-              <View style={styles.flex1}>
-                <Text style={[styles.cardTitle, { color: colors.text }, rtl]} numberOfLines={1}>
-                  {tpl.title}
-                </Text>
-                <Text style={[styles.cardSub, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
-                  {he ? `תבנית בשימוש ${tpl.usedBy.toLocaleString()} אנשים` : `Used by ${tpl.usedBy.toLocaleString()} people`}
-                </Text>
-              </View>
-            </View>
-            <Text style={[styles.steps, { color: colors.textSecondary }, rtl]} numberOfLines={2}>
-              {tpl.steps.join('  ·  ')}
-            </Text>
-            <View style={[styles.actionRow, rtlRow(lang)]}>
-              <PillAction colors={colors} primary onPress={() => createFromArchetype(tpl.archetype, tpl.title)}>
-                {he ? 'צור תהליך' : 'Create process'}
-              </PillAction>
-            </View>
-          </View>
-        ))}
-
-        {/* Aggregate intelligence */}
-        {insights.length > 0 && (
-          <SectionTitle colors={colors} rtl={rtl}>
-            {he ? 'תובנות מאגרגציה' : 'Aggregate intelligence'}
-          </SectionTitle>
-        )}
-        {insights.map((ins: InsightCard) => (
-          <View
-            key={ins.id}
-            style={[styles.card, { backgroundColor: colors.surface }]}
-          >
-            <View style={[styles.cardHead, rtlRow(lang)]}>
-              <Text style={styles.cardEmoji}>{ins.emoji}</Text>
-              <Text style={[styles.cardTitle, { color: colors.text }, rtl]} numberOfLines={1}>
-                {ins.title}
-              </Text>
-            </View>
-            <Text style={[styles.cardSub, { color: colors.textSecondary }, rtl]}>
-              {he ? 'איפה רוב האנשים נתקעים:' : 'Where most people get stuck:'}
-            </Text>
-            {ins.points.map((pt, i) => (
-              <Text key={i} style={[styles.insightPoint, { color: colors.text }, rtl]}>
-                {`${i + 1}. ${pt}`}
-              </Text>
-            ))}
-            <View style={[styles.actionRow, rtlRow(lang)]}>
-              <PillAction colors={colors} primary onPress={() => createFromArchetype(ins.archetype, ins.title)}>
-                {he ? 'צור מזה' : 'Create from this'}
-              </PillAction>
-            </View>
-          </View>
-        ))}
       </BottomSheetScrollView>
     </BottomSheet>
   );
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────
-
-function SectionTitle({
-  children,
-  colors,
-  rtl,
-}: {
-  children: React.ReactNode;
-  colors: ThemeColors;
-  rtl: object | null;
-}) {
-  return (
-    <Text style={[styles.sectionTitle, { color: colors.textSecondary }, rtl]}>{children}</Text>
-  );
-}
 
 function PillAction({
   children,
@@ -590,4 +545,27 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   signalText: { flex: 1, fontSize: 14, fontWeight: '500', lineHeight: 20 },
+
+  // ── Global loop card ──────────────────────────────────────────────────
+  loopCard: {
+    flex: 1,
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  loopBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  loopBadge: {
+    backgroundColor: '#34D8A0',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  loopBadgeText: { fontSize: 12, fontWeight: '800', color: '#062018', letterSpacing: 0.3 },
+  loopEmoji: { fontSize: 40, marginTop: 18 },
+  loopTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3, marginTop: 8, lineHeight: 30 },
+  emptyText: { fontSize: 15, textAlign: 'center', marginTop: 40 },
 });
