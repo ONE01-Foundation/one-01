@@ -140,32 +140,38 @@ export function DocsView({ group }: { group: DocGroupId }) {
 
   return (
     <main className="docs-root">
-      <header className="docs-topbar">
-        <Link href="/" className="docs-topbar-brand" aria-label="ONE01 home">
-          <Logo height={20} interactive />
-        </Link>
-        <nav className="docs-tabs" aria-label="Pages">
-          {docs.groups.map((gr) => (
-            <Link key={gr.id} href={`/${gr.id}`} className={`docs-tab${gr.id === group ? " active" : ""}`}>
-              {gr.title}
-            </Link>
-          ))}
-        </nav>
-        <div className="docs-topbar-actions">
-          <button type="button" className="nav-mode nav-lang" onClick={toggleLang} aria-label={t.aria.switchLang}>
-            {t.aria.langLabel}
-          </button>
-          <button
-            type="button"
-            className="nav-mode"
-            onClick={toggleTheme}
-            aria-label={isDark ? t.aria.toLight : t.aria.toDark}
-          >
-            {isDark ? <SunIcon /> : <MoonIcon />}
-          </button>
-          <Link className="btn btn-primary" href="/app">
-            {t.nav.enter}
+      {/* The SAME menu as the landing — identical classes, so it inherits the
+          frame, gradient, wordmark, borderless links and outline CTA and can
+          never drift from home. `nav-static` is the only difference: it rides
+          with the page and is always visible (no hero to scroll-reveal from). */}
+      <header className="nav nav-static">
+        <div className="nav-inner">
+          <Link href="/" className="nav-brand" aria-label="ONE01 home">
+            <Logo height={24} interactive />
           </Link>
+          <nav className="nav-links" aria-label="Pages">
+            {docs.groups.map((gr) => (
+              <Link key={gr.id} href={`/${gr.id}`} className={`nav-link${gr.id === group ? " active" : ""}`}>
+                {gr.title}
+              </Link>
+            ))}
+          </nav>
+          <div className="nav-right">
+            <button type="button" className="nav-mode nav-lang" onClick={toggleLang} aria-label={t.aria.switchLang}>
+              {t.aria.langLabel}
+            </button>
+            <button
+              type="button"
+              className="nav-mode"
+              onClick={toggleTheme}
+              aria-label={isDark ? t.aria.toLight : t.aria.toDark}
+            >
+              {isDark ? <SunIcon /> : <MoonIcon />}
+            </button>
+            <Link className="btn btn-primary" href="/app">
+              {t.nav.enter}
+            </Link>
+          </div>
         </div>
       </header>
 

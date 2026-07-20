@@ -8,6 +8,16 @@ import { Orb } from "@/components/Orb";
 import { Sheet } from "@/components/product/Sheet";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
 import { LANDING_COPY, type Lang } from "@/lib/landingCopy";
+// DEMO — "Your data, live". Delete this import with the section.
+import {
+  DEMO_SEED,
+  mulberry32,
+  nextEvent,
+  seedEvents,
+  tickStats,
+  type PulseEvent,
+  type PulseStats,
+} from "@/lib/demoPulse";
 
 function GoogleG() {
   return (
@@ -70,6 +80,42 @@ function MoonIcon() {
     </svg>
   );
 }
+function GlobeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+function XIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.657l-5.214-6.817-5.967 6.817H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z" />
+    </svg>
+  );
+}
+function YouTubeIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M23.5 6.507a3.02 3.02 0 0 0-2.124-2.135C19.505 3.86 12 3.86 12 3.86s-7.505 0-9.376.512A3.02 3.02 0 0 0 .5 6.507 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.493 3.02 3.02 0 0 0 2.124 2.135C4.495 20.14 12 20.14 12 20.14s7.505 0 9.376-.512a3.02 3.02 0 0 0 2.124-2.135A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.493ZM9.6 15.6V8.4l6.223 3.6L9.6 15.6Z" />
+    </svg>
+  );
+}
+function InstagramIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="2.6" y="2.6" width="18.8" height="18.8" rx="5.4" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="17.4" cy="6.6" r="1.15" fill="currentColor" />
+    </svg>
+  );
+}
 function AppleLogo() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -84,6 +130,29 @@ function GooglePlayLogo() {
       <path fill="#4285F4" d="M5 21 L5 12 L13 16.5 Z" />
       <path fill="#FBBC04" d="M21 12 L13 7.5 L13 16.5 Z" />
       <path fill="#EA4335" d="M5 12 L13 7.5 L13 16.5 Z" />
+    </svg>
+  );
+}
+/**
+ * The closing screen's facing side — ONE doing the things a process is made of
+ * (moving, studying, cooking, travelling…). The frame cross-fades through them.
+ *
+ * EMPTY ON PURPOSE: the artwork isn't in the repo yet. Drop the files into
+ * `web/public/one/` and list them here — nothing else needs to change. While
+ * this is empty the frame falls back to a plain Orb, so the layout is already
+ * final and only the pictures are missing.
+ *
+ *   { src: "/one/moving.png",   alt: "ONE carrying a box" },
+ *   { src: "/one/studying.png", alt: "ONE studying at a desk" },
+ */
+const CLOSING_SHOTS: { src: string; alt: string }[] = [];
+
+function BrowserLogo() {
+  return (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9.2" stroke="currentColor" strokeWidth="1.7" />
+      <ellipse cx="12" cy="12" rx="4" ry="9.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M3 12h18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }
@@ -112,9 +181,20 @@ function StoreBadge({
 export default function LandingPage() {
   const heroInputRef = useRef<HTMLInputElement>(null);
   const heroRef = useRef<HTMLElement>(null);
+  // The footer is fixed behind the page; the page reserves exactly its height
+  // as bottom spacing so scrolling to the end uncovers it fully. Measured, not
+  // guessed, because the footer's height changes as its links wrap.
+  const footRef = useRef<HTMLElement>(null);
   // The opening "awakening" owns --p until it finishes; scroll takes over after.
   const introDoneRef = useRef(false);
   const [scrolled, setScrolled] = useState(false);
+  // True once the footer starts being revealed at the end of the scroll. Drives
+  // the nav's "arrived" state (Enter CTA fills, wordmark wakes into the ONE
+  // face) — the same look as hovering the brand — and relaxes back on scroll up.
+  const [atFooter, setAtFooter] = useState(false);
+  // True only at the very bottom — squares off the page's rounded bottom corners
+  // once the footer is fully revealed (they're rounded during the reveal).
+  const [scrolledToEnd, setScrolledToEnd] = useState(false);
   const router = useRouter();
 
   // Hero scroll-collapse: as you scroll off the (pinned) hero, ONE centres and
@@ -296,6 +376,49 @@ export default function LandingPage() {
     return () => clearInterval(t);
   }, [heroLines.length]);
 
+  // DEMO — the "Your data, live" section. Invented numbers that drift upward
+  // and a feed that ticks; see src/lib/demoPulse.ts to delete or replace.
+  // Seeded state renders identically on server and client (no Math.random at
+  // module scope), then only starts moving after mount — otherwise React
+  // hydration would mismatch on the very first paint.
+  const [stats, setStats] = useState<PulseStats>(DEMO_SEED);
+  const [events, setEvents] = useState<PulseEvent[]>(() => seedEvents(mulberry32(7)));
+  useEffect(() => {
+    const roll = mulberry32(Date.now() & 0xffff);
+    let nextId = 100;
+    const id = setInterval(() => {
+      setStats((s) => tickStats(s, roll));
+      setEvents((prev) => {
+        const aged = prev.map((e) => ({ ...e, age: e.age + 4 }));
+        // A new event only sometimes, so the feed breathes instead of marching.
+        if (roll() < 0.6) return [nextEvent(nextId++, roll), ...aged].slice(0, 5);
+        return aged.slice(0, 5);
+      });
+    }, 4000);
+    return () => clearInterval(id);
+  }, []);
+
+  // The facing shots cross-fade slowly — the only movement on the closing
+  // screen, so it reads as ONE being alive rather than as a busy CTA.
+  // Mirror the fixed footer's height into --foot-h so .page-layer can reserve
+  // exactly that much space below itself for the reveal.
+  useEffect(() => {
+    const el = footRef.current;
+    if (!el) return;
+    const sync = () => document.documentElement.style.setProperty("--foot-h", `${el.offsetHeight}px`);
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const [si, setSi] = useState(0);
+  useEffect(() => {
+    if (CLOSING_SHOTS.length < 2) return;
+    const id = setInterval(() => setSi((i) => (i + 1) % CLOSING_SHOTS.length), 4200);
+    return () => clearInterval(id);
+  }, []);
+
   // Sign-in popup (opened by tapping the Orb), mirroring the mobile SignInSheet.
   const [signInOpen, setSignInOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -437,6 +560,35 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Nav "arrived" state: watch the transparent foot-spacer (whose height mirrors
+  // the fixed footer). The moment it enters the viewport the footer is being
+  // uncovered, so the nav lights up; it turns back off as you scroll away.
+  useEffect(() => {
+    const spacer = document.querySelector(".foot-spacer");
+    if (!spacer || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver(([e]) => setAtFooter(e.isIntersecting), {
+      threshold: 0,
+    });
+    io.observe(spacer);
+    return () => io.disconnect();
+  }, []);
+
+  // Round the page's bottom corners while the footer is being revealed, then
+  // square them off at the very end of the scroll so it sits flush on the footer.
+  useEffect(() => {
+    const onScroll = () => {
+      const doc = document.documentElement;
+      setScrolledToEnd(window.innerHeight + window.scrollY >= doc.scrollHeight - 4);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
   // Content floats up into place as it enters the viewport (free scroll).
   useEffect(() => {
     const els = Array.from(document.querySelectorAll<HTMLElement>(".reveal"));
@@ -461,8 +613,13 @@ export default function LandingPage() {
 
   return (
     <>
+      {/* The whole page is an opaque layer that sits ABOVE the fixed footer and
+          slides up off it at the end of the scroll — the Wolt "reveal" effect.
+          It needs a solid background and a positive z-index so the fixed footer
+          (z-index 0) stays hidden behind it until the last screen. */}
+      <div className={`page-layer${scrolledToEnd ? " at-end" : ""}`}>
       {/* ── nav — floating pill, revealed after scrolling into the content ── */}
-      <nav className={`nav${scrolled ? " is-scrolled" : ""}`}>
+      <nav className={`nav${scrolled ? " is-scrolled" : ""}${atFooter ? " is-footer" : ""}`}>
         <div className="nav-inner">
           <Link href="/" className="nav-brand" aria-label="ONE01">
             <Logo height={22} interactive />
@@ -480,15 +637,8 @@ export default function LandingPage() {
               onClick={toggleLang}
               aria-label={t.aria.switchLang}
             >
+              <GlobeIcon />
               {t.aria.langLabel}
-            </button>
-            <button
-              type="button"
-              className="nav-mode"
-              onClick={toggleTheme}
-              aria-label={isDark ? t.aria.toLight : t.aria.toDark}
-            >
-              {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
             <Link className="btn btn-primary" href="/app">{t.nav.enter}</Link>
           </div>
@@ -606,23 +756,42 @@ export default function LandingPage() {
       </Sheet>
 
       {/* ── thesis ── */}
-      <section className="section center reveal" id="problem">
-        <div className="shell narrow">
-          <div className="eyebrow">{t.thesis.eyebrow}</div>
-          <h2>
-            {t.thesis.line1}<br />
-            {t.thesis.line2pre}<span className="accent-italic">{t.thesis.accent}</span>{t.thesis.line2post}
-          </h2>
-          <p className="lede">{t.thesis.lede}</p>
+      {/* ── why ONE — the film IS the section: one full-screen poster ── */}
+      <section className="section center reveal why-section" id="problem">
+        <div className="shell">
+          {/* The frame is the stage. Drop the footage in as a first child
+              <video src="…" poster="…" playsInline /> — it fills the frame and
+              sits UNDER the poster, which carries the copy on a dark scrim. */}
+          <div className="why-video">
+            <div className="why-poster">
+              {/* The copy is nested one level down so it can be counter-scaled:
+                  the frame grows on hover, this cancels that growth back out, so
+                  the box gets bigger and the text does not. */}
+              <div className="why-poster-inner">
+                <h2 className="why-title">{t.thesis.title}</h2>
+                <p className="why-lede">{t.thesis.lede}</p>
+              </div>
+            </div>
+            {/* The whole frame plays — no play button; hovering grows the frame
+                and dims the copy, and that IS the affordance. The transparent
+                button covers the frame rather than wrapping the copy, because a
+                <button> may only contain phrasing content (an <h2> inside one is
+                invalid), and it keeps the control keyboard-reachable. */}
+            <button type="button" className="why-play-target" aria-label={t.thesis.playAria} />
+          </div>
         </div>
       </section>
 
-      {/* ── the idea: ONE · Units · Global + capabilities, as a bento ── */}
-      <section className="section center reveal" id="concept">
+      {/* ── the whole idea, as one continuous bento: the "three words" grid
+             flows straight into ONE for Life / ONE for Business — two screens as
+             you scroll, but a single grid. The section headings sit on the
+             background (full-width cells, no card), like a bento intro. ── */}
+      <section className="section center reveal" id="identity">
         <div className="shell">
-          <div className="eyebrow">{t.bento.eyebrow}</div>
-          <h2>{t.bento.h2}</h2>
           <div className="bento">
+            <div className="bento-tile bento-full bento-intro">
+              <h2>{t.bento.h2}</h2>
+            </div>
             <div className="bento-tile bento-core">
               <div className="bento-core-orb">
                 <Orb size={54} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
@@ -643,18 +812,11 @@ export default function LandingPage() {
                 <h3>{tile.title}</h3>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── ONE for Life / ONE for Business ── */}
-      <section className="section center reveal" id="identity">
-        <div className="shell">
-          <div className="eyebrow">{t.duo.eyebrow}</div>
-          <h2>{t.duo.h2}</h2>
-          <p className="lede">{t.duo.lede}</p>
-          <div className="duo">
-            <div className="duo-card">
+            <div className="bento-tile bento-full bento-intro bento-intro-b">
+              <h2>{t.duo.h2}</h2>
+              <p className="lede">{t.duo.lede}</p>
+            </div>
+            <div className="bento-tile bento-half bento-solution">
               <span className="duo-tag">{t.duo.life.tag}</span>
               <h3>{t.duo.life.h3}</h3>
               <p>{t.duo.life.p}</p>
@@ -664,7 +826,7 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-            <div className="duo-card">
+            <div className="bento-tile bento-half bento-solution">
               <span className="duo-tag">{t.duo.business.tag}</span>
               <h3>{t.duo.business.h3}</h3>
               <p>{t.duo.business.p}</p>
@@ -681,7 +843,6 @@ export default function LandingPage() {
       {/* ── businesses connect (the network in action) ── */}
       <section className="section center reveal" id="connections">
         <div className="shell narrow">
-          <div className="eyebrow">{t.network.eyebrow}</div>
           <h2>
             {t.network.h2pre}<span className="accent-italic">{t.network.h2accent}</span>{t.network.h2post}
           </h2>
@@ -705,20 +866,62 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
+
+        {/* The same network, breathing — live (demo) numbers and a running feed,
+            merged in from the old "Your data, live" section so the network and
+            its live pulse read as one thing. The "Demo data" tag stays: invented
+            numbers shown as live have to say so. */}
+        <div className="shell live-block">
+          <div className="live-head">
+            <h3 className="live-title">{t.pulse.h2}</h3>
+            <span className="pulse-demo-tag">{t.pulse.demoTag}</span>
+          </div>
+          <p className="lede">{t.pulse.lede}</p>
+          <div className="pulse-stats">
+            {t.pulse.stats.map((s) => (
+              <div className="pulse-stat" key={s.key}>
+                <div className="pulse-num">{stats[s.key as keyof PulseStats].toLocaleString()}</div>
+                <div className="pulse-label">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <div className="pulse-feed">
+            <div className="pulse-feed-head">
+              <span className="pulse-feed-title">{t.pulse.timelineTitle}</span>
+              <span className="pulse-live">
+                <span className="pulse-dot" aria-hidden="true" />
+                {t.pulse.liveLabel}
+              </span>
+            </div>
+            <ul className="pulse-list">
+              {events.map((e) => (
+                <li className="pulse-row" key={e.id}>
+                  <span className="pulse-row-dot" aria-hidden="true" />
+                  <span className="pulse-row-text">{t.pulse.events[e.key]}</span>
+                  <span className="pulse-row-age">
+                    {e.age < 60 ? t.pulse.justNow : t.pulse.minsAgo.replace("{n}", String(Math.floor(e.age / 60)))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </section>
 
       {/* ── pricing ── */}
       <section className="section center reveal" id="pricing">
         <div className="shell">
-          <div className="eyebrow">{t.pricing.eyebrow}</div>
           <h2>{t.pricing.h2}</h2>
           <div className="plans">
             {t.pricing.plans.map((p, i) => {
-              const featured = i === 1;
+              const featured = i === 2;
               const per = i === 0 ? t.pricing.perForever : t.pricing.perMonth;
               const btnClass = featured ? "btn btn-primary" : "btn btn-ghost";
               return (
-                <div className={featured ? "plan plan-featured" : "plan"} key={p.name}>
+                <div
+                  className={`plan${featured ? " plan-featured" : ""}${i === 0 ? " plan-plain" : ""}`}
+                  key={p.name}
+                >
                   <div className="plan-name">{p.name}</div>
                   <div className="plan-price">
                     {p.price}
@@ -735,61 +938,170 @@ export default function LandingPage() {
               );
             })}
           </div>
+          {/* The tailored/enterprise tier lives here as a quiet line + link,
+              mirroring the hero's "have a ONE? sign in" affordance. */}
+          <p className="plan-enterprise">
+            {t.pricing.enterprise.line}{" "}
+            <Link className="lhero-link" href="/app">{t.pricing.enterprise.cta}</Link>
+          </p>
         </div>
       </section>
 
-      {/* ── status ── */}
-      <section className="section center reveal" id="status">
-        <div className="shell narrow">
-          <div className="eyebrow">{t.status.eyebrow}</div>
-          <h2>{t.status.h2}</h2>
-          <p className="lede">{t.status.lede}</p>
+      {/* ── newsroom — a moving row of updates, partnerships, and releases,
+             below the plans as a momentum beat before the closing CTA.
+             Data-driven from news.items; loops seamlessly; pauses on hover;
+             holds still under reduced-motion. ── */}
+      <section className="section center reveal news-section">
+        <div className="news-marquee">
+          <div className="news-track">
+            {[...t.news.items, ...t.news.items].map((item, i) => (
+              <article
+                className="news-card"
+                key={`${item.title}-${i}`}
+                aria-hidden={i >= t.news.items.length}
+              >
+                <span className="news-tag">{item.tag}</span>
+                <h3 className="news-card-title">{item.title}</h3>
+                <span className="news-date">{item.date}</span>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ── final CTA — start now, or grab the app (merged) ── */}
+      {/* ── the closing screen — one headline, one subtitle, three buttons.
+             The footer is wrapped in with it so the two SHARE one viewport and
+             the page ends on a single screen, rather than the footer starting
+             a second one. ── */}
+      <div className="closing">
       <section className="final reveal">
-        <h2>
-          {t.final.pre}<span className="accent-italic">{t.final.accent}</span>{t.final.post}
-        </h2>
-        <p className="lede">{t.final.lede}</p>
-        <div className="final-ctas">
-          <Link className="btn btn-primary btn-lg" href="/app">{t.final.cta}</Link>
-        </div>
-
-        {/* the mobile invite — a wide floating card: the real app icon beside
-            the copy + store badges */}
-        <div className="dl-card">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="dl-card-appicon" src="/app-icon.png" alt="ONE app icon" width={80} height={80} />
-          <div className="dl-card-body">
-            <h3 className="dl-card-title">{t.download.title}</h3>
-            <p className="dl-card-sub">{t.download.sub}</p>
+        <div className="final-grid">
+          <div className="final-copy">
+            {/* One sentence over two lines — the lead muted, the payoff solid.
+                Nothing rotates: this is the CTA, and movement here would pull
+                the eye off the buttons. */}
+            <h2 className="final-title">
+              <span className="final-lead">{t.download.titleLead}</span>
+              {t.download.titleRest}
+            </h2>
+            <p className="lede">{t.download.sub}</p>
+            {/* Browser leads — it's the one that actually works today; the `soon`
+                line under them keeps the two store buttons honest. */}
             <div className="store-badges">
+              <StoreBadge logo={<BrowserLogo />} small={t.download.browserSmall} name={t.download.browserName} href="/app" />
               <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
               <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
             </div>
             <p className="download-soon">{t.download.soon}</p>
           </div>
+
+          {/* The facing side — ONE doing the things a process is made of.
+              Empty until the art lands, so it falls back to the plain Orb and
+              the layout is already correct. See CLOSING_SHOTS. */}
+          <div className="final-visual" aria-hidden={CLOSING_SHOTS.length === 0}>
+            {CLOSING_SHOTS.length > 0 ? (
+              CLOSING_SHOTS.map((shot, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={shot.src}
+                  className={`final-shot${i === si % CLOSING_SHOTS.length ? " is-on" : ""}`}
+                  src={shot.src}
+                  alt={i === si % CLOSING_SHOTS.length ? shot.alt : ""}
+                />
+              ))
+            ) : (
+              <div className="final-visual-empty">
+                <Orb size={168} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
+              </div>
+            )}
+          </div>
         </div>
       </section>
+      </div>
+      </div>
 
-      {/* ── footer — centered: orb, quiet links, copyright ── */}
-      <footer className="foot">
+      {/* Transparent spacer the height of the footer — scrolling through it
+          uncovers the fixed footer beneath the page layer. A real element (not
+          a margin) so it can't collapse away. */}
+      <div className="foot-spacer" aria-hidden="true" />
+
+      {/* ── footer — full-bleed, fixed at the bottom BEHIND the page layer.
+             It's uncovered as the page scrolls up off it (see .page-layer). No
+             rounded corners, no reveal class — the scroll itself is the reveal. ── */}
+      <footer className="foot foot-rich" ref={footRef}>
         <div className="foot-center">
-          <Link href="/" aria-label="ONE01" className="foot-orb">
-            <svg width="40" height="40" viewBox="0 0 100 100" aria-hidden="true">
-              <circle cx="50" cy="50" r="50" fill="var(--orb)" />
-              <circle className="foot-eye" cx="34" cy="45" r="12" fill="var(--orb-eye)" />
-              <circle className="foot-eye" cx="66" cy="45" r="12" fill="var(--orb-eye)" />
-            </svg>
-          </Link>
-          <nav className="foot-links">
-            <Link href="/about">{t.foot.about}</Link>
-            <Link href="/support">{t.foot.support}</Link>
-            <Link href="/legal">{t.foot.legal}</Link>
-          </nav>
-          <span className="foot-copy">{t.foot.copy}</span>
+          <div className="foot-top">
+            <div className="foot-brand">
+              <Link href="/" aria-label="ONE01" className="foot-logo">
+                <Logo height={26} interactive />
+              </Link>
+              <p className="foot-tagline">{t.foot.tagline}</p>
+            </div>
+            <div className="foot-cols">
+              {t.foot.cols.map((col) => (
+                <div className="foot-col" key={col.title}>
+                  <div className="foot-col-title">{col.title}</div>
+                  <ul>
+                    {col.links.map((link) => (
+                      <li key={`${col.title}-${link.label}`}>
+                        <Link href={link.href}>{link.label}</Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="foot-bar">
+            <div className="foot-bar-actions">
+              <a
+                className="foot-social-link"
+                href="https://x.com/one01_io"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X"
+              >
+                <XIcon />
+              </a>
+              <a
+                className="foot-social-link"
+                href="https://youtube.com/@one01_io"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="YouTube"
+              >
+                <YouTubeIcon />
+              </a>
+              <a
+                className="foot-social-link"
+                href="https://instagram.com/one01_io"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+              >
+                <InstagramIcon />
+              </a>
+            </div>
+            <span className="foot-copy">{t.foot.copy}</span>
+            <div className="foot-bar-controls">
+              <button
+                type="button"
+                className="foot-ctrl"
+                onClick={toggleLang}
+                aria-label={t.aria.switchLang}
+              >
+                {t.aria.langLabel}
+              </button>
+              <button
+                type="button"
+                className="foot-ctrl foot-ctrl-icon"
+                onClick={toggleTheme}
+                aria-label={isDark ? t.aria.toLight : t.aria.toDark}
+              >
+                {isDark ? <SunIcon /> : <MoonIcon />}
+              </button>
+            </div>
+          </div>
         </div>
       </footer>
 
@@ -827,7 +1139,6 @@ export default function LandingPage() {
             ✕
           </button>
           <div className="gsheet-inner">
-            <div className="eyebrow">{t.global.eyebrow}</div>
             <h2 className="gsheet-title">{t.global.title}</h2>
             <p className="gsheet-sub">{t.global.sub}</p>
             <div className="connect gsheet-connect">

@@ -25,7 +25,8 @@ export interface LandingCopy {
     sent: string;
     failed: string;
   };
-  thesis: { eyebrow: string; line1: string; line2pre: string; accent: string; line2post: string; lede: string };
+  /** "Why ONE" — the film IS the section: copy sits on a scrim over it. */
+  thesis: { title: string; lede: string; playAria: string };
   duo: {
     eyebrow: string;
     h2: string;
@@ -55,34 +56,72 @@ export interface LandingCopy {
     perForever: string;
     perMonth: string;
     plans: { name: string; price: string; blurb: string; feats: string[]; cta: string }[];
+    // The tailored/enterprise tier — not a card, just a line + link below.
+    enterprise: { line: string; cta: string };
   };
-  status: { eyebrow: string; h2: string; lede: string };
+  /** DEMO — see src/lib/demoPulse.ts. Delete this block with the section. */
+  pulse: {
+    eyebrow: string;
+    demoTag: string;
+    h2: string;
+    lede: string;
+    stats: { key: string; label: string }[];
+    timelineTitle: string;
+    liveLabel: string;
+    justNow: string;
+    minsAgo: string;
+    events: Record<string, string>;
+  };
   bento: {
     eyebrow: string;
     h2: string;
     core: { label: string; title: string; text: string };
     tiles: { key: string; label?: string; emoji?: string; icon?: string; title: string; span: "" | "wide" | "full" }[];
   };
+  /**
+   * The closing screen: one sentence, a subtitle, three buttons. The sentence
+   * breaks across two lines — `titleLead` is muted, `titleRest` carries the
+   * weight — so it reads as one statement with the emphasis landing at the end.
+   * No rotation here on purpose: this is the CTA, and it should be still.
+   */
   download: {
-    title: string;
+    titleLead: string;
+    titleRest: string;
     sub: string;
     soon: string;
     appStoreSmall: string;
     appStoreName: string;
     googlePlaySmall: string;
     googlePlayName: string;
+    browserSmall: string;
+    browserName: string;
   };
   mobileBanner: { title: string; sub: string; cta: string; dismiss: string };
   global: { eyebrow: string; title: string; sub: string; cta: string; hint: string };
-  final: { pre: string; accent: string; post: string; lede: string; cta: string };
-  foot: { about: string; support: string; legal: string; copy: string };
+  foot: {
+    about: string;
+    support: string;
+    legal: string;
+    copy: string;
+    tagline: string;
+    madeWith: string;
+    // Columned link groups — add a column or a link here and the footer grows
+    // with it, no markup change needed.
+    cols: { title: string; links: { label: string; href: string }[] }[];
+  };
   aria: { toLight: string; toDark: string; switchLang: string; langLabel: string };
+  // Newsroom marquee — add an item and the moving row grows with it.
+  news: {
+    eyebrow: string;
+    title: string;
+    items: { tag: string; title: string; date: string }[];
+  };
 }
 
 export const LANDING_COPY: Record<Lang, LandingCopy> = {
   en: {
     dir: "ltr",
-    nav: { one: "ONE", life: "Life", business: "Business", pricing: "Pricing", enter: "Enter" },
+    nav: { one: "ONE", life: "Solutions", business: "Network", pricing: "Plans", enter: "Enter" },
     hero: {
       greetings: {
         morning: "Good morning.",
@@ -100,7 +139,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         "Big or small — what should we start with?",
       ],
       noAccount: "No account needed to start",
-      haveOne: "Already have ONE?",
+      haveOne: "Connect",
       inputAria: "Tell ONE what you want to move forward",
     },
     signin: {
@@ -115,13 +154,9 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       failed: "Couldn't send the link.",
     },
     thesis: {
-      eyebrow: "Why ONE",
-      line1: "One for everything.",
-      line2pre: "Everything in ",
-      accent: "one",
-      line2post: ".",
-      lede:
-        "Getting anything done today means becoming your own integration layer — juggling apps, forms, threads, and people, holding the whole picture in your head. ONE takes that weight. It's a single representative that turns what you want into motion, and keeps it moving until it's done.",
+      title: "Meet ONE",
+      lede: "Your digital representative. Tell it what you want, and it carries the process end to end — speaking on your behalf, holding every detail in one place, and disclosing only what you allow.",
+      playAria: "Play the film",
     },
     duo: {
       eyebrow: "One representative, many identities",
@@ -166,19 +201,19 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     pricing: {
       eyebrow: "Plans",
-      h2: "Start free. Grow when you're ready.",
+      h2: "Your ONE grows with you.",
       perForever: " / forever",
       perMonth: " / month",
       plans: [
         {
-          name: "ONE Free",
+          name: "Free",
           price: "$0",
           blurb: "Put your first real process in ONE's hands — no account needed.",
-          feats: ["Unlimited processes", "One personal identity", "Runs on this device"],
+          feats: ["Unlimited processes", "One identity", "Runs on this device"],
           cta: "Start free",
         },
         {
-          name: "ONE Plus",
+          name: "Plus",
           price: "$8",
           blurb: "Your whole life in one place — synced, remembered, everywhere you are.",
           feats: [
@@ -187,30 +222,53 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             "Full memory & history",
             "Connect calendar, email, files",
           ],
-          cta: "Start with Plus",
+          cta: "Choose Plus",
         },
         {
-          name: "ONE Business",
-          price: "$29",
-          blurb: "Give your business a representative customers can reach.",
+          name: "Pro",
+          price: "$19",
+          blurb: "Turn any ONE into a business — become an owner, no company required.",
           feats: [
             "Everything in Plus",
-            "Business identity + bookings",
-            "Followers & customer list",
-            "Team access",
+            "Open a business — its ONE is free",
+            "Bookings & a customer list",
+            "Followers & a public profile",
           ],
-          cta: "Add Business",
+          cta: "Go Pro",
         },
       ],
+      enterprise: {
+        line: "Bigger needs? Max — ONE for teams and organizations, tailored to you.",
+        cta: "Let's talk",
+      },
     },
-    status: {
-      eyebrow: "Where we are",
-      h2: "Open preview.",
-      lede: "Every screen, gesture, and flow is real and complete — you can use it today. The intelligence that acts on your behalf and the network that connects ONEs are rolling out next. No account needed to try it.",
+    pulse: {
+      eyebrow: "Your data, live",
+      demoTag: "Demo data",
+      h2: "The system, breathing.",
+      lede: "ONEs, processes, and the businesses they talk to — moving in real time.",
+      stats: [
+        { key: "ones", label: "ONEs" },
+        { key: "processes", label: "Processes" },
+        { key: "businesses", label: "Businesses" },
+        { key: "handled", label: "Handled this week" },
+      ],
+      timelineTitle: "Happening now",
+      liveLabel: "Live",
+      justNow: "just now",
+      minsAgo: "{n}m ago",
+      events: {
+        process_opened: "A ONE opened a new process",
+        draft_written: "A ONE drafted a message to send",
+        business_connected: "A business connected to a ONE",
+        step_done: "A ONE checked off the next step",
+        booking_made: "A ONE booked an appointment",
+        process_closed: "A process reached done",
+      },
     },
     bento: {
       eyebrow: "The idea",
-      h2: "Three words. One system.",
+      h2: "Everything ONE does — one grid.",
       core: {
         label: "ONE",
         title: "Your digital representative.",
@@ -220,17 +278,24 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         { key: "units", label: "Units", title: "Every intention becomes a living process.", span: "wide" },
         { key: "global", label: "Global", title: "It talks to other ONEs.", span: "" },
         { key: "memory", icon: "fi-rr-brain", title: "Remembers your people, files & decisions.", span: "" },
-        { key: "next", icon: "fi-rr-arrow-progress", title: "Always knows the next step — and takes it.", span: "full" },
+        { key: "drafts", icon: "fi-rr-paper-plane", title: "Writes the real message — ready for you to send.", span: "wide" },
+        { key: "next", icon: "fi-rr-arrow-progress", title: "Always knows the next step.", span: "" },
+        { key: "templates", icon: "fi-rr-layers", title: "Knows the domain, so it fills the process in upfront.", span: "" },
+        { key: "identities", icon: "fi-rr-users", title: "One ONE, separate profiles for life and work.", span: "wide" },
+        { key: "booking", icon: "fi-rr-calendar", title: "Books the appointment with the business.", span: "wide" },
       ],
     },
     download: {
-      title: "ONE, in your pocket",
-      sub: "The same representative, wherever you go — every process in one place.",
-      soon: "Mobile apps coming soon — iOS & Android",
+      titleLead: "ONE for",
+      titleRest: "everyone.",
+      sub: "Same representative, same memory, same processes — phone, laptop, or browser.",
+      soon: "Mobile apps coming soon — the browser works today",
       appStoreSmall: "Download on the",
       appStoreName: "App Store",
       googlePlaySmall: "Get it on",
       googlePlayName: "Google Play",
+      browserSmall: "Open it in your",
+      browserName: "Browser",
     },
     mobileBanner: {
       title: "Get ONE on your phone",
@@ -245,25 +310,72 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       cta: "Step into the network →",
       hint: "Scroll up for Global",
     },
-    final: {
-      pre: "Start with ",
-      accent: "one thing",
-      post: ".",
-      lede: "Hand ONE a single intention. Watch it become a process that moves.",
-      cta: "Start with ONE →",
+    foot: {
+      about: "About",
+      support: "Support",
+      legal: "Legal",
+      copy: "© 2026 ONE01",
+      tagline: "One representative for everything you need to get done — in life and in business.",
+      madeWith: "From intention to reality.",
+      cols: [
+        {
+          title: "Product",
+          links: [
+            { label: "ONE", href: "#problem" },
+            { label: "Life", href: "#identity" },
+            { label: "Business", href: "#connections" },
+            { label: "Pricing", href: "#pricing" },
+            { label: "Launch app", href: "/app" },
+          ],
+        },
+        {
+          title: "Company",
+          links: [
+            { label: "About", href: "/about" },
+            { label: "Support", href: "/support" },
+          ],
+        },
+        {
+          title: "Resources",
+          links: [
+            { label: "Blog", href: "/about" },
+            { label: "Help center", href: "/support" },
+            { label: "Status", href: "/support" },
+          ],
+        },
+        {
+          title: "Legal",
+          links: [
+            { label: "Privacy", href: "/legal" },
+            { label: "Terms", href: "/legal" },
+            { label: "Cookies", href: "/legal" },
+          ],
+        },
+      ],
     },
-    foot: { about: "About", support: "Support", legal: "Legal", copy: "© 2026 ONE01" },
     aria: {
       toLight: "Switch to light",
       toDark: "Switch to dark",
       switchLang: "Switch to Hebrew",
       langLabel: "EN",
     },
+    news: {
+      eyebrow: "Newsroom",
+      title: "What's new at ONE01",
+      items: [
+        { tag: "Product", title: "ONE for Business goes live", date: "Jul 2026" },
+        { tag: "Update", title: "Drafts — ONE writes the message for you", date: "Jul 2026" },
+        { tag: "Partnership", title: "Bringing local service providers on board", date: "Jun 2026" },
+        { tag: "Product", title: "Now on web, phone, and browser", date: "Jun 2026" },
+        { tag: "Milestone", title: "On the way to the App Store & Google Play", date: "Soon" },
+        { tag: "Update", title: "A first look at your data, live", date: "May 2026" },
+      ],
+    },
   },
 
   he: {
     dir: "rtl",
-    nav: { one: "ONE", life: "חיים", business: "עסק", pricing: "מחירים", enter: "כניסה" },
+    nav: { one: "ONE", life: "פתרונות", business: "רשת", pricing: "מסלולים", enter: "כניסה" },
     hero: {
       greetings: {
         morning: "בוקר טוב.",
@@ -272,70 +384,66 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         hello: "שלום.",
       },
       prompts: [
-        "מה תרצה לקדם?",
-        "תן לי דבר אחד שאתה רוצה שיטופל.",
-        "גלול למטה וראה איך אני מתקפל לנקודה.",
+        "מה תרצו לקדם?",
+        "תנו לי דבר אחד שאתם רוצים שיטופל.",
+        "גללו למטה וראו איך אני מתקפל לנקודה.",
         "כוון אותי למשהו גדול — ואני אפרק אותו לתוכנית.",
-        "אמור את זה פעם אחת. אני אקח את זה עד הסוף.",
+        "אמרו את זה פעם אחת. אני אקח את זה עד הסוף.",
         "גלול למעלה כדי לפתוח את גלובל — רשת ה-ONEs.",
         "גדול או קטן — במה נתחיל?",
       ],
       noAccount: "אפשר להתחיל בלי חשבון",
-      haveOne: "כבר יש לך ONE?",
-      inputAria: "ספר ל-ONE מה תרצה לקדם",
+      haveOne: "התחבר",
+      inputAria: "ספרו ל-ONE מה תרצו לקדם",
     },
     signin: {
       title: "להמשיך עם ONE",
-      sub: "שמור את התהליכים שלך והמשך מכל מכשיר.",
-      google: "המשך עם Google",
+      sub: "שמרו את התהליכים שלכם והמשיכו מכל מכשיר.",
+      google: "המשיכו עם Google",
       or: "או",
       emailPlaceholder: "you@email.com",
       send: "שלח קישור",
       sending: "שולח…",
-      sent: "בדוק את תיבת הדואר שלך.",
+      sent: "בדקו את תיבת הדואר שלכם.",
       failed: "לא הצלחנו לשלוח את הקישור.",
     },
     thesis: {
-      eyebrow: "למה ONE",
-      line1: "אחד לכל דבר.",
-      line2pre: "הכול במקום ",
-      accent: "אחד",
-      line2post: ".",
-      lede:
-        "כדי לקדם משהו היום אתה הופך בעצמך לשכבת החיבור — מלהטט בין אפליקציות, טפסים, התכתבויות ואנשים, ומחזיק את כל התמונה בראש. ONE לוקח את המשקל הזה. נציג אחד שהופך את מה שאתה רוצה לתנועה, וממשיך לדחוף עד שזה נסגר.",
+      title: "הכירו את וואן",
+      lede: "הנציג הדיגיטלי שלכם. אתם אומרים מה אתם רוצים, והוא מוביל את התהליך מקצה לקצה — מדבר בשמכם, שומר כל פרט במקום אחד, וחושף רק מה שאתם מאשרים.",
+      playAria: "נגן את הסרטון",
     },
     duo: {
       eyebrow: "נציג אחד, זהויות רבות",
       h2: "ONE לחיים. ONE לעסק.",
-      lede: "אותו נציג, בכל עולם שאתה חי בו — עבור ביניהם בלי להחליף כלים.",
+      lede: "אותו נציג, בכל עולם שאתם חיים בו — עברו ביניהם בלי להחליף כלים.",
       life: {
         tag: "👤 ONE לחיים",
-        h3: "כל העולם האישי שלך, מיוצג",
-        p: "כל מה שאתה אחראי עליו מחוץ לעבודה — הבריאות, הבית, הכסף, המערכות שאתה נאלץ לנווט בהן. הצב מטרה ו-ONE הופך אותה לתהליך שהוא מוביל, לא לתזכורת שאתה צריך לרדוף אחריה.",
+        h3: "כל העולם האישי שלכם, מיוצג",
+        p: "כל מה שאתם אחראים עליו מחוץ לעבודה — הבריאות, הבית, הכסף, המערכות שאתם נאלצים לנווט בהן. הציבו מטרה ו-ONE הופך אותה לתהליך שהוא מוביל, לא לתזכורת שאתם צריכים לרדוף אחריה.",
         list: [
           "הופך מטרה לתוכנית עם צעד הבא אמיתי",
-          "מנווט עבורך את ההזמנות, הביורוקרטיה והלוגיסטיקה",
+          "מנווט עבורכם את ההזמנות, הביורוקרטיה והלוגיסטיקה",
           "זוכר את האנשים, הקבצים וההחלטות מאחורי כל תהליך",
         ],
       },
       business: {
         tag: "🏢 ONE לעסק",
-        h3: "גם לעסק שלך יש ONE משלו",
-        p: "תן לעסק שלך נציג שתמיד זמין. לקוחות מגיעים אליו דרך ה-ONE שלהם — הוא עונה, מתזמן ומנהל רשימה חיה של מי הם. נוכחות ותפעול, בלי דלפק קבלה.",
+        h3: "גם לעסק שלכם יש ONE משלו",
+        p: "תנו לעסק שלכם נציג שתמיד זמין. לקוחות מגיעים אליו דרך ה-ONE שלהם — הוא עונה, מתזמן ומנהל רשימה חיה של מי הם. נוכחות ותפעול, בלי דלפק קבלה.",
         list: [
-          "ה-ONEs של הלקוחות מגיעים ישירות לשלך",
+          "ה-ONEs של הלקוחות מגיעים ישירות לשלכם",
           "הזמנות הופכות לכרטיסים משותפים לשני הצדדים",
-          "תצוגה חיה של העוקבים והלקוחות שלך",
+          "תצוגה חיה של העוקבים והלקוחות שלכם",
         ],
       },
     },
     network: {
       eyebrow: "הרשת",
-      h2pre: "ה-ONE שלך מדבר עם ה-ONE ",
+      h2pre: "ה-ONE שלכם מדבר עם ה-ONE ",
       h2accent: "שלהם",
       h2post: ".",
-      lede: "כשתהליך מערב מישהו אחר — עסק, שירות, מוסד — ה-ONE שלך מתחבר לשלהם סביב התהליך עצמו. הם מסדרים את הפרטים; כל צד מקבל כרטיס אחד וברור. בלי טפסים, בלי ריצות טלפוניות, בלי חוטים אבודים.",
-      yourOne: "ה-ONE שלך",
+      lede: "כשתהליך מערב מישהו אחר — עסק, שירות, מוסד — ה-ONE שלכם מתחבר לשלהם סביב התהליך עצמו. הם מסדרים את הפרטים; כל צד מקבל כרטיס אחד וברור. בלי טפסים, בלי ריצות טלפוניות, בלי חוטים אבודים.",
+      yourOne: "ה-ONE שלכם",
       yourRole: "אישי",
       yourProcess: "אישור משכנתא",
       yourProcessIcon: "fi-rr-bank",
@@ -347,71 +455,101 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     pricing: {
       eyebrow: "תוכניות",
-      h2: "התחל בחינם. גדל כשתהיה מוכן.",
+      h2: "ה-ONE שלכם גדל יחד אתכם.",
       perForever: " / לתמיד",
       perMonth: " / לחודש",
       plans: [
         {
-          name: "ONE חינם",
+          name: "חינם",
           price: "$0",
-          blurb: "תן ל-ONE את התהליך האמיתי הראשון שלך — בלי חשבון.",
-          feats: ["תהליכים ללא הגבלה", "זהות אישית אחת", "עובד במכשיר הזה"],
-          cta: "התחל בחינם",
+          blurb: "תנו ל-ONE את התהליך האמיתי הראשון שלכם — בלי חשבון.",
+          feats: ["תהליכים ללא הגבלה", "זהות אחת", "עובד במכשיר הזה"],
+          cta: "התחילו בחינם",
         },
         {
-          name: "ONE פלוס",
+          name: "פלוס",
           price: "$8",
-          blurb: "כל החיים שלך במקום אחד — מסונכרנים, זכורים, בכל מקום.",
+          blurb: "כל החיים שלכם במקום אחד — מסונכרנים, זכורים, בכל מקום.",
           feats: [
             "כל מה שבחינם",
             "סנכרון בכל המכשירים",
             "זיכרון והיסטוריה מלאים",
-            "חבר יומן, אימייל וקבצים",
+            "חברו יומן, אימייל וקבצים",
           ],
-          cta: "התחל עם פלוס",
+          cta: "בחרו פלוס",
         },
         {
-          name: "ONE עסקי",
-          price: "$29",
-          blurb: "תן לעסק שלך נציג שהלקוחות יכולים להגיע אליו.",
+          name: "פרו",
+          price: "$19",
+          blurb: "הפכו כל ONE לעסק — היו בעלי עסק, בלי צורך בחברה.",
           feats: [
             "כל מה שבפלוס",
-            "זהות עסקית + הזמנות",
-            "עוקבים ורשימת לקוחות",
-            "גישת צוות",
+            "פתחו עסק — ה-ONE שלו חינם",
+            "הזמנות ורשימת לקוחות",
+            "עוקבים ופרופיל ציבורי",
           ],
-          cta: "הוסף עסק",
+          cta: "עברו לפרו",
         },
       ],
+      enterprise: {
+        line: "צרכים גדולים יותר? מקס — ONE לצוותים ולארגונים, מותאם אליכם.",
+        cta: "דברו איתנו",
+      },
     },
-    status: {
-      eyebrow: "איפה אנחנו",
-      h2: "תצוגה פתוחה.",
-      lede: "כל מסך, מחווה ותהליך אמיתיים ומלאים — אפשר להשתמש כבר היום. הבינה שפועלת בשמך והרשת שמחברת בין ה-ONEs מגיעות בשלב הבא. אין צורך בחשבון כדי לנסות.",
+    pulse: {
+      eyebrow: "הנתונים שלכם, חיים",
+      demoTag: "נתוני דמו",
+      h2: "המערכת, נושמת.",
+      lede: "וואנים, תהליכים והעסקים שהם מדברים איתם — בתנועה, בזמן אמת.",
+      stats: [
+        { key: "ones", label: "וואנים" },
+        { key: "processes", label: "תהליכים" },
+        { key: "businesses", label: "עסקים" },
+        { key: "handled", label: "טופלו השבוע" },
+      ],
+      timelineTitle: "קורה עכשיו",
+      liveLabel: "חי",
+      justNow: "עכשיו",
+      minsAgo: "לפני {n} דק׳",
+      events: {
+        process_opened: "וואן פתח תהליך חדש",
+        draft_written: "וואן ניסח הודעה לשליחה",
+        business_connected: "עסק התחבר לוואן",
+        step_done: "וואן סימן את הצעד הבא כבוצע",
+        booking_made: "וואן קבע תור",
+        process_closed: "תהליך הגיע לסיום",
+      },
     },
     bento: {
       eyebrow: "הרעיון",
-      h2: "שלוש מילים. מערכת אחת.",
+      h2: "כל מה ש-ONE עושה — גריד אחד.",
       core: {
         label: "ONE",
-        title: "הנציג הדיגיטלי שלך.",
-        text: "אמור מה אתה רוצה במילים פשוטות; ONE מבין למה אתה מתכוון ופועל בשבילך — מחליט, מארגן ועוקב עד שזה נסגר.",
+        title: "הנציג הדיגיטלי שלכם.",
+        text: "אמרו מה אתם רוצים במילים פשוטות; ONE מבין למה אתם מתכוונים ופועל בשבילכם — מחליט, מארגן ועוקב עד שזה נסגר.",
       },
       tiles: [
         { key: "units", label: "יחידות", title: "כל כוונה הופכת לתהליך חי.", span: "wide" },
         { key: "global", label: "גלובל", title: "הוא מדבר עם ONEs אחרים.", span: "" },
-        { key: "memory", icon: "fi-rr-brain", title: "זוכר את האנשים, הקבצים וההחלטות שלך.", span: "" },
-        { key: "next", icon: "fi-rr-arrow-progress", title: "תמיד יודע מה הצעד הבא — ולוקח אותו.", span: "full" },
+        { key: "memory", icon: "fi-rr-brain", title: "זוכר את האנשים, הקבצים וההחלטות שלכם.", span: "" },
+        { key: "drafts", icon: "fi-rr-paper-plane", title: "מנסח את ההודעה עצמה — מוכנה לשליחה.", span: "wide" },
+        { key: "next", icon: "fi-rr-arrow-progress", title: "תמיד יודע מה הצעד הבא.", span: "" },
+        { key: "templates", icon: "fi-rr-layers", title: "מכיר את התחום, ולכן ממלא את התהליך מראש.", span: "" },
+        { key: "identities", icon: "fi-rr-users", title: "וואן אחד, פרופילים נפרדים לחיים ולעבודה.", span: "wide" },
+        { key: "booking", icon: "fi-rr-calendar", title: "קובע את התור מול העסק.", span: "wide" },
       ],
     },
     download: {
-      title: "וואן, בכיס שלך",
-      sub: "אותו נציג, לכל מקום שתלכו — כל התהליכים שלכם במקום אחד.",
-      soon: "אפליקציות המובייל בקרוב — iOS ואנדרואיד",
+      titleLead: "ONE",
+      titleRest: "לכולם.",
+      sub: "אותו נציג, אותו זיכרון, אותם תהליכים — בטלפון, במחשב או בדפדפן.",
+      soon: "אפליקציות המובייל בקרוב — בדפדפן זה עובד כבר היום",
       appStoreSmall: "הורידו דרך",
       appStoreName: "App Store",
       googlePlaySmall: "זמין ב־",
       googlePlayName: "Google Play",
+      browserSmall: "פתחו ב־",
+      browserName: "דפדפן",
     },
     mobileBanner: {
       title: "קבלו את ONE בטלפון",
@@ -422,23 +560,70 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     global: {
       eyebrow: "גלובל",
       title: "רשת ה-ONEs.",
-      sub: "ה-ONE שלך לא עובד לבד. הוא מתחבר ל-ONEs של אנשים, עסקים ומוסדות — כך שדברים זזים בין נציגים, סביב התהליך עצמו.",
+      sub: "ה-ONE שלכם לא עובד לבד. הוא מתחבר ל-ONEs של אנשים, עסקים ומוסדות — כך שדברים זזים בין נציגים, סביב התהליך עצמו.",
       cta: "היכנס לרשת ←",
       hint: "גלול למעלה לגלובל",
     },
-    final: {
-      pre: "התחל עם ",
-      accent: "דבר אחד",
-      post: ".",
-      lede: "מסור ל-ONE כוונה אחת. וראה אותה הופכת לתהליך שזז.",
-      cta: "התחל עם ONE ←",
+    foot: {
+      about: "אודות",
+      support: "תמיכה",
+      legal: "משפטי",
+      copy: "© 2026 ONE01",
+      tagline: "נציג אחד לכל מה שצריך להשלים — בחיים ובעסק.",
+      madeWith: "מרצון למציאות.",
+      cols: [
+        {
+          title: "מוצר",
+          links: [
+            { label: "ONE", href: "#problem" },
+            { label: "חיים", href: "#identity" },
+            { label: "עסק", href: "#connections" },
+            { label: "מחירים", href: "#pricing" },
+            { label: "פתחו את האפליקציה", href: "/app" },
+          ],
+        },
+        {
+          title: "החברה",
+          links: [
+            { label: "אודות", href: "/about" },
+            { label: "תמיכה", href: "/support" },
+          ],
+        },
+        {
+          title: "משאבים",
+          links: [
+            { label: "בלוג", href: "/about" },
+            { label: "מרכז עזרה", href: "/support" },
+            { label: "סטטוס", href: "/support" },
+          ],
+        },
+        {
+          title: "משפטי",
+          links: [
+            { label: "פרטיות", href: "/legal" },
+            { label: "תנאים", href: "/legal" },
+            { label: "עוגיות", href: "/legal" },
+          ],
+        },
+      ],
     },
-    foot: { about: "אודות", support: "תמיכה", legal: "משפטי", copy: "© 2026 ONE01" },
     aria: {
       toLight: "עבור למצב בהיר",
       toDark: "עבור למצב כהה",
       switchLang: "החלף לאנגלית",
       langLabel: "עב",
+    },
+    news: {
+      eyebrow: "חדשות",
+      title: "מה חדש ב-ONE01",
+      items: [
+        { tag: "מוצר", title: "ONE for Business יוצא לדרך", date: "יולי 2026" },
+        { tag: "עדכון", title: "טיוטות — ONE כותב בשבילכם את ההודעה", date: "יולי 2026" },
+        { tag: "שותפות", title: "מחברים נותני שירות מקומיים", date: "יוני 2026" },
+        { tag: "מוצר", title: "עכשיו באתר, בטלפון ובדפדפן", date: "יוני 2026" },
+        { tag: "אבן דרך", title: "בדרך ל-App Store ול-Google Play", date: "בקרוב" },
+        { tag: "עדכון", title: "הצצה ראשונה לנתונים שלכם, בזמן אמת", date: "מאי 2026" },
+      ],
     },
   },
 };

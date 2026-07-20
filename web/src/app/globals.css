@@ -137,17 +137,69 @@ html {
   width: 30px;
   height: 30px;
 }
-/* Quiet gateway hints — a steady subtle grey that fades out early as ONE
-   collapses (browser clamps the negative value to 0). */
+/* Gateway hints — pulled in from the screen edge toward the centred hero.
+   The BUTTON carries only the scroll fade (it clears early as ONE collapses;
+   the browser clamps the negative value to 0). The arrival hint lives on the
+   inner svg instead, so the two never fight over `opacity`. */
 .lhero-chev.up {
-  top: 34px;
-  opacity: calc(0.28 - var(--p, 0) * 0.5);
+  top: 92px;
+  opacity: calc(1 - var(--p, 0) * 1.8);
 }
 .lhero-chev.down {
-  bottom: 34px;
+  bottom: 92px;
   cursor: pointer;
-  opacity: calc(0.28 - var(--p, 0) * 0.5);
-  animation: lheroBob 2.4s ease-in-out infinite;
+  opacity: calc(1 - var(--p, 0) * 1.8);
+}
+/* One-shot arrival hint: each arrow STARTS pulled in toward the centre, then
+   at full strength travels outward — the way the scroll goes — before holding
+   still and dimming. Movement finishes BEFORE the fade starts; that ordering is
+   the whole gesture. The travel ends at translateY(0), so the resting spot is
+   the CSS `top`/`bottom` above. `both` pins the faint end state once played. */
+.lhero-chev > svg {
+  animation-duration: 2s;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation-iteration-count: 1;
+  animation-fill-mode: both;
+}
+.lhero-chev.up > svg {
+  animation-name: lheroHintUp;
+}
+.lhero-chev.down > svg {
+  animation-name: lheroHintDown;
+}
+/* The up arrow lives at the top, so "toward the centre" is DOWN (+y) and it
+   travels up (-y) to its resting 0. */
+@keyframes lheroHintUp {
+  0%,
+  15% {
+    transform: translateY(18px);
+    opacity: 0.85;
+  }
+  55% {
+    transform: translateY(0);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 0.2;
+  }
+}
+/* The down arrow lives at the bottom: "toward the centre" is UP (-y), and it
+   travels down (+y) to its resting 0. */
+@keyframes lheroHintDown {
+  0%,
+  15% {
+    transform: translateY(-18px);
+    opacity: 0.85;
+  }
+  55% {
+    transform: translateY(0);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 0.2;
+  }
 }
 .lhero-orb-btn {
   background: transparent;
@@ -251,7 +303,12 @@ html {
   }
   .lhero-chev.up,
   .lhero-chev.down {
-    opacity: 0.28;
+    opacity: 1;
+  }
+  /* Skip the arrival hint; land straight on its resting state. */
+  .lhero-chev > svg {
+    animation: none;
+    opacity: 0.2;
   }
 }
 .lhero-dock {
@@ -353,20 +410,11 @@ html {
   font-size: inherit;
   font-family: inherit;
   padding: 0;
+  text-decoration: none;
 }
 .lhero-link:hover {
   text-decoration: underline;
 }
-@keyframes lheroBob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(5px);
-  }
-}
-
 /* ── Sign-in popup (inside the Sheet) ── */
 .signin {
   display: flex;
@@ -636,6 +684,12 @@ button {
 }
 
 /* ─── nav — a floating pill that reveals a little after you start scrolling ── */
+/* The site menu — a full-bleed bar in the same shape as the docs pages
+   (About / Support / Legal use .docs-topbar), NOT a floating capsule.
+   Its background is the supplied gradient (web_menu_bg.svg): the page colour
+   solid under the bar, fading to transparent by 138px, so content scrolls up
+   into a soft fade instead of hitting a hard edge. Built from `--bg` rather
+   than the raw #F5F4F0 so it holds in dark mode too. */
 .nav {
   position: fixed;
   top: 0;
@@ -644,7 +698,14 @@ button {
   z-index: 50;
   display: flex;
   justify-content: center;
-  padding: 16px;
+  align-items: flex-start;
+  /* Solid page colour across the FULL viewport width — an edge-to-edge bar that
+     content passes cleanly behind. No gradient, no shadow: the colour break is
+     the only edge. The CONTENT inside stays framed to --max (see .nav-inner). */
+  height: auto;
+  padding: 0;
+  background: var(--bg);
+  /* Only the bar itself takes clicks. */
   pointer-events: none;
   opacity: 0;
   transform: translateY(-14px);
@@ -654,23 +715,39 @@ button {
   opacity: 1;
   transform: translateY(0);
 }
+/* The docs pages (About / Support / Legal) wear the SAME menu as home — same
+   frame, gradient, wordmark, borderless links, outline CTA. Three differences,
+   because there's no hero here to float over: it rides with the page (sticky),
+   it's always visible (no scroll-reveal to wait for), and it reserves only its
+   own bar height, so the docs layout below it is untouched. */
+.nav.nav-static {
+  position: sticky;
+  height: auto;
+  opacity: 1;
+  transform: none;
+}
 .nav-inner {
   pointer-events: auto;
-  width: min(940px, 100%);
+  /* Framed to the content column (--max) rather than running edge-to-edge, so
+     the wordmark and the CTA line up with the page content beneath them. The
+     1fr/auto/1fr grid keeps the links optically centred inside that frame. */
+  width: 100%;
+  max-width: var(--max);
+  margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 20px;
-  /* Logical padding: more room on the brand (start) side, tighter on the
-     action (end) side — so it mirrors correctly in Hebrew/RTL too. */
-  padding-block: 9px;
-  padding-inline: 22px 10px;
-  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
-  backdrop-filter: saturate(180%) blur(18px);
-  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  /* Matches .shell's 28px gutter so the brand sits on the same vertical line as
+     the section content. The solid colour lives on .nav (full width) — this is
+     just the framed content rail: no card, no rounding, no lift. */
+  padding: 14px 28px;
+  background: none;
   border: none;
-  border-radius: 999px;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.09);
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
 }
 .nav-brand {
   display: flex;
@@ -679,7 +756,9 @@ button {
   justify-self: start;
 }
 .nav-brand svg {
-  height: 22px;
+  /* Balanced against the 36px controls + CTA at the other end: 22px read small,
+     28px read oversized. */
+  height: 24px;
   width: auto;
   display: block;
 }
@@ -695,19 +774,42 @@ button {
   gap: 12px;
   align-items: center;
 }
+/* Centre menu items: pure text, never a chip. No frame, no fill, no underline —
+   the ONLY feedback is the text's colour strength: muted at rest, full on
+   hover/focus, and briefly dimmed while held. */
 .nav-link {
   font-size: 15px;
   font-weight: 500;
   color: var(--text-2);
-  transition: color 160ms;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  text-decoration: none;
+  transition: color 160ms ease, opacity 120ms ease;
 }
-.nav-link:hover {
+.nav-link:hover,
+.nav-link:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+.nav-link:active {
+  color: var(--text);
+  opacity: 0.55;
+}
+/* Docs pages mark the page you're on at full strength — same "colour strength
+   is the only signal" rule, just pinned on. */
+.nav-link.active {
   color: var(--text);
 }
 @media (max-width: 720px) {
   .nav-inner {
     padding-inline-start: 18px;
   }
+  /* Centre links drop out on narrow screens — on the landing they're section
+     anchors, and on the docs pages the tabs did exactly this before too
+     (the old rule hid .docs-tabs under 760px). Keeping them would overflow the
+     bar past the CTA. */
   .nav-link {
     display: none;
   }
@@ -722,7 +824,7 @@ button {
   border-radius: 999px;
   font-size: 14px;
   font-weight: 600;
-  transition: transform 160ms, background 160ms, color 160ms;
+  transition: transform 160ms, background 160ms, color 160ms, border-color 160ms;
   border: 1px solid transparent;
   white-space: nowrap;
   letter-spacing: -0.005em;
@@ -733,6 +835,25 @@ button {
 }
 .btn-primary:hover {
   transform: translateY(-1px);
+}
+
+/* The menu's "Enter" CTA only — a quiet hairline outline at rest so it sits
+   calmly next to the wordmark, then fills solid on hover/focus. Scoped to the
+   nav on purpose: the page's real CTAs (final / global / pricing) stay solid. */
+.nav-right .btn-primary {
+  background: transparent;
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+  /* Slimmer than the page's CTAs — it sits in a bar, not on a page. */
+  padding: 6px 16px;
+  font-size: 13px;
+}
+.nav-right .btn-primary:hover,
+.nav-right .btn-primary:focus-visible {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+  outline: none;
 }
 .btn-ghost {
   background: transparent;
@@ -1403,31 +1524,100 @@ h3 {
 }
 
 /* ─── final CTA ─────────────────────────────────────────── */
+/* The closing screen and the footer share ONE viewport: the section takes the
+   slack and centres in it, the footer sits at the bottom of the same screen.
+   Without this the footer would open a second, near-empty screen. */
+/* The download CTA is the finale: it reserves the last viewport so it and the
+   footer share one screen — the footer is revealed beneath it on scroll. */
+.closing {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+.closing .final {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+/* Not centred: the copy takes one side, ONE takes the facing side. */
 .final {
-  text-align: center;
-  padding: 140px 28px;
+  text-align: start;
+  padding: 80px 0 40px;
+}
+.final-grid {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 28px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: center;
 }
 .final h2 {
-  font-size: clamp(44px, 6.4vw, 72px);
+  font-size: clamp(40px, 5.6vw, 64px);
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1.05;
   max-width: 720px;
-  margin: 0 auto;
+  margin: 0;
+}
+/* The sentence's first line — same size as the rest, muted, so the two lines
+   read as one statement whose weight lands on the second. */
+.final-lead {
+  display: block;
+  color: var(--text-3);
 }
 .final .lede {
-  margin: 26px auto 0;
-  font-size: 20px;
+  margin: 22px 0 0;
+  font-size: 19px;
   color: var(--text-2);
-  max-width: 480px;
+  max-width: 42ch;
   line-height: 1.5;
 }
-.final-ctas {
-  margin-top: 40px;
+/* Start-aligned with the copy, not centred in the column. */
+.final .store-badges {
+  justify-content: start;
+}
+/* The facing side — ONE, cross-fading through what a process looks like. */
+.final-visual {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-width: 420px;
+  justify-self: center;
+}
+.final-shot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 700ms ease;
+}
+.final-shot.is-on {
+  opacity: 1;
+}
+/* Stand-in until the artwork lands — see CLOSING_SHOTS. */
+.final-visual-empty {
+  position: absolute;
+  inset: 0;
   display: flex;
-  gap: 12px;
+  align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
+}
+@media (max-width: 900px) {
+  .final-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  /* Picture first on a phone, copy under it. */
+  .final-visual {
+    grid-row: 1;
+    max-width: 300px;
+  }
 }
 
 /* ─── footer ────────────────────────────────────────────── */
@@ -1499,6 +1689,160 @@ footer {
   color: var(--text-3);
 }
 
+/* ─── why ONE — a full-screen stage: one line, then the film ─────────────── */
+/* The film IS the section, so it gets the whole viewport. Content is centred in
+   what's LEFT after the fixed bar (hence the asymmetric padding) — centring
+   against the raw viewport would optically sink it, since the top ~66px is
+   covered by the menu. `svh` keeps it honest on mobile, where `vh` jumps as the
+   URL bar hides. */
+.section.why-section {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Clears the fixed bar, so the frame reads optically centred rather than
+     sunk beneath the menu. */
+  padding-top: 104px;
+  padding-bottom: 56px;
+}
+/* `.shell` carries `margin: 0 auto`, and auto cross-axis margins cancel a flex
+   column's default `align-items: stretch` — the shell would size to fit-content.
+   Its only child is the frame at `width: 100%` with absolutely-positioned copy,
+   so there's no intrinsic width to fall back on and the whole thing collapses to
+   zero. State the width explicitly. */
+.why-section .shell {
+  width: 100%;
+}
+
+/* ─── why ONE — the film is the section ─────────────────────────────────── */
+/* 16:9 stage. Dropped-in footage fills the frame and sits UNDER `.why-poster`.
+   `container-type` makes the frame the sizing reference for the copy inside:
+   the frame shrinks on short screens, and the type must shrink WITH it —
+   viewport units would keep the headline big inside a small box. */
+.why-video {
+  container-type: inline-size;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  /* A comfortable poster at rest — substantial, not full-bleed. It grows a
+     touch on hover (below), which is the "this plays" affordance now that
+     there's no play button. The `min()` keeps the fixed-ratio box inside short
+     viewports so it never forces a scroll. */
+  max-width: min(820px, (100svh - 200px) * 16 / 9);
+  margin-inline: auto;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #121212;
+  box-shadow: 0 16px 52px rgba(10, 10, 10, 0.17);
+  transition: transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 360ms ease;
+}
+.why-video:hover {
+  /* A gentle step up — the poster leans toward you. */
+  transform: scale(1.05);
+  box-shadow: 0 30px 84px rgba(10, 10, 10, 0.28);
+}
+.why-video > video,
+.why-video > iframe,
+.why-video > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: none;
+}
+/* The copy, over the footage. The scrim is a gradient rather than a flat wash
+   so the picture still reads at the top while the text stays legible over
+   whatever the frame happens to be showing. */
+.why-poster {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 6cqw 8cqw;
+  text-align: center;
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 8, 8, 0.28) 0%,
+    rgba(8, 8, 8, 0.52) 55%,
+    rgba(8, 8, 8, 0.72) 100%
+  );
+}
+/* Counter-scales the frame's growth, so the box gets bigger and the text keeps
+   exactly its size. 0.9756 is 1 / 1.025 — the inverse of the frame's scale. */
+.why-poster-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: inherit;
+  transition: transform 340ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.why-video:hover .why-poster-inner {
+  /* Exactly 1 / 1.05 — cancels the frame's growth so the box gets bigger and
+     the copy holds its size. */
+  transform: scale(0.9524);
+}
+/* `.section h2` caps width at 720px and sets its own size — the selector is
+   `.section h2.why-title` so it outranks that inside the frame. */
+.section h2.why-title {
+  max-width: none;
+  margin: 0;
+  color: #fff;
+  /* Matches the site's standard section heading (clamp(34px, 4.4vw, 52px)),
+     but in container units so it tracks the frame, not the viewport: 6.3cqw of
+     the 820px frame ≈ 52px, the same cap. */
+  font-size: clamp(30px, 6.3cqw, 52px);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+.why-lede {
+  margin: 0;
+  max-width: 52ch;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: clamp(15px, 2cqw, 18px);
+  line-height: 1.55;
+}
+/* The frame itself is the play control — an invisible button over the whole
+   thing. Nothing is drawn: the frame's growth and the copy's dimming are the
+   affordance. It stays a real <button> so it's keyboard-reachable and named. */
+.why-play-target {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.why-play-target:focus-visible {
+  outline: none;
+}
+/* On hover the frame grows and the copy holds its exact size (counter-scaled
+   above). The copy stays FULLY visible — it never dims or fades to transparent;
+   the growth alone is the "this plays" affordance. */
+@media (prefers-reduced-motion: reduce) {
+  .why-video,
+  .why-poster-inner {
+    transition: none;
+  }
+  .why-video:hover {
+    transform: none;
+  }
+  .why-video:hover .why-poster-inner {
+    transform: none;
+  }
+}
+@media (max-width: 720px) {
+  .why-video {
+    border-radius: 18px;
+  }
+}
+
 /* ─── clean landing: centered sections, steps, slim footer ─── */
 .shell.narrow {
   max-width: 780px;
@@ -1562,12 +1906,75 @@ footer {
 }
 
 /* centered footer — orb, quiet links, copyright on a soft field */
-.foot {
-  border-top: none;
-  padding: 84px 24px 60px;
-  /* Same flat canvas as the home/page — the footer reads as the same surface,
-     not a separate tinted band. */
+/* A dark panel with rounded top corners, so the page ends on a distinct
+   surface rather than trailing off the same cream canvas. It echoes the film
+   frame, which is the page's only other dark block.
+   The orb inside is drawn from `--orb` / `--orb-eye`, so re-pointing those two
+   vars here flips it to white-on-dark without touching the SVG. */
+/* The whole page is an opaque layer over the fixed footer. Positive z-index so
+   it stacks above the footer (z-index 0); solid bg so the footer stays hidden
+   until the layer scrolls up off it. */
+.page-layer {
+  position: relative;
+  z-index: 1;
   background: var(--bg);
+  /* Rounded bottom corners while the footer is revealed beneath (Wolt-style
+     card lift) — squared off at the very end of the scroll via .at-end. */
+  border-bottom-left-radius: 28px;
+  border-bottom-right-radius: 28px;
+  transition: border-radius 220ms ease;
+}
+.page-layer.at-end {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+/* Transparent, footer-tall — the scroll room in which the fixed footer is
+   uncovered. Height, not margin, so it can't collapse away. */
+.foot-spacer {
+  height: var(--foot-h, 300px);
+}
+.foot {
+  --orb: #f5f4f0;
+  --orb-eye: #121212;
+  /* Fixed at the bottom, full-bleed, BEHIND the page layer. Revealed as the
+     page scrolls up off it — no rounded corners, no width cap. */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  border-top: none;
+  border-radius: 0;
+  padding: 76px 24px 54px;
+  background: #121212;
+  color: rgba(255, 255, 255, 0.72);
+}
+/* Dark mode: the page background is also #121212, so a footer painted the same
+   colour would be invisible as it's revealed — the "layer lifting off" effect
+   disappears. Lift the footer to a slightly brighter surface and add a hairline
+   top edge so the reveal reads. Light mode keeps the flush dark-on-cream look. */
+:root[data-theme="dark"] .foot {
+  background: #1c1c1c;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+/* Keep the footer's own content in the content column, centred. */
+.foot .foot-center {
+  max-width: var(--max);
+  margin-inline: auto;
+}
+.foot .foot-links a {
+  color: rgba(255, 255, 255, 0.72);
+}
+.foot .foot-links a:hover {
+  color: #fff;
+}
+.foot .foot-copy {
+  color: rgba(255, 255, 255, 0.42);
+}
+@media (max-width: 620px) {
+  .foot {
+    border-radius: 22px 22px 0 0;
+  }
 }
 .foot-center {
   display: flex;
@@ -1608,6 +2015,303 @@ footer {
 @media (max-width: 640px) {
   .foot-links {
     gap: 28px;
+  }
+}
+
+/* ─── rich footer (landing) — brand + link columns + utility bar ──────
+   A grown-company footer built to scale: columns are data-driven (see
+   foot.cols in landingCopy), so adding a section or link needs no markup.
+   Scoped to `.foot-rich` so the lighter docs-page footer is untouched. */
+.foot-rich {
+  /* Horizontal padding lives on .foot-center (not here) so the content column
+     lines up exactly with the nav's — same max-width + 28px inset, both centred
+     in the full viewport. The dark background stays full-bleed regardless. */
+  padding: 150px 0 100px;
+}
+.foot-rich .foot-center {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 56px;
+  text-align: start;
+  padding-inline: 28px;
+}
+.foot-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 44px 64px;
+  flex-wrap: wrap;
+}
+.foot-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 320px;
+}
+.foot-logo {
+  display: inline-flex;
+  align-items: center;
+  color: #fff;
+  line-height: 0;
+}
+.foot-logo svg {
+  height: 26px;
+  width: auto;
+}
+.foot-tagline {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.55);
+  max-width: 32ch;
+}
+.foot-social {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.foot-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.foot-social-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.foot-cols {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(84px, auto));
+  gap: 28px 44px;
+}
+.foot-col-title {
+  margin-bottom: 15px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+.foot-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.foot-col a {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.58);
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+.foot-col a:hover {
+  color: #fff;
+}
+/* Three-zone bar: buttons on the start side, copyright dead-centre (the two
+   1fr columns balance it), the tagline on the end side. */
+.foot-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.foot-rich .foot-copy {
+  justify-self: center;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.42);
+}
+.foot-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+}
+.foot-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
+.foot-made {
+  justify-self: end;
+  text-align: end;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.42);
+}
+.foot-ctrl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 13px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.foot-ctrl:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.foot-ctrl-icon {
+  width: 30px;
+  padding: 0;
+}
+.foot-ctrl svg {
+  width: 15px;
+  height: 15px;
+}
+@media (max-width: 720px) {
+  .foot-rich {
+    padding: 76px 0 52px;
+  }
+  .foot-rich .foot-center {
+    padding-inline: 22px;
+  }
+  .foot-top {
+    flex-direction: column;
+    gap: 34px;
+  }
+  .foot-cols {
+    grid-template-columns: repeat(2, minmax(112px, 1fr));
+    gap: 28px 32px;
+  }
+  .foot-bar {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 14px;
+  }
+  .foot-bar-actions,
+  .foot-bar-controls {
+    justify-self: center;
+  }
+}
+
+/* ─── the network's live "breathing" block, merged into #connections ─── */
+.live-block {
+  margin-top: 76px;
+}
+.live-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.live-title {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+/* Newsroom sits below the plans with no heading — drop the marquee's heading
+   gap and keep the section tight so it reads as a quick momentum beat. */
+.news-section {
+  padding-top: 30px;
+  padding-bottom: 34px;
+}
+.news-section .news-marquee {
+  margin-top: 0;
+}
+
+/* ─── newsroom marquee — a row of update cards that slides sideways ──────
+   The track is the items rendered twice; translateX(-50%) lands the second
+   copy exactly where the first began, so the loop is seamless. Each card owns
+   its trailing gap (margin, not flex-gap) to keep that math exact. Pauses on
+   hover; holds still under reduced-motion (and becomes a manual scroller). */
+.news-marquee {
+  margin-top: 42px;
+  /* Generous vertical padding so the cards' soft shadow (0 6px 30px) isn't
+     clipped by overflow:hidden — the mask only fades the left/right edges. */
+  padding: 26px 0 40px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+.news-track {
+  display: flex;
+  width: max-content;
+  animation: newsScroll 76s linear infinite;
+}
+.news-marquee:hover .news-track {
+  animation-play-state: paused;
+}
+@keyframes newsScroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.news-card {
+  flex: 0 0 300px;
+  margin-inline-end: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px;
+  min-height: 174px;
+  padding: 26px 26px 24px;
+  border-radius: 22px;
+  background: var(--bg-card);
+  box-shadow: 0 6px 30px rgba(10, 10, 10, 0.06);
+  text-align: start;
+}
+.news-tag {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-2);
+  background: var(--bg-soft);
+  padding: 5px 11px;
+  border-radius: 999px;
+}
+.news-card-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.32;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.news-date {
+  margin-top: auto;
+  font-size: 13px;
+  color: var(--text-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .news-track {
+    animation: none;
+  }
+  .news-marquee {
+    overflow-x: auto;
+  }
+}
+@media (max-width: 720px) {
+  .news-card {
+    flex-basis: 260px;
   }
 }
 
@@ -1694,6 +2398,7 @@ footer {
 .duo-tag {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
@@ -1738,8 +2443,17 @@ footer {
 }
 
 /* ─── pricing plans ─── */
+/* Plans is a full-screen beat: it fills the viewport and centres its content so
+   it "lands" cleanly when you scroll to it. */
+#pricing {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
 .plans {
-  margin-top: 56px;
+  margin-top: 52px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 22px;
@@ -1754,8 +2468,16 @@ footer {
     margin-right: auto;
   }
 }
+/* Tailored/enterprise tier — a quiet line + link under the cards, styled like
+   the hero's sign-in prompt (see .lhero-signin / .lhero-link). */
+.plan-enterprise {
+  margin-top: 44px;
+  font-size: 15px;
+  color: var(--text-3);
+  text-align: center;
+}
 .plan {
-  padding: 34px 30px;
+  padding: 32px 28px;
   border: none;
   border-radius: 24px;
   background: var(--bg-card);
@@ -1766,6 +2488,11 @@ footer {
 }
 .plan-featured {
   box-shadow: 0 18px 48px rgba(10, 10, 10, 0.13);
+}
+/* Free reads as the entry tier — the same white card as the rest, but flat:
+   no shadow, so the paid tiers lift above it. */
+.plan-plain {
+  box-shadow: none;
 }
 .plan-name {
   font-size: 14px;
@@ -1836,11 +2563,22 @@ footer {
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
 }
-/* Language toggle — text ("עב" / "EN") in the same round chip as the theme toggle. */
+/* Language toggle — a small globe + the target-language label ("EN" / "עב"),
+   in a pill (wider than the old round chip so the icon + text fit). */
 .nav-lang {
+  width: auto;
+  min-width: 36px;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
+}
+.nav-lang svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 /* ─── logo hover: "01" fades out, ONE opens living eyes on the orb ─── */
@@ -1859,6 +2597,23 @@ footer {
 .nav-brand:hover .logo-eye {
   opacity: 1;
   animation: orbBlink 5.4s ease-in-out infinite;
+}
+
+/* Scroll-arrival state: when the footer is being revealed at the end of the
+   page (nav gets .is-footer from the foot-spacer observer), the wordmark wakes
+   into the living ONE face and the Enter CTA fills solid — exactly the hover
+   look, but driven by scroll position. It relaxes back as you scroll away. */
+.nav.is-footer .logo-01 {
+  opacity: 0;
+}
+.nav.is-footer .logo-eye {
+  opacity: 1;
+  animation: orbBlink 5.4s ease-in-out infinite;
+}
+.nav.is-footer .nav-right .btn-primary {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
 }
 
 /* ─── footer orb: a plain circle at rest, opens living eyes on hover ─── */
@@ -3275,6 +4030,38 @@ footer {
 .bento-full {
   grid-column: 1 / -1;
 }
+.bento-half {
+  grid-column: span 3;
+}
+/* Section intros that live INSIDE the grid — heading (and lede) on the page
+   background, not in a card. Full-width cells that open each "screen" of the
+   continuous bento. */
+.bento-intro {
+  background: transparent;
+  box-shadow: none;
+  padding: 8px 2px 2px;
+  gap: 10px;
+}
+.bento-intro h2 {
+  margin: 0 auto;
+}
+.bento-intro .lede {
+  margin: 0 auto;
+}
+.bento-intro-b {
+  margin-top: 32px;
+}
+/* ONE for Life / ONE for Business — rich tiles (merged in from the old duo). */
+.bento-solution {
+  padding: 32px 30px;
+  gap: 12px;
+  text-align: start;
+}
+.bento-solution h3 {
+  font-size: 24px;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
 @media (max-width: 900px) {
   .bento {
     grid-template-columns: repeat(2, 1fr);
@@ -3284,6 +4071,7 @@ footer {
     grid-row: span 1;
   }
   .bento-wide,
+  .bento-half,
   .bento-full {
     grid-column: span 2;
   }
@@ -3295,6 +4083,7 @@ footer {
   }
   .bento-core,
   .bento-wide,
+  .bento-half,
   .bento-full {
     grid-column: 1 / -1;
   }
@@ -3308,87 +4097,174 @@ footer {
   text-align: center;
   padding: 32px 24px 64px;
 }
-/* The mobile invite — a WIDE floating card (landscape banner): the real app
-   icon beside the copy + store badges. Rounded, borderless, lifts on a soft
-   shadow. Flex handles LTR/RTL (icon on the leading side). */
-.dl-card {
-  margin: 64px auto 0;
-  max-width: 720px;
-  background: var(--bg-card);
-  border-radius: 24px;
-  padding: 30px 36px;
+/* ═══ DEMO — "Your data, live" ══════════════════════════════════════════════
+   Delete this whole block with src/lib/demoPulse.ts (its header lists the
+   steps). Nothing else on the page depends on these rules. */
+.pulse-eyebrow {
   display: flex;
   align-items: center;
-  gap: 30px;
-  text-align: start;
-  box-shadow: 0 30px 70px -28px rgba(10, 10, 10, 0.32), 0 6px 20px -12px rgba(10, 10, 10, 0.14);
+  justify-content: center;
+  gap: 10px;
 }
-[data-theme="dark"] .dl-card {
-  box-shadow: 0 34px 80px -26px rgba(0, 0, 0, 0.7), 0 4px 16px -10px rgba(0, 0, 0, 0.5);
+/* `.section.center .eyebrow` sets auto side-margins, which would shove the tag
+   to the far edge of the flex row — this selector has to outrank it. */
+.section.center .pulse-eyebrow .eyebrow {
+  margin: 0;
 }
-/* The app icon as a rounded-square tile (like a home-screen icon). */
-.dl-card-appicon {
-  flex-shrink: 0;
-  width: 80px;
-  height: 80px;
+/* The honesty tag. It has to stay visible while the numbers are invented. */
+.pulse-demo-tag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.pulse-stats {
+  margin-top: 42px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.pulse-stat {
+  background: var(--bg-card);
   border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 8px 22px -10px rgba(0, 0, 0, 0.35);
+  padding: 26px 18px;
 }
-.dl-card-body {
-  min-width: 0;
-  flex: 1;
-}
-.dl-card-title {
-  font-size: clamp(23px, 3vw, 30px);
+.pulse-num {
+  font-size: clamp(26px, 3.2vw, 40px);
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.1;
+  line-height: 1.05;
+  /* Digits must not reflow the tile as they tick. */
+  font-variant-numeric: tabular-nums;
 }
-.dl-card-sub {
-  margin: 8px 0 0;
-  max-width: 48ch;
-  font-size: 15px;
-  line-height: 1.5;
+.pulse-label {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.pulse-feed {
+  margin-top: 14px;
+  background: var(--bg-card);
+  border-radius: 20px;
+  padding: 22px 24px;
+  text-align: start;
+}
+.pulse-feed-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+.pulse-feed-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.pulse-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #29b46a;
+  animation: pulseBlink 2s ease-in-out infinite;
+}
+@keyframes pulseBlink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.pulse-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pulse-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 0;
+  font-size: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 5%, transparent);
+  animation: pulseRowIn 420ms ease both;
+}
+.pulse-row:last-child {
+  border-bottom: none;
+}
+@keyframes pulseRowIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+.pulse-row-dot {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+}
+.pulse-row-text {
+  flex: 1;
+  min-width: 0;
   color: var(--text-2);
 }
-.dl-card .store-badges {
-  margin-top: 20px;
-  justify-content: flex-start;
+.pulse-row-age {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
-.dl-card .download-soon {
-  margin-top: 12px;
+@media (max-width: 760px) {
+  .pulse-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot,
+  .pulse-row {
+    animation: none;
+  }
+}
+/* ═══ end DEMO ════════════════════════════════════════════════════════════ */
+
 @media (max-width: 620px) {
-  .dl-card {
-    flex-direction: column;
-    text-align: center;
-    gap: 20px;
-    padding: 34px 24px;
-  }
-  .dl-card-body {
-    text-align: center;
-  }
-  .dl-card-sub {
-    margin-inline: auto;
-  }
-  .dl-card .store-badges {
-    justify-content: center;
+  /* One column rather than three cramped ones — still all the same width. */
+  .store-badges {
+    grid-template-columns: 220px;
   }
 }
+/* Grid, not flex: fixed equal tracks make all three buttons the same width,
+   where flex would let each one's label decide its size. */
 .store-badges {
   margin-top: 30px;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 186px);
   gap: 14px;
   justify-content: center;
-  flex-wrap: wrap;
 }
 .store-badge {
   display: inline-flex;
   align-items: center;
   gap: 11px;
   padding-block: 10px;
-  padding-inline: 16px 22px;
+  padding-inline: 16px;
   border-radius: 14px;
   background: var(--text);
   color: var(--bg);
