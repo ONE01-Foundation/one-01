@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { Orb } from "@/components/Orb";
 import { Sheet } from "@/components/product/Sheet";
+import { QRCodeSVG } from "qrcode.react";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
-import { LANDING_COPY, type Lang } from "@/lib/landingCopy";
+import { LANDING_COPY, type Lang, type LandingCopy } from "@/lib/landingCopy";
 // DEMO — "Your data, live". Delete this import with the section.
 import {
   DEMO_SEED,
@@ -100,6 +101,220 @@ function XIcon() {
     </svg>
   );
 }
+
+/** Languages in the switcher. English + Hebrew are live; the other three are
+    listed so the option is discoverable and flip on once their copy lands. */
+const LANGS: { code: string; native: string; short: string; ready: boolean }[] = [
+  { code: "en", native: "English", short: "EN", ready: true },
+  { code: "he", native: "עברית", short: "עב", ready: true },
+  { code: "ru", native: "Русский", short: "RU", ready: false },
+  { code: "fr", native: "Français", short: "FR", ready: false },
+  { code: "ar", native: "العربية", short: "AR", ready: false },
+];
+
+/** Globe/label button that opens a language menu. Used in the nav (with globe)
+    and in the footer bar (text only). Closes on outside click or Escape. */
+function LangSwitch({
+  lang,
+  onSelect,
+  variant,
+  menuLabel,
+  soonLabel,
+}: {
+  lang: Lang;
+  onSelect: (code: Lang) => void;
+  variant: "nav" | "foot";
+  menuLabel: string;
+  soonLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const current = LANGS.find((l) => l.code === lang) ?? LANGS[0];
+  return (
+    <div className={`lang-switch lang-switch-${variant}`} ref={ref}>
+      <button
+        type="button"
+        className={variant === "nav" ? "nav-mode nav-lang" : "foot-ctrl"}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={menuLabel}
+      >
+        {variant === "nav" && <GlobeIcon />}
+        <span>{current.short}</span>
+        <svg className="lang-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <ul className="lang-menu" role="listbox">
+          {LANGS.map((l) => {
+            const active = l.code === lang;
+            return (
+              <li key={l.code}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  disabled={!l.ready}
+                  className={`lang-opt${active ? " is-active" : ""}${l.ready ? "" : " is-soon"}`}
+                  onClick={() => {
+                    if (!l.ready) return;
+                    onSelect(l.code as Lang);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="lang-opt-name">{l.native}</span>
+                  {l.ready ? (
+                    active ? (
+                      <span className="lang-opt-check" aria-hidden="true">✓</span>
+                    ) : null
+                  ) : (
+                    <span className="lang-opt-soon">{soonLabel}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+type A11ySettings = {
+  large: boolean;
+  contrast: boolean;
+  motion: boolean;
+  underline: boolean;
+};
+const A11Y_DEFAULTS: A11ySettings = { large: false, contrast: false, motion: false, underline: false };
+function applyA11y(s: A11ySettings) {
+  if (typeof document === "undefined") return;
+  const el = document.documentElement;
+  const set = (attr: string, on: boolean) => {
+    if (on) el.setAttribute(attr, "");
+    else el.removeAttribute(attr);
+  };
+  set("data-a11y-large", s.large);
+  set("data-a11y-contrast", s.contrast);
+  set("data-a11y-motion", s.motion);
+  set("data-a11y-underline", s.underline);
+}
+function A11yIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="12" cy="7" r="1.35" fill="currentColor" />
+      <path
+        d="M6.6 9.6c1.7.8 3.5 1.2 5.4 1.2s3.7-.4 5.4-1.2M12 10.8V15M12 15l-2.1 3.6M12 15l2.1 3.6"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+/** Footer accessibility menu — display toggles (bigger text, high contrast,
+    reduced motion, underlined links) applied to <html> and remembered across
+    visits. Replaces the footer's language control; language stays in the nav. */
+function A11yMenu({ copy }: { copy: LandingCopy["a11y"] }) {
+  const [open, setOpen] = useState(false);
+  const [settings, setSettings] = useState<A11ySettings>(A11Y_DEFAULTS);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("one_web_a11y");
+      if (raw) {
+        const next = { ...A11Y_DEFAULTS, ...JSON.parse(raw) } as A11ySettings;
+        setSettings(next);
+        applyA11y(next);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const toggle = (key: keyof A11ySettings) => {
+    setSettings((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      applyA11y(next);
+      try {
+        localStorage.setItem("one_web_a11y", JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+  const items: { key: keyof A11ySettings; label: string }[] = [
+    { key: "large", label: copy.largeText },
+    { key: "contrast", label: copy.contrast },
+    { key: "motion", label: copy.motion },
+    { key: "underline", label: copy.underline },
+  ];
+  return (
+    <div className="lang-switch lang-switch-foot" ref={ref}>
+      <button
+        type="button"
+        className="foot-ctrl foot-ctrl-icon"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={copy.label}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <A11yIcon />
+      </button>
+      {open && (
+        <ul className="lang-menu a11y-menu" role="menu">
+          {items.map((it) => (
+            <li key={it.key}>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={settings[it.key]}
+                className={`lang-opt a11y-opt${settings[it.key] ? " is-on" : ""}`}
+                onClick={() => toggle(it.key)}
+              >
+                <span className="lang-opt-name">{it.label}</span>
+                <span className={`a11y-switch${settings[it.key] ? " is-on" : ""}`} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 function YouTubeIcon() {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -113,23 +328,6 @@ function InstagramIcon() {
       <rect x="2.6" y="2.6" width="18.8" height="18.8" rx="5.4" stroke="currentColor" strokeWidth="1.8" />
       <circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="1.8" />
       <circle cx="17.4" cy="6.6" r="1.15" fill="currentColor" />
-    </svg>
-  );
-}
-function AppleLogo() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.91-1.21-1.77-3.09-2.01-3.76-2.04-1.6-.16-3.12.94-3.93.94-.81 0-1.72-.92-2.83-.9-1.46.02-2.8.85-3.55 2.15-1.51 2.62-.39 6.5 1.09 8.63.72 1.04 1.58 2.21 2.71 2.17 1.09-.04 1.5-.7 2.82-.7 1.31 0 1.68.7 2.83.68 1.17-.02 1.91-1.06 2.63-2.11.83-1.21 1.17-2.38 1.19-2.44-.03-.01-2.28-.88-2.31-3.47M14.53 4.62c.6-.73 1.01-1.74.9-2.75-.87.04-1.92.58-2.54 1.3-.56.64-1.05 1.67-.92 2.65.97.08 1.96-.49 2.56-1.2" />
-    </svg>
-  );
-}
-function GooglePlayLogo() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#34A853" d="M5 3 L5 12 L13 7.5 Z" />
-      <path fill="#4285F4" d="M5 21 L5 12 L13 16.5 Z" />
-      <path fill="#FBBC04" d="M21 12 L13 7.5 L13 16.5 Z" />
-      <path fill="#EA4335" d="M5 12 L13 7.5 L13 16.5 Z" />
     </svg>
   );
 }
@@ -147,34 +345,237 @@ function GooglePlayLogo() {
  */
 const CLOSING_SHOTS: { src: string; alt: string }[] = [];
 
-function BrowserLogo() {
+/** The closing-screen face — alive: its eyes follow the cursor, and when the
+    mouse is idle it drifts on its own in a slow wander. The loop only runs while
+    the orb is on screen (IntersectionObserver), so it costs nothing up top. */
+function ClosingOrb({ isDark }: { isDark: boolean }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [eye, setEye] = useState({ look: 0, gaze: 0 });
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    let raf = 0;
+    let idle = 999;
+    let phase = 0;
+    let targetLook = 0;
+    let targetGaze = 0;
+    let curLook = 0;
+    let curGaze = 0;
+    const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+    const onMove = (e: MouseEvent) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      targetGaze = clamp(((e.clientX - cx) / (window.innerWidth / 2)) * 1.5);
+      targetLook = clamp(((e.clientY - cy) / (window.innerHeight / 2)) * 1.5);
+      idle = 0;
+    };
+    const tick = () => {
+      idle += 1;
+      // After ~1.5s without the mouse, wander on its own.
+      if (idle > 100) {
+        phase += 0.01;
+        targetGaze = Math.sin(phase) * 0.6;
+        targetLook = 0.15 + Math.sin(phase * 0.7) * 0.35;
+      }
+      curGaze += (targetGaze - curGaze) * 0.08;
+      curLook += (targetLook - curLook) * 0.08;
+      setEye((prev) =>
+        Math.abs(prev.gaze - curGaze) < 0.004 && Math.abs(prev.look - curLook) < 0.004
+          ? prev
+          : { look: curLook, gaze: curGaze }
+      );
+      raf = requestAnimationFrame(tick);
+    };
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !raf) {
+          window.addEventListener("mousemove", onMove);
+          raf = requestAnimationFrame(tick);
+        } else if (!entry.isIntersecting && raf) {
+          window.removeEventListener("mousemove", onMove);
+          cancelAnimationFrame(raf);
+          raf = 0;
+        }
+      },
+      { threshold: 0.15 }
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      window.removeEventListener("mousemove", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
   return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9.2" stroke="currentColor" strokeWidth="1.7" />
-      <ellipse cx="12" cy="12" rx="4" ry="9.2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M3 12h18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <div className="final-visual-empty" ref={wrapRef}>
+      <Orb
+        size={168}
+        alive
+        look={eye.look}
+        gaze={eye.gaze}
+        faceColor={isDark ? "#2a2a2a" : "#0a0a0a"}
+        eyeColor={isDark ? "#ffffff" : "#f5f4f0"}
+        className="final-orb"
+      />
+    </div>
+  );
+}
+
+function MonitorIcon() {
+  return (
+    <svg className="get-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="2.6" y="4" width="18.8" height="12.4" rx="2.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M9 20.5h6M12 16.4v4.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
-function StoreBadge({
-  logo,
-  small,
-  name,
-  href,
-}: {
-  logo: React.ReactNode;
-  small: string;
-  name: string;
-  href: string;
-}) {
+function PhoneIcon() {
   return (
-    <a className="store-badge" href={href}>
-      <span className="store-badge-logo">{logo}</span>
-      <span className="store-badge-text">
-        <span className="store-badge-small">{small}</span>
-        <span className="store-badge-name">{name}</span>
+    <svg className="get-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="6.6" y="2.4" width="10.8" height="19.2" rx="2.8" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M10.6 18.6h2.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+function CaretIcon() {
+  return (
+    <svg className="get-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** The phone QR — encodes THIS deployment's /app URL (resolved on the client so
+    it points wherever the site is actually hosted), with the ONE face set in the
+    middle behind a subtle frame. High error-correction keeps it scannable with
+    the centre badge. */
+function AppQR() {
+  const [url, setUrl] = useState("https://one01.io/app");
+  useEffect(() => {
+    if (typeof window !== "undefined") setUrl(window.location.origin + "/app");
+  }, []);
+  return (
+    <div className="qr">
+      <QRCodeSVG value={url} size={168} level="H" marginSize={2} bgColor="#ffffff" fgColor="#121212" />
+      <span className="qr-badge" aria-hidden="true">
+        <Orb size={30} look={0.7} faceColor="#0a0a0a" eyeColor="#f5f4f0" />
       </span>
-    </a>
+    </div>
+  );
+}
+
+/** The two device buttons ("Desktop" / "Mobile"), each opening a small menu —
+    the same dropdown affordance as the language switch. Desktop → open in the
+    browser (works today); Mobile → a QR to scan on the phone. Opening one closes
+    the other; outside-click / Escape close both. */
+function GetOptions({ get }: { get: LandingCopy["download"]["get"] }) {
+  const [open, setOpen] = useState<null | "desktop" | "mobile">(null);
+  const ref = useRef<HTMLDivElement>(null);
+  // Hover opens the menu (mouse only); a short close delay bridges the gap
+  // between the button and its menu so it doesn't flicker shut in between.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const openItem = (kind: "desktop" | "mobile") => {
+    cancelClose();
+    setOpen(kind);
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(null), 160);
+  };
+  useEffect(() => () => cancelClose(), []);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(null);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <div className="get-row" ref={ref}>
+      <div
+        className="get-item"
+        onPointerEnter={(e) => {
+          if (e.pointerType === "mouse") openItem("desktop");
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") scheduleClose();
+        }}
+      >
+        <button
+          type="button"
+          className="get-btn"
+          aria-haspopup="menu"
+          aria-expanded={open === "desktop"}
+          onClick={() => setOpen((o) => (o === "desktop" ? null : "desktop"))}
+        >
+          <MonitorIcon />
+          <span>{get.desktop}</span>
+          <CaretIcon />
+        </button>
+        {open === "desktop" && (
+          <div className="get-pop" role="menu">
+            <Link className="get-opt" href="/app" role="menuitem">
+              <span className="get-opt-l">
+                <span className="get-opt-name">{get.browser}</span>
+                <span className="get-opt-sub">{get.browserSub}</span>
+              </span>
+              <span className="get-opt-arrow" aria-hidden="true">→</span>
+            </Link>
+            <div className="get-opt is-soon">
+              <span className="get-opt-l">
+                <span className="get-opt-name">{get.desktopApp}</span>
+              </span>
+              <span className="get-opt-soon">{get.soon}</span>
+            </div>
+          </div>
+        )}
+      </div>
+      <div
+        className="get-item"
+        onPointerEnter={(e) => {
+          if (e.pointerType === "mouse") openItem("mobile");
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") scheduleClose();
+        }}
+      >
+        <button
+          type="button"
+          className="get-btn"
+          aria-haspopup="menu"
+          aria-expanded={open === "mobile"}
+          onClick={() => setOpen((o) => (o === "mobile" ? null : "mobile"))}
+        >
+          <PhoneIcon />
+          <span>{get.mobile}</span>
+          <CaretIcon />
+        </button>
+        {open === "mobile" && (
+          <div className="get-pop get-pop-qr get-pop-up" role="menu">
+            <div className="qr-tile">
+              <AppQR />
+            </div>
+            <div className="get-qr-cap">{get.scan}</div>
+            <div className="get-qr-platforms">{get.platforms}</div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -282,16 +683,13 @@ export default function LandingPage() {
     document.documentElement.lang = lang;
     document.documentElement.dir = t.dir;
   }, [lang, t.dir]);
-  const toggleLang = () => {
-    setLang((prev) => {
-      const next = prev === "he" ? "en" : "he";
-      try {
-        localStorage.setItem("one_web_lang", next);
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+  const selectLang = (code: Lang) => {
+    setLang(code);
+    try {
+      localStorage.setItem("one_web_lang", code);
+    } catch {
+      /* ignore */
+    }
   };
 
   // Ready to type from the moment ONE appears — focus (blinking caret) without
@@ -589,6 +987,13 @@ export default function LandingPage() {
     };
   }, []);
 
+  // Touch/hover the revealed footer strip → smooth-scroll the rest of the way,
+  // so the footer opens all the way on its own (a "grab the footer" gesture).
+  const revealFooter = () => {
+    if (typeof window === "undefined" || scrolledToEnd || !atFooter) return;
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+  };
+
   // Content floats up into place as it enters the viewport (free scroll).
   useEffect(() => {
     const els = Array.from(document.querySelectorAll<HTMLElement>(".reveal"));
@@ -619,7 +1024,7 @@ export default function LandingPage() {
           (z-index 0) stays hidden behind it until the last screen. */}
       <div className={`page-layer${scrolledToEnd ? " at-end" : ""}`}>
       {/* ── nav — floating pill, revealed after scrolling into the content ── */}
-      <nav className={`nav${scrolled ? " is-scrolled" : ""}${atFooter ? " is-footer" : ""}`}>
+      <nav className={`nav${scrolled ? " is-scrolled" : ""}${atFooter ? " is-footer" : ""}${scrolledToEnd ? " is-end" : ""}`}>
         <div className="nav-inner">
           <Link href="/" className="nav-brand" aria-label="ONE01">
             <Logo height={22} interactive />
@@ -631,15 +1036,13 @@ export default function LandingPage() {
             <a className="nav-link" href="#pricing">{t.nav.pricing}</a>
           </div>
           <div className="nav-right">
-            <button
-              type="button"
-              className="nav-mode nav-lang"
-              onClick={toggleLang}
-              aria-label={t.aria.switchLang}
-            >
-              <GlobeIcon />
-              {t.aria.langLabel}
-            </button>
+            <LangSwitch
+              lang={lang}
+              onSelect={selectLang}
+              variant="nav"
+              menuLabel={t.aria.langMenu}
+              soonLabel={t.aria.langSoon}
+            />
             <Link className="btn btn-primary" href="/app">{t.nav.enter}</Link>
           </div>
         </div>
@@ -782,95 +1185,54 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── the whole idea, as one continuous bento: the "three words" grid
-             flows straight into ONE for Life / ONE for Business — two screens as
-             you scroll, but a single grid. The section headings sit on the
-             background (full-width cells, no card), like a bento intro. ── */}
+      {/* ── the whole idea as three themed bentos, stacked: what ONE does
+             (capabilities) → the worlds it represents you across → the network
+             of ONEs. Each group is a centered header over its own grid; tiles
+             carry an icon, a title, and a supporting line. ── */}
       <section className="section center reveal" id="identity">
         <div className="shell">
-          <div className="bento">
-            <div className="bento-tile bento-full bento-intro">
+          <div className="bento bento-one">
+            {/* One heading, living inside the grid as a full-width intro cell. */}
+            <div className="bento-tile bento-full bento-head-cell">
               <h2>{t.bento.h2}</h2>
-            </div>
-            <div className="bento-tile bento-core">
-              <div className="bento-core-orb">
-                <Orb size={54} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
-              </div>
-              <div className="bento-key">{t.bento.core.label}</div>
-              <h3>{t.bento.core.title}</h3>
-              <p>{t.bento.core.text}</p>
-            </div>
-            {t.bento.tiles.map((tile) => (
-              <div className={`bento-tile${tile.span ? ` bento-${tile.span}` : ""}`} key={tile.key}>
-                {tile.label ? (
-                  <div className="bento-key">{tile.label}</div>
-                ) : tile.icon ? (
-                  <i className={`fi ${tile.icon} bento-icon`} aria-hidden="true" />
-                ) : (
-                  <span className="bento-emoji" aria-hidden="true">{tile.emoji}</span>
-                )}
-                <h3>{tile.title}</h3>
-              </div>
-            ))}
-            <div className="bento-tile bento-full bento-intro bento-intro-b">
-              <h2>{t.duo.h2}</h2>
-              <p className="lede">{t.duo.lede}</p>
-            </div>
-            <div className="bento-tile bento-half bento-solution">
-              <span className="duo-tag">{t.duo.life.tag}</span>
-              <h3>{t.duo.life.h3}</h3>
-              <p>{t.duo.life.p}</p>
-              <div className="duo-list">
-                {t.duo.life.list.map((li, i) => (
-                  <span key={i}>{li}</span>
+              <p className="lede">{t.bento.lede}</p>
+              <div className="bento-points">
+                {t.bento.points.map((p, i) => (
+                  <span key={i}>{p}</span>
                 ))}
               </div>
             </div>
-            <div className="bento-tile bento-half bento-solution">
-              <span className="duo-tag">{t.duo.business.tag}</span>
-              <h3>{t.duo.business.h3}</h3>
-              <p>{t.duo.business.p}</p>
-              <div className="duo-list">
-                {t.duo.business.list.map((li, i) => (
-                  <span key={i}>{li}</span>
-                ))}
-              </div>
-            </div>
+            {t.bento.tiles.map((tile) => {
+              const cls = [
+                "bento-tile",
+                tile.span ? `bento-${tile.span}` : "",
+                tile.variant ? `bento-${tile.variant}` : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <div className={cls} key={tile.key}>
+                  {tile.variant === "core" ? (
+                    <div className="bento-core-orb">
+                      <Orb size={54} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
+                    </div>
+                  ) : tile.icon ? (
+                    <i className={`fi ${tile.icon} bento-icon`} aria-hidden="true" />
+                  ) : null}
+                  {tile.label ? <div className="bento-key">{tile.label}</div> : null}
+                  <h3>{tile.title}</h3>
+                  {tile.text ? <p>{tile.text}</p> : null}
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* ── businesses connect (the network in action) ── */}
       <section className="section center reveal" id="connections">
-        <div className="shell narrow">
-          <h2>
-            {t.network.h2pre}<span className="accent-italic">{t.network.h2accent}</span>{t.network.h2post}
-          </h2>
-          <p className="lede">{t.network.lede}</p>
-          <div className="connect" style={{ marginTop: 48 }}>
-            <div className="connect-side">
-              <div className="connect-orb" />
-              <div className="connect-name">{t.network.yourOne}</div>
-              <div className="connect-role">{t.network.yourRole}</div>
-              <div className="connect-sub"><i className={`fi ${t.network.yourProcessIcon} connect-ico`} aria-hidden="true" />{t.network.yourProcess}</div>
-            </div>
-            <div className="connect-bridge">
-              <div className="connect-bridge-line">↔</div>
-              <div className="connect-bridge-label">{t.network.connectedLabel}</div>
-            </div>
-            <div className="connect-side">
-              <div className="connect-orb" />
-              <div className="connect-name">{t.network.providerName}</div>
-              <div className="connect-role">{t.network.providerRole}</div>
-              <div className="connect-sub"><i className={`fi ${t.network.providerStatusIcon} connect-ico`} aria-hidden="true" />{t.network.providerStatus}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* The same network, breathing — live (demo) numbers and a running feed,
-            merged in from the old "Your data, live" section so the network and
-            its live pulse read as one thing. The "Demo data" tag stays: invented
-            numbers shown as live have to say so. */}
+        {/* The system, breathing — live (demo) numbers and a running feed. The
+            "Demo data" tag stays: invented numbers shown as live have to say so. */}
         <div className="shell live-block">
           <div className="live-head">
             <h3 className="live-title">{t.pulse.h2}</h3>
@@ -917,12 +1279,15 @@ export default function LandingPage() {
               const featured = i === 2;
               const per = i === 0 ? t.pricing.perForever : t.pricing.perMonth;
               const btnClass = featured ? "btn btn-primary" : "btn btn-ghost";
+              // Metallic tier ladder on the plan name: Free quiet, Plus silver,
+              // Pro mustard-gold.
+              const nameTier = i === 2 ? "plan-name-pro" : i === 1 ? "plan-name-plus" : "plan-name-free";
               return (
                 <div
                   className={`plan${featured ? " plan-featured" : ""}${i === 0 ? " plan-plain" : ""}`}
                   key={p.name}
                 >
-                  <div className="plan-name">{p.name}</div>
+                  <div className={`plan-name ${nameTier}`}>{p.name}</div>
                   <div className="plan-price">
                     {p.price}
                     <small>{per}</small>
@@ -938,12 +1303,32 @@ export default function LandingPage() {
               );
             })}
           </div>
-          {/* The tailored/enterprise tier lives here as a quiet line + link,
-              mirroring the hero's "have a ONE? sign in" affordance. */}
+          {/* Tailored tier — a quiet line + link under the cards, mirroring the
+              hero's "have a ONE? sign in" affordance. */}
           <p className="plan-enterprise">
             {t.pricing.enterprise.line}{" "}
             <Link className="lhero-link" href="/app">{t.pricing.enterprise.cta}</Link>
           </p>
+        </div>
+      </section>
+
+      {/* ── FAQ — expandable drawers below the plans (native <details>) ── */}
+      <section className="section center reveal faq-section">
+        <div className="shell narrow">
+          <h2>{t.faq.title}</h2>
+          <div className="faq-list">
+            {t.faq.items.map((item, i) => (
+              <details className="faq-item" key={i}>
+                <summary className="faq-q">
+                  <span>{item.q}</span>
+                  <svg className="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </summary>
+                <p className="faq-a">{item.a}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -985,14 +1370,9 @@ export default function LandingPage() {
               {t.download.titleRest}
             </h2>
             <p className="lede">{t.download.sub}</p>
-            {/* Browser leads — it's the one that actually works today; the `soon`
-                line under them keeps the two store buttons honest. */}
-            <div className="store-badges">
-              <StoreBadge logo={<BrowserLogo />} small={t.download.browserSmall} name={t.download.browserName} href="/app" />
-              <StoreBadge logo={<AppleLogo />} small={t.download.appStoreSmall} name={t.download.appStoreName} href="/app" />
-              <StoreBadge logo={<GooglePlayLogo />} small={t.download.googlePlaySmall} name={t.download.googlePlayName} href="/app" />
-            </div>
-            <p className="download-soon">{t.download.soon}</p>
+            {/* Two device buttons — each opens a small menu: Desktop → open in
+                the browser (works today); Mobile → a QR to scan on the phone. */}
+            <GetOptions get={t.download.get} />
           </div>
 
           {/* The facing side — ONE doing the things a process is made of.
@@ -1010,9 +1390,7 @@ export default function LandingPage() {
                 />
               ))
             ) : (
-              <div className="final-visual-empty">
-                <Orb size={168} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
-              </div>
+              <ClosingOrb isDark={isDark} />
             )}
           </div>
         </div>
@@ -1035,7 +1413,7 @@ export default function LandingPage() {
               <Link href="/" aria-label="ONE01" className="foot-logo">
                 <Logo height={26} interactive />
               </Link>
-              <p className="foot-tagline">{t.foot.tagline}</p>
+              <p className="foot-company">{t.foot.company}</p>
             </div>
             <div className="foot-cols">
               {t.foot.cols.map((col) => (
@@ -1052,7 +1430,7 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
-          <div className="foot-bar">
+          <div className="foot-bar" onPointerEnter={revealFooter}>
             <div className="foot-bar-actions">
               <a
                 className="foot-social-link"
@@ -1084,14 +1462,7 @@ export default function LandingPage() {
             </div>
             <span className="foot-copy">{t.foot.copy}</span>
             <div className="foot-bar-controls">
-              <button
-                type="button"
-                className="foot-ctrl"
-                onClick={toggleLang}
-                aria-label={t.aria.switchLang}
-              >
-                {t.aria.langLabel}
-              </button>
+              <A11yMenu copy={t.a11y} />
               <button
                 type="button"
                 className="foot-ctrl foot-ctrl-icon"

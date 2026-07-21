@@ -27,13 +27,6 @@ export interface LandingCopy {
   };
   /** "Why ONE" — the film IS the section: copy sits on a scrim over it. */
   thesis: { title: string; lede: string; playAria: string };
-  duo: {
-    eyebrow: string;
-    h2: string;
-    lede: string;
-    life: { tag: string; h3: string; p: string; list: string[] };
-    business: { tag: string; h3: string; p: string; list: string[] };
-  };
   network: {
     eyebrow: string;
     h2pre: string;
@@ -73,11 +66,23 @@ export interface LandingCopy {
     events: Record<string, string>;
   };
   bento: {
-    eyebrow: string;
+    // One continuous grid: the heading lives in the grid (a full-width intro
+    // cell), followed by the tiles. Add a tile and the grid grows.
     h2: string;
-    core: { label: string; title: string; text: string };
-    tiles: { key: string; label?: string; emoji?: string; icon?: string; title: string; span: "" | "wide" | "full" }[];
+    lede: string;
+    points: string[];
+    tiles: {
+      key: string;
+      icon?: string;
+      label?: string;
+      title: string;
+      text?: string;
+      span?: "" | "wide";
+      variant?: "" | "core" | "accent";
+    }[];
   };
+  // FAQ accordion below the plans — native <details> drawers.
+  faq: { title: string; items: { q: string; a: string }[] };
   /**
    * The closing screen: one sentence, a subtitle, three buttons. The sentence
    * breaks across two lines — `titleLead` is muted, `titleRest` carries the
@@ -88,13 +93,18 @@ export interface LandingCopy {
     titleLead: string;
     titleRest: string;
     sub: string;
-    soon: string;
-    appStoreSmall: string;
-    appStoreName: string;
-    googlePlaySmall: string;
-    googlePlayName: string;
-    browserSmall: string;
-    browserName: string;
+    // Two device buttons, each opening a small menu (see GetOptions in page.tsx):
+    // Desktop → open in browser, Mobile → a QR to scan.
+    get: {
+      desktop: string;
+      mobile: string;
+      browser: string;
+      browserSub: string;
+      desktopApp: string;
+      soon: string;
+      scan: string;
+      platforms: string;
+    };
   };
   mobileBanner: { title: string; sub: string; cta: string; dismiss: string };
   global: { eyebrow: string; title: string; sub: string; cta: string; hint: string };
@@ -104,12 +114,15 @@ export interface LandingCopy {
     legal: string;
     copy: string;
     tagline: string;
+    company: string;
     madeWith: string;
     // Columned link groups — add a column or a link here and the footer grows
     // with it, no markup change needed.
     cols: { title: string; links: { label: string; href: string }[] }[];
   };
-  aria: { toLight: string; toDark: string; switchLang: string; langLabel: string };
+  aria: { toLight: string; toDark: string; switchLang: string; langLabel: string; langMenu: string; langSoon: string };
+  // Footer accessibility menu — a few genuinely-working display toggles.
+  a11y: { label: string; largeText: string; contrast: string; motion: string; underline: string };
   // Newsroom marquee — add an item and the moving row grows with it.
   news: {
     eyebrow: string;
@@ -157,31 +170,6 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       title: "Meet ONE",
       lede: "Your digital representative. Tell it what you want, and it carries the process end to end — speaking on your behalf, holding every detail in one place, and disclosing only what you allow.",
       playAria: "Play the film",
-    },
-    duo: {
-      eyebrow: "One representative, many identities",
-      h2: "ONE for Life. ONE for Business.",
-      lede: "The same representative, in every world you live in — switch between them without switching tools.",
-      life: {
-        tag: "👤 ONE for Life",
-        h3: "Your whole personal world, represented",
-        p: "Everything you're responsible for outside of work — your health, your home, your money, the systems you're forced to navigate. State a goal and ONE turns it into a process it will carry, not a reminder you have to chase.",
-        list: [
-          "Turns a goal into a plan with a real next step",
-          "Navigates the bookings, bureaucracy, and logistics for you",
-          "Remembers the people, files, and decisions behind each one",
-        ],
-      },
-      business: {
-        tag: "🏢 ONE for Business",
-        h3: "Your business gets a ONE of its own",
-        p: "Give your business a representative that's always on. Customers reach it through their own ONE — it answers, schedules, and keeps a living list of who they are. Presence and operations, without a front desk.",
-        list: [
-          "Customers' ONEs reach yours directly",
-          "Bookings become shared cards on both sides",
-          "A living view of your followers and customers",
-        ],
-      },
     },
     network: {
       eyebrow: "The network",
@@ -238,7 +226,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         },
       ],
       enterprise: {
-        line: "Bigger needs? Max — ONE for teams and organizations, tailored to you.",
+        line: "Bigger needs? ONE for teams and organizations, tailored to you.",
         cta: "Let's talk",
       },
     },
@@ -267,35 +255,48 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       },
     },
     bento: {
-      eyebrow: "The idea",
-      h2: "Everything ONE does — one grid.",
-      core: {
-        label: "ONE",
-        title: "Your digital representative.",
-        text: "Speak in plain words; ONE understands what you mean and acts on your behalf — deciding, arranging, and following through until it's done.",
-      },
+      h2: "Everything ONE does.",
+      lede: "One representative for your whole life — it understands what you mean, acts on your behalf, and keeps everything moving.",
+      points: ["Understands you", "Acts for you", "Remembers everything", "Talks to other ONEs"],
       tiles: [
-        { key: "units", label: "Units", title: "Every intention becomes a living process.", span: "wide" },
-        { key: "global", label: "Global", title: "It talks to other ONEs.", span: "" },
-        { key: "memory", icon: "fi-rr-brain", title: "Remembers your people, files & decisions.", span: "" },
-        { key: "drafts", icon: "fi-rr-paper-plane", title: "Writes the real message — ready for you to send.", span: "wide" },
-        { key: "next", icon: "fi-rr-arrow-progress", title: "Always knows the next step.", span: "" },
-        { key: "templates", icon: "fi-rr-layers", title: "Knows the domain, so it fills the process in upfront.", span: "" },
-        { key: "identities", icon: "fi-rr-users", title: "One ONE, separate profiles for life and work.", span: "wide" },
-        { key: "booking", icon: "fi-rr-calendar", title: "Books the appointment with the business.", span: "wide" },
+        { key: "core", variant: "core", label: "ONE", title: "Your digital representative.", text: "Speak in plain words; it acts on your behalf and discloses only what you allow." },
+        { key: "units", icon: "fi-rr-apps", label: "Units", title: "Every intention becomes a living process.", text: "Not a note you revisit — a process ONE opens and carries.", span: "wide" },
+        { key: "worlds", variant: "accent", span: "wide", title: "Every world you live in.", text: "Health, money, home, learning, work — one representative across them all." },
+        { key: "next", icon: "fi-rr-arrow-progress", title: "Always knows the next step." },
+        { key: "drafts", icon: "fi-rr-paper-plane", title: "Writes the real message — ready to send." },
+        { key: "memory", icon: "fi-rr-brain", title: "Remembers your people, files & decisions." },
+        { key: "network", icon: "fi-rr-link", title: "Your ONE talks to their ONE." },
+        { key: "business", icon: "fi-rr-shop", title: "Businesses get a ONE of their own." },
+        { key: "templates", icon: "fi-rr-layers", title: "Knows the domain — fills the process in upfront.", span: "wide" },
+        { key: "custom", icon: "fi-rr-settings-sliders", title: "A ONE tailored to how you work." },
+        { key: "identities", icon: "fi-rr-users", title: "One ONE, separate profiles for life and work." },
+      ],
+    },
+    faq: {
+      title: "Questions & answers",
+      items: [
+        { q: "What is ONE?", a: "ONE is your digital representative. You tell it what you want in plain words, and it turns that into a living process it carries end to end — deciding, arranging, and following through." },
+        { q: "Do I need an account to start?", a: "No. You can put a real process in ONE's hands right away. Create an account later to sync across devices and keep your full history." },
+        { q: "Is my data private?", a: "ONE discloses only what you allow. You stay in control of what it shares, with whom, and when — selective by design." },
+        { q: "Can I use it for my business?", a: "Yes. On Pro, any ONE can become a business — customers reach it through their own ONE, and bookings become shared cards on both sides." },
+        { q: "Which devices does it work on?", a: "The browser works today on phone, laptop, and desktop. Native mobile apps are on the way — the same representative, memory, and processes everywhere." },
+        { q: "How much does it cost?", a: "Free to start, forever. Plus and Pro add sync, full memory, business tools, and more — see the plans above." },
       ],
     },
     download: {
-      titleLead: "ONE for",
-      titleRest: "everyone.",
-      sub: "Same representative, same memory, same processes — phone, laptop, or browser.",
-      soon: "Mobile apps coming soon — the browser works today",
-      appStoreSmall: "Download on the",
-      appStoreName: "App Store",
-      googlePlaySmall: "Get it on",
-      googlePlayName: "Google Play",
-      browserSmall: "Open it in your",
-      browserName: "Browser",
+      titleLead: "Wherever you go,",
+      titleRest: "ONE is with you.",
+      sub: "In life, at work, and everything in between.",
+      get: {
+        desktop: "Desktop",
+        mobile: "Mobile",
+        browser: "Open in browser",
+        browserSub: "Works today",
+        desktopApp: "Desktop app",
+        soon: "Soon",
+        scan: "Scan to open ONE on your phone",
+        platforms: "iOS & Android",
+      },
     },
     mobileBanner: {
       title: "Get ONE on your phone",
@@ -315,7 +316,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       support: "Support",
       legal: "Legal",
       copy: "© 2026 ONE01",
-      tagline: "One representative for everything you need to get done — in life and in business.",
+      tagline: "ONE is your digital representative. Say what you want in plain words, and it turns it into a living process it carries to done — across every part of your life and work.",
+      company: "ONE01 is building the network of ONEs: one representative for people, businesses, and institutions to get things done together.",
       madeWith: "From intention to reality.",
       cols: [
         {
@@ -325,7 +327,6 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             { label: "Life", href: "#identity" },
             { label: "Business", href: "#connections" },
             { label: "Pricing", href: "#pricing" },
-            { label: "Launch app", href: "/app" },
           ],
         },
         {
@@ -358,6 +359,15 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       toDark: "Switch to dark",
       switchLang: "Switch to Hebrew",
       langLabel: "EN",
+      langMenu: "Change language",
+      langSoon: "Soon",
+    },
+    a11y: {
+      label: "Accessibility",
+      largeText: "Bigger text",
+      contrast: "High contrast",
+      motion: "Reduce motion",
+      underline: "Underline links",
     },
     news: {
       eyebrow: "Newsroom",
@@ -411,31 +421,6 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       title: "הכירו את וואן",
       lede: "הנציג הדיגיטלי שלכם. אתם אומרים מה אתם רוצים, והוא מוביל את התהליך מקצה לקצה — מדבר בשמכם, שומר כל פרט במקום אחד, וחושף רק מה שאתם מאשרים.",
       playAria: "נגן את הסרטון",
-    },
-    duo: {
-      eyebrow: "נציג אחד, זהויות רבות",
-      h2: "ONE לחיים. ONE לעסק.",
-      lede: "אותו נציג, בכל עולם שאתם חיים בו — עברו ביניהם בלי להחליף כלים.",
-      life: {
-        tag: "👤 ONE לחיים",
-        h3: "כל העולם האישי שלכם, מיוצג",
-        p: "כל מה שאתם אחראים עליו מחוץ לעבודה — הבריאות, הבית, הכסף, המערכות שאתם נאלצים לנווט בהן. הציבו מטרה ו-ONE הופך אותה לתהליך שהוא מוביל, לא לתזכורת שאתם צריכים לרדוף אחריה.",
-        list: [
-          "הופך מטרה לתוכנית עם צעד הבא אמיתי",
-          "מנווט עבורכם את ההזמנות, הביורוקרטיה והלוגיסטיקה",
-          "זוכר את האנשים, הקבצים וההחלטות מאחורי כל תהליך",
-        ],
-      },
-      business: {
-        tag: "🏢 ONE לעסק",
-        h3: "גם לעסק שלכם יש ONE משלו",
-        p: "תנו לעסק שלכם נציג שתמיד זמין. לקוחות מגיעים אליו דרך ה-ONE שלהם — הוא עונה, מתזמן ומנהל רשימה חיה של מי הם. נוכחות ותפעול, בלי דלפק קבלה.",
-        list: [
-          "ה-ONEs של הלקוחות מגיעים ישירות לשלכם",
-          "הזמנות הופכות לכרטיסים משותפים לשני הצדדים",
-          "תצוגה חיה של העוקבים והלקוחות שלכם",
-        ],
-      },
     },
     network: {
       eyebrow: "הרשת",
@@ -492,7 +477,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         },
       ],
       enterprise: {
-        line: "צרכים גדולים יותר? מקס — ONE לצוותים ולארגונים, מותאם אליכם.",
+        line: "צרכים גדולים יותר? ONE לצוותים ולארגונים, מותאם אליכם.",
         cta: "דברו איתנו",
       },
     },
@@ -521,35 +506,48 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       },
     },
     bento: {
-      eyebrow: "הרעיון",
-      h2: "כל מה ש-ONE עושה — גריד אחד.",
-      core: {
-        label: "ONE",
-        title: "הנציג הדיגיטלי שלכם.",
-        text: "אמרו מה אתם רוצים במילים פשוטות; ONE מבין למה אתם מתכוונים ופועל בשבילכם — מחליט, מארגן ועוקב עד שזה נסגר.",
-      },
+      h2: "כל מה ש-ONE עושה.",
+      lede: "נציג אחד לכל החיים שלכם — מבין למה אתם מתכוונים, פועל בשמכם ושומר שהכול זז.",
+      points: ["מבין אתכם", "פועל בשבילכם", "זוכר הכול", "מדבר עם ONEs אחרים"],
       tiles: [
-        { key: "units", label: "יחידות", title: "כל כוונה הופכת לתהליך חי.", span: "wide" },
-        { key: "global", label: "גלובל", title: "הוא מדבר עם ONEs אחרים.", span: "" },
-        { key: "memory", icon: "fi-rr-brain", title: "זוכר את האנשים, הקבצים וההחלטות שלכם.", span: "" },
-        { key: "drafts", icon: "fi-rr-paper-plane", title: "מנסח את ההודעה עצמה — מוכנה לשליחה.", span: "wide" },
-        { key: "next", icon: "fi-rr-arrow-progress", title: "תמיד יודע מה הצעד הבא.", span: "" },
-        { key: "templates", icon: "fi-rr-layers", title: "מכיר את התחום, ולכן ממלא את התהליך מראש.", span: "" },
-        { key: "identities", icon: "fi-rr-users", title: "וואן אחד, פרופילים נפרדים לחיים ולעבודה.", span: "wide" },
-        { key: "booking", icon: "fi-rr-calendar", title: "קובע את התור מול העסק.", span: "wide" },
+        { key: "core", variant: "core", label: "ONE", title: "הנציג הדיגיטלי שלכם.", text: "מדברים במילים פשוטות; הוא פועל בשמכם וחושף רק את מה שאתם מאשרים." },
+        { key: "units", icon: "fi-rr-apps", label: "יחידות", title: "כל כוונה הופכת לתהליך חי.", text: "לא פתק שחוזרים אליו — תהליך ש-ONE פותח ומוביל.", span: "wide" },
+        { key: "worlds", variant: "accent", span: "wide", title: "כל עולם שאתם חיים בו.", text: "בריאות, כסף, בית, לימודים, עבודה — נציג אחד בכולם." },
+        { key: "next", icon: "fi-rr-arrow-progress", title: "תמיד יודע מה הצעד הבא." },
+        { key: "drafts", icon: "fi-rr-paper-plane", title: "מנסח את ההודעה עצמה — מוכנה לשליחה." },
+        { key: "memory", icon: "fi-rr-brain", title: "זוכר את האנשים, הקבצים וההחלטות שלכם." },
+        { key: "network", icon: "fi-rr-link", title: "ה-ONE שלכם מדבר עם ה-ONE שלהם." },
+        { key: "business", icon: "fi-rr-shop", title: "גם לעסק יש ONE משלו." },
+        { key: "templates", icon: "fi-rr-layers", title: "מכיר את התחום — וממלא את התהליך מראש.", span: "wide" },
+        { key: "custom", icon: "fi-rr-settings-sliders", title: "ONE שמותאם לאיך שאתם עובדים." },
+        { key: "identities", icon: "fi-rr-users", title: "וואן אחד, פרופילים נפרדים לחיים ולעבודה." },
+      ],
+    },
+    faq: {
+      title: "שאלות ותשובות",
+      items: [
+        { q: "מה זה ONE?", a: "ONE הוא הנציג הדיגיטלי שלכם. אומרים לו מה רוצים במילים פשוטות, והוא הופך את זה לתהליך חי שהוא מוביל מקצה לקצה — מחליט, מארגן ועוקב עד הסוף." },
+        { q: "צריך חשבון כדי להתחיל?", a: "לא. אפשר לתת ל-ONE תהליך אמיתי כבר עכשיו. פותחים חשבון בהמשך כדי לסנכרן בין מכשירים ולשמור את כל ההיסטוריה." },
+        { q: "הפרטיות שלי נשמרת?", a: "ONE חושף רק את מה שאתם מאשרים. אתם שולטים במה הוא משתף, עם מי ומתי — חשיפה סלקטיבית מעצם התכנון." },
+        { q: "אפשר להשתמש בזה לעסק?", a: "כן. בפרו כל ONE יכול להפוך לעסק — לקוחות מגיעים אליו דרך ה-ONE שלהם, והזמנות הופכות לכרטיסים משותפים לשני הצדדים." },
+        { q: "באילו מכשירים זה עובד?", a: "הדפדפן עובד כבר היום בטלפון, במחשב הנייד ובמחשב הנייח. אפליקציות מובייל בדרך — אותו נציג, זיכרון ותהליכים בכל מקום." },
+        { q: "כמה זה עולה?", a: "התחלה חינם, לתמיד. פלוס ופרו מוסיפים סנכרון, זיכרון מלא, כלים לעסק ועוד — ראו את המסלולים למעלה." },
       ],
     },
     download: {
-      titleLead: "ONE",
-      titleRest: "לכולם.",
-      sub: "אותו נציג, אותו זיכרון, אותם תהליכים — בטלפון, במחשב או בדפדפן.",
-      soon: "אפליקציות המובייל בקרוב — בדפדפן זה עובד כבר היום",
-      appStoreSmall: "הורידו דרך",
-      appStoreName: "App Store",
-      googlePlaySmall: "זמין ב־",
-      googlePlayName: "Google Play",
-      browserSmall: "פתחו ב־",
-      browserName: "דפדפן",
+      titleLead: "בכל מקום,",
+      titleRest: "‏ONE איתך.",
+      sub: "בחיים, בעבודה, ובכל מה שביניהם.",
+      get: {
+        desktop: "מחשב",
+        mobile: "מובייל",
+        browser: "פתחו בדפדפן",
+        browserSub: "עובד כבר היום",
+        desktopApp: "אפליקציה למחשב",
+        soon: "בקרוב",
+        scan: "סרקו כדי לפתוח את ONE בטלפון",
+        platforms: "אפל ואנדרואיד",
+      },
     },
     mobileBanner: {
       title: "קבלו את ONE בטלפון",
@@ -569,7 +567,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       support: "תמיכה",
       legal: "משפטי",
       copy: "© 2026 ONE01",
-      tagline: "נציג אחד לכל מה שצריך להשלים — בחיים ובעסק.",
+      tagline: "ONE הוא הנציג הדיגיטלי שלכם. אומרים מה רוצים במילים פשוטות, והוא הופך את זה לתהליך חי שהוא מוביל עד הסוף — בכל תחום בחיים ובעבודה.",
+      company: "‏ONE01 בונה את רשת ה-ONEs: נציג אחד לאנשים, לעסקים ולמוסדות, כדי להשלים דברים ביחד.",
       madeWith: "מרצון למציאות.",
       cols: [
         {
@@ -579,7 +578,6 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             { label: "חיים", href: "#identity" },
             { label: "עסק", href: "#connections" },
             { label: "מחירים", href: "#pricing" },
-            { label: "פתחו את האפליקציה", href: "/app" },
           ],
         },
         {
@@ -612,6 +610,15 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       toDark: "עבור למצב כהה",
       switchLang: "החלף לאנגלית",
       langLabel: "עב",
+      langMenu: "שינוי שפה",
+      langSoon: "בקרוב",
+    },
+    a11y: {
+      label: "נגישות",
+      largeText: "טקסט גדול יותר",
+      contrast: "ניגודיות גבוהה",
+      motion: "הפחתת תנועה",
+      underline: "קו תחתון לקישורים",
     },
     news: {
       eyebrow: "חדשות",
