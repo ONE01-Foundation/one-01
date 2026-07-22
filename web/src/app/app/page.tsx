@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Orb } from "@/components/Orb";
-import { Logo } from "@/components/Logo";
 import { Splash } from "@/components/Splash";
 import { Sheet } from "@/components/product/Sheet";
 import {
@@ -217,6 +216,154 @@ function SendIcon() {
   );
 }
 
+/**
+ * A unit's live detail — metrics, steps, connections, insights, decisions,
+ * timeline, sources. Rendered in the desktop split BESIDE the unit's chat, so
+ * it updates the moment the chat changes the unit. Reads its Process fresh each
+ * render, so upserts show immediately.
+ */
+function UnitDetail({
+  p,
+  businesses,
+  isStepDone,
+  toggleStep,
+  runQuickAction,
+  openBiz,
+}: {
+  p: Process;
+  businesses: Business[];
+  isStepDone: (p: Process, i: number) => boolean;
+  toggleStep: (p: Process, i: number) => void;
+  runQuickAction: (p: Process, label: string) => void;
+  openBiz: (id: string) => void;
+}) {
+  const sources = unitSources(p);
+  return (
+    <div className="unit-detail-body">
+      {p.nextAction && <div className="unit-pulse unit-detail-pulse">{p.nextAction}</div>}
+
+      {p.metrics && p.metrics.length > 0 && (
+        <div className="metric-grid">
+          {p.metrics.map((m) => (
+            <div className="metric" key={m.label}>
+              <div className="metric-value">{m.value}</div>
+              <div className="metric-label">{m.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {p.quickActions && p.quickActions.length > 0 && (
+        <div className="qa-row">
+          {p.quickActions.map((a) => (
+            <button key={a} className="qa-btn" onClick={() => runQuickAction(p, a)}>
+              {a}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="sheet-section">
+        <h4>Next steps</h4>
+        {p.steps.map((s, i) => {
+          const done = isStepDone(p, i);
+          return (
+            <button
+              key={i}
+              className={`step-item${done ? " done" : ""}`}
+              style={{ width: "100%", border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
+              onClick={() => toggleStep(p, i)}
+            >
+              <span className={`step-check${done ? " done" : ""}`}>{done ? "✓" : ""}</span>
+              <span className="step-text">{s.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="sheet-section">
+        <h4>Connections</h4>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {(p.people.length ? p.people : [p.relation]).filter(Boolean).map((person) => {
+            const b = businesses.find(
+              (x) =>
+                person.toLowerCase().includes(x.name.toLowerCase()) ||
+                x.name.toLowerCase().includes(person.toLowerCase()),
+            );
+            return b ? (
+              <button
+                key={person}
+                className="sheet-pill ghost biz-link"
+                style={{ fontWeight: 600, fontSize: 12.5 }}
+                onClick={() => openBiz(b.id)}
+              >
+                {b.emoji} {person} ›
+              </button>
+            ) : (
+              <span key={person} className="sheet-pill ghost" style={{ fontWeight: 600, fontSize: 12.5 }}>
+                {person}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {p.insights && p.insights.length > 0 && (
+        <div className="sheet-section">
+          <h4>Insights</h4>
+          <div className="insight-list">
+            {p.insights.map((t, i) => (
+              <div className="insight" key={i}>
+                {t}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {p.decisions.length > 0 && (
+        <div className="sheet-section">
+          <h4>Decisions</h4>
+          {p.decisions.map((d) => (
+            <div className="sheet-row" key={d}>
+              <span className="r-label" style={{ fontWeight: 500 }}>
+                {d}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="sheet-section">
+        <h4>Timeline</h4>
+        {p.timeline.map((ev, i) => (
+          <div className="timeline-item" key={i}>
+            <span className="timeline-dot" />
+            <span>
+              <b style={{ fontWeight: 600 }}>{ev.at}</b> — {ev.text}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {sources.length > 0 && (
+        <div className="sheet-section">
+          <h4>Sources</h4>
+          <div className="source-list">
+            {sources.map((s) => (
+              <div className="source-item" key={s.label}>
+                <span className="source-dot" />
+                <span className="source-label">{s.label}</span>
+                <span className="source-detail">{s.detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AppHome() {
   const [plan, setPlan] = useState<PlanTier>("free");
   const [activeIdentityId, setActiveIdentityId] = useState(IDENTITIES[0].id);
@@ -230,6 +377,11 @@ export default function AppHome() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
+  // Desktop split: a unit open BESIDE its own chat, plus a full-screen toggle.
+  const [unitFull, setUnitFull] = useState(false);
+  const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
+  const [unitDraft, setUnitDraft] = useState("");
+  const [unitThinking, setUnitThinking] = useState(false);
   // One unit store — seeds + anything ONE creates, so every surface stays in sync.
   const [units, setUnits] = useState<Process[]>(PROCESSES);
   // The process ONE is currently refining, and its latest live broadcast line.
@@ -257,6 +409,7 @@ export default function AppHome() {
   const [followers, setFollowers] = useState<CloudFollower[]>([]);
   const [customers, setCustomers] = useState<CloudCustomer[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const unitEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     myKey().then(setOwnerKey);
@@ -731,6 +884,49 @@ export default function AppHome() {
     setThinking(false);
   };
 
+  // Open a unit into the desktop split (detail + its own chat); focus it so the
+  // chat updates THIS unit, and greet.
+  const openUnit = (p: Process) => {
+    setActiveProcess(p);
+    setFocusId(p.id);
+    setUnitFull(false);
+    setUnitChat([
+      { role: "one", text: `Here's ${p.title}.${p.nextAction ? " " + p.nextAction : " Tell me what changed and I'll update it."}` },
+    ]);
+  };
+  const closeUnit = () => {
+    setActiveProcess(null);
+    setUnitChat([]);
+    setUnitDraft("");
+    setUnitThinking(false);
+  };
+  // Chat scoped to the open unit — every reply's changes land on the card beside.
+  const sendToUnit = () => {
+    if (!activeProcess) return;
+    const text = unitDraft.trim();
+    if (!text) return;
+    setUnitChat((c) => [...c, { role: "user", text }]);
+    setUnitDraft("");
+    setUnitThinking(true);
+    const focus = units.find((u) => u.id === activeProcess.id) ?? null;
+    const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus });
+    window.setTimeout(() => {
+      setUnitThinking(false);
+      res.lines.forEach((line) => setUnitChat((c) => [...c, { role: "one", text: line }]));
+      if (res.process) upsert(res.process);
+      if (res.broadcast) setLiveBroadcast(res.broadcast);
+      if (res.outreach && res.process) {
+        const targetId = res.process.id;
+        const o = res.outreach;
+        window.setTimeout(() => {
+          setUnits((list) => list.map((pp) => (pp.id === targetId ? o.apply(pp) : pp)));
+          setUnitChat((c) => [...c, { role: "one", text: o.line }]);
+          setLiveBroadcast(o.broadcast);
+        }, o.delayMs);
+      }
+    }, 700);
+  };
+
   // Arrived from the landing gateway ("/app?q=…")? ONE starts working on that
   // intention immediately — send it as the first message, then clean the URL.
   // Sent synchronously (no timer) and ref-guarded so it survives React's
@@ -750,6 +946,20 @@ export default function AppHome() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, thinking]);
+  useEffect(() => {
+    unitEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [unitChat, unitThinking]);
+
+  // Esc backs out of the open unit — the workspace should never trap you.
+  useEffect(() => {
+    if (!activeProcess) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeUnit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProcess]);
 
   // rotating broadcast line (fade between). Re-keyed on identity so switching
   // ONEs restarts the rotation in that ONE's voice.
@@ -784,17 +994,8 @@ export default function AppHome() {
   return (
     <main className="product-root">
       <Splash bg="var(--p-bg)" />
-      {/* Floating pill header — matches the landing nav, ties the product back to
-          the site. Kept minimal (brand + back-to-site) while the desktop product
-          structure is still being decided. */}
-      <nav className="app-topbar">
-        <Link href="/" className="app-topbar-brand" aria-label="ONE01 home">
-          <Logo height={20} />
-        </Link>
-        <Link href="/" className="app-topbar-back">
-          ← Back to site
-        </Link>
-      </nav>
+      {/* Full-bleed canvas — no window chrome, no back-to-site. The product is
+          its own place; the ONE orb in the sidebar is the brand anchor. */}
       <div className="app-shell">
         {/* LEFT rail — a sidebar on desktop, a compact top header on mobile */}
         <aside className="app-side">
@@ -865,93 +1066,171 @@ export default function AppHome() {
         {/* RIGHT — the workspace: broadcast-driven cards or the conversation */}
         <section className="app-main">
           <div className="app-edge top" />
-          {chat.length > 0 && (
-            <button className="app-close" onClick={endChat} aria-label="Close chat">
-              ×
-            </button>
-          )}
-
-        {chat.length === 0 ? (
-        <div className="app-cards">
-          {processes.map((p) => {
-            const done = p.steps.filter((_, i) => isStepDone(p, i)).length;
-            const total = p.steps.length;
-            return (
-              <div
-                key={p.id}
-                className="ucard"
-                onClick={() => setActiveProcess(p)}
-                role="button"
-                tabIndex={0}
-              >
-                <div className="ucard-head">
-                  <div className="ucard-title">
-                    <span className="ucard-emoji">{p.emoji}</span>
-                    <span>{p.title}</span>
+          {activeLive ? (
+            // ── UNIT SPLIT — the wide detail card BESIDE its own chat. Typing in
+            //    the chat updates the card live. "Full" hides the chat and lets
+            //    the card fill the workspace.
+            <div className={`unit-view${unitFull ? " is-full" : ""}`}>
+              <div className="unit-topbar">
+                <div className="unit-topbar-head">
+                  <div className="unit-topbar-title">
+                    <span className="unit-topbar-emoji">{activeLive.emoji}</span>
+                    <span>{activeLive.title}</span>
                   </div>
-                  <div className="ucard-time">
-                    {p.time}
-                    {p.unread > 0 && <span className="ucard-badge">{p.unread}</span>}
+                  <div className="unit-topbar-sub">
+                    {activeLive.relation}
+                    <span className="unit-topbar-dot">·</span>
+                    {activeLive.steps.filter((_, i) => isStepDone(activeLive, i)).length}/
+                    {activeLive.steps.length} done
                   </div>
                 </div>
-                <div className="ucard-sub">{p.summary}</div>
-                <div className="ucard-foot">
-                  <span className="ucard-relation">{p.relation}</span>
-                  <div className="ucard-progress">
-                    <div className="ucard-track">
-                      <div
-                        className="ucard-fill"
-                        style={{ width: `${Math.round((done / total) * 100)}%` }}
-                      />
+                <div className="unit-topbar-actions">
+                  <button className="unit-tb-btn" onClick={() => setUnitFull((f) => !f)}>
+                    {unitFull ? "◑ Split" : "⛶ Full"}
+                  </button>
+                  <button className="unit-tb-btn unit-tb-close" onClick={closeUnit} aria-label="Close unit">
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div className="unit-split">
+                <div className="unit-detail">
+                  <UnitDetail
+                    p={activeLive}
+                    businesses={businesses}
+                    isStepDone={isStepDone}
+                    toggleStep={toggleStep}
+                    runQuickAction={runQuickAction}
+                    openBiz={openBiz}
+                  />
+                </div>
+                {!unitFull && (
+                  <div className="unit-chatpane">
+                    <div className="unit-chat-scroll">
+                      {unitChat.map((m, i) => (
+                        <div key={i} className={`chat-msg ${m.role}`}>
+                          {m.text}
+                        </div>
+                      ))}
+                      {unitThinking && (
+                        <div className="chat-msg one thinking" aria-label="ONE is thinking">
+                          <span />
+                          <span />
+                          <span />
+                        </div>
+                      )}
+                      <div ref={unitEndRef} />
                     </div>
-                    <span className="ucard-count">
-                      {done}/{total}
-                    </span>
+                    <div className="app-dock unit-dock">
+                      <input
+                        className="app-input"
+                        placeholder="Tell ONE what changed…"
+                        value={unitDraft}
+                        onChange={(e) => setUnitDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            sendToUnit();
+                          }
+                        }}
+                      />
+                      <button className="app-send" aria-label="Send" onClick={sendToUnit}>
+                        <SendIcon />
+                      </button>
+                    </div>
                   </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {chat.length > 0 && (
+                <button className="app-close" onClick={endChat} aria-label="Close chat">
+                  ×
+                </button>
+              )}
+              {chat.length === 0 ? (
+                <div className="app-cards">
+                  {processes.map((p) => {
+                    const done = p.steps.filter((_, i) => isStepDone(p, i)).length;
+                    const total = p.steps.length;
+                    return (
+                      <div
+                        key={p.id}
+                        className="ucard"
+                        onClick={() => openUnit(p)}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <div className="ucard-head">
+                          <div className="ucard-title">
+                            <span className="ucard-emoji">{p.emoji}</span>
+                            <span>{p.title}</span>
+                          </div>
+                          <div className="ucard-time">
+                            {p.time}
+                            {p.unread > 0 && <span className="ucard-badge">{p.unread}</span>}
+                          </div>
+                        </div>
+                        <div className="ucard-sub">{p.summary}</div>
+                        <div className="ucard-foot">
+                          <span className="ucard-relation">{p.relation}</span>
+                          <div className="ucard-progress">
+                            <div className="ucard-track">
+                              <div
+                                className="ucard-fill"
+                                style={{ width: `${Math.round((done / total) * 100)}%` }}
+                              />
+                            </div>
+                            <span className="ucard-count">
+                              {done}/{total}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {processes.length === 0 && (
+                    <div className="app-empty">Nothing here yet for {identity.name}.</div>
+                  )}
                 </div>
+              ) : (
+                <div className="app-chat">
+                  {chat.map((m, i) => (
+                    <div key={i} className={`chat-msg ${m.role}`}>
+                      {m.text}
+                    </div>
+                  ))}
+                  {thinking && (
+                    <div className="chat-msg one thinking" aria-label="ONE is thinking">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+              )}
+              <div className="app-edge bottom" />
+              <div className="app-dock">
+                <input
+                  className="app-input"
+                  placeholder="Talk to ONE"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                />
+                <button className="app-send" aria-label="Send" onClick={() => send()}>
+                  <SendIcon />
+                </button>
               </div>
-            );
-          })}
-          {processes.length === 0 && (
-            <div className="app-empty">Nothing here yet for {identity.name}.</div>
+            </>
           )}
-        </div>
-        ) : (
-          <div className="app-chat">
-            {chat.map((m, i) => (
-              <div key={i} className={`chat-msg ${m.role}`}>
-                {m.text}
-              </div>
-            ))}
-            {thinking && (
-              <div className="chat-msg one thinking" aria-label="ONE is thinking">
-                <span />
-                <span />
-                <span />
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-        )}
-
-        <div className="app-edge bottom" />
-        <div className="app-dock">
-          <input
-            className="app-input"
-            placeholder="Talk to ONE"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                send();
-              }
-            }}
-          />
-          <button className="app-send" aria-label="Send" onClick={() => send()}>
-            <SendIcon />
-          </button>
-        </div>
         </section>
       </div>
 
@@ -1189,155 +1468,8 @@ export default function AppHome() {
         </div>
       </Sheet>
 
-      {/* ── PROCESS popup — a type-aware unit profile ── */}
-      <Sheet open={!!activeProcess} onClose={() => setActiveProcess(null)}>
-        {activeLive && (
-          <div className="sheet-body">
-            {/* Header + pulse (one short "what's next", not a repeat of the stats) */}
-            <div className="sheet-hero">
-              <div className="sheet-title">
-                <span>{activeLive.emoji}</span> {activeLive.title}
-              </div>
-              {activeLive.nextAction && <div className="unit-pulse">{activeLive.nextAction}</div>}
-            </div>
-
-            {/* Key metrics — chosen per unit type */}
-            {activeLive.metrics && activeLive.metrics.length > 0 && (
-              <div className="metric-grid">
-                {activeLive.metrics.map((m) => (
-                  <div className="metric" key={m.label}>
-                    <div className="metric-value">{m.value}</div>
-                    <div className="metric-label">{m.label}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Quick actions — contextual */}
-            {activeLive.quickActions && activeLive.quickActions.length > 0 && (
-              <div className="qa-row">
-                {activeLive.quickActions.map((a) => (
-                  <button key={a} className="qa-btn" onClick={() => runQuickAction(activeLive, a)}>
-                    {a}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="sheet-section">
-              <h4>Next steps</h4>
-              {activeLive.steps.map((s, i) => {
-                const done = isStepDone(activeLive, i);
-                return (
-                  <button
-                    key={i}
-                    className={`step-item${done ? " done" : ""}`}
-                    style={{ width: "100%", border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
-                    onClick={() => toggleStep(activeLive, i)}
-                  >
-                    <span className={`step-check${done ? " done" : ""}`}>{done ? "✓" : ""}</span>
-                    <span className="step-text">{s.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="sheet-section">
-              <h4>Connections</h4>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {(activeLive.people.length ? activeLive.people : [activeLive.relation])
-                  .filter(Boolean)
-                  .map((person) => {
-                    const b = businesses.find(
-                      (x) =>
-                        person.toLowerCase().includes(x.name.toLowerCase()) ||
-                        x.name.toLowerCase().includes(person.toLowerCase()),
-                    );
-                    return b ? (
-                      <button
-                        key={person}
-                        className="sheet-pill ghost biz-link"
-                        style={{ fontWeight: 600, fontSize: 12.5 }}
-                        onClick={() => openBiz(b.id)}
-                      >
-                        {b.emoji} {person} ›
-                      </button>
-                    ) : (
-                      <span key={person} className="sheet-pill ghost" style={{ fontWeight: 600, fontSize: 12.5 }}>
-                        {person}
-                      </span>
-                    );
-                  })}
-              </div>
-            </div>
-
-            {activeLive.insights && activeLive.insights.length > 0 && (
-              <div className="sheet-section">
-                <h4>Insights</h4>
-                <div className="insight-list">
-                  {activeLive.insights.map((t, i) => (
-                    <div className="insight" key={i}>
-                      {t}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {activeLive.decisions.length > 0 && (
-              <div className="sheet-section">
-                <h4>Decisions</h4>
-                {activeLive.decisions.map((d) => (
-                  <div className="sheet-row" key={d}>
-                    <span className="r-label" style={{ fontWeight: 500 }}>
-                      {d}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="sheet-section">
-              <h4>Timeline</h4>
-              {activeLive.timeline.map((ev, i) => (
-                <div className="timeline-item" key={i}>
-                  <span className="timeline-dot" />
-                  <span>
-                    <b style={{ fontWeight: 600 }}>{ev.at}</b> — {ev.text}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Sources — where ONE pulls this unit's reality from. */}
-            {unitSources(activeLive).length > 0 && (
-              <div className="sheet-section">
-                <h4>Sources</h4>
-                <div className="source-list">
-                  {unitSources(activeLive).map((s) => (
-                    <div className="source-item" key={s.label}>
-                      <span className="source-dot" />
-                      <span className="source-label">{s.label}</span>
-                      <span className="source-detail">{s.detail}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-              <input
-                className="app-input"
-                style={{ boxShadow: "none", background: "var(--p-bg)" }}
-                placeholder={`Ask ONE about ${activeLive.title}…`}
-              />
-              <button className="app-send" aria-label="Send">
-                <SendIcon />
-              </button>
-            </div>
-          </div>
-        )}
-      </Sheet>
+      {/* The unit detail now lives inline in the workspace split (UnitDetail),
+          beside its own chat — no modal popup. */}
 
       {/* ── CREATE A BUSINESS — form + free-text, ONE builds the profile ── */}
       <Sheet open={!!draftBiz} onClose={() => setDraftBiz(null)}>

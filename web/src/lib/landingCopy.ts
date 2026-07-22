@@ -48,7 +48,7 @@ export interface LandingCopy {
     h2: string;
     perForever: string;
     perMonth: string;
-    plans: { name: string; price: string; blurb: string; feats: string[]; cta: string }[];
+    plans: { name: string; price: string; blurb: string; feats: { icon: string; label: string }[]; cta: string }[];
     // The tailored/enterprise tier — not a card, just a line + link below.
     enterprise: { line: string; cta: string };
   };
@@ -189,7 +189,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     pricing: {
       eyebrow: "Plans",
-      h2: "Your ONE grows with you.",
+      h2: "ONE grows with you.",
       perForever: " / forever",
       perMonth: " / month",
       plans: [
@@ -197,7 +197,11 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
           name: "Free",
           price: "$0",
           blurb: "Put your first real process in ONE's hands — no account needed.",
-          feats: ["Unlimited processes", "One identity", "Runs on this device"],
+          feats: [
+            { icon: "fi-rr-apps", label: "Unlimited processes" },
+            { icon: "fi-rr-user", label: "One identity" },
+            { icon: "fi-rr-laptop", label: "Runs on this device" },
+          ],
           cta: "Start free",
         },
         {
@@ -205,10 +209,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
           price: "$8",
           blurb: "Your whole life in one place — synced, remembered, everywhere you are.",
           feats: [
-            "Everything in Free",
-            "Sync across all your devices",
-            "Full memory & history",
-            "Connect calendar, email, files",
+            { icon: "fi-rr-check", label: "Everything in Free" },
+            { icon: "fi-rr-devices", label: "Sync across all your devices" },
+            { icon: "fi-rr-brain", label: "Full memory & history" },
+            { icon: "fi-rr-link", label: "Connect calendar, email, files" },
           ],
           cta: "Choose Plus",
         },
@@ -217,10 +221,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
           price: "$19",
           blurb: "Turn any ONE into a business — become an owner, no company required.",
           feats: [
-            "Everything in Plus",
-            "Open a business — its ONE is free",
-            "Bookings & a customer list",
-            "Followers & a public profile",
+            { icon: "fi-rr-check", label: "Everything in Plus" },
+            { icon: "fi-rr-shop", label: "Open a business — its ONE is free" },
+            { icon: "fi-rr-calendar", label: "Bookings & a customer list" },
+            { icon: "fi-rr-followcollection", label: "Followers & a public profile" },
           ],
           cta: "Go Pro",
         },
@@ -284,8 +288,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       ],
     },
     download: {
-      titleLead: "Wherever you go,",
-      titleRest: "ONE is with you.",
+      titleLead: "ONE",
+      titleRest: "is here for you.",
       sub: "In life, at work, and everything in between.",
       get: {
         desktop: "Desktop",
@@ -440,7 +444,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     pricing: {
       eyebrow: "תוכניות",
-      h2: "ה-ONE שלכם גדל יחד אתכם.",
+      h2: "‏ONE גדל יחד איתך.",
       perForever: " / לתמיד",
       perMonth: " / לחודש",
       plans: [
@@ -448,7 +452,11 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
           name: "חינם",
           price: "$0",
           blurb: "תנו ל-ONE את התהליך האמיתי הראשון שלכם — בלי חשבון.",
-          feats: ["תהליכים ללא הגבלה", "זהות אחת", "עובד במכשיר הזה"],
+          feats: [
+            { icon: "fi-rr-apps", label: "תהליכים ללא הגבלה" },
+            { icon: "fi-rr-user", label: "זהות אחת" },
+            { icon: "fi-rr-laptop", label: "עובד במכשיר הזה" },
+          ],
           cta: "התחילו בחינם",
         },
         {
@@ -456,10 +464,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
           price: "$8",
           blurb: "כל החיים שלכם במקום אחד — מסונכרנים, זכורים, בכל מקום.",
           feats: [
-            "כל מה שבחינם",
-            "סנכרון בכל המכשירים",
-            "זיכרון והיסטוריה מלאים",
-            "חברו יומן, אימייל וקבצים",
+            { icon: "fi-rr-check", label: "כל מה שבחינם" },
+            { icon: "fi-rr-devices", label: "סנכרון בכל המכשירים" },
+            { icon: "fi-rr-brain", label: "זיכרון והיסטוריה מלאים" },
+            { icon: "fi-rr-link", label: "חברו יומן, אימייל וקבצים" },
           ],
           cta: "בחרו פלוס",
         },
@@ -468,10 +476,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
           price: "$19",
           blurb: "הפכו כל ONE לעסק — היו בעלי עסק, בלי צורך בחברה.",
           feats: [
-            "כל מה שבפלוס",
-            "פתחו עסק — ה-ONE שלו חינם",
-            "הזמנות ורשימת לקוחות",
-            "עוקבים ופרופיל ציבורי",
+            { icon: "fi-rr-check", label: "כל מה שבפלוס" },
+            { icon: "fi-rr-shop", label: "פתחו עסק — ה-ONE שלו חינם" },
+            { icon: "fi-rr-calendar", label: "הזמנות ורשימת לקוחות" },
+            { icon: "fi-rr-followcollection", label: "עוקבים ופרופיל ציבורי" },
           ],
           cta: "עברו לפרו",
         },
@@ -535,8 +543,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       ],
     },
     download: {
-      titleLead: "בכל מקום,",
-      titleRest: "‏ONE איתך.",
+      titleLead: "ONE",
+      titleRest: "כאן בשבילך.",
       sub: "בחיים, בעבודה, ובכל מה שביניהם.",
       get: {
         desktop: "מחשב",

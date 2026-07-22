@@ -589,6 +589,8 @@ export default function LandingPage() {
   // The opening "awakening" owns --p until it finishes; scroll takes over after.
   const introDoneRef = useRef(false);
   const [scrolled, setScrolled] = useState(false);
+  // Which pricing plan is hovered — drives the ONE that "grows with you".
+  const [hoverPlan, setHoverPlan] = useState<number | null>(null);
   // True once the footer starts being revealed at the end of the scroll. Drives
   // the nav's "arrived" state (Enter CTA fills, wordmark wakes into the ONE
   // face) — the same look as hovering the brand — and relaxes back on scroll up.
@@ -1016,6 +1018,34 @@ export default function LandingPage() {
     return () => io.disconnect();
   }, []);
 
+  // Film section: a scroll-linked parallax — the frame expands toward full width
+  // as it reaches the middle of the viewport and contracts as it leaves. Sets a
+  // 0..1 `--fp` on the frame; the scale itself lives in CSS.
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>(".why-video");
+    if (!el) return;
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight;
+      const center = r.top + r.height / 2;
+      const dist = Math.abs(center - vh / 2) / (vh / 2 + r.height / 2);
+      el.style.setProperty("--fp", Math.max(0, Math.min(1, 1 - dist)).toFixed(3));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    apply();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   return (
     <>
       {/* The whole page is an opaque layer that sits ABOVE the fixed footer and
@@ -1274,6 +1304,16 @@ export default function LandingPage() {
       <section className="section center reveal" id="pricing">
         <div className="shell">
           <h2>{t.pricing.h2}</h2>
+          {/* The ONE literally grows with the plan you hover — Free small, Pro
+              big — a live picture of "grows with you". */}
+          <div className="pricing-orb" aria-hidden="true">
+            <div
+              className="pricing-orb-inner"
+              style={{ transform: `scale(${hoverPlan === 0 ? 0.82 : hoverPlan === 2 ? 1.32 : 1})` }}
+            >
+              <Orb size={92} alive faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
+            </div>
+          </div>
           <div className="plans">
             {t.pricing.plans.map((p, i) => {
               const featured = i === 2;
@@ -1286,6 +1326,8 @@ export default function LandingPage() {
                 <div
                   className={`plan${featured ? " plan-featured" : ""}${i === 0 ? " plan-plain" : ""}`}
                   key={p.name}
+                  onMouseEnter={() => setHoverPlan(i)}
+                  onMouseLeave={() => setHoverPlan(null)}
                 >
                   <div className={`plan-name ${nameTier}`}>{p.name}</div>
                   <div className="plan-price">
@@ -1295,7 +1337,10 @@ export default function LandingPage() {
                   <p className="plan-blurb">{p.blurb}</p>
                   <div className="plan-feats">
                     {p.feats.map((f, fi) => (
-                      <span key={fi}>{f}</span>
+                      <span key={fi}>
+                        <i className={`fi ${f.icon} plan-feat-ico`} aria-hidden="true" />
+                        {f.label}
+                      </span>
                     ))}
                   </div>
                   <Link className={btnClass} href="/app">{p.cta}</Link>

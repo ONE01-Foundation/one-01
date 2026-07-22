@@ -1554,8 +1554,8 @@ h3 {
   grid-template-columns: 1fr 1fr;
   gap: 56px;
   align-items: center;
-  /* Sit well below centre so the whole CTA lands low on the screen. */
-  transform: translateY(12vh);
+  /* Sit a little below centre — low, but not so low it opens a gap under news. */
+  transform: translateY(6vh);
 }
 .final h2 {
   font-size: clamp(40px, 5.6vw, 64px);
@@ -1758,12 +1758,14 @@ footer {
   overflow: hidden;
   background: #121212;
   box-shadow: 0 16px 52px rgba(10, 10, 10, 0.17);
-  transition: transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1),
-    box-shadow 360ms ease;
+  /* Scroll-linked parallax: the frame expands toward full width as it reaches
+     the middle of the viewport and contracts as it leaves. --fp (0..1) is set
+     in page.tsx; a short transition just smooths the per-frame steps. */
+  transform: scale(calc(1 + var(--fp, 0) * 0.3));
+  transform-origin: center;
+  transition: transform 120ms linear, box-shadow 360ms ease;
 }
 .why-video:hover {
-  /* A gentle step up — the poster leans toward you. */
-  transform: scale(1.05);
   box-shadow: 0 30px 84px rgba(10, 10, 10, 0.28);
 }
 .why-video > video,
@@ -1805,11 +1807,6 @@ footer {
   align-items: center;
   gap: inherit;
   transition: transform 340ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.why-video:hover .why-poster-inner {
-  /* Exactly 1 / 1.05 — cancels the frame's growth so the box gets bigger and
-     the copy holds its size. */
-  transform: scale(0.9524);
 }
 /* `.section h2` caps width at 720px and sets its own size — the selector is
    `.section h2.why-title` so it outranks that inside the frame. */
@@ -2260,7 +2257,7 @@ footer {
    gap and keep the section tight so it reads as a quick momentum beat. */
 .news-section {
   padding-top: 30px;
-  padding-bottom: 34px;
+  padding-bottom: 6px;
 }
 .news-section .news-marquee {
   margin-top: 0;
@@ -2289,6 +2286,10 @@ footer {
   display: flex;
   width: max-content;
   animation: newsScroll 76s linear infinite;
+}
+/* RTL reads right-to-left, so the row should travel the other way. */
+[dir="rtl"] .news-track {
+  animation-direction: reverse;
 }
 .news-marquee:hover .news-track {
   animation-play-state: paused;
@@ -2487,6 +2488,20 @@ footer {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  padding-block: 64px;
+}
+/* The ONE that grows with your plan — scales up toward Pro, down toward Free,
+   from a baseline that reads as "grows with you". */
+.pricing-orb {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 128px;
+  margin-top: 24px;
+}
+.pricing-orb-inner {
+  transform-origin: center bottom;
+  transition: transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .plans {
   margin-top: 52px;
@@ -2531,15 +2546,22 @@ footer {
   box-shadow: none;
 }
 .plan-name {
-  font-size: 14px;
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--text) 16%, transparent);
+  font-size: 12.5px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text);
 }
-/* Metallic tier ladder on the plan name: Free stays quiet, Plus is silver,
-   Pro is mustard gold. The gradient is clipped to the letterforms. */
+/* Metallic tier ladder + a frame in the tier's colour: Free quiet, Plus silver,
+   Pro mustard gold. The gradient is clipped to the letterforms. */
 .plan-name-free {
   color: var(--text-3);
+  border-color: color-mix(in srgb, var(--text) 15%, transparent);
 }
 .plan-name-plus,
 .plan-name-pro {
@@ -2550,9 +2572,11 @@ footer {
 }
 .plan-name-plus {
   background-image: linear-gradient(100deg, #8d9099 0%, #d9dce1 40%, #a7abb2 60%, #eef1f4 100%);
+  border-color: #b6bac2;
 }
 .plan-name-pro {
   background-image: linear-gradient(100deg, #916a12 0%, #e4c163 42%, #c1901f 62%, #f2dc93 100%);
+  border-color: #d2a83c;
 }
 .plan-price {
   margin: 16px 0 4px;
@@ -2585,14 +2609,17 @@ footer {
   color: var(--text-2);
   display: flex;
   gap: 10px;
-  align-items: baseline;
+  align-items: center;
   line-height: 1.4;
 }
-.plan-feats span::before {
-  content: "✓";
-  color: var(--ok);
-  font-weight: 700;
+/* A relevant icon per feature, in place of the old ✓. */
+.plan-feat-ico {
   flex: none;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-3);
+  display: inline-flex;
+  margin-top: 1px;
 }
 .plan .btn {
   margin-top: auto;
@@ -2919,13 +2946,13 @@ footer {
   }
 }
 @media (min-width: 900px) {
+  /* Full-bleed canvas on desktop — no window frame, no radius, no shadow. */
   .app-shell {
     flex-direction: row;
-    width: min(1180px, 95vw);
-    height: min(800px, 92vh);
-    border-radius: 28px;
-    box-shadow: 0 40px 100px -34px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(10, 10, 10, 0.05);
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
   }
 }
 
@@ -3254,6 +3281,9 @@ footer {
 /* cards list */
 .app-cards {
   flex: 1;
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
   overflow-y: auto;
   padding: 14px 16px 130px;
   display: flex;
@@ -3385,9 +3415,11 @@ footer {
   display: flex;
   gap: 10px;
   align-items: center;
+  justify-content: center;
 }
 .app-input {
   flex: 1;
+  max-width: 664px;
   height: 52px;
   border-radius: 26px;
   background: var(--p-surface);
@@ -3398,9 +3430,15 @@ footer {
   color: var(--p-text);
   outline: none;
   font-family: var(--sans);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 .app-input::placeholder {
   color: var(--p-text-3);
+}
+.app-input:focus {
+  border-color: color-mix(in srgb, var(--p-face) 42%, var(--p-line));
+  box-shadow: 0 12px 26px -16px rgba(0, 0, 0, 0.3),
+    0 0 0 3px color-mix(in srgb, var(--p-face) 9%, transparent);
 }
 .app-send {
   width: 52px;
@@ -3417,6 +3455,143 @@ footer {
 }
 .app-send:hover {
   opacity: 0.9;
+}
+
+/* ─── unit split — a unit's wide detail card BESIDE its own chat ─────────── */
+.unit-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 6;
+}
+.unit-topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 14px;
+}
+.unit-topbar-head {
+  min-width: 0;
+}
+.unit-topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--p-text);
+}
+.unit-topbar-sub {
+  margin-top: 3px;
+  padding-inline-start: 32px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--p-text-3);
+}
+.unit-topbar-dot {
+  margin-inline: 7px;
+}
+.unit-topbar-title > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unit-topbar-emoji {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.unit-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.unit-tb-btn {
+  border: none;
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+  color: var(--p-text-2);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 15px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.unit-tb-btn:hover {
+  background: color-mix(in srgb, var(--p-text) 10%, transparent);
+  color: var(--p-text);
+}
+.unit-tb-close {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+.unit-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 18px;
+  padding: 0 26px 26px;
+}
+.unit-view.is-full .unit-split {
+  grid-template-columns: 1fr;
+}
+.unit-detail,
+.unit-chatpane {
+  min-height: 0;
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  border-radius: 20px;
+}
+.unit-detail {
+  overflow-y: auto;
+  padding: 26px 28px;
+}
+.unit-view.is-full .unit-detail {
+  width: 100%;
+  max-width: 920px;
+  margin-inline: auto;
+}
+.unit-detail-pulse {
+  margin-bottom: 18px;
+}
+.unit-chatpane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.unit-chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 20px 8px;
+}
+.unit-dock {
+  position: static;
+  z-index: auto;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--p-line);
+}
+@media (max-width: 899px) {
+  .unit-split {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .unit-chatpane {
+    min-height: 340px;
+  }
 }
 
 /* close-chat button — mirrors the gear, on the LEFT, only while chatting */
@@ -3444,6 +3619,9 @@ footer {
 /* ── home conversation with ONE ── */
 .app-chat {
   flex: 1;
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
   overflow-y: auto;
   padding: 18px 18px 130px;
   display: flex;
