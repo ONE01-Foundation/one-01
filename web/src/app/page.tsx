@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Logo } from "@/components/Logo";
+import { Logo, OneWord } from "@/components/Logo";
 import { Orb } from "@/components/Orb";
 import { Sheet } from "@/components/product/Sheet";
 import { QRCodeSVG } from "qrcode.react";
@@ -1303,17 +1303,24 @@ export default function LandingPage() {
       {/* ── pricing ── */}
       <section className="section center reveal" id="pricing">
         <div className="shell">
-          <h2>{t.pricing.h2}</h2>
-          {/* The ONE literally grows with the plan you hover — Free small, Pro
-              big — a live picture of "grows with you". */}
-          <div className="pricing-orb" aria-hidden="true">
-            <div
-              className="pricing-orb-inner"
-              style={{ transform: `scale(${hoverPlan === 0 ? 0.82 : hoverPlan === 2 ? 1.32 : 1})` }}
-            >
-              <Orb size={92} alive faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
-            </div>
-          </div>
+          {/* The name is the wordmark, face awake in the "O" — and it literally
+              grows with the plan you hover (Free small, Pro big), so the
+              headline demonstrates itself. The size is animated as real width/
+              height rather than a transform: a scaled transform overflows its
+              layout box and the big state collides with the next word, whereas
+              this lets the line re-centre around it. */}
+          <h2 className="pricing-h2">
+            {(() => {
+              const em = hoverPlan === 0 ? 0.76 : hoverPlan === 2 ? 1.24 : 0.94;
+              return (
+                <OneWord
+                  className="pricing-one"
+                  style={{ height: `${em}em`, width: `${em * (84 / 32)}em` }}
+                />
+              );
+            })()}
+            {t.pricing.h2Rest}
+          </h2>
           <div className="plans">
             {t.pricing.plans.map((p, i) => {
               const featured = i === 2;

@@ -45,7 +45,10 @@ export interface LandingCopy {
   };
   pricing: {
     eyebrow: string;
-    h2: string;
+    /** The headline WITHOUT its leading "ONE" — the name is drawn as the
+     *  wordmark (face in the O) that grows with the hovered plan, so the copy
+     *  carries only the remainder of the sentence. */
+    h2Rest: string;
     perForever: string;
     perMonth: string;
     plans: { name: string; price: string; blurb: string; feats: { icon: string; label: string }[]; cta: string }[];
@@ -189,7 +192,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     pricing: {
       eyebrow: "Plans",
-      h2: "ONE grows with you.",
+      h2Rest: "grows with you.",
       perForever: " / forever",
       perMonth: " / month",
       plans: [
@@ -289,7 +292,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     download: {
       titleLead: "ONE",
-      titleRest: "is here for you.",
+      titleRest: "for you.",
       sub: "In life, at work, and everything in between.",
       get: {
         desktop: "Desktop",
@@ -444,7 +447,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     pricing: {
       eyebrow: "תוכניות",
-      h2: "‏ONE גדל יחד איתך.",
+      h2Rest: "גדל יחד איתך.",
       perForever: " / לתמיד",
       perMonth: " / לחודש",
       plans: [
@@ -544,8 +547,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     download: {
       titleLead: "ONE",
-      titleRest: "כאן בשבילך.",
-      sub: "בחיים, בעבודה, ובכל מה שביניהם.",
+      titleRest: "בשבילך.",
+      sub: "בחיים, בעבודה, וכל מה שביניהם.",
       get: {
         desktop: "מחשב",
         mobile: "מובייל",

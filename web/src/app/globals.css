@@ -2281,15 +2281,26 @@ footer {
   overflow: hidden;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+  /* The duplicate-and-translate math above assumes a left-to-right track, and a
+     child's static position follows its PARENT's direction: under RTL an
+     overflowing track anchors its right edge to this box's right edge, starting
+     a full copy off-screen to the left, so the visible window runs empty. Pin
+     the container to LTR in both languages and express the RTL travel purely as
+     a reversed animation; each card restores its own text direction below. */
+  direction: ltr;
 }
 .news-track {
   display: flex;
   width: max-content;
   animation: newsScroll 76s linear infinite;
 }
-/* RTL reads right-to-left, so the row should travel the other way. */
+/* RTL reads right-to-left, so the row should travel the other way. Both ends of
+   the keyframe show an identical copy, so reversing stays seamless. */
 [dir="rtl"] .news-track {
   animation-direction: reverse;
+}
+[dir="rtl"] .news-card {
+  direction: rtl;
 }
 .news-marquee:hover .news-track {
   animation-play-state: paused;
@@ -2490,18 +2501,28 @@ footer {
   justify-content: center;
   padding-block: 64px;
 }
-/* The ONE that grows with your plan — scales up toward Pro, down toward Free,
-   from a baseline that reads as "grows with you". */
-.pricing-orb {
+/* The name inside the headline is the wordmark itself, face awake in the "O",
+   and it grows with the plan you hover — up toward Pro, down toward Free — so
+   the sentence demonstrates what it says. Sized in `em` so it tracks the
+   heading's type, and scaled by transform so the words around it never
+   reflow. Extra inline room keeps the biggest state off its neighbours. */
+.pricing-h2 {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  height: 128px;
-  margin-top: 24px;
+  flex-wrap: wrap;
+  gap: 0.06em;
 }
-.pricing-orb-inner {
-  transform-origin: center bottom;
-  transition: transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
+.pricing-one {
+  flex: none;
+  margin-inline-end: 0.16em;
+  transition: width 360ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.one-word-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: orbBlink 5.4s ease-in-out infinite;
 }
 .plans {
   margin-top: 52px;
