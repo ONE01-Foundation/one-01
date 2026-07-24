@@ -821,13 +821,31 @@ button {
   align-items: center;
   justify-content: center;
   padding: 10px 20px;
-  border-radius: 999px;
+  /* Softly squared, not a pill — closer to the product's cards and the device
+     buttons below, so the page reads as one set of shapes. */
+  border-radius: 13px;
   font-size: 14px;
   font-weight: 600;
   transition: transform 160ms, background 160ms, color 160ms, border-color 160ms;
   border: 1px solid transparent;
   white-space: nowrap;
   letter-spacing: -0.005em;
+}
+/* The CTA's arrow — nudges forward on hover so the button feels like a door. */
+.btn-arrow {
+  margin-inline-start: 7px;
+  font-size: 1.02em;
+  line-height: 1;
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+[dir="rtl"] .btn-arrow {
+  transform: scaleX(-1);
+}
+.btn:hover .btn-arrow {
+  transform: translateX(3px);
+}
+[dir="rtl"] .btn:hover .btn-arrow {
+  transform: scaleX(-1) translateX(3px);
 }
 .btn-primary {
   background: var(--text);
@@ -2501,11 +2519,9 @@ footer {
   justify-content: center;
   padding-block: 64px;
 }
-/* The name inside the headline is the wordmark itself, face awake in the "O",
-   and it grows with the plan you hover — up toward Pro, down toward Free — so
-   the sentence demonstrates what it says. Sized in `em` so it tracks the
-   heading's type, and scaled by transform so the words around it never
-   reflow. Extra inline room keeps the biggest state off its neighbours. */
+/* The name inside the headline is the wordmark itself, face awake in the "O".
+   Sized in `em` so it tracks the heading's type. It stays put — the "grows
+   with you" is acted out by the plans below. */
 .pricing-h2 {
   display: flex;
   align-items: center;
@@ -2515,9 +2531,9 @@ footer {
 }
 .pricing-one {
   flex: none;
+  height: 0.94em;
+  width: 2.4675em; /* 0.94em × the 84:32 crop */
   margin-inline-end: 0.16em;
-  transition: width 360ms cubic-bezier(0.2, 0.7, 0.2, 1),
-    height 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .one-word-eye {
   transform-box: fill-box;
@@ -2529,7 +2545,10 @@ footer {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 22px;
-  align-items: stretch;
+  /* `start`, not `stretch`: a hovered card grows on its own. Under `stretch`
+     the whole row would grow with it and the other two would just gain blank
+     space at the bottom. */
+  align-items: start;
 }
 @media (max-width: 880px) {
   .plans {
@@ -2557,6 +2576,40 @@ footer {
   text-align: left;
   display: flex;
   flex-direction: column;
+}
+/* Turning up a plan: the card lifts and opens, revealing the rest of what it
+   includes. The extra rows live in a 0fr→1fr grid so the card animates to its
+   real content height without a hard-coded max-height. */
+.plan {
+  transition: transform 320ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.plan:hover,
+.plan:focus-within {
+  transform: translateY(-6px);
+  box-shadow: 0 22px 56px rgba(10, 10, 10, 0.16);
+}
+.plan-more {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 320ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    opacity 220ms ease;
+}
+.plan-more-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.plan:hover .plan-more,
+.plan:focus-within .plan-more {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan,
+  .plan-more {
+    transition: none;
+  }
 }
 .plan-featured {
   box-shadow: 0 18px 48px rgba(10, 10, 10, 0.13);
@@ -3478,13 +3531,465 @@ footer {
   opacity: 0.9;
 }
 
-/* ─── unit split — a unit's wide detail card BESIDE its own chat ─────────── */
-.unit-view {
-  flex: 1;
-  min-height: 0;
+/* ─── product top bar — the site's shape, ONE's own face as the mark ─────── */
+.app-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+}
+.app-nav-brand {
+  position: relative;
+}
+.app-brand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--p-text);
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.app-brand-btn:hover {
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+}
+/* The mark is the wordmark with ONE's face in the "O" — same as the site, but
+   the company "01" is dropped: in here you're with your ONE, not the company. */
+.app-brand-mark {
+  height: 20px;
+  width: 52.5px; /* 20px × the 84:32 crop */
+  display: block;
+  color: var(--p-text);
+}
+.app-brand-mark .one-word-eye {
+  fill: var(--p-bg);
+}
+/* Profiles tab — drops from the mark on hover, like the site's menus. */
+.app-profiles {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  min-width: 268px;
+  padding: 8px;
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(10, 10, 10, 0.16);
+  animation: langMenuIn 140ms ease;
+}
+.app-profiles-label {
+  padding: 6px 10px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--p-text-3);
+}
+.app-profile {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--p-text);
+  font-family: var(--sans);
+  text-align: start;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.app-profile:hover {
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+}
+.app-profile.active {
+  background: color-mix(in srgb, var(--p-text) 7%, transparent);
+}
+.app-profile-emoji {
+  font-size: 19px;
+  flex-shrink: 0;
+}
+.app-profile-text {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+.app-profile-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.app-profile-role {
+  font-size: 12px;
+  color: var(--p-text-3);
+}
+.app-nav-right {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* You, as a round avatar — the entry to the profiles you can be. */
+.app-avatar {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--p-line);
+  border-radius: 50%;
+  background: var(--p-surface);
+  cursor: pointer;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+.app-avatar:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.35);
+}
+.app-avatar-emoji {
+  font-size: 17px;
+  line-height: 1;
+}
+.app-nav-right .app-profiles {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+}
+/* Where this ONE is kept — sits with the profile, not loose in the chrome. */
+.app-profiles-cloud {
+  margin-top: 6px;
+  padding: 9px 10px 4px;
+  border-top: 1px solid var(--p-line);
+  font-size: 12px;
+  color: var(--p-text-3);
+}
+.app-profiles-cloud.cloud-synced {
+  color: var(--p-ok);
+}
+
+/* What ONE itself owns, hanging off the mark. */
+.app-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  min-width: 216px;
+  padding: 8px;
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(10, 10, 10, 0.16);
+  animation: langMenuIn 140ms ease;
+}
+.app-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--p-text);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 550;
+  text-align: start;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.app-menu-item:hover {
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+}
+.app-menu-ico {
+  font-size: 15px;
+  color: var(--p-text-3);
+  flex-shrink: 0;
+}
+.app-menu-item .app-plan {
+  margin-inline-start: auto;
+}
+
+/* ─── home — the hero, then your processes; sideways, the Global ─────────── */
+.app-pager {
+  position: absolute;
+  /* Clears the top bar, which floats over the canvas. */
+  inset: 58px 0 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.app-pager::-webkit-scrollbar {
+  display: none;
+}
+.app-page {
+  flex: 0 0 100%;
+  height: 100%;
+  overflow-y: auto;
+  scroll-snap-align: start;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+.app-page::-webkit-scrollbar {
+  display: none;
+}
+.home-hero,
+.home-processes {
+  min-height: 100%;
+  scroll-snap-align: start;
+}
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 0 24px 120px;
+}
+/* The home hero collapses exactly like the landing's (see .lhero-orb): --p
+   (0…1), where 1 is ONE shrunk to a plain black dot at the centre of the
+   screen. Scroll drives it toward the processes; the opening replays it in
+   reverse. No transitions — it must track frame-for-frame. --orb-drop is the
+   rest-to-centre distance, measured in the preview. */
+.home-hero-orb {
+  border: none;
+  background: transparent;
+  padding: 0;
+  line-height: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  --orb-drop: 97px;
+  transform: translateY(calc(var(--p, 0) * var(--orb-drop))) scale(calc(1 - var(--p, 0) * 0.58));
+  transform-origin: center;
+  will-change: transform;
+}
+/* Eyes close as ONE collapses, so it becomes a plain black dot — and open as
+   the awakening runs it backwards. */
+.home-hero-orb .orb-eye {
+  opacity: calc(1 - var(--p, 0) * 2.2);
+}
+.home-hero-line {
+  max-width: 34ch;
+  text-align: center;
+  text-wrap: balance;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+  color: var(--p-text);
+  /* Fades out in place as ONE collapses (and between rotating lines). */
+  opacity: calc(1 - var(--p, 0) * 3.4);
+  transition: opacity 300ms ease;
+}
+.home-hero-line.is-fading {
+  opacity: 0;
+}
+.home-hero-cue {
+  font-size: 22px;
+  color: var(--p-text-3);
+  opacity: calc(0.55 - var(--p, 0) * 2);
+  animation: heroCue 2.6s ease-in-out infinite;
+}
+/* Transform only — the fade is --p's job, so the two don't overwrite. */
+@keyframes heroCue {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+}
+.home-processes {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 72px 0 130px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-orb,
+  .home-hero-line,
+  .home-hero-orb .orb-eye {
+    transform: none;
+    opacity: 1;
+  }
+  .home-hero-cue {
+    animation: none;
+  }
+}
+
+/* The crossing to Global — a quiet tab pinned to the far edge. */
+.pager-edge {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 0;
+  transform: translateY(-50%);
+  z-index: 8;
+  padding: 16px 10px;
+  border: 1px solid var(--p-line);
+  border-inline-end: none;
+  border-start-start-radius: 14px;
+  border-end-start-radius: 14px;
+  background: var(--p-surface);
+  color: var(--p-text-3);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 140ms ease, padding-inline 140ms ease;
+}
+.pager-edge:hover {
+  color: var(--p-text);
+  padding-inline: 14px 12px;
+}
+.pager-edge-label {
+  writing-mode: vertical-rl;
+}
+/* Global — the page one swipe sideways. */
+.app-page-global {
+  background: color-mix(in srgb, var(--p-text) 3%, var(--p-bg));
+}
+.global-pane {
+  min-height: 100%;
+  max-width: 780px;
+  margin-inline: auto;
+  padding: 96px 26px 130px;
+}
+.global-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--p-text);
+}
+.global-lede {
+  margin: 8px 0 26px;
+  max-width: 48ch;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--p-text-2);
+}
+.global-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.gcard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 18px;
+  border: 1px solid var(--p-line);
+  border-radius: 18px;
+  background: var(--p-surface);
+  font-family: var(--sans);
+  text-align: start;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.gcard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 34px rgba(10, 10, 10, 0.1);
+}
+.gcard-emoji {
+  font-size: 24px;
+}
+.gcard-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--p-text);
+}
+.gcard-cat {
+  font-size: 12.5px;
+  color: var(--p-text-3);
+}
+
+/* ─── the one input bar the product speaks through ───────────────────────── */
+.app-bar {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 62px;
+  padding: 0 8px 0 16px;
+  border-radius: 999px;
+  background: var(--p-surface);
+  box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.34);
+  transition: box-shadow 160ms ease;
+}
+.app-bar:focus-within {
+  box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.34),
+    0 0 0 3px color-mix(in srgb, var(--p-face) 8%, transparent);
+}
+.app-bar-plus {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--p-text-3);
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+.app-bar-plus:hover {
+  color: var(--p-text);
+  background: color-mix(in srgb, var(--p-text) 6%, transparent);
+}
+.app-bar-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--sans);
+  font-size: 16px;
+  color: var(--p-text);
+}
+.app-bar-input::placeholder {
+  color: var(--p-text-3);
+}
+.app-bar-go {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--p-face);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+.app-bar-go:hover {
+  opacity: 0.9;
+}
+
+/* ─── unit — the chat IS the room; details ride in a resizable rail ──────── */
+.unit-view {
+  position: absolute;
+  inset: 58px 0 0;
   z-index: 6;
+  display: flex;
+  align-items: stretch;
 }
 .unit-topbar {
   flex-shrink: 0;
@@ -3555,63 +4060,87 @@ footer {
   font-size: 20px;
   line-height: 1;
 }
-.unit-split {
+/* The conversation: no card, no border — it happens on the canvas itself. */
+.unit-chatpane {
   flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
-  gap: 18px;
-  padding: 0 26px 26px;
-}
-.unit-view.is-full .unit-split {
-  grid-template-columns: 1fr;
-}
-.unit-detail,
-.unit-chatpane {
-  min-height: 0;
-  background: var(--p-surface);
-  border: 1px solid var(--p-line);
-  border-radius: 20px;
-}
-.unit-detail {
-  overflow-y: auto;
-  padding: 26px 28px;
-}
-.unit-view.is-full .unit-detail {
-  width: 100%;
-  max-width: 920px;
-  margin-inline: auto;
-}
-.unit-detail-pulse {
-  margin-bottom: 18px;
-}
-.unit-chatpane {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .unit-chat-scroll {
   flex: 1;
   min-height: 0;
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 22px 20px 8px;
+  padding: 8px 24px 8px;
 }
 .unit-dock {
   position: static;
   z-index: auto;
-  padding: 12px 14px 14px;
-  border-top: 1px solid var(--p-line);
+  padding: 12px 24px 22px;
+}
+.unit-detail-pulse {
+  margin-bottom: 18px;
+}
+/* The details rail — narrow by default, dragged wider by its inner edge. */
+.unit-aside {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  /* A card, not a wall: inset from the edges with rounded corners so it reads
+     as the unit's profile sitting beside the conversation. */
+  margin: 0 18px 18px 0;
+  margin-inline: 0 18px;
+  margin-block: 0 18px;
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  border-radius: 20px;
+  overflow: hidden;
+}
+.unit-aside-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 22px 22px 28px;
+}
+.unit-resizer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -3px;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+}
+.unit-resizer::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 3px;
+  width: 1px;
+  background: transparent;
+  transition: background 140ms ease;
+}
+.unit-resizer:hover::after {
+  background: color-mix(in srgb, var(--p-face) 30%, transparent);
 }
 @media (max-width: 899px) {
-  .unit-split {
-    grid-template-columns: 1fr;
-    overflow-y: auto;
+  .unit-view {
+    flex-direction: column;
   }
-  .unit-chatpane {
-    min-height: 340px;
+  .unit-aside {
+    width: 100% !important;
+    max-height: 45%;
+    margin-inline: 14px;
+    margin-block: 0 14px;
+  }
+  .unit-resizer {
+    display: none;
   }
 }
 
@@ -4895,6 +5424,22 @@ a.get-opt:hover {
   flex-direction: column;
   align-items: center;
   gap: 12px;
+}
+/* A little tab pointing back down at the Mobile button, so the panel reads as
+   attached to it rather than floating loose. Rotated square rather than a
+   border-triangle so it can carry the panel's own border and background. */
+.get-pop-qr::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  inset-inline-start: 34px;
+  width: 13px;
+  height: 13px;
+  transform: rotate(45deg);
+  background: var(--bg-card);
+  border-inline-end: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-end-end-radius: 3px;
 }
 .qr-tile {
   /* Always a white tile with dark modules, in both themes, so it stays scannable

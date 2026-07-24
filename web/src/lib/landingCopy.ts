@@ -51,7 +51,17 @@ export interface LandingCopy {
     h2Rest: string;
     perForever: string;
     perMonth: string;
-    plans: { name: string; price: string; blurb: string; feats: { icon: string; label: string }[]; cta: string }[];
+    plans: {
+      name: string;
+      price: string;
+      blurb: string;
+      feats: { icon: string; label: string }[];
+      /** Revealed when the card is hovered — the plan "turns up" and shows the
+       *  rest of what it includes. Keep every plan's `feats` the same length so
+       *  the row sits level at rest and only the hovered card grows. */
+      more: { icon: string; label: string }[];
+      cta: string;
+    }[];
     // The tailored/enterprise tier — not a card, just a line + link below.
     enterprise: { line: string; cta: string };
   };
@@ -204,6 +214,11 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             { icon: "fi-rr-apps", label: "Unlimited processes" },
             { icon: "fi-rr-user", label: "One identity" },
             { icon: "fi-rr-laptop", label: "Runs on this device" },
+            { icon: "fi-rr-shield-check", label: "Stays private on your device" },
+          ],
+          more: [
+            { icon: "fi-rr-comment-dots", label: "Talk to ONE in plain words" },
+            { icon: "fi-rr-heart", label: "No account, no card, no catch" },
           ],
           cta: "Start free",
         },
@@ -217,6 +232,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             { icon: "fi-rr-brain", label: "Full memory & history" },
             { icon: "fi-rr-link", label: "Connect calendar, email, files" },
           ],
+          more: [
+            { icon: "fi-rr-bell", label: "A nudge before something slips" },
+            { icon: "fi-rr-wallet", label: "Costs tracked per process" },
+          ],
           cta: "Choose Plus",
         },
         {
@@ -228,6 +247,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             { icon: "fi-rr-shop", label: "Open a business — its ONE is free" },
             { icon: "fi-rr-calendar", label: "Bookings & a customer list" },
             { icon: "fi-rr-followcollection", label: "Followers & a public profile" },
+          ],
+          more: [
+            { icon: "fi-rr-bank", label: "Invoices and payments" },
+            { icon: "fi-rr-settings-sliders", label: "Your ONE, your rules" },
           ],
           cta: "Go Pro",
         },
@@ -459,6 +482,11 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             { icon: "fi-rr-apps", label: "תהליכים ללא הגבלה" },
             { icon: "fi-rr-user", label: "זהות אחת" },
             { icon: "fi-rr-laptop", label: "עובד במכשיר הזה" },
+            { icon: "fi-rr-shield-check", label: "נשאר פרטי במכשיר שלכם" },
+          ],
+          more: [
+            { icon: "fi-rr-comment-dots", label: "דברו עם ONE במילים שלכם" },
+            { icon: "fi-rr-heart", label: "בלי חשבון, בלי כרטיס, בלי אותיות קטנות" },
           ],
           cta: "התחילו בחינם",
         },
@@ -472,6 +500,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             { icon: "fi-rr-brain", label: "זיכרון והיסטוריה מלאים" },
             { icon: "fi-rr-link", label: "חברו יומן, אימייל וקבצים" },
           ],
+          more: [
+            { icon: "fi-rr-bell", label: "תזכורת לפני שמשהו נופל" },
+            { icon: "fi-rr-wallet", label: "מעקב עלויות לכל תהליך" },
+          ],
           cta: "בחרו פלוס",
         },
         {
@@ -483,6 +515,10 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
             { icon: "fi-rr-shop", label: "פתחו עסק — ה-ONE שלו חינם" },
             { icon: "fi-rr-calendar", label: "הזמנות ורשימת לקוחות" },
             { icon: "fi-rr-followcollection", label: "עוקבים ופרופיל ציבורי" },
+          ],
+          more: [
+            { icon: "fi-rr-bank", label: "חשבוניות ותשלומים" },
+            { icon: "fi-rr-settings-sliders", label: "ה-ONE שלכם, הכללים שלכם" },
           ],
           cta: "עברו לפרו",
         },

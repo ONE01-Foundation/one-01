@@ -458,8 +458,10 @@ function AppQR() {
   return (
     <div className="qr">
       <QRCodeSVG value={url} size={168} level="H" marginSize={2} bgColor="#ffffff" fgColor="#121212" />
+      {/* A plain dot, no face — at 30px the eyes read as noise inside the code
+          and fight the modules around them. */}
       <span className="qr-badge" aria-hidden="true">
-        <Orb size={30} look={0.7} faceColor="#0a0a0a" eyeColor="#f5f4f0" />
+        <Orb size={30} eyeR={0} faceColor="#0a0a0a" />
       </span>
     </div>
   );
@@ -589,8 +591,6 @@ export default function LandingPage() {
   // The opening "awakening" owns --p until it finishes; scroll takes over after.
   const introDoneRef = useRef(false);
   const [scrolled, setScrolled] = useState(false);
-  // Which pricing plan is hovered — drives the ONE that "grows with you".
-  const [hoverPlan, setHoverPlan] = useState<number | null>(null);
   // True once the footer starts being revealed at the end of the scroll. Drives
   // the nav's "arrived" state (Enter CTA fills, wordmark wakes into the ONE
   // face) — the same look as hovering the brand — and relaxes back on scroll up.
@@ -1073,7 +1073,10 @@ export default function LandingPage() {
               menuLabel={t.aria.langMenu}
               soonLabel={t.aria.langSoon}
             />
-            <Link className="btn btn-primary" href="/app">{t.nav.enter}</Link>
+            <Link className="btn btn-primary" href="/app">
+              {t.nav.enter}
+              <span className="btn-arrow" aria-hidden="true">→</span>
+            </Link>
           </div>
         </div>
       </nav>
@@ -1303,22 +1306,11 @@ export default function LandingPage() {
       {/* ── pricing ── */}
       <section className="section center reveal" id="pricing">
         <div className="shell">
-          {/* The name is the wordmark, face awake in the "O" — and it literally
-              grows with the plan you hover (Free small, Pro big), so the
-              headline demonstrates itself. The size is animated as real width/
-              height rather than a transform: a scaled transform overflows its
-              layout box and the big state collides with the next word, whereas
-              this lets the line re-centre around it. */}
+          {/* The name is the wordmark, face awake in the "O" — same as the logo.
+              It stays put: the "grows with you" is carried by the plans below,
+              which turn up like a volume step as you move across them. */}
           <h2 className="pricing-h2">
-            {(() => {
-              const em = hoverPlan === 0 ? 0.76 : hoverPlan === 2 ? 1.24 : 0.94;
-              return (
-                <OneWord
-                  className="pricing-one"
-                  style={{ height: `${em}em`, width: `${em * (84 / 32)}em` }}
-                />
-              );
-            })()}
+            <OneWord className="pricing-one" />
             {t.pricing.h2Rest}
           </h2>
           <div className="plans">
@@ -1333,8 +1325,6 @@ export default function LandingPage() {
                 <div
                   className={`plan${featured ? " plan-featured" : ""}${i === 0 ? " plan-plain" : ""}`}
                   key={p.name}
-                  onMouseEnter={() => setHoverPlan(i)}
-                  onMouseLeave={() => setHoverPlan(null)}
                 >
                   <div className={`plan-name ${nameTier}`}>{p.name}</div>
                   <div className="plan-price">
@@ -1349,6 +1339,21 @@ export default function LandingPage() {
                         {f.label}
                       </span>
                     ))}
+                  </div>
+                  {/* The rest of the plan, revealed as the card turns up. Purely
+                      CSS (hover / focus-within) so it also opens for keyboard
+                      users tabbing to the CTA. */}
+                  <div className="plan-more">
+                    <div className="plan-more-inner">
+                      <div className="plan-feats">
+                        {p.more.map((f, fi) => (
+                          <span key={fi}>
+                            <i className={`fi ${f.icon} plan-feat-ico`} aria-hidden="true" />
+                            {f.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <Link className={btnClass} href="/app">{p.cta}</Link>
                 </div>

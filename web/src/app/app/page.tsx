@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Orb } from "@/components/Orb";
-import { Splash } from "@/components/Splash";
+import { OneWord } from "@/components/Logo";
 import { Sheet } from "@/components/product/Sheet";
 import {
   IDENTITIES,
@@ -222,6 +222,68 @@ function SendIcon() {
  * it updates the moment the chat changes the unit. Reads its Process fresh each
  * render, so upserts show immediately.
  */
+function PlusIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+/** Voice bars — the resting state of the dock's action button, as in the app's
+    hero. It flips to the send arrow the moment there's something to send. */
+function VoiceIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 9v6M12 5v14M16 9v6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** The one input bar the whole product uses — the hero's capsule: a quiet "+"
+    inside on the left, the dark action button on the right. Same shape on the
+    home canvas and inside an open unit, so the product has a single "speak to
+    ONE" affordance rather than one per surface. */
+function AppInput({
+  value,
+  onChange,
+  onSend,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSend: () => void;
+  placeholder: string;
+}) {
+  const hasText = value.trim().length > 0;
+  return (
+    <div className="app-bar">
+      <button className="app-bar-plus" aria-label="Add" type="button">
+        <PlusIcon />
+      </button>
+      <input
+        className="app-bar-input"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onSend();
+          }
+        }}
+      />
+      <button
+        className="app-bar-go"
+        aria-label={hasText ? "Send" : "Voice"}
+        type="button"
+        onClick={() => hasText && onSend()}
+      >
+        {hasText ? <SendIcon /> : <VoiceIcon />}
+      </button>
+    </div>
+  );
+}
+
 function UnitDetail({
   p,
   businesses,
@@ -379,6 +441,19 @@ export default function AppHome() {
   const [thinking, setThinking] = useState(false);
   // Desktop split: a unit open BESIDE its own chat, plus a full-screen toggle.
   const [unitFull, setUnitFull] = useState(false);
+  // Top-bar menus (open on hover, like the site's). The ONE mark holds what ONE
+  // owns; the avatar holds who you are.
+  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Width of the unit's detail rail — the user drags its edge to resize.
+  const [asideW, setAsideW] = useState(340);
+  // The home hero uses the landing's exact collapse model: --p (0…1) where 1 is
+  // ONE collapsed to a plain black dot at the centre of the screen. Scroll
+  // drives it toward the processes; the opening plays it in reverse.
+  const homePageRef = useRef<HTMLDivElement>(null);
+  const pagerRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  const introDoneRef = useRef(false);
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
   const [unitDraft, setUnitDraft] = useState("");
   const [unitThinking, setUnitThinking] = useState(false);
@@ -900,6 +975,39 @@ export default function AppHome() {
     setUnitDraft("");
     setUnitThinking(false);
   };
+  // The ONE mark is "home": drop whatever you're in and return to the hero.
+  const goHome = () => {
+    setActiveProcess(null);
+    setUnitChat([]);
+    setUnitDraft("");
+    setUnitThinking(false);
+    endChat();
+    setMenuOpen(false);
+    requestAnimationFrame(() => {
+      pagerRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+      homePageRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
+
+  // Drag the rail's inner edge to resize it. Pointer capture keeps the drag
+  // alive even when the cursor outruns the 6px handle.
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    const startX = e.clientX;
+    const startW = asideW;
+    const dir = document.documentElement.dir === "rtl" ? -1 : 1;
+    const onMove = (ev: PointerEvent) => {
+      const next = startW - (ev.clientX - startX) * dir;
+      setAsideW(Math.max(260, Math.min(560, next)));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   const sendToUnit = () => {
     if (!activeProcess) return;
@@ -950,6 +1058,66 @@ export default function AppHome() {
     unitEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [unitChat, unitThinking]);
 
+  // Scroll-collapse: pulling the processes up collapses ONE into a plain black
+  // dot at the centre of the screen. Pure CSS var, so it tracks frame-for-frame
+  // with no re-render. The awakening below owns --p until it finishes.
+  useEffect(() => {
+    const page = homePageRef.current;
+    const hero = heroRef.current;
+    if (!page || !hero) return;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf || !introDoneRef.current) return; // let the awakening own --p first
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const p = Math.max(0, Math.min(1, page.scrollTop / Math.max(1, page.clientHeight)));
+        hero.style.setProperty("--p", p.toFixed(4));
+      });
+    };
+    page.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      page.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [activeProcess, chat.length]);
+
+  // ONE's awakening — the opening IS the home animating in, the exact reverse of
+  // the scroll-collapse: ONE starts as a dot at the centre of the screen, then
+  // grows/rises into place while its eyes open and the broadcast, input and cue
+  // fade in. No splash overlay — it's the home's own elements. Identical timing
+  // and easing to the landing hero's.
+  useEffect(() => {
+    const hero = heroRef.current;
+    const page = homePageRef.current;
+    if (!hero || !page) return;
+    const syncToScroll = () => {
+      introDoneRef.current = true;
+      const p = Math.max(0, Math.min(1, page.scrollTop / Math.max(1, page.clientHeight)));
+      hero.style.setProperty("--p", p.toFixed(4));
+    };
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    // Only awaken when entering at the very top; if we're already scrolled (or
+    // reduced-motion is on), hand --p straight to the scroll position.
+    if (reduce || page.scrollTop > 4) {
+      syncToScroll();
+      return;
+    }
+    hero.style.setProperty("--p", "1"); // start collapsed: a dot at screen centre
+    const DURATION = 1050;
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // easeOutCubic
+    let raf = 0;
+    let startTs = 0;
+    const step = (ts: number) => {
+      if (!startTs) startTs = ts;
+      const t = Math.min(1, (ts - startTs) / DURATION);
+      hero.style.setProperty("--p", (1 - ease(t)).toFixed(4));
+      if (t < 1) raf = requestAnimationFrame(step);
+      else introDoneRef.current = true; // ended at the top → --p=0 is correct
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   // Esc backs out of the open unit — the workspace should never trap you.
   useEffect(() => {
     if (!activeProcess) return;
@@ -993,75 +1161,137 @@ export default function AppHome() {
 
   return (
     <main className="product-root">
-      <Splash bg="var(--p-bg)" />
+      {/* No splash overlay. The opening IS the home animating in — see the
+          awakening effect above: ONE starts as a dot at the centre of the
+          screen and grows into place. Same as the landing hero. */}
       {/* Full-bleed canvas — no window chrome, no back-to-site. The product is
           its own place; the ONE orb in the sidebar is the brand anchor. */}
       <div className="app-shell">
-        {/* LEFT rail — a sidebar on desktop, a compact top header on mobile */}
-        <aside className="app-side">
-          <button className="app-orb" onClick={() => setOpenSheet("profile")} aria-label="Open profile">
-            <Orb size={78} />
-          </button>
-          <div className="app-name">
-            ONE <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
-          </div>
-          <div className="app-broadcast" style={{ opacity: liveBroadcast ? 1 : bfade ? 0 : 1 }}>
-            {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
-          </div>
-          <div className={`cloud-status cloud-${cloud}`} title="Where your processes are saved">
-            {cloud === "synced" && "☁ Synced to cloud"}
-            {cloud === "connecting" && "☁ Connecting…"}
-            {cloud === "offline" && "• Local only"}
-          </div>
-
-          {/* Identity switcher — shown in the sidebar on desktop; on mobile the
-              identities live in the profile popup, so this is hidden. */}
-          <nav className="side-ids">
-            <div className="side-label">Identities</div>
-            {IDENTITIES.map((id) => (
-              <button
-                key={id.id}
-                className={`side-id${id.id === activeIdentityId ? " active" : ""}`}
-                onClick={() => setActiveIdentityId(id.id)}
-              >
-                <span className="side-id-emoji">{id.emoji}</span>
-                <span className="side-id-text">
-                  <span className="side-id-name">{id.name}</span>
-                  <span className="side-id-role">{id.role}</span>
-                </span>
-              </button>
-            ))}
-          </nav>
-
-          {/* Discover — walk into any business's ONE (chat, ask, book) */}
-          <nav className="side-ids">
-            <div className="side-label">Nearby ONEs</div>
-            {businesses.map((b) => (
-              <button key={b.id} className="side-id" onClick={() => openBiz(b.id)}>
-                <span className="side-id-emoji">{b.emoji}</span>
-                <span className="side-id-text">
-                  <span className="side-id-name">
-                    {b.name}
-                    {b.ownerKey && ownerKey && b.ownerKey === ownerKey ? " · yours" : ""}
-                  </span>
-                  <span className="side-id-role">{b.category}</span>
-                </span>
-              </button>
-            ))}
-            <button className="side-id side-id-new" onClick={startCreateBusiness}>
-              <span className="side-id-emoji">＋</span>
-              <span className="side-id-text">
-                <span className="side-id-name">Create a business ONE</span>
-                <span className="side-id-role">Set hours, services — or just describe it</span>
-              </span>
+        {/* TOP BAR — the site's shape. The ONE mark is home (and its menu holds
+            what ONE itself owns); the round avatar on the right is you, and
+            holds the profiles you can be. */}
+        <nav className="app-nav">
+          <div
+            className="app-nav-brand"
+            onPointerEnter={(e) => {
+              if (e.pointerType === "mouse") setMenuOpen(true);
+            }}
+            onPointerLeave={(e) => {
+              if (e.pointerType === "mouse") setMenuOpen(false);
+            }}
+          >
+            <button
+              className="app-brand-btn"
+              onClick={goHome}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="ONE — home"
+            >
+              <OneWord className="app-brand-mark" />
             </button>
-          </nav>
-
-          <button className="side-gear" onClick={() => setOpenSheet("settings")} aria-label="Settings">
-            <GearIcon />
-            <span className="side-gear-label">Settings</span>
-          </button>
-        </aside>
+            {menuOpen && (
+              <div className="app-menu" role="menu">
+                <button className="app-menu-item" onClick={goHome} role="menuitem">
+                  <i className="fi fi-rr-home app-menu-ico" aria-hidden="true" />
+                  Home
+                </button>
+                <button
+                  className="app-menu-item"
+                  onClick={() => {
+                    setOpenSheet("profile");
+                    setMenuOpen(false);
+                  }}
+                  role="menuitem"
+                >
+                  <i className="fi fi-rr-user app-menu-ico" aria-hidden="true" />
+                  ONE profile
+                </button>
+                <button
+                  className="app-menu-item"
+                  onClick={() => {
+                    setOpenSheet("subscription");
+                    setMenuOpen(false);
+                  }}
+                  role="menuitem"
+                >
+                  <i className="fi fi-rr-wallet app-menu-ico" aria-hidden="true" />
+                  Plan
+                  <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
+                </button>
+                <button
+                  className="app-menu-item"
+                  onClick={() => {
+                    setOpenSheet("settings");
+                    setMenuOpen(false);
+                  }}
+                  role="menuitem"
+                >
+                  <i className="fi fi-rr-settings-sliders app-menu-ico" aria-hidden="true" />
+                  Settings
+                </button>
+              </div>
+            )}
+          </div>
+          <div
+            className="app-nav-right"
+            onPointerEnter={(e) => {
+              if (e.pointerType === "mouse") setProfilesOpen(true);
+            }}
+            onPointerLeave={(e) => {
+              if (e.pointerType === "mouse") setProfilesOpen(false);
+            }}
+          >
+            <button
+              className="app-avatar"
+              onClick={() => setProfilesOpen((o) => !o)}
+              aria-haspopup="menu"
+              aria-expanded={profilesOpen}
+              aria-label={`${identity.name} — switch profile`}
+            >
+              <span className="app-avatar-emoji">{identity.emoji}</span>
+            </button>
+            {profilesOpen && (
+              <div className="app-profiles" role="menu">
+                <div className="app-profiles-label">Profiles</div>
+                {IDENTITIES.map((id) => (
+                  <button
+                    key={id.id}
+                    className={`app-profile${id.id === activeIdentityId ? " active" : ""}`}
+                    onClick={() => {
+                      setActiveIdentityId(id.id);
+                      setProfilesOpen(false);
+                    }}
+                    role="menuitem"
+                  >
+                    <span className="app-profile-emoji">{id.emoji}</span>
+                    <span className="app-profile-text">
+                      <span className="app-profile-name">{id.name}</span>
+                      <span className="app-profile-role">{id.role}</span>
+                    </span>
+                  </button>
+                ))}
+                <button
+                  className="app-profile app-profile-new"
+                  onClick={startCreateBusiness}
+                  role="menuitem"
+                >
+                  <span className="app-profile-emoji">＋</span>
+                  <span className="app-profile-text">
+                    <span className="app-profile-name">New profile</span>
+                    <span className="app-profile-role">A ONE for a business or a side of life</span>
+                  </span>
+                </button>
+                {/* Where this ONE is kept — it belongs with the profile, not
+                    floating in the chrome. */}
+                <div className={`app-profiles-cloud cloud-${cloud}`}>
+                  {cloud === "synced" && "☁ Synced to cloud"}
+                  {cloud === "connecting" && "☁ Connecting…"}
+                  {cloud === "offline" && "• Saved on this device"}
+                </div>
+              </div>
+            )}
+          </div>
+        </nav>
 
         {/* RIGHT — the workspace: broadcast-driven cards or the conversation */}
         <section className="app-main">
@@ -1071,76 +1301,76 @@ export default function AppHome() {
             //    the chat updates the card live. "Full" hides the chat and lets
             //    the card fill the workspace.
             <div className={`unit-view${unitFull ? " is-full" : ""}`}>
-              <div className="unit-topbar">
-                <div className="unit-topbar-head">
-                  <div className="unit-topbar-title">
-                    <span className="unit-topbar-emoji">{activeLive.emoji}</span>
-                    <span>{activeLive.title}</span>
+              {/* The conversation is the room — bare on the canvas, no card
+                  around it. The unit's details sit as a narrow rail you can
+                  drag wider when you actually want to read them. */}
+              <div className="unit-chatpane">
+                <div className="unit-topbar">
+                  <div className="unit-topbar-head">
+                    <div className="unit-topbar-title">
+                      <span className="unit-topbar-emoji">{activeLive.emoji}</span>
+                      <span>{activeLive.title}</span>
+                    </div>
+                    <div className="unit-topbar-sub">
+                      {activeLive.relation}
+                      <span className="unit-topbar-dot">·</span>
+                      {activeLive.steps.filter((_, i) => isStepDone(activeLive, i)).length}/
+                      {activeLive.steps.length} done
+                    </div>
                   </div>
-                  <div className="unit-topbar-sub">
-                    {activeLive.relation}
-                    <span className="unit-topbar-dot">·</span>
-                    {activeLive.steps.filter((_, i) => isStepDone(activeLive, i)).length}/
-                    {activeLive.steps.length} done
+                  <div className="unit-topbar-actions">
+                    <button className="unit-tb-btn" onClick={() => setUnitFull((f) => !f)}>
+                      {unitFull ? "◑ Details" : "⛶ Hide details"}
+                    </button>
+                    <button className="unit-tb-btn unit-tb-close" onClick={closeUnit} aria-label="Close unit">
+                      ×
+                    </button>
                   </div>
                 </div>
-                <div className="unit-topbar-actions">
-                  <button className="unit-tb-btn" onClick={() => setUnitFull((f) => !f)}>
-                    {unitFull ? "◑ Split" : "⛶ Full"}
-                  </button>
-                  <button className="unit-tb-btn unit-tb-close" onClick={closeUnit} aria-label="Close unit">
-                    ×
-                  </button>
+                <div className="unit-chat-scroll">
+                  {unitChat.map((m, i) => (
+                    <div key={i} className={`chat-msg ${m.role}`}>
+                      {m.text}
+                    </div>
+                  ))}
+                  {unitThinking && (
+                    <div className="chat-msg one thinking" aria-label="ONE is thinking">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  )}
+                  <div ref={unitEndRef} />
                 </div>
-              </div>
-              <div className="unit-split">
-                <div className="unit-detail">
-                  <UnitDetail
-                    p={activeLive}
-                    businesses={businesses}
-                    isStepDone={isStepDone}
-                    toggleStep={toggleStep}
-                    runQuickAction={runQuickAction}
-                    openBiz={openBiz}
+                <div className="app-dock unit-dock">
+                  <AppInput
+                    value={unitDraft}
+                    onChange={setUnitDraft}
+                    onSend={sendToUnit}
+                    placeholder="Tell ONE what changed…"
                   />
                 </div>
-                {!unitFull && (
-                  <div className="unit-chatpane">
-                    <div className="unit-chat-scroll">
-                      {unitChat.map((m, i) => (
-                        <div key={i} className={`chat-msg ${m.role}`}>
-                          {m.text}
-                        </div>
-                      ))}
-                      {unitThinking && (
-                        <div className="chat-msg one thinking" aria-label="ONE is thinking">
-                          <span />
-                          <span />
-                          <span />
-                        </div>
-                      )}
-                      <div ref={unitEndRef} />
-                    </div>
-                    <div className="app-dock unit-dock">
-                      <input
-                        className="app-input"
-                        placeholder="Tell ONE what changed…"
-                        value={unitDraft}
-                        onChange={(e) => setUnitDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            sendToUnit();
-                          }
-                        }}
-                      />
-                      <button className="app-send" aria-label="Send" onClick={sendToUnit}>
-                        <SendIcon />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
+              {!unitFull && (
+                <aside className="unit-aside" style={{ width: asideW }}>
+                  <div
+                    className="unit-resizer"
+                    onPointerDown={startResize}
+                    role="separator"
+                    aria-label="Resize details"
+                  />
+                  <div className="unit-aside-scroll">
+                    <UnitDetail
+                      p={activeLive}
+                      businesses={businesses}
+                      isStepDone={isStepDone}
+                      toggleStep={toggleStep}
+                      runQuickAction={runQuickAction}
+                      openBiz={openBiz}
+                    />
+                  </div>
+                </aside>
+              )}
             </div>
           ) : (
             <>
@@ -1150,8 +1380,48 @@ export default function AppHome() {
                 </button>
               )}
               {chat.length === 0 ? (
-                <div className="app-cards">
-                  {processes.map((p) => {
+                // HOME — the hero, exactly as on the site, except scrolling down
+                // lands on YOUR processes instead of the next marketing section.
+                // Sideways is the Global: the world outside your own ONE.
+                <div className="app-pager" ref={pagerRef}>
+                  {/* A wheel alone can't travel sideways, so give the crossing a
+                      handle: an edge tab that scrolls the pager either way. */}
+                  <button
+                    className="pager-edge"
+                    onClick={() => {
+                      const el = pagerRef.current;
+                      if (!el) return;
+                      const atHome = el.scrollLeft < el.clientWidth / 2;
+                      el.scrollTo({ left: atHome ? el.clientWidth : 0, behavior: "smooth" });
+                    }}
+                    aria-label="Global"
+                  >
+                    <span className="pager-edge-label">Global</span>
+                  </button>
+                  <div className="app-page" ref={homePageRef}>
+                    <section className="home-hero" ref={heroRef}>
+                      <button
+                        className="home-hero-orb"
+                        onClick={() => setOpenSheet("profile")}
+                        aria-label="Open profile"
+                      >
+                        <Orb size={92} alive />
+                      </button>
+                      {/* The rotating broadcast's own cross-fade rides a CLASS,
+                          not an inline style — inline would beat the --p fade
+                          declared in CSS and the line would never reach zero. */}
+                      <div
+                        className={`home-hero-line${!liveBroadcast && bfade ? " is-fading" : ""}`}
+                      >
+                        {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
+                      </div>
+                      <div className="home-hero-cue" aria-hidden="true">
+                        ⌄
+                      </div>
+                    </section>
+                    <section className="home-processes">
+                      <div className="app-cards">
+                        {processes.map((p) => {
                     const done = p.steps.filter((_, i) => isStepDone(p, i)).length;
                     const total = p.steps.length;
                     return (
@@ -1190,9 +1460,41 @@ export default function AppHome() {
                       </div>
                     );
                   })}
-                  {processes.length === 0 && (
-                    <div className="app-empty">Nothing here yet for {identity.name}.</div>
-                  )}
+                        {processes.length === 0 && (
+                          <div className="app-empty">Nothing here yet for {identity.name}.</div>
+                        )}
+                      </div>
+                    </section>
+                  </div>
+                  {/* GLOBAL — one page sideways: the ONEs around you. This is
+                      where the businesses list moved to; it was never sidebar
+                      furniture, it's a place you travel to. */}
+                  <div className="app-page app-page-global">
+                    <div className="global-pane">
+                      <h2 className="global-title">Global</h2>
+                      <p className="global-lede">
+                        Every ONE out here can be talked to. Walk in, ask, book — your ONE
+                        handles the rest.
+                      </p>
+                      <div className="global-grid">
+                        {businesses.map((b) => (
+                          <button key={b.id} className="gcard" onClick={() => openBiz(b.id)}>
+                            <span className="gcard-emoji">{b.emoji}</span>
+                            <span className="gcard-name">
+                              {b.name}
+                              {b.ownerKey && ownerKey && b.ownerKey === ownerKey ? " · yours" : ""}
+                            </span>
+                            <span className="gcard-cat">{b.category}</span>
+                          </button>
+                        ))}
+                        <button className="gcard gcard-new" onClick={startCreateBusiness}>
+                          <span className="gcard-emoji">＋</span>
+                          <span className="gcard-name">Create a business ONE</span>
+                          <span className="gcard-cat">Set hours, services — or just describe it</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="app-chat">
@@ -1213,21 +1515,12 @@ export default function AppHome() {
               )}
               <div className="app-edge bottom" />
               <div className="app-dock">
-                <input
-                  className="app-input"
-                  placeholder="Talk to ONE"
+                <AppInput
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
+                  onChange={setDraft}
+                  onSend={() => send()}
+                  placeholder="Talk to ONE"
                 />
-                <button className="app-send" aria-label="Send" onClick={() => send()}>
-                  <SendIcon />
-                </button>
               </div>
             </>
           )}
