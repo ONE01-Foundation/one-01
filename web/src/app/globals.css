@@ -3718,42 +3718,68 @@ footer {
 }
 
 /* ─── home — the hero, then your processes; sideways, the Global ─────────── */
-.app-pager {
+/* One column of three screens — Global, hero, processes — with the hero as the
+   middle and the resting position. Up is the world outside your ONE; down is
+   your own. The page is parked on the hero before first paint. */
+.app-page {
   position: absolute;
   /* Clears the top bar, which floats over the canvas. */
   inset: 58px 0 0;
-  display: flex;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-.app-pager::-webkit-scrollbar {
-  display: none;
-}
-.app-page {
-  flex: 0 0 100%;
-  height: 100%;
   overflow-y: auto;
-  scroll-snap-align: start;
   scroll-snap-type: y mandatory;
   scrollbar-width: none;
 }
 .app-page::-webkit-scrollbar {
   display: none;
 }
+.home-global,
 .home-hero,
 .home-processes {
   min-height: 100%;
   scroll-snap-align: start;
 }
 .home-hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: 0 24px 120px;
+  gap: 18px;
+  padding: 0 24px;
+}
+/* Reserves the dock's seat inside the centred group. The dock itself is
+   absolutely placed (it has to outlive the scroll), so without this the group
+   would centre as if the input weren't there. */
+.home-hero-dockslot {
+  height: 62px;
+  width: 1px;
+}
+/* The two gateways, as on the landing hero: up to the Global, down to your
+   processes. Both fade out as ONE collapses. */
+.home-chev {
+  position: absolute;
+  left: 50%;
+  margin-left: -18px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--p-text-3);
+  cursor: pointer;
+  opacity: calc(0.75 - var(--p, 0) * 1.8);
+  transition: color 140ms ease;
+}
+.home-chev:hover {
+  color: var(--p-text);
+}
+.home-chev.up {
+  top: 34px;
+}
+.home-chev.down {
+  bottom: 34px;
+  animation: heroCue 2.6s ease-in-out infinite;
 }
 /* The home hero collapses exactly like the landing's (see .lhero-orb): --p
    (0…1), where 1 is ONE shrunk to a plain black dot at the centre of the
@@ -3793,12 +3819,6 @@ footer {
 .home-hero-line.is-fading {
   opacity: 0;
 }
-.home-hero-cue {
-  font-size: 22px;
-  color: var(--p-text-3);
-  opacity: calc(0.55 - var(--p, 0) * 2);
-  animation: heroCue 2.6s ease-in-out infinite;
-}
 /* Transform only — the fade is --p's job, so the two don't overwrite. */
 @keyframes heroCue {
   0%,
@@ -3827,37 +3847,7 @@ footer {
   }
 }
 
-/* The crossing to Global — a quiet tab pinned to the far edge. */
-.pager-edge {
-  position: absolute;
-  top: 50%;
-  inset-inline-end: 0;
-  transform: translateY(-50%);
-  z-index: 8;
-  padding: 16px 10px;
-  border: 1px solid var(--p-line);
-  border-inline-end: none;
-  border-start-start-radius: 14px;
-  border-end-start-radius: 14px;
-  background: var(--p-surface);
-  color: var(--p-text-3);
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: color 140ms ease, padding-inline 140ms ease;
-}
-.pager-edge:hover {
-  color: var(--p-text);
-  padding-inline: 14px 12px;
-}
-.pager-edge-label {
-  writing-mode: vertical-rl;
-}
-/* Global — the page one swipe sideways. */
-.app-page-global {
+.home-global {
   background: color-mix(in srgb, var(--p-text) 3%, var(--p-bg));
 }
 .global-pane {
@@ -3917,6 +3907,12 @@ footer {
 }
 
 /* ─── the one input bar the product speaks through ───────────────────────── */
+/* The home dock rides --p: parked inside the hero's centred group at rest, and
+   lowered to its natural bottom position once you're on the processes. One
+   element in two places rather than two elements cross-fading. */
+.app-page ~ .app-dock {
+  transform: translateY(calc((var(--p, 0) - 1) * var(--dock-lift, 214px)));
+}
 .app-bar {
   width: 100%;
   max-width: 720px;
@@ -3951,6 +3947,26 @@ footer {
 .app-bar-plus:hover {
   color: var(--p-text);
   background: color-mix(in srgb, var(--p-text) 6%, transparent);
+}
+.app-bar-wrap {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+}
+/* Resting caret — at home there's no placeholder copy at all: ONE just looks
+   ready to be spoken to. (Lifted from the landing hero's .lhero-caret.) */
+.app-bar-caret {
+  position: absolute;
+  inset-inline-start: 2px;
+  width: 2px;
+  height: 22px;
+  background: var(--p-text);
+  border-radius: 1px;
+  pointer-events: none;
+  animation: caretBlink 1.1s step-end infinite;
 }
 .app-bar-input {
   flex: 1;

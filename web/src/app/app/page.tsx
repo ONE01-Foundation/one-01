@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Orb } from "@/components/Orb";
 import { OneWord } from "@/components/Logo";
@@ -222,6 +222,20 @@ function SendIcon() {
  * it updates the moment the chat changes the unit. Reads its Process fresh each
  * render, so upserts show immediately.
  */
+function ChevronUpIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 15l6-6 6 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function ChevronDownIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 function PlusIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -248,30 +262,42 @@ function AppInput({
   onChange,
   onSend,
   placeholder,
+  caret = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
-  placeholder: string;
+  placeholder?: string;
+  /** Home: no placeholder copy at all — just a resting caret, so ONE looks
+   *  ready to be spoken to rather than instructing you. (Same as the hero.) */
+  caret?: boolean;
 }) {
+  const [focused, setFocused] = useState(false);
   const hasText = value.trim().length > 0;
   return (
     <div className="app-bar">
       <button className="app-bar-plus" aria-label="Add" type="button">
         <PlusIcon />
       </button>
-      <input
-        className="app-bar-input"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onSend();
-          }
-        }}
-      />
+      <span className="app-bar-wrap">
+        {caret && !value && !focused && <span className="app-bar-caret" aria-hidden="true" />}
+        <input
+          className="app-bar-input"
+          dir="auto"
+          placeholder={caret ? undefined : placeholder}
+          aria-label={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onSend();
+            }
+          }}
+        />
+      </span>
       <button
         className="app-bar-go"
         aria-label={hasText ? "Send" : "Voice"}
@@ -451,7 +477,7 @@ export default function AppHome() {
   // ONE collapsed to a plain black dot at the centre of the screen. Scroll
   // drives it toward the processes; the opening plays it in reverse.
   const homePageRef = useRef<HTMLDivElement>(null);
-  const pagerRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const introDoneRef = useRef(false);
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
@@ -983,10 +1009,8 @@ export default function AppHome() {
     setUnitThinking(false);
     endChat();
     setMenuOpen(false);
-    requestAnimationFrame(() => {
-      pagerRef.current?.scrollTo({ left: 0, behavior: "smooth" });
-      homePageRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    });
+    // Back to the hero — the MIDDLE screen, not the top of the scroller.
+    requestAnimationFrame(() => scrollHome(0));
   };
 
   // Drag the rail's inner edge to resize it. Pointer capture keeps the drag
@@ -1058,20 +1082,61 @@ export default function AppHome() {
     unitEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [unitChat, unitThinking]);
 
+  // The hero is the MIDDLE of three screens — Global above, processes below —
+  // so its resting scroll position is one screen down, not zero.
+  const heroTop = () => homePageRef.current?.clientHeight ?? 0;
+  const scrollHome = (dir: -1 | 0 | 1) => {
+    const page = homePageRef.current;
+    if (!page) return;
+    page.scrollTo({ top: page.clientHeight * (1 + dir), behavior: "smooth" });
+  };
+
+  // Park on the hero before the first paint (so the app never flashes the
+  // Global on the way down), then measure how far the dock has to travel
+  // between its seat in the hero and its resting place at the bottom. That
+  // distance depends on the viewport, so it's measured rather than guessed —
+  // and re-measured on resize.
+  useLayoutEffect(() => {
+    const page = homePageRef.current;
+    const host = mainRef.current;
+    if (!page || !host) return;
+    page.scrollTop = page.clientHeight;
+    const measure = () => {
+      const slot = page.querySelector<HTMLElement>(".home-hero-dockslot");
+      const dock = host.querySelector<HTMLElement>(".app-dock");
+      if (!slot || !dock) return;
+      // Neutralise the transform to read the dock's untransformed seat. No
+      // paint happens inside a layout effect, so this can't flicker.
+      const prev = dock.style.transform;
+      dock.style.transform = "none";
+      const d = dock.getBoundingClientRect();
+      const s = slot.getBoundingClientRect();
+      dock.style.transform = prev;
+      const lift = Math.round(d.top + d.height / 2 - (s.top + s.height / 2));
+      host.style.setProperty("--dock-lift", `${Math.max(0, lift)}px`);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [activeProcess, chat.length]);
+
   // Scroll-collapse: pulling the processes up collapses ONE into a plain black
-  // dot at the centre of the screen. Pure CSS var, so it tracks frame-for-frame
-  // with no re-render. The awakening below owns --p until it finishes.
+  // dot at the centre of the screen. Measured FROM the hero, so scrolling up to
+  // the Global leaves the hero whole (the clamp floors it at 0). Pure CSS var —
+  // it tracks frame-for-frame with no re-render, and the dock rides it too, so
+  // --p lives on the shared ancestor rather than the hero.
   useEffect(() => {
     const page = homePageRef.current;
-    const hero = heroRef.current;
-    if (!page || !hero) return;
+    const host = mainRef.current;
+    if (!page || !host) return;
     let raf = 0;
     const onScroll = () => {
       if (raf || !introDoneRef.current) return; // let the awakening own --p first
       raf = requestAnimationFrame(() => {
         raf = 0;
-        const p = Math.max(0, Math.min(1, page.scrollTop / Math.max(1, page.clientHeight)));
-        hero.style.setProperty("--p", p.toFixed(4));
+        const h = Math.max(1, page.clientHeight);
+        const p = Math.max(0, Math.min(1, (page.scrollTop - h) / h));
+        host.style.setProperty("--p", p.toFixed(4));
       });
     };
     page.addEventListener("scroll", onScroll, { passive: true });
@@ -1087,22 +1152,23 @@ export default function AppHome() {
   // fade in. No splash overlay — it's the home's own elements. Identical timing
   // and easing to the landing hero's.
   useEffect(() => {
-    const hero = heroRef.current;
+    const host = mainRef.current;
     const page = homePageRef.current;
-    if (!hero || !page) return;
+    if (!host || !page) return;
+    const h = Math.max(1, page.clientHeight);
     const syncToScroll = () => {
       introDoneRef.current = true;
-      const p = Math.max(0, Math.min(1, page.scrollTop / Math.max(1, page.clientHeight)));
-      hero.style.setProperty("--p", p.toFixed(4));
+      const p = Math.max(0, Math.min(1, (page.scrollTop - h) / h));
+      host.style.setProperty("--p", p.toFixed(4));
     };
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    // Only awaken when entering at the very top; if we're already scrolled (or
+    // Only awaken when we're parked on the hero; if we're already elsewhere (or
     // reduced-motion is on), hand --p straight to the scroll position.
-    if (reduce || page.scrollTop > 4) {
+    if (reduce || Math.abs(page.scrollTop - h) > 4) {
       syncToScroll();
       return;
     }
-    hero.style.setProperty("--p", "1"); // start collapsed: a dot at screen centre
+    host.style.setProperty("--p", "1"); // start collapsed: a dot at screen centre
     const DURATION = 1050;
     const ease = (t: number) => 1 - Math.pow(1 - t, 3); // easeOutCubic
     let raf = 0;
@@ -1110,7 +1176,7 @@ export default function AppHome() {
     const step = (ts: number) => {
       if (!startTs) startTs = ts;
       const t = Math.min(1, (ts - startTs) / DURATION);
-      hero.style.setProperty("--p", (1 - ease(t)).toFixed(4));
+      host.style.setProperty("--p", (1 - ease(t)).toFixed(4));
       if (t < 1) raf = requestAnimationFrame(step);
       else introDoneRef.current = true; // ended at the top → --p=0 is correct
     };
@@ -1294,7 +1360,7 @@ export default function AppHome() {
         </nav>
 
         {/* RIGHT — the workspace: broadcast-driven cards or the conversation */}
-        <section className="app-main">
+        <section className="app-main" ref={mainRef}>
           <div className="app-edge top" />
           {activeLive ? (
             // ── UNIT SPLIT — the wide detail card BESIDE its own chat. Typing in
@@ -1380,45 +1446,73 @@ export default function AppHome() {
                 </button>
               )}
               {chat.length === 0 ? (
-                // HOME — the hero, exactly as on the site, except scrolling down
-                // lands on YOUR processes instead of the next marketing section.
-                // Sideways is the Global: the world outside your own ONE.
-                <div className="app-pager" ref={pagerRef}>
-                  {/* A wheel alone can't travel sideways, so give the crossing a
-                      handle: an edge tab that scrolls the pager either way. */}
-                  <button
-                    className="pager-edge"
-                    onClick={() => {
-                      const el = pagerRef.current;
-                      if (!el) return;
-                      const atHome = el.scrollLeft < el.clientWidth / 2;
-                      el.scrollTo({ left: atHome ? el.clientWidth : 0, behavior: "smooth" });
-                    }}
-                    aria-label="Global"
-                  >
-                    <span className="pager-edge-label">Global</span>
-                  </button>
-                  <div className="app-page" ref={homePageRef}>
-                    <section className="home-hero" ref={heroRef}>
-                      <button
-                        className="home-hero-orb"
-                        onClick={() => setOpenSheet("profile")}
-                        aria-label="Open profile"
-                      >
-                        <Orb size={92} alive />
-                      </button>
-                      {/* The rotating broadcast's own cross-fade rides a CLASS,
-                          not an inline style — inline would beat the --p fade
-                          declared in CSS and the line would never reach zero. */}
-                      <div
-                        className={`home-hero-line${!liveBroadcast && bfade ? " is-fading" : ""}`}
-                      >
-                        {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
+                // HOME — one column, the hero in the middle of it, exactly as on
+                // the site: UP is the Global (the world outside your ONE), DOWN
+                // is your own processes. The page opens parked on the hero.
+                <div className="app-page" ref={homePageRef}>
+                  {/* GLOBAL — one screen up. This is where the businesses list
+                      moved to; it was never sidebar furniture, it's a place. */}
+                  <section className="home-global">
+                    <div className="global-pane">
+                      <h2 className="global-title">Global</h2>
+                      <p className="global-lede">
+                        Every ONE out here can be talked to. Walk in, ask, book — your ONE
+                        handles the rest.
+                      </p>
+                      <div className="global-grid">
+                        {businesses.map((b) => (
+                          <button key={b.id} className="gcard" onClick={() => openBiz(b.id)}>
+                            <span className="gcard-emoji">{b.emoji}</span>
+                            <span className="gcard-name">
+                              {b.name}
+                              {b.ownerKey && ownerKey && b.ownerKey === ownerKey ? " · yours" : ""}
+                            </span>
+                            <span className="gcard-cat">{b.category}</span>
+                          </button>
+                        ))}
+                        <button className="gcard gcard-new" onClick={startCreateBusiness}>
+                          <span className="gcard-emoji">＋</span>
+                          <span className="gcard-name">Create a business ONE</span>
+                          <span className="gcard-cat">Set hours, services — or just describe it</span>
+                        </button>
                       </div>
-                      <div className="home-hero-cue" aria-hidden="true">
-                        ⌄
-                      </div>
-                    </section>
+                    </div>
+                  </section>
+                  <section className="home-hero" ref={heroRef}>
+                    <button
+                      type="button"
+                      className="home-chev up"
+                      onClick={() => scrollHome(-1)}
+                      aria-label="Global"
+                    >
+                      <ChevronUpIcon />
+                    </button>
+                    <button
+                      className="home-hero-orb"
+                      onClick={() => setOpenSheet("profile")}
+                      aria-label="Open profile"
+                    >
+                      <Orb size={92} alive />
+                    </button>
+                    {/* The rotating broadcast's own cross-fade rides a CLASS,
+                        not an inline style — inline would beat the --p fade
+                        declared in CSS and the line would never reach zero. */}
+                    <div className={`home-hero-line${!liveBroadcast && bfade ? " is-fading" : ""}`}>
+                      {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
+                    </div>
+                    {/* A spacer the size of the dock: the input is fixed to the
+                        page (it has to survive the scroll), so the hero group
+                        reserves its seat here and the dock parks in it. */}
+                    <div className="home-hero-dockslot" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="home-chev down"
+                      onClick={() => scrollHome(1)}
+                      aria-label="Your processes"
+                    >
+                      <ChevronDownIcon />
+                    </button>
+                  </section>
                     <section className="home-processes">
                       <div className="app-cards">
                         {processes.map((p) => {
@@ -1465,36 +1559,6 @@ export default function AppHome() {
                         )}
                       </div>
                     </section>
-                  </div>
-                  {/* GLOBAL — one page sideways: the ONEs around you. This is
-                      where the businesses list moved to; it was never sidebar
-                      furniture, it's a place you travel to. */}
-                  <div className="app-page app-page-global">
-                    <div className="global-pane">
-                      <h2 className="global-title">Global</h2>
-                      <p className="global-lede">
-                        Every ONE out here can be talked to. Walk in, ask, book — your ONE
-                        handles the rest.
-                      </p>
-                      <div className="global-grid">
-                        {businesses.map((b) => (
-                          <button key={b.id} className="gcard" onClick={() => openBiz(b.id)}>
-                            <span className="gcard-emoji">{b.emoji}</span>
-                            <span className="gcard-name">
-                              {b.name}
-                              {b.ownerKey && ownerKey && b.ownerKey === ownerKey ? " · yours" : ""}
-                            </span>
-                            <span className="gcard-cat">{b.category}</span>
-                          </button>
-                        ))}
-                        <button className="gcard gcard-new" onClick={startCreateBusiness}>
-                          <span className="gcard-emoji">＋</span>
-                          <span className="gcard-name">Create a business ONE</span>
-                          <span className="gcard-cat">Set hours, services — or just describe it</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               ) : (
                 <div className="app-chat">
@@ -1520,6 +1584,7 @@ export default function AppHome() {
                   onChange={setDraft}
                   onSend={() => send()}
                   placeholder="Talk to ONE"
+                  caret
                 />
               </div>
             </>
