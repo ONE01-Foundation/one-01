@@ -16,6 +16,7 @@ import {
 } from "@/lib/mockData";
 import { interpret, type ChatMsg } from "@/lib/oneBrain";
 import { bizReply, openState, findBusiness } from "@/lib/bizBrain";
+import { invokeAiChat, oneSystemPrompt, type AiChatMessage } from "@/lib/aiChat";
 import {
   ensureSession,
   saveUnits,
@@ -1237,9 +1238,10 @@ export default function AppHome() {
     }, 640);
   };
 
-  const send = (override?: string) => {
+  const send = async (override?: string) => {
     const text = (override ?? draft).trim();
     if (!text) return;
+    const priorChat = chat; // snapshot the transcript for the AI, pre-append
     setChat((c) => [...c, { role: "user", text }]);
     setDraft("");
     setThinking(true);
@@ -1271,16 +1273,14 @@ export default function AppHome() {
       focus,
     });
 
-    window.setTimeout(() => {
-      setThinking(false);
-      res.lines.forEach((line) => setChat((c) => [...c, { role: "one", text: line }]));
+    // The structured side (created/updated process, broadcast, ONE-to-ONE
+    // outreach) applies whether ONE speaks via the real model or the fallback.
+    const applyStructured = () => {
       if (res.process) {
         upsert(res.process);
         setFocusId(res.process.id);
       }
       if (res.broadcast) setLiveBroadcast(res.broadcast);
-
-      // A business's ONE "replies" a beat later — the update lands on the card.
       if (res.outreach && res.process) {
         const targetId = res.process.id;
         const o = res.outreach;
@@ -1290,7 +1290,32 @@ export default function AppHome() {
           setLiveBroadcast(o.broadcast);
         }, o.delayMs);
       }
-    }, 780);
+    };
+
+    try {
+      const extra = res.process
+        ? `You have just opened a process for them: "${res.process.title}". Acknowledge it in one line and say you're on it.`
+        : undefined;
+      const messages: AiChatMessage[] = [
+        { role: "system", content: oneSystemPrompt(lang, extra) },
+        ...priorChat.slice(-8).map((m) => ({
+          role: (m.role === "one" ? "assistant" : "user") as AiChatMessage["role"],
+          content: m.text,
+        })),
+        { role: "user", content: text },
+      ];
+      const reply = await invokeAiChat(messages, { maxTokens: 220 });
+      setThinking(false);
+      setChat((c) => [...c, { role: "one", text: reply }]);
+      applyStructured();
+    } catch {
+      // Offline / unconfigured — fall back to the local brain's canned lines.
+      window.setTimeout(() => {
+        setThinking(false);
+        res.lines.forEach((line) => setChat((c) => [...c, { role: "one", text: line }]));
+        applyStructured();
+      }, 600);
+    }
   };
 
   const endChat = () => {
@@ -1412,18 +1437,18 @@ export default function AppHome() {
   };
 
   // Chat scoped to the open unit — every reply's changes land on the card beside.
-  const sendToUnit = () => {
+  const sendToUnit = async () => {
     if (!activeProcess) return;
     const text = unitDraft.trim();
     if (!text) return;
+    const priorChat = unitChat; // snapshot the transcript for the AI, pre-append
     setUnitChat((c) => [...c, { role: "user", text }]);
     setUnitDraft("");
     setUnitThinking(true);
     const focus = units.find((u) => u.id === activeProcess.id) ?? null;
     const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus });
-    window.setTimeout(() => {
-      setUnitThinking(false);
-      res.lines.forEach((line) => setUnitChat((c) => [...c, { role: "one", text: line }]));
+
+    const applyStructured = () => {
       if (res.process) upsert(res.process);
       if (res.broadcast) setLiveBroadcast(res.broadcast);
       if (res.outreach && res.process) {
@@ -1435,7 +1460,31 @@ export default function AppHome() {
           setLiveBroadcast(o.broadcast);
         }, o.delayMs);
       }
-    }, 700);
+    };
+
+    try {
+      const done = focus ? focus.steps.filter((_, i) => isStepDone(focus, i)).length : 0;
+      const total = focus ? focus.steps.length : 0;
+      const extra = `You are working on this specific process for them: "${activeProcess.title}" (${activeProcess.relation}${total ? `, ${done}/${total} steps done` : ""}). Keep the reply scoped to moving THIS process forward.`;
+      const messages: AiChatMessage[] = [
+        { role: "system", content: oneSystemPrompt(lang, extra) },
+        ...priorChat.slice(-8).map((m) => ({
+          role: (m.role === "one" ? "assistant" : "user") as AiChatMessage["role"],
+          content: m.text,
+        })),
+        { role: "user", content: text },
+      ];
+      const reply = await invokeAiChat(messages, { maxTokens: 200 });
+      setUnitThinking(false);
+      setUnitChat((c) => [...c, { role: "one", text: reply }]);
+      applyStructured();
+    } catch {
+      window.setTimeout(() => {
+        setUnitThinking(false);
+        res.lines.forEach((line) => setUnitChat((c) => [...c, { role: "one", text: line }]));
+        applyStructured();
+      }, 600);
+    }
   };
 
   // Arrived from the landing gateway ("/app?q=…")? ONE starts working on that

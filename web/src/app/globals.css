@@ -3828,10 +3828,10 @@ footer {
    on hover. Sits at the end of the drawer list, above the footer separator. */
 .drawer-new {
   align-self: flex-start;
-  margin: 8px 10px 4px;
+  margin: 6px 10px 2px;
   display: inline-flex;
   align-items: center;
-  height: 44px;
+  height: 36px;
   padding: 0;
   border: none;
   border-radius: 999px;
@@ -3842,10 +3842,10 @@ footer {
   transition: background 160ms ease;
 }
 .drawer-new-ico {
-  flex: 0 0 44px;
+  flex: 0 0 36px;
   display: grid;
   place-items: center;
-  font-size: 16px;
+  font-size: 14px;
 }
 .drawer-new-label {
   max-width: 0;
