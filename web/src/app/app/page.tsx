@@ -229,10 +229,20 @@ function ChevronUpIcon() {
     </svg>
   );
 }
-function ChevronDownIcon() {
+/* Drawer toggle — a chevron; points toward opening, flips 180° when open. */
+function ArrowIcon() {
   return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+/* Temporary chat — the dashed ring from the mobile app: a conversation that
+   leaves no trace. */
+function DashedRingIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeDasharray="2.4 3.4" />
     </svg>
   );
 }
@@ -243,12 +253,22 @@ function PlusIcon() {
     </svg>
   );
 }
+/* Kebab — three vertical dots; opens the unit's options menu. */
+function KebabIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.9" />
+      <circle cx="12" cy="12" r="1.9" />
+      <circle cx="12" cy="19" r="1.9" />
+    </svg>
+  );
+}
 /** Voice bars — the resting state of the dock's action button, as in the app's
     hero. It flips to the send arrow the moment there's something to send. */
 function VoiceIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M8 9v6M12 5v14M16 9v6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 8.5v7M12 4.5v15M16 8.5v7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -452,10 +472,149 @@ function UnitDetail({
   );
 }
 
+// ── Product chrome copy, EN + HE. Mock content (process titles, ONE's replies,
+//    business data) stays in its own language — this covers the fixed UI only.
+type UILang = "en" | "he";
+const PRODUCT_UI: Record<UILang, Record<string, string>> = {
+  en: {
+    upgrade: "Upgrade",
+    tempChat: "Temporary chat",
+    newChat: "New chat",
+    profiles: "Profiles",
+    processes: "Processes",
+    newProfile: "New profile",
+    nothingHere: "Nothing here yet.",
+    oneProfile: "ONE profile",
+    settings: "Settings",
+    cloudSynced: "☁ Synced to cloud",
+    cloudConnecting: "☁ Connecting…",
+    cloudOffline: "• Saved on this device",
+    talkToOne: "Talk to ONE",
+    tellChanged: "Tell ONE what changed…",
+    hideDetails: "Hide details",
+    details: "Details",
+    share: "Share",
+    deleteProcess: "Delete process",
+    done: "done",
+    repSub: "Your representative across every identity.",
+    account: "Account",
+    signInBlurb: "Sign in so your processes follow you across every device.",
+    continueGoogle: "Continue with Google",
+    orMagic: "or a magic link",
+    sendLink: "Send link",
+    synced: "☁ synced",
+    signOut: "Sign out",
+    identity: "Identity",
+    active: "active",
+    plan: "Plan",
+    onFree: "You're on FREE",
+    unlockMore: "Unlock more with Pro / Max",
+    activePlan: "Active plan",
+    more: "More",
+    memory: "Memory",
+    memoryVal: "{n} processes remembered",
+    connections: "Connections",
+    connectionsVal: "1 of 6 connected",
+    upgradeOne: "Upgrade ONE",
+    choosePlan: "Choose the plan that fits how much you move.",
+    perMonth: "per month",
+    choosePro: "Choose Pro",
+    chooseMax: "Choose Max",
+    proFeat: "Unlimited identities · advanced model",
+    maxFeat: "Everything in Pro · proactive ONE",
+    preferences: "Preferences",
+    language: "Language",
+    theme: "Theme",
+    light: "Light",
+    dark: "Dark",
+    langName: "English",
+    exportData: "Export my data",
+    backToSite: "← Back to site",
+  },
+  he: {
+    upgrade: "שדרוג",
+    tempChat: "צ'אט זמני",
+    newChat: "צ'אט חדש",
+    profiles: "פרופילים",
+    processes: "תהליכים",
+    newProfile: "פרופיל חדש",
+    nothingHere: "אין כאן עדיין כלום.",
+    oneProfile: "הפרופיל של ONE",
+    settings: "הגדרות",
+    cloudSynced: "☁ מסונכרן לענן",
+    cloudConnecting: "☁ מתחבר…",
+    cloudOffline: "• נשמר במכשיר הזה",
+    talkToOne: "דברו עם ONE",
+    tellChanged: "ספרו ל‑ONE מה השתנה…",
+    hideDetails: "הסתרת פרטים",
+    details: "פרטים",
+    share: "שיתוף",
+    deleteProcess: "מחיקת תהליך",
+    done: "הושלמו",
+    repSub: "הנציג שלכם בכל זהות.",
+    account: "חשבון",
+    signInBlurb: "התחברו כדי שהתהליכים ילכו איתכם בכל מכשיר.",
+    continueGoogle: "המשך עם Google",
+    orMagic: "או בקישור קסם",
+    sendLink: "שליחת קישור",
+    synced: "☁ מסונכרן",
+    signOut: "התנתקות",
+    identity: "זהות",
+    active: "פעיל",
+    plan: "תוכנית",
+    onFree: "אתם על FREE",
+    unlockMore: "פותחים עוד עם Pro / Max",
+    activePlan: "תוכנית פעילה",
+    more: "עוד",
+    memory: "זיכרון",
+    memoryVal: "{n} תהליכים בזיכרון",
+    connections: "חיבורים",
+    connectionsVal: "1 מתוך 6 מחוברים",
+    upgradeOne: "שדרוג ONE",
+    choosePlan: "בחרו את התוכנית שמתאימה לקצב שלכם.",
+    perMonth: "לחודש",
+    choosePro: "בחירת Pro",
+    chooseMax: "בחירת Max",
+    proFeat: "זהויות ללא הגבלה · מודל מתקדם",
+    maxFeat: "כל מה שב‑Pro · ONE יזום",
+    preferences: "העדפות",
+    language: "שפה",
+    theme: "ערכת נושא",
+    light: "בהיר",
+    dark: "כהה",
+    langName: "עברית",
+    exportData: "ייצוא הנתונים שלי",
+    backToSite: "← חזרה לאתר",
+  },
+};
+
 export default function AppHome() {
   const [plan, setPlan] = useState<PlanTier>("free");
   const [activeIdentityId, setActiveIdentityId] = useState(IDENTITIES[0].id);
   const [openSheet, setOpenSheet] = useState<null | "profile" | "settings" | "subscription">(null);
+  // Appearance + language. Persisted; dark defaults to the OS preference.
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [lang, setLang] = useState<UILang>("en");
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem("one_theme");
+      const savedLang = localStorage.getItem("one_lang");
+      if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
+      else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) setTheme("dark");
+      if (savedLang === "he" || savedLang === "en") setLang(savedLang);
+    } catch {
+      /* private mode — defaults are fine */
+    }
+  }, []);
+  const applyTheme = (t: "light" | "dark") => {
+    setTheme(t);
+    try { localStorage.setItem("one_theme", t); } catch {}
+  };
+  const applyLang = (l: UILang) => {
+    setLang(l);
+    try { localStorage.setItem("one_lang", l); } catch {}
+  };
+  const t = PRODUCT_UI[lang];
   const [activeProcess, setActiveProcess] = useState<Process | null>(null);
   const [stepOverrides, setStepOverrides] = useState<Record<string, boolean>>({});
   const [bi, setBi] = useState(0);
@@ -465,21 +624,48 @@ export default function AppHome() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
-  // Desktop split: a unit open BESIDE its own chat, plus a full-screen toggle.
-  const [unitFull, setUnitFull] = useState(false);
-  // Top-bar menus (open on hover, like the site's). The ONE mark holds what ONE
-  // owns; the avatar holds who you are.
+  // An open unit is a split: its conversation on one side, a live detail card
+  // beside it. The card is drag-resizable (asideW), and a kebab menu holds
+  // per-process actions. Typing in the chat updates the card live.
+  const [asideW, setAsideW] = useState(384);
+  const [unitMenuOpen, setUnitMenuOpen] = useState(false);
+  const unitSplitRef = useRef<HTMLDivElement>(null);
+  // The side drawer (off the logo) holds navigation — profiles + processes.
+  // It opens on edge-hover (auto) or on click. A click "pins" it so it stays
+  // open until clicked again; an edge-hover open auto-closes on mouse-leave.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerPinned, setDrawerPinned] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+  const toggleDrawer = () => {
+    const willOpen = !drawerOpen;
+    setDrawerOpen(willOpen);
+    setDrawerPinned(willOpen);
+  };
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setDrawerPinned(false);
+  };
+  // When the drawer was revealed by hover (not pinned by a click), auto-close it
+  // once the pointer moves clearly away from it. A global listener is more
+  // reliable than onMouseLeave across fast pointer moves.
+  useEffect(() => {
+    if (!drawerOpen || drawerPinned) return;
+    const onMove = (e: MouseEvent) => {
+      const r = drawerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      if (e.clientX > r.right + 48 || e.clientX < r.left - 48) setDrawerOpen(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, [drawerOpen, drawerPinned]);
+  // Profiles collapse to the active one; the rest reveal on hover or click.
   const [profilesOpen, setProfilesOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  // Width of the unit's detail rail — the user drags its edge to resize.
-  const [asideW, setAsideW] = useState(340);
+  // A temporary chat: a fresh conversation that isn't kept as a process.
+  const [tempChat, setTempChat] = useState(false);
   // The home hero uses the landing's exact collapse model: --p (0…1) where 1 is
   // ONE collapsed to a plain black dot at the centre of the screen. Scroll
   // drives it toward the processes; the opening plays it in reverse.
   const homePageRef = useRef<HTMLDivElement>(null);
-  const mainRef = useRef<HTMLElement>(null);
-  const heroRef = useRef<HTMLElement>(null);
-  const introDoneRef = useRef(false);
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
   const [unitDraft, setUnitDraft] = useState("");
   const [unitThinking, setUnitThinking] = useState(false);
@@ -983,6 +1169,17 @@ export default function AppHome() {
   const endChat = () => {
     setChat([]);
     setThinking(false);
+    setTempChat(false);
+  };
+
+  // A temporary chat — a clean conversation that ONE won't keep as a process.
+  // The drawer stays open (it's a persistent panel now).
+  const startTempChat = () => {
+    setActiveProcess(null);
+    setChat([]);
+    setThinking(false);
+    setDraft("");
+    setTempChat(true);
   };
 
   // Open a unit into the desktop split (detail + its own chat); focus it so the
@@ -990,7 +1187,7 @@ export default function AppHome() {
   const openUnit = (p: Process) => {
     setActiveProcess(p);
     setFocusId(p.id);
-    setUnitFull(false);
+    setUnitMenuOpen(false);
     setUnitChat([
       { role: "one", text: `Here's ${p.title}.${p.nextAction ? " " + p.nextAction : " Tell me what changed and I'll update it."}` },
     ]);
@@ -1000,6 +1197,45 @@ export default function AppHome() {
     setUnitChat([]);
     setUnitDraft("");
     setUnitThinking(false);
+    setUnitMenuOpen(false);
+  };
+  // Drag the divider to resize the detail card. Works in both LTR (card on the
+  // right) and RTL (card on the left) by measuring from the split's edges.
+  const startAsideResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const rtl = lang === "he";
+    const onMove = (ev: MouseEvent) => {
+      const rect = unitSplitRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const w = rtl ? ev.clientX - rect.left : rect.right - ev.clientX;
+      setAsideW(Math.max(300, Math.min(720, w)));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+  // Kebab-menu actions on the open process.
+  const shareUnit = () => {
+    setUnitMenuOpen(false);
+    if (!activeProcess) return;
+    const text = `${activeProcess.emoji} ${activeProcess.title}${activeProcess.nextAction ? " — " + activeProcess.nextAction : ""}`;
+    try {
+      void navigator.clipboard?.writeText(text);
+    } catch {
+      /* clipboard blocked — no-op */
+    }
+  };
+  const deleteUnit = () => {
+    setUnitMenuOpen(false);
+    if (!activeProcess) return;
+    const id = activeProcess.id;
+    setUnits((u) => u.filter((x) => x.id !== id));
+    closeUnit();
   };
   // The ONE mark is "home": drop whatever you're in and return to the hero.
   const goHome = () => {
@@ -1008,30 +1244,11 @@ export default function AppHome() {
     setUnitDraft("");
     setUnitThinking(false);
     endChat();
-    setMenuOpen(false);
-    // Back to the hero — the MIDDLE screen, not the top of the scroller.
+    closeDrawer();
+    // Back to the ONE surface (the resting screen), not the Global above it.
     requestAnimationFrame(() => scrollHome(0));
   };
 
-  // Drag the rail's inner edge to resize it. Pointer capture keeps the drag
-  // alive even when the cursor outruns the 6px handle.
-  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    const startX = e.clientX;
-    const startW = asideW;
-    const dir = document.documentElement.dir === "rtl" ? -1 : 1;
-    const onMove = (ev: PointerEvent) => {
-      const next = startW - (ev.clientX - startX) * dir;
-      setAsideW(Math.max(260, Math.min(560, next)));
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  };
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   const sendToUnit = () => {
     if (!activeProcess) return;
@@ -1082,118 +1299,34 @@ export default function AppHome() {
     unitEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [unitChat, unitThinking]);
 
-  // The hero is the MIDDLE of three screens — Global above, processes below —
-  // so its resting scroll position is one screen down, not zero.
-  const heroTop = () => homePageRef.current?.clientHeight ?? 0;
-  const scrollHome = (dir: -1 | 0 | 1) => {
+  // The home is two screens — the ONE surface (rest) with the Global one screen
+  // ABOVE it. dir −1 goes up to the Global, dir 0 returns to the surface.
+  const scrollHome = (dir: -1 | 0) => {
     const page = homePageRef.current;
     if (!page) return;
-    page.scrollTo({ top: page.clientHeight * (1 + dir), behavior: "smooth" });
+    page.scrollTo({ top: dir === -1 ? 0 : page.clientHeight, behavior: "smooth" });
   };
 
-  // Park on the hero before the first paint (so the app never flashes the
-  // Global on the way down), then measure how far the dock has to travel
-  // between its seat in the hero and its resting place at the bottom. That
-  // distance depends on the viewport, so it's measured rather than guessed —
-  // and re-measured on resize.
+  // Park on the ONE surface before the first paint, so the app never flashes
+  // the Global on the way down.
   useLayoutEffect(() => {
     const page = homePageRef.current;
-    const host = mainRef.current;
-    if (!page || !host) return;
-    page.scrollTop = page.clientHeight;
-    const measure = () => {
-      const slot = page.querySelector<HTMLElement>(".home-hero-dockslot");
-      const dock = host.querySelector<HTMLElement>(".app-dock");
-      if (!slot || !dock) return;
-      // Neutralise the transform to read the dock's untransformed seat. No
-      // paint happens inside a layout effect, so this can't flicker.
-      const prev = dock.style.transform;
-      dock.style.transform = "none";
-      const d = dock.getBoundingClientRect();
-      const s = slot.getBoundingClientRect();
-      dock.style.transform = prev;
-      const lift = Math.round(d.top + d.height / 2 - (s.top + s.height / 2));
-      host.style.setProperty("--dock-lift", `${Math.max(0, lift)}px`);
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [activeProcess, chat.length]);
+    if (page) page.scrollTop = page.clientHeight;
+  }, [activeProcess, chat.length, tempChat]);
 
-  // Scroll-collapse: pulling the processes up collapses ONE into a plain black
-  // dot at the centre of the screen. Measured FROM the hero, so scrolling up to
-  // the Global leaves the hero whole (the clamp floors it at 0). Pure CSS var —
-  // it tracks frame-for-frame with no re-render, and the dock rides it too, so
-  // --p lives on the shared ancestor rather than the hero.
+  // Esc backs out of whatever's open — an overlay, then the unit, then the
+  // drawer. The workspace should never trap you.
   useEffect(() => {
-    const page = homePageRef.current;
-    const host = mainRef.current;
-    if (!page || !host) return;
-    let raf = 0;
-    const onScroll = () => {
-      if (raf || !introDoneRef.current) return; // let the awakening own --p first
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        const h = Math.max(1, page.clientHeight);
-        const p = Math.max(0, Math.min(1, (page.scrollTop - h) / h));
-        host.style.setProperty("--p", p.toFixed(4));
-      });
-    };
-    page.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      page.removeEventListener("scroll", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [activeProcess, chat.length]);
-
-  // ONE's awakening — the opening IS the home animating in, the exact reverse of
-  // the scroll-collapse: ONE starts as a dot at the centre of the screen, then
-  // grows/rises into place while its eyes open and the broadcast, input and cue
-  // fade in. No splash overlay — it's the home's own elements. Identical timing
-  // and easing to the landing hero's.
-  useEffect(() => {
-    const host = mainRef.current;
-    const page = homePageRef.current;
-    if (!host || !page) return;
-    const h = Math.max(1, page.clientHeight);
-    const syncToScroll = () => {
-      introDoneRef.current = true;
-      const p = Math.max(0, Math.min(1, (page.scrollTop - h) / h));
-      host.style.setProperty("--p", p.toFixed(4));
-    };
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    // Only awaken when we're parked on the hero; if we're already elsewhere (or
-    // reduced-motion is on), hand --p straight to the scroll position.
-    if (reduce || Math.abs(page.scrollTop - h) > 4) {
-      syncToScroll();
-      return;
-    }
-    host.style.setProperty("--p", "1"); // start collapsed: a dot at screen centre
-    const DURATION = 1050;
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // easeOutCubic
-    let raf = 0;
-    let startTs = 0;
-    const step = (ts: number) => {
-      if (!startTs) startTs = ts;
-      const t = Math.min(1, (ts - startTs) / DURATION);
-      host.style.setProperty("--p", (1 - ease(t)).toFixed(4));
-      if (t < 1) raf = requestAnimationFrame(step);
-      else introDoneRef.current = true; // ended at the top → --p=0 is correct
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  // Esc backs out of the open unit — the workspace should never trap you.
-  useEffect(() => {
-    if (!activeProcess) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeUnit();
+      if (e.key !== "Escape") return;
+      if (openSheet) setOpenSheet(null);
+      else if (activeProcess) closeUnit();
+      else if (drawerOpen) closeDrawer();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProcess]);
+  }, [openSheet, activeProcess, drawerOpen]);
 
   // rotating broadcast line (fade between). Re-keyed on identity so switching
   // ONEs restarts the rotation in that ONE's voice.
@@ -1226,229 +1359,277 @@ export default function AppHome() {
     setStepOverrides((s) => ({ ...s, [`${p.id}:${i}`]: !isStepDone(p, i) }));
 
   return (
-    <main className="product-root">
+    <main className="product-root" data-theme={theme} dir={lang === "he" ? "rtl" : "ltr"} lang={lang}>
       {/* No splash overlay. The opening IS the home animating in — see the
           awakening effect above: ONE starts as a dot at the centre of the
           screen and grows into place. Same as the landing hero. */}
       {/* Full-bleed canvas — no window chrome, no back-to-site. The product is
           its own place; the ONE orb in the sidebar is the brand anchor. */}
       <div className="app-shell">
-        {/* TOP BAR — the site's shape. The ONE mark is home (and its menu holds
-            what ONE itself owns); the round avatar on the right is you, and
-            holds the profiles you can be. */}
+        {/* Edge-hover zone — sweep the mouse to the inline-start edge and the
+            drawer slides out on its own (desktop only). */}
+        <div
+          className="app-edge-hover"
+          onMouseEnter={() => !drawerOpen && setDrawerOpen(true)}
+          aria-hidden="true"
+        />
+        {/* TOP BAR — the ONE mark (face in the "O", click = home) with the panel
+            arrow beside it; the right side is Upgrade and a temporary chat. */}
         <nav className="app-nav">
-          <div
-            className="app-nav-brand"
-            onPointerEnter={(e) => {
-              if (e.pointerType === "mouse") setMenuOpen(true);
-            }}
-            onPointerLeave={(e) => {
-              if (e.pointerType === "mouse") setMenuOpen(false);
-            }}
-          >
+          <div className="app-nav-left">
             <button
               className="app-brand-btn"
-              onClick={goHome}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              aria-label="ONE — home"
+              onClick={() => {
+                // From a unit or a chat, the mark backs you out to home; on the
+                // home surface it opens/closes the side drawer.
+                if (activeProcess || chat.length > 0 || tempChat) goHome();
+                else toggleDrawer();
+              }}
+              aria-label={
+                activeProcess || chat.length > 0 || tempChat
+                  ? "ONE — home"
+                  : drawerOpen
+                    ? "Collapse menu"
+                    : "Open menu"
+              }
             >
               <OneWord className="app-brand-mark" />
             </button>
-            {menuOpen && (
-              <div className="app-menu" role="menu">
-                <button className="app-menu-item" onClick={goHome} role="menuitem">
-                  <i className="fi fi-rr-home app-menu-ico" aria-hidden="true" />
-                  Home
-                </button>
-                <button
-                  className="app-menu-item"
-                  onClick={() => {
-                    setOpenSheet("profile");
-                    setMenuOpen(false);
-                  }}
-                  role="menuitem"
-                >
-                  <i className="fi fi-rr-user app-menu-ico" aria-hidden="true" />
-                  ONE profile
-                </button>
-                <button
-                  className="app-menu-item"
-                  onClick={() => {
-                    setOpenSheet("subscription");
-                    setMenuOpen(false);
-                  }}
-                  role="menuitem"
-                >
-                  <i className="fi fi-rr-wallet app-menu-ico" aria-hidden="true" />
-                  Plan
-                  <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
-                </button>
-                <button
-                  className="app-menu-item"
-                  onClick={() => {
-                    setOpenSheet("settings");
-                    setMenuOpen(false);
-                  }}
-                  role="menuitem"
-                >
-                  <i className="fi fi-rr-settings-sliders app-menu-ico" aria-hidden="true" />
-                  Settings
-                </button>
-              </div>
-            )}
-          </div>
-          <div
-            className="app-nav-right"
-            onPointerEnter={(e) => {
-              if (e.pointerType === "mouse") setProfilesOpen(true);
-            }}
-            onPointerLeave={(e) => {
-              if (e.pointerType === "mouse") setProfilesOpen(false);
-            }}
-          >
             <button
-              className="app-avatar"
-              onClick={() => setProfilesOpen((o) => !o)}
-              aria-haspopup="menu"
-              aria-expanded={profilesOpen}
-              aria-label={`${identity.name} — switch profile`}
+              className={`app-drawer-toggle${drawerOpen ? " is-open" : ""}`}
+              onClick={toggleDrawer}
+              aria-expanded={drawerOpen}
+              aria-label={drawerOpen ? "Collapse menu" : "Open menu"}
             >
-              <span className="app-avatar-emoji">{identity.emoji}</span>
+              <ArrowIcon />
             </button>
-            {profilesOpen && (
-              <div className="app-profiles" role="menu">
-                <div className="app-profiles-label">Profiles</div>
-                {IDENTITIES.map((id) => (
-                  <button
-                    key={id.id}
-                    className={`app-profile${id.id === activeIdentityId ? " active" : ""}`}
-                    onClick={() => {
-                      setActiveIdentityId(id.id);
-                      setProfilesOpen(false);
-                    }}
-                    role="menuitem"
-                  >
-                    <span className="app-profile-emoji">{id.emoji}</span>
-                    <span className="app-profile-text">
-                      <span className="app-profile-name">{id.name}</span>
-                      <span className="app-profile-role">{id.role}</span>
-                    </span>
-                  </button>
-                ))}
-                <button
-                  className="app-profile app-profile-new"
-                  onClick={startCreateBusiness}
-                  role="menuitem"
-                >
-                  <span className="app-profile-emoji">＋</span>
-                  <span className="app-profile-text">
-                    <span className="app-profile-name">New profile</span>
-                    <span className="app-profile-role">A ONE for a business or a side of life</span>
-                  </span>
-                </button>
-                {/* Where this ONE is kept — it belongs with the profile, not
-                    floating in the chrome. */}
-                <div className={`app-profiles-cloud cloud-${cloud}`}>
-                  {cloud === "synced" && "☁ Synced to cloud"}
-                  {cloud === "connecting" && "☁ Connecting…"}
-                  {cloud === "offline" && "• Saved on this device"}
-                </div>
-              </div>
-            )}
+          </div>
+          <div className="app-nav-right">
+            <button
+              className="app-nav-btn app-nav-upgrade"
+              onClick={() => setOpenSheet("subscription")}
+            >
+              <span>{t.upgrade}</span>
+            </button>
+            {/* Temporary chat — icon only, the dashed ring from the app. */}
+            <button
+              className="app-nav-btn app-nav-icon"
+              onClick={startTempChat}
+              aria-label={t.tempChat}
+              title={t.tempChat}
+            >
+              <DashedRingIcon />
+            </button>
           </div>
         </nav>
 
+        {/* SIDE DRAWER — profiles + your process list, profile/settings at the
+            foot. On desktop it's a persistent panel that shrinks the canvas;
+            on mobile it slides over with a scrim. */}
+        {drawerOpen && (
+          <div className="app-drawer-scrim" onClick={closeDrawer} />
+        )}
+        <aside
+          ref={drawerRef}
+          className={`app-drawer${drawerOpen ? " is-open" : ""}`}
+          aria-hidden={!drawerOpen}
+        >
+          <div className="drawer-top">
+            <button className="drawer-new" onClick={startTempChat}>
+              <i className="fi fi-rr-edit" aria-hidden="true" />
+              <span>{t.newChat}</span>
+            </button>
+          </div>
+
+          <div className="drawer-scroll">
+            <div
+              className={`drawer-section drawer-profiles${profilesOpen ? " is-open" : ""}`}
+              onMouseLeave={() => setProfilesOpen(false)}
+            >
+              <div className="drawer-label">{t.profiles}</div>
+              {/* Active profile — click to reveal the others (they also reveal
+                  on hover, like a little drawer). */}
+              <button
+                className="drawer-profile active"
+                onClick={() => setProfilesOpen((v) => !v)}
+                aria-expanded={profilesOpen}
+              >
+                <span className="drawer-profile-emoji">{identity.emoji}</span>
+                <span className="drawer-profile-text">
+                  <span className="drawer-profile-name">{identity.name}</span>
+                  <span className="drawer-profile-role">{identity.role}</span>
+                </span>
+                <i className="fi fi-rr-angle-small-down drawer-profile-caret" aria-hidden="true" />
+              </button>
+              <div className="drawer-profiles-more">
+                <div className="drawer-profiles-more-inner">
+                  {IDENTITIES.filter((id) => id.id !== activeIdentityId).map((id) => (
+                    <button
+                      key={id.id}
+                      className="drawer-profile"
+                      onClick={() => {
+                        setActiveIdentityId(id.id);
+                        setProfilesOpen(false);
+                      }}
+                    >
+                      <span className="drawer-profile-emoji">{id.emoji}</span>
+                      <span className="drawer-profile-text">
+                        <span className="drawer-profile-name">{id.name}</span>
+                        <span className="drawer-profile-role">{id.role}</span>
+                      </span>
+                    </button>
+                  ))}
+                  <button className="drawer-row drawer-row-new" onClick={startCreateBusiness}>
+                    <i className="fi fi-rr-plus drawer-row-ico" aria-hidden="true" />
+                    {t.newProfile}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="drawer-section">
+              <div className="drawer-label">{t.processes}</div>
+              {processes.map((p) => (
+                <button
+                  key={p.id}
+                  className="drawer-row drawer-process"
+                  onClick={() => openUnit(p)}
+                >
+                  <span className="drawer-process-emoji">{p.emoji}</span>
+                  <span className="drawer-process-title">{p.title}</span>
+                  {p.unread > 0 && <span className="drawer-process-badge">{p.unread}</span>}
+                </button>
+              ))}
+              {processes.length === 0 && (
+                <div className="drawer-empty">{t.nothingHere}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="drawer-foot">
+            <button className="drawer-row" onClick={() => setOpenSheet("profile")}>
+              <i className="fi fi-rr-user drawer-row-ico" aria-hidden="true" />
+              {t.oneProfile}
+            </button>
+            <button className="drawer-row" onClick={() => setOpenSheet("settings")}>
+              <i className="fi fi-rr-settings-sliders drawer-row-ico" aria-hidden="true" />
+              {t.settings}
+            </button>
+            <div className={`drawer-cloud cloud-${cloud}`}>
+              {cloud === "synced" && t.cloudSynced}
+              {cloud === "connecting" && t.cloudConnecting}
+              {cloud === "offline" && t.cloudOffline}
+            </div>
+          </div>
+        </aside>
+
         {/* RIGHT — the workspace: broadcast-driven cards or the conversation */}
-        <section className="app-main" ref={mainRef}>
+        <section className="app-main">
           <div className="app-edge top" />
           {activeLive ? (
             // ── UNIT SPLIT — the wide detail card BESIDE its own chat. Typing in
             //    the chat updates the card live. "Full" hides the chat and lets
             //    the card fill the workspace.
-            <div className={`unit-view${unitFull ? " is-full" : ""}`}>
-              {/* The conversation is the room — bare on the canvas, no card
-                  around it. The unit's details sit as a narrow rail you can
-                  drag wider when you actually want to read them. */}
-              <div className="unit-chatpane">
-                <div className="unit-topbar">
-                  <div className="unit-topbar-head">
-                    <div className="unit-topbar-title">
-                      <span className="unit-topbar-emoji">{activeLive.emoji}</span>
-                      <span>{activeLive.title}</span>
+            <div className="unit-view">
+              {/* A split: the conversation on one side, a live detail card beside
+                  it that you can drag wider. The chat carries its own header
+                  (title · a kebab menu · close), scoped to the chat's width. */}
+              <div className="unit-split" ref={unitSplitRef}>
+                <div className="unit-chatpane">
+                  <div className="unit-chat-head">
+                    <div className="unit-topbar-head">
+                      <div className="unit-topbar-title">
+                        <span className="unit-topbar-emoji">{activeLive.emoji}</span>
+                        <span>{activeLive.title}</span>
+                      </div>
+                      <div className="unit-topbar-sub">
+                        {activeLive.relation}
+                        <span className="unit-topbar-dot">·</span>
+                        {activeLive.steps.filter((_, i) => isStepDone(activeLive, i)).length}/
+                        {activeLive.steps.length} {t.done}
+                      </div>
                     </div>
-                    <div className="unit-topbar-sub">
-                      {activeLive.relation}
-                      <span className="unit-topbar-dot">·</span>
-                      {activeLive.steps.filter((_, i) => isStepDone(activeLive, i)).length}/
-                      {activeLive.steps.length} done
+                    <div className="unit-menu-wrap">
+                      <button
+                        className="unit-tb-icon"
+                        onClick={() => setUnitMenuOpen((v) => !v)}
+                        aria-label="Options"
+                        aria-haspopup="menu"
+                        aria-expanded={unitMenuOpen}
+                      >
+                        <KebabIcon />
+                      </button>
+                      {unitMenuOpen && (
+                        <>
+                          <div className="unit-menu-catch" onClick={() => setUnitMenuOpen(false)} />
+                          <div className="unit-menu" role="menu">
+                            <button className="unit-menu-item" onClick={shareUnit} role="menuitem">
+                              <i className="fi fi-rr-share" aria-hidden="true" /> {t.share}
+                            </button>
+                            <button className="unit-menu-item danger" onClick={deleteUnit} role="menuitem">
+                              <i className="fi fi-rr-trash" aria-hidden="true" /> {t.deleteProcess}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </div>
-                  <div className="unit-topbar-actions">
-                    <button className="unit-tb-btn" onClick={() => setUnitFull((f) => !f)}>
-                      {unitFull ? "◑ Details" : "⛶ Hide details"}
-                    </button>
-                    <button className="unit-tb-btn unit-tb-close" onClick={closeUnit} aria-label="Close unit">
+                    <button className="unit-tb-icon" onClick={closeUnit} aria-label="Close unit">
                       ×
                     </button>
                   </div>
-                </div>
-                <div className="unit-chat-scroll">
-                  {unitChat.map((m, i) => (
-                    <div key={i} className={`chat-msg ${m.role}`}>
-                      {m.text}
-                    </div>
-                  ))}
-                  {unitThinking && (
-                    <div className="chat-msg one thinking" aria-label="ONE is thinking">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  )}
-                  <div ref={unitEndRef} />
-                </div>
-                <div className="app-dock unit-dock">
-                  <AppInput
-                    value={unitDraft}
-                    onChange={setUnitDraft}
-                    onSend={sendToUnit}
-                    placeholder="Tell ONE what changed…"
-                  />
-                </div>
-              </div>
-              {!unitFull && (
-                <aside className="unit-aside" style={{ width: asideW }}>
-                  <div
-                    className="unit-resizer"
-                    onPointerDown={startResize}
-                    role="separator"
-                    aria-label="Resize details"
-                  />
-                  <div className="unit-aside-scroll">
-                    <UnitDetail
-                      p={activeLive}
-                      businesses={businesses}
-                      isStepDone={isStepDone}
-                      toggleStep={toggleStep}
-                      runQuickAction={runQuickAction}
-                      openBiz={openBiz}
+                  <div className="unit-chat-scroll">
+                    {unitChat.map((m, i) => (
+                      <div key={i} className={`chat-msg ${m.role}`}>
+                        {m.text}
+                      </div>
+                    ))}
+                    {unitThinking && (
+                      <div className="chat-msg one thinking" aria-label="ONE is thinking">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                    )}
+                    <div ref={unitEndRef} />
+                  </div>
+                  <div className="app-dock unit-dock">
+                    <AppInput
+                      value={unitDraft}
+                      onChange={setUnitDraft}
+                      onSend={sendToUnit}
+                      placeholder={t.tellChanged}
                     />
                   </div>
+                </div>
+                <div
+                  className="unit-resizer"
+                  onMouseDown={startAsideResize}
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize details"
+                />
+                <aside className="unit-aside" style={{ width: asideW }}>
+                  <UnitDetail
+                    p={activeLive}
+                    businesses={businesses}
+                    isStepDone={isStepDone}
+                    toggleStep={toggleStep}
+                    runQuickAction={runQuickAction}
+                    openBiz={openBiz}
+                  />
                 </aside>
-              )}
+              </div>
             </div>
           ) : (
             <>
-              {chat.length > 0 && (
+              {(chat.length > 0 || tempChat) && (
                 <button className="app-close" onClick={endChat} aria-label="Close chat">
                   ×
                 </button>
               )}
-              {chat.length === 0 ? (
-                // HOME — one column, the hero in the middle of it, exactly as on
-                // the site: UP is the Global (the world outside your ONE), DOWN
-                // is your own processes. The page opens parked on the hero.
+              {chat.length === 0 && !tempChat ? (
+                // HOME — two screens: the ONE surface (rest) with the Global one
+                // screen above. Opens parked on the surface.
                 <div className="app-page" ref={homePageRef}>
                   {/* GLOBAL — one screen up. This is where the businesses list
                       moved to; it was never sidebar furniture, it's a place. */}
@@ -1478,7 +1659,10 @@ export default function AppHome() {
                       </div>
                     </div>
                   </section>
-                  <section className="home-hero" ref={heroRef}>
+                  {/* The ONE surface — no face here (it lives in the top mark);
+                      just the broadcast and the input, centred. Up reveals the
+                      Global. */}
+                  <section className="home-main">
                     <button
                       type="button"
                       className="home-chev up"
@@ -1487,106 +1671,56 @@ export default function AppHome() {
                     >
                       <ChevronUpIcon />
                     </button>
-                    <button
-                      className="home-hero-orb"
-                      onClick={() => setOpenSheet("profile")}
-                      aria-label="Open profile"
-                    >
-                      <Orb size={92} alive />
-                    </button>
-                    {/* The rotating broadcast's own cross-fade rides a CLASS,
-                        not an inline style — inline would beat the --p fade
-                        declared in CSS and the line would never reach zero. */}
-                    <div className={`home-hero-line${!liveBroadcast && bfade ? " is-fading" : ""}`}>
-                      {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
-                    </div>
-                    {/* A spacer the size of the dock: the input is fixed to the
-                        page (it has to survive the scroll), so the hero group
-                        reserves its seat here and the dock parks in it. */}
-                    <div className="home-hero-dockslot" aria-hidden="true" />
-                    <button
-                      type="button"
-                      className="home-chev down"
-                      onClick={() => scrollHome(1)}
-                      aria-label="Your processes"
-                    >
-                      <ChevronDownIcon />
-                    </button>
-                  </section>
-                    <section className="home-processes">
-                      <div className="app-cards">
-                        {processes.map((p) => {
-                    const done = p.steps.filter((_, i) => isStepDone(p, i)).length;
-                    const total = p.steps.length;
-                    return (
+                    <div className="home-center">
                       <div
-                        key={p.id}
-                        className="ucard"
-                        onClick={() => openUnit(p)}
-                        role="button"
-                        tabIndex={0}
+                        className={`home-broadcast${!liveBroadcast && bfade ? " is-fading" : ""}`}
                       >
-                        <div className="ucard-head">
-                          <div className="ucard-title">
-                            <span className="ucard-emoji">{p.emoji}</span>
-                            <span>{p.title}</span>
-                          </div>
-                          <div className="ucard-time">
-                            {p.time}
-                            {p.unread > 0 && <span className="ucard-badge">{p.unread}</span>}
-                          </div>
-                        </div>
-                        <div className="ucard-sub">{p.summary}</div>
-                        <div className="ucard-foot">
-                          <span className="ucard-relation">{p.relation}</span>
-                          <div className="ucard-progress">
-                            <div className="ucard-track">
-                              <div
-                                className="ucard-fill"
-                                style={{ width: `${Math.round((done / total) * 100)}%` }}
-                              />
-                            </div>
-                            <span className="ucard-count">
-                              {done}/{total}
-                            </span>
-                          </div>
-                        </div>
+                        {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
                       </div>
-                    );
-                  })}
-                        {processes.length === 0 && (
-                          <div className="app-empty">Nothing here yet for {identity.name}.</div>
-                        )}
-                      </div>
-                    </section>
+                      <AppInput
+                        value={draft}
+                        onChange={setDraft}
+                        onSend={() => send()}
+                        placeholder={t.talkToOne}
+                        caret
+                      />
+                    </div>
+                  </section>
                 </div>
               ) : (
-                <div className="app-chat">
-                  {chat.map((m, i) => (
-                    <div key={i} className={`chat-msg ${m.role}`}>
-                      {m.text}
-                    </div>
-                  ))}
-                  {thinking && (
-                    <div className="chat-msg one thinking" aria-label="ONE is thinking">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  )}
-                  <div ref={chatEndRef} />
-                </div>
+                <>
+                  <div className="app-chat">
+                    {tempChat && (
+                      <div className="temp-chat-tag">
+                        <i className="fi fi-rr-incognito" aria-hidden="true" /> Temporary chat · not
+                        kept as a process
+                      </div>
+                    )}
+                    {chat.map((m, i) => (
+                      <div key={i} className={`chat-msg ${m.role}`}>
+                        {m.text}
+                      </div>
+                    ))}
+                    {thinking && (
+                      <div className="chat-msg one thinking" aria-label="ONE is thinking">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+                  <div className="app-edge bottom" />
+                  <div className="app-dock">
+                    <AppInput
+                      value={draft}
+                      onChange={setDraft}
+                      onSend={() => send()}
+                      placeholder={t.talkToOne}
+                    />
+                  </div>
+                </>
               )}
-              <div className="app-edge bottom" />
-              <div className="app-dock">
-                <AppInput
-                  value={draft}
-                  onChange={setDraft}
-                  onSend={() => send()}
-                  placeholder="Talk to ONE"
-                  caret
-                />
-              </div>
             </>
           )}
         </section>
@@ -1600,16 +1734,16 @@ export default function AppHome() {
             <div className="sheet-title">
               ONE <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
             </div>
-            <div className="sheet-sub">Your representative across every identity.</div>
+            <div className="sheet-sub">{t.repSub}</div>
           </div>
 
           <div className="sheet-section">
-            <h4>Account</h4>
+            <h4>{t.account}</h4>
             {user ? (
               <>
                 <div className="sheet-row">
                   <span className="r-label">{user.name ?? user.email ?? "Signed in"}</span>
-                  <span className="r-value" style={{ color: "var(--p-ok)", fontWeight: 600 }}>☁ synced</span>
+                  <span className="r-value" style={{ color: "var(--p-ok)", fontWeight: 600 }}>{t.synced}</span>
                 </div>
                 {user.email && user.name && (
                   <div className="sheet-row">
@@ -1621,19 +1755,19 @@ export default function AppHome() {
                   style={{ width: "100%", marginTop: 6, padding: 11 }}
                   onClick={doSignOut}
                 >
-                  Sign out
+                  {t.signOut}
                 </button>
               </>
             ) : (
               <>
                 <div className="sheet-sub" style={{ marginBottom: 10 }}>
-                  Sign in so your processes follow you across every device.
+                  {t.signInBlurb}
                 </div>
                 <button className="google-btn" onClick={continueWithGoogle}>
-                  <GoogleG /> Continue with Google
+                  <GoogleG /> {t.continueGoogle}
                 </button>
                 <div className="auth-or">
-                  <span>or a magic link</span>
+                  <span>{t.orMagic}</span>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
@@ -1647,7 +1781,7 @@ export default function AppHome() {
                     onKeyDown={(e) => e.key === "Enter" && sendMagicLink()}
                   />
                   <button className="sheet-pill blue" style={{ padding: "0 16px" }} onClick={sendMagicLink}>
-                    Send link
+                    {t.sendLink}
                   </button>
                 </div>
                 {authMsg && <div className="auth-msg">{authMsg}</div>}
@@ -1656,7 +1790,7 @@ export default function AppHome() {
           </div>
 
           <div className="sheet-section">
-            <h4>Identity</h4>
+            <h4>{t.identity}</h4>
             {IDENTITIES.map((id) => (
               <button
                 key={id.id}
@@ -1672,52 +1806,52 @@ export default function AppHome() {
                 </span>
                 <span className="r-value">
                   {id.role}
-                  {id.id === activeIdentityId ? " · active" : ""}
+                  {id.id === activeIdentityId ? ` · ${t.active}` : ""}
                 </span>
               </button>
             ))}
           </div>
 
           <div className="sheet-section">
-            <h4>Plan</h4>
+            <h4>{t.plan}</h4>
             {plan === "free" ? (
               <>
                 <div className="sheet-row">
-                  <span className="r-label">You&apos;re on FREE</span>
-                  <span className="r-value">Unlock more with Pro / Max</span>
+                  <span className="r-label">{t.onFree}</span>
+                  <span className="r-value">{t.unlockMore}</span>
                 </div>
                 <button
                   className="sheet-pill blue"
                   style={{ width: "100%", marginTop: 4, padding: "12px" }}
                   onClick={() => setOpenSheet("subscription")}
                 >
-                  Upgrade
+                  {t.upgrade}
                 </button>
               </>
             ) : (
               <div className="sheet-row">
-                <span className="r-label">Active plan</span>
+                <span className="r-label">{t.activePlan}</span>
                 <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
               </div>
             )}
           </div>
 
           <div className="sheet-section">
-            <h4>More</h4>
+            <h4>{t.more}</h4>
             <div className="sheet-row">
-              <span className="r-label">Memory</span>
-              <span className="r-value">{PROCESSES.length} processes remembered</span>
+              <span className="r-label">{t.memory}</span>
+              <span className="r-value">{t.memoryVal.replace("{n}", String(PROCESSES.length))}</span>
             </div>
             <div className="sheet-row">
-              <span className="r-label">Connections</span>
-              <span className="r-value">1 of 6 connected</span>
+              <span className="r-label">{t.connections}</span>
+              <span className="r-value">{t.connectionsVal}</span>
             </div>
             <button
               className="sheet-row"
               style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "left" }}
               onClick={() => setOpenSheet("settings")}
             >
-              <span className="r-label">Settings</span>
+              <span className="r-label">{t.settings}</span>
               <span className="r-value">›</span>
             </button>
           </div>
@@ -1728,8 +1862,8 @@ export default function AppHome() {
       <Sheet open={openSheet === "subscription"} onClose={() => setOpenSheet("profile")}>
         <div className="sheet-body">
           <div className="sheet-hero">
-            <div className="sheet-title">Upgrade ONE</div>
-            <div className="sheet-sub">Choose the plan that fits how much you move.</div>
+            <div className="sheet-title">{t.upgradeOne}</div>
+            <div className="sheet-sub">{t.choosePlan}</div>
           </div>
           <div className="plan-tiers">
             <div className="plan-tier">
@@ -1737,7 +1871,7 @@ export default function AppHome() {
                 Pro
               </div>
               <div className="t-price">₪29</div>
-              <div className="t-per">per month</div>
+              <div className="t-per">{t.perMonth}</div>
               <button
                 className="sheet-pill blue"
                 style={{ width: "100%" }}
@@ -1746,7 +1880,7 @@ export default function AppHome() {
                   setOpenSheet("profile");
                 }}
               >
-                Choose Pro
+                {t.choosePro}
               </button>
             </div>
             <div className="plan-tier">
@@ -1754,7 +1888,7 @@ export default function AppHome() {
                 Max
               </div>
               <div className="t-price">₪69</div>
-              <div className="t-per">per month</div>
+              <div className="t-per">{t.perMonth}</div>
               <button
                 className="sheet-pill purple"
                 style={{ width: "100%" }}
@@ -1763,18 +1897,18 @@ export default function AppHome() {
                   setOpenSheet("profile");
                 }}
               >
-                Choose Max
+                {t.chooseMax}
               </button>
             </div>
           </div>
           <div className="sheet-section">
             <div className="sheet-row">
               <span className="r-label">Pro</span>
-              <span className="r-value">Unlimited identities · advanced model</span>
+              <span className="r-value">{t.proFeat}</span>
             </div>
             <div className="sheet-row">
               <span className="r-label">Max</span>
-              <span className="r-value">Everything in Pro · proactive ONE</span>
+              <span className="r-value">{t.maxFeat}</span>
             </div>
           </div>
         </div>
@@ -1784,43 +1918,63 @@ export default function AppHome() {
       <Sheet open={openSheet === "settings"} onClose={() => setOpenSheet(null)}>
         <div className="sheet-body">
           <div className="sheet-hero">
-            <div className="sheet-title">Settings</div>
+            <div className="sheet-title">{t.settings}</div>
           </div>
           <div className="sheet-section">
-            <h4>Preferences</h4>
+            <h4>{t.preferences}</h4>
             <div className="sheet-row">
-              <span className="r-label">Language</span>
-              <span className="r-value">English</span>
+              <span className="r-label">{t.language}</span>
+              <div className="seg2">
+                <button className={lang === "en" ? "on" : ""} onClick={() => applyLang("en")}>
+                  English
+                </button>
+                <button className={lang === "he" ? "on" : ""} onClick={() => applyLang("he")}>
+                  עברית
+                </button>
+              </div>
             </div>
             <div className="sheet-row">
-              <span className="r-label">Theme</span>
-              <span className="r-value">Light</span>
+              <span className="r-label">{t.theme}</span>
+              <div className="seg2">
+                <button className={theme === "light" ? "on" : ""} onClick={() => applyTheme("light")}>
+                  {t.light}
+                </button>
+                <button className={theme === "dark" ? "on" : ""} onClick={() => applyTheme("dark")}>
+                  {t.dark}
+                </button>
+              </div>
             </div>
           </div>
           <div className="sheet-section">
-            <h4>Account</h4>
+            <h4>{t.account}</h4>
             <button
               className="sheet-row"
               style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "left" }}
               onClick={() => setOpenSheet("subscription")}
             >
-              <span className="r-label">Subscription</span>
+              <span className="r-label">{lang === "he" ? "מנוי" : "Subscription"}</span>
               <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
             </button>
             <div className="sheet-row">
-              <span className="r-label">Export my data</span>
+              <span className="r-label">{t.exportData}</span>
               <span className="r-value">›</span>
             </div>
-            <div className="sheet-row">
-              <span className="r-label" style={{ color: "#DC2626" }}>
-                Sign out
-              </span>
-              <span className="r-value">›</span>
-            </div>
+            {user && (
+              <button
+                className="sheet-row"
+                style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "left" }}
+                onClick={doSignOut}
+              >
+                <span className="r-label" style={{ color: "#DC2626" }}>
+                  {t.signOut}
+                </span>
+                <span className="r-value">›</span>
+              </button>
+            )}
           </div>
           <div className="sheet-section">
             <Link href="/" className="sheet-pill ghost" style={{ display: "inline-block" }}>
-              ← Back to site
+              {t.backToSite}
             </Link>
           </div>
         </div>

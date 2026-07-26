@@ -771,10 +771,52 @@ export default function LandingPage() {
       setTimeout(() => {
         setBi((i) => (i + 1) % heroLines.length);
         setBfade(false);
-      }, 300);
-    }, 3800);
+      }, 420);
+    }, 6400);
     return () => clearInterval(t);
   }, [heroLines.length]);
+
+  // Animated placeholder — a typewriter cycling through concrete example
+  // intentions ("things you can do"), so the empty input suggests what to say.
+  // Only runs while the input is empty and unfocused.
+  const [exText, setExText] = useState("");
+  useEffect(() => {
+    if (heroDraft || heroFocused) return;
+    const examples = t.hero.examples;
+    let ei = 0;
+    let ci = 0;
+    let deleting = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const full = examples[ei % examples.length];
+      if (!deleting) {
+        ci++;
+        setExText(full.slice(0, ci));
+        if (ci >= full.length) {
+          deleting = true;
+          timer = setTimeout(tick, 1600); // hold the finished line
+          return;
+        }
+        timer = setTimeout(tick, 55);
+      } else {
+        ci--;
+        setExText(full.slice(0, ci));
+        if (ci <= 0) {
+          deleting = false;
+          ei++;
+          timer = setTimeout(tick, 320);
+          return;
+        }
+        timer = setTimeout(tick, 28);
+      }
+    };
+    timer = setTimeout(tick, 600);
+    return () => {
+      clearTimeout(timer);
+      setExText("");
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroDraft, heroFocused, t]);
 
   // DEMO — the "Your data, live" section. Invented numbers that drift upward
   // and a feed that ticks; see src/lib/demoPulse.ts to delete or replace.
@@ -1131,7 +1173,12 @@ export default function LandingPage() {
               <PlusIcon />
             </button>
             <span className="lhero-inputwrap">
-              {!heroDraft && !heroFocused && <span className="lhero-caret" aria-hidden="true" />}
+              {!heroDraft && !heroFocused && (
+                <span className="lhero-ghost" aria-hidden="true" dir="auto">
+                  {exText}
+                  <span className="lhero-caret" />
+                </span>
+              )}
               <input
                 ref={heroInputRef}
                 className="lhero-input"

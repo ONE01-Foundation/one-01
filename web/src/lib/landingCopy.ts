@@ -10,6 +10,7 @@ export interface LandingCopy {
   hero: {
     greetings: { morning: string; afternoon: string; evening: string; hello: string };
     prompts: string[];
+    examples: string[];
     noAccount: string;
     haveOne: string;
     inputAria: string;
@@ -156,13 +157,20 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         hello: "Hello.",
       },
       prompts: [
-        "What would you like to move forward?",
-        "Name one thing you want handled.",
-        "Scroll down and watch me fold into a dot.",
-        "Point me at something big — I'll break it into a plan.",
-        "Say it once. I'll carry it to done.",
-        "Scroll up to open Global — the network of ONEs.",
-        "Big or small — what should we start with?",
+        "What do you want handled?",
+        "Say it once. I carry it to done.",
+        "Point me at something big — I'll make it a plan.",
+        "One sentence is enough to start.",
+        "Tell me the outcome. I'll work backward.",
+        "What's been sitting on your list too long?",
+      ],
+      examples: [
+        "Renew my driver's license",
+        "Plan my apartment move",
+        "Get to 75 kg by June",
+        "Find a lawyer for the lease",
+        "Book flights to Lisbon",
+        "Launch my side project",
       ],
       noAccount: "No account needed to start",
       haveOne: "Connect",
@@ -424,13 +432,20 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         hello: "שלום.",
       },
       prompts: [
-        "מה תרצו לקדם?",
-        "תנו לי דבר אחד שאתם רוצים שיטופל.",
-        "גללו למטה וראו איך אני מתקפל לנקודה.",
-        "כוון אותי למשהו גדול — ואני אפרק אותו לתוכנית.",
-        "אמרו את זה פעם אחת. אני אקח את זה עד הסוף.",
-        "גלול למעלה כדי לפתוח את גלובל — רשת ה-ONEs.",
-        "גדול או קטן — במה נתחיל?",
+        "מה תרצו שיטופל?",
+        "אמרו פעם אחת. אני לוקח עד הסוף.",
+        "כוונו אותי למשהו גדול — ואהפוך אותו לתוכנית.",
+        "משפט אחד מספיק כדי להתחיל.",
+        "תגידו לי את התוצאה. אני אעבוד לאחור.",
+        "מה יושב לכם ברשימה יותר מדי זמן?",
+      ],
+      examples: [
+        "לחדש את רישיון הנהיגה",
+        "לתכנן מעבר דירה",
+        "להגיע ל-75 ק\"ג עד יוני",
+        "למצוא עורך דין לחוזה",
+        "להזמין טיסות לליסבון",
+        "להשיק את פרויקט הצד שלי",
       ],
       noAccount: "אפשר להתחיל בלי חשבון",
       haveOne: "התחבר",
