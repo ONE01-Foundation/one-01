@@ -3824,29 +3824,48 @@ footer {
   gap: 8px;
   padding: 12px 12px 8px;
 }
+/* New process — a black circle with a plus that expands into a labelled pill
+   on hover. Sits at the end of the drawer list, above the footer separator. */
 .drawer-new {
-  flex: 1;
+  align-self: flex-start;
+  margin: 8px 10px 4px;
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  height: 40px;
-  padding: 0 14px;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  background: transparent;
-  color: var(--p-text);
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--p-face);
+  color: var(--p-bg);
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 160ms ease;
+}
+.drawer-new-ico {
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+}
+.drawer-new-label {
+  max-width: 0;
+  opacity: 0;
+  white-space: nowrap;
+  overflow: hidden;
   font-family: var(--sans);
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
-  transition: background 140ms ease;
+  transition: max-width 240ms ease, opacity 200ms ease, padding 240ms ease;
 }
-.drawer-new:hover {
-  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+.drawer-new:hover,
+.drawer-new:focus-visible {
+  background: color-mix(in srgb, var(--p-face) 86%, var(--p-bg));
 }
-.drawer-new i {
-  font-size: 14px;
-  color: var(--p-text-3);
+.drawer-new:hover .drawer-new-label,
+.drawer-new:focus-visible .drawer-new-label {
+  max-width: 200px;
+  opacity: 1;
+  padding-inline-end: 18px;
 }
 .drawer-scroll {
   flex: 1;
@@ -4009,6 +4028,28 @@ footer {
 .drawer-cloud.cloud-synced {
   color: var(--p-ok);
 }
+/* Global — a place, not a menu row. A live pulse marks it as the busy world. */
+.drawer-global {
+  margin: 2px 0 6px;
+  font-weight: 600;
+}
+.drawer-global-live {
+  margin-inline-start: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--p-ok);
+  animation: globalPulse 2s ease-out infinite;
+}
+@keyframes globalPulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-ok) 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
 
 /* ─── home — the hero, then your processes; sideways, the Global ─────────── */
 /* One column of three screens — Global, hero, processes — with the hero as the
@@ -4055,6 +4096,307 @@ footer {
     opacity: 0;
     transform: translateY(14px);
   }
+}
+
+/* ─── Home / Global — one canvas, a segmented toggle flips between them ────── */
+.home-view {
+  position: absolute;
+  /* Clears the floating top bar. */
+  inset: 58px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+/* The Home ⇄ Global toggle — a pill segmented control, centred at the top. */
+.space-toggle {
+  flex-shrink: 0;
+  margin-top: 22px;
+  display: inline-flex;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--p-text) 6%, var(--p-bg));
+  border: 1px solid var(--p-line);
+  z-index: 2;
+}
+.space-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--p-text-3);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+.space-seg i {
+  font-size: 13px;
+}
+.space-seg.is-active {
+  background: var(--p-surface);
+  color: var(--p-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+/* Home content fills the space below the toggle and centres itself. */
+.home-view .home-center {
+  flex: 1;
+  justify-content: center;
+  padding: 0 24px;
+}
+/* Global scrolls under the toggle. */
+.global-scroll {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+}
+.global-scroll .global-pane {
+  min-height: auto;
+  padding: 26px 26px 120px;
+}
+/* World filter chips — the "worlds" of Global (health, learning, …). */
+.world-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 20px;
+}
+.world-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 999px;
+  background: var(--p-surface);
+  color: var(--p-text-2);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+.world-chip:hover {
+  border-color: color-mix(in srgb, var(--p-text) 22%, transparent);
+}
+.world-chip.is-active {
+  background: var(--p-text);
+  border-color: var(--p-text);
+  color: var(--p-bg);
+}
+.world-chip-emoji {
+  font-size: 14px;
+}
+.world-empty {
+  margin-top: 18px;
+  padding: 28px;
+  border: 1px dashed var(--p-line);
+  border-radius: 16px;
+  text-align: center;
+  color: var(--p-text-3);
+  font-size: 14px;
+}
+/* Global feed sections — Processes · Connections · Requests · News. */
+.global-sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.global-sec-head.with-top {
+  margin-top: 34px;
+}
+.global-sec-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--p-text);
+}
+.global-sec-sub {
+  font-size: 12.5px;
+  color: var(--p-text-3);
+}
+.glist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.grow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  background: var(--p-surface);
+  font-family: var(--sans);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+.grow:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--p-text) 20%, transparent);
+}
+.grow-emoji {
+  flex: 0 0 auto;
+  font-size: 22px;
+}
+.grow-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.grow-who {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--p-text);
+}
+.grow-text {
+  font-size: 12.5px;
+  color: var(--p-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grow-cta {
+  flex: 0 0 auto;
+  font-size: 20px;
+  color: var(--p-text-3);
+}
+.product-root[dir="rtl"] .grow-cta {
+  transform: scaleX(-1);
+}
+.grow-badge {
+  flex: 0 0 auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--p-blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+/* Connections — a wrap of compact ONE chips. */
+.gconns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gconn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid var(--p-line);
+  border-radius: 999px;
+  background: var(--p-surface);
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: border-color 140ms ease;
+}
+.gconn:hover {
+  border-color: color-mix(in srgb, var(--p-text) 20%, transparent);
+}
+.gconn-emoji {
+  font-size: 17px;
+}
+.gconn-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--p-text);
+}
+/* News — a simple dotted list. */
+.gnews {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--p-line);
+}
+.gnews:last-child {
+  border-bottom: none;
+}
+.gnews-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--p-ok);
+}
+.gnews-text {
+  font-size: 13.5px;
+  color: var(--p-text-2);
+}
+
+/* ─── Profile — a full canvas screen (was a popup) ───────────────────────── */
+.canvas {
+  position: absolute;
+  inset: 58px 0 0;
+  overflow-y: auto;
+  background: var(--p-bg);
+}
+.canvas-inner {
+  max-width: 560px;
+  margin-inline: auto;
+  padding: 22px 22px 90px;
+}
+.canvas-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 8px 14px 8px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--p-text-2);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+.canvas-back:hover {
+  color: var(--p-text);
+  background: color-mix(in srgb, var(--p-text) 6%, transparent);
+}
+.canvas-back-ico {
+  font-size: 20px;
+  line-height: 1;
+}
+.product-root[dir="rtl"] .canvas-back-ico {
+  transform: scaleX(-1);
+}
+.profile-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 10px 0 20px;
+}
+.profile-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--p-text);
+}
+.profile-sub {
+  max-width: 34ch;
+  font-size: 14px;
+  color: var(--p-text-2);
 }
 /* The broadcast, right above the input. A fixed two-line box, BOTTOM-aligned so
    the line always sits just above the input; a second line grows upward and the
@@ -4133,11 +4475,83 @@ footer {
   color: var(--p-text);
 }
 .global-lede {
-  margin: 8px 0 26px;
+  margin: 8px 0 0;
   max-width: 48ch;
   font-size: 15px;
   line-height: 1.55;
   color: var(--p-text-2);
+}
+/* Live header — title/lede with a pulsing "online" pill. */
+.global-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.global-headtext {
+  min-width: 0;
+}
+.global-live {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--p-ok) 12%, transparent);
+  color: var(--p-ok);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.global-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--p-ok);
+  animation: globalPulse 2s ease-out infinite;
+}
+/* Real-time activity ticker — one rotating line, marks the place as busy. */
+.global-feed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0 24px;
+  padding: 12px 16px;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  background: var(--p-surface);
+  overflow: hidden;
+}
+.global-feed-pulse {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--p-blue);
+  animation: globalPulse 2s ease-out infinite;
+}
+.global-feed-line {
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--p-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: feedIn 360ms ease;
+}
+@keyframes feedIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .global-grid {
   display: grid;
@@ -4387,6 +4801,18 @@ footer {
 .unit-menu-item.danger,
 .unit-menu-item.danger i {
   color: #dc2626;
+}
+.unit-menu-item.ok,
+.unit-menu-item.ok i {
+  color: var(--p-ok);
+}
+/* Primed delete — filled red so the confirming tap is unmistakable. */
+.unit-menu-item.danger.confirm {
+  background: #dc2626;
+  color: #fff;
+}
+.unit-menu-item.danger.confirm i {
+  color: #fff;
 }
 /* The split — the conversation on one side, a drag-resizable detail card. */
 .unit-split {

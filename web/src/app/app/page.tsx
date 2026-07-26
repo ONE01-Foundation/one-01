@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Orb } from "@/components/Orb";
 import { OneWord } from "@/components/Logo";
@@ -222,13 +222,6 @@ function SendIcon() {
  * it updates the moment the chat changes the unit. Reads its Process fresh each
  * render, so upserts show immediately.
  */
-function ChevronUpIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 15l6-6 6 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 /* Drawer toggle — a chevron; points toward opening, flips 180° when open. */
 function ArrowIcon() {
   return (
@@ -494,7 +487,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     hideDetails: "Hide details",
     details: "Details",
     share: "Share",
+    copied: "Copied ✓",
     deleteProcess: "Delete process",
+    confirmDelete: "Tap again to delete",
     done: "done",
     repSub: "Your representative across every identity.",
     account: "Account",
@@ -530,6 +525,33 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     langName: "English",
     exportData: "Export my data",
     backToSite: "← Back to site",
+    global: "Global",
+    globalLede: "Every ONE out here can be talked to. Walk in, ask, book — your ONE handles the rest.",
+    live: "Live",
+    onesOnline: "ONEs online",
+    openNow: "Open now",
+    closedNow: "Closed",
+    createBiz: "Create a business ONE",
+    createBizSub: "Set hours, services — or just describe it",
+    homeTab: "Home",
+    worlds: "Worlds",
+    worldAll: "All",
+    wHealth: "Health",
+    wLearning: "Learning",
+    wLeisure: "Leisure",
+    wFinance: "Finance",
+    wHome: "Home",
+    wFood: "Food",
+    wCommunity: "Community",
+    emptyWorld: "No ONEs here yet — be the first.",
+    backHome: "Back",
+    newProcess: "New process",
+    processesSub: "Your active engagements",
+    requests: "Requests",
+    requestsSub: "Waiting on you",
+    connectionsSub: "ONEs you're linked to",
+    news: "News",
+    newsSub: "Across the network",
   },
   he: {
     upgrade: "שדרוג",
@@ -549,7 +571,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     hideDetails: "הסתרת פרטים",
     details: "פרטים",
     share: "שיתוף",
+    copied: "הועתק ✓",
     deleteProcess: "מחיקת תהליך",
+    confirmDelete: "לחצו שוב למחיקה",
     done: "הושלמו",
     repSub: "הנציג שלכם בכל זהות.",
     account: "חשבון",
@@ -585,13 +609,88 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     langName: "עברית",
     exportData: "ייצוא הנתונים שלי",
     backToSite: "← חזרה לאתר",
+    global: "גלובל",
+    globalLede: "אפשר לדבר עם כל ONE שיש כאן. להיכנס, לשאול, להזמין — וה‑ONE שלכם מטפל בשאר.",
+    live: "חי",
+    onesOnline: "ONE מחוברים",
+    openNow: "פתוח עכשיו",
+    closedNow: "סגור",
+    createBiz: "יצירת ONE עסקי",
+    createBizSub: "הגדירו שעות ושירותים — או פשוט תארו",
+    homeTab: "בית",
+    worlds: "עולמות",
+    worldAll: "הכול",
+    wHealth: "בריאות",
+    wLearning: "לימודים",
+    wLeisure: "פנאי",
+    wFinance: "כלכלה",
+    wHome: "בית",
+    wFood: "אוכל",
+    wCommunity: "קהילה",
+    emptyWorld: "אין כאן ONE עדיין — היו הראשונים.",
+    backHome: "חזרה",
+    newProcess: "תהליך חדש",
+    processesSub: "המעורבויות הפעילות שלכם",
+    requests: "בקשות",
+    requestsSub: "מחכות לכם",
+    connectionsSub: "ONE שאתם מחוברים אליהם",
+    news: "חדשות",
+    newsSub: "מהרשת",
   },
 };
+
+// ── Global is organised into "worlds" — broad domains of life a ONE can live
+//    in. Each business is sorted into one by its category text. Add keywords
+//    here as the directory grows.
+const WORLD_KEYS = [
+  "health",
+  "learning",
+  "leisure",
+  "finance",
+  "home",
+  "food",
+  "community",
+] as const;
+type WorldKey = (typeof WORLD_KEYS)[number];
+const WORLD_EMOJI: Record<WorldKey, string> = {
+  health: "🩺",
+  learning: "📚",
+  leisure: "✨",
+  finance: "💰",
+  home: "🏠",
+  food: "🍽️",
+  community: "🏘️",
+};
+// Which dict key labels each world.
+const WORLD_LABEL: Record<WorldKey, string> = {
+  health: "wHealth",
+  learning: "wLearning",
+  leisure: "wLeisure",
+  finance: "wFinance",
+  home: "wHome",
+  food: "wFood",
+  community: "wCommunity",
+};
+function worldOf(category: string): WorldKey {
+  const c = category.toLowerCase();
+  if (/(gym|fitness|health|clinic|doctor|dentist|wellness|therap|medic|pharma|nutrition)/.test(c)) return "health";
+  if (/(instructor|teacher|school|course|tutor|driving|lesson|academ|learn|studio)/.test(c)) return "learning";
+  if (/(salon|hair|nail|beauty|spa|barber|entertain|game|sport|travel|tour|leisure|event)/.test(c)) return "leisure";
+  if (/(bank|account|finance|insur|invest|tax|loan|mortgage)/.test(c)) return "finance";
+  if (/(mov|clean|repair|plumb|electr|renov|construct|handyman|home|garden)/.test(c)) return "home";
+  if (/(restaurant|cafe|food|bakery|cater|grocery|deli|coffee)/.test(c)) return "food";
+  return "community";
+}
 
 export default function AppHome() {
   const [plan, setPlan] = useState<PlanTier>("free");
   const [activeIdentityId, setActiveIdentityId] = useState(IDENTITIES[0].id);
-  const [openSheet, setOpenSheet] = useState<null | "profile" | "settings" | "subscription">(null);
+  const [openSheet, setOpenSheet] = useState<null | "settings" | "subscription">(null);
+  // The main canvas shows one of three "spaces": the ONE home (broadcast +
+  // input), the Global marketplace, or the ONE profile — all on-canvas, no
+  // popups. A segmented toggle flips Home ⇄ Global; the drawer opens Profile.
+  const [space, setSpace] = useState<"home" | "global" | "profile">("home");
+  const [world, setWorld] = useState<"all" | WorldKey>("all");
   // Appearance + language. Persisted; dark defaults to the OS preference.
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [lang, setLang] = useState<UILang>("en");
@@ -619,6 +718,20 @@ export default function AppHome() {
   const [stepOverrides, setStepOverrides] = useState<Record<string, boolean>>({});
   const [bi, setBi] = useState(0);
   const [bfade, setBfade] = useState(false);
+  // Global surface — a live marketplace. `now` (client-only, avoids hydration
+  // mismatch) drives the open/closed status; `feedIdx` cycles a live activity
+  // ticker so the place feels alive.
+  const [now, setNow] = useState<Date | null>(null);
+  const [feedIdx, setFeedIdx] = useState(0);
+  useEffect(() => {
+    setNow(new Date());
+    const clock = setInterval(() => setNow(new Date()), 60_000);
+    const ticker = setInterval(() => setFeedIdx((i) => i + 1), 3200);
+    return () => {
+      clearInterval(clock);
+      clearInterval(ticker);
+    };
+  }, []);
 
   // Home conversation with ONE.
   const [chat, setChat] = useState<ChatMsg[]>([]);
@@ -629,6 +742,8 @@ export default function AppHome() {
   // per-process actions. Typing in the chat updates the card live.
   const [asideW, setAsideW] = useState(384);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
+  const [unitShared, setUnitShared] = useState(false);
+  const [unitConfirmDelete, setUnitConfirmDelete] = useState(false);
   const unitSplitRef = useRef<HTMLDivElement>(null);
   // The side drawer (off the logo) holds navigation — profiles + processes.
   // It opens on edge-hover (auto) or on click. A click "pins" it so it stays
@@ -645,6 +760,22 @@ export default function AppHome() {
     setDrawerOpen(false);
     setDrawerPinned(false);
   };
+  // On desktop the drawer is a push-panel that shrinks the canvas, so it can
+  // stay open beside a unit. On mobile it's a full slide-over, so navigating
+  // to a unit/chat must close it or it would hide the content behind it.
+  const closeDrawerOnMobile = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 899px)").matches) {
+      closeDrawer();
+    }
+  };
+  // Reset the unit menu's transient states whenever it closes, so a reopened
+  // menu never shows a stale "Copied ✓" or a primed delete-confirm.
+  useEffect(() => {
+    if (!unitMenuOpen) {
+      setUnitShared(false);
+      setUnitConfirmDelete(false);
+    }
+  }, [unitMenuOpen]);
   // When the drawer was revealed by hover (not pinned by a click), auto-close it
   // once the pointer moves clearly away from it. A global listener is more
   // reliable than onMouseLeave across fast pointer moves.
@@ -662,10 +793,6 @@ export default function AppHome() {
   const [profilesOpen, setProfilesOpen] = useState(false);
   // A temporary chat: a fresh conversation that isn't kept as a process.
   const [tempChat, setTempChat] = useState(false);
-  // The home hero uses the landing's exact collapse model: --p (0…1) where 1 is
-  // ONE collapsed to a plain black dot at the centre of the screen. Scroll
-  // drives it toward the processes; the opening plays it in reverse.
-  const homePageRef = useRef<HTMLDivElement>(null);
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
   const [unitDraft, setUnitDraft] = useState("");
   const [unitThinking, setUnitThinking] = useState(false);
@@ -1180,6 +1307,20 @@ export default function AppHome() {
     setThinking(false);
     setDraft("");
     setTempChat(true);
+    closeDrawerOnMobile();
+  };
+
+  // New process — a fresh conversation with ONE. Unlike a temporary chat, ONE
+  // keeps it: whatever you ask for becomes a new process. Drops you on the
+  // blank ONE home, ready to state the intention.
+  const startNewProcess = () => {
+    setActiveProcess(null);
+    setChat([]);
+    setThinking(false);
+    setDraft("");
+    setTempChat(false);
+    setSpace("home");
+    closeDrawerOnMobile();
   };
 
   // Open a unit into the desktop split (detail + its own chat); focus it so the
@@ -1191,6 +1332,7 @@ export default function AppHome() {
     setUnitChat([
       { role: "one", text: `Here's ${p.title}.${p.nextAction ? " " + p.nextAction : " Tell me what changed and I'll update it."}` },
     ]);
+    closeDrawerOnMobile();
   };
   const closeUnit = () => {
     setActiveProcess(null);
@@ -1221,7 +1363,6 @@ export default function AppHome() {
   };
   // Kebab-menu actions on the open process.
   const shareUnit = () => {
-    setUnitMenuOpen(false);
     if (!activeProcess) return;
     const text = `${activeProcess.emoji} ${activeProcess.title}${activeProcess.nextAction ? " — " + activeProcess.nextAction : ""}`;
     try {
@@ -1229,12 +1370,24 @@ export default function AppHome() {
     } catch {
       /* clipboard blocked — no-op */
     }
+    // Confirm the copy in place, then dismiss the menu.
+    setUnitShared(true);
+    setTimeout(() => {
+      setUnitShared(false);
+      setUnitMenuOpen(false);
+    }, 1100);
   };
   const deleteUnit = () => {
-    setUnitMenuOpen(false);
     if (!activeProcess) return;
+    // Deleting is irreversible — require a confirming second tap.
+    if (!unitConfirmDelete) {
+      setUnitConfirmDelete(true);
+      return;
+    }
     const id = activeProcess.id;
     setUnits((u) => u.filter((x) => x.id !== id));
+    setUnitConfirmDelete(false);
+    setUnitMenuOpen(false);
     closeUnit();
   };
   // The ONE mark is "home": drop whatever you're in and return to the hero.
@@ -1245,8 +1398,17 @@ export default function AppHome() {
     setUnitThinking(false);
     endChat();
     closeDrawer();
-    // Back to the ONE surface (the resting screen), not the Global above it.
-    requestAnimationFrame(() => scrollHome(0));
+    setSpace("home");
+  };
+  // ONE profile — now a full canvas screen, not a popup.
+  const openProfile = () => {
+    setActiveProcess(null);
+    setUnitChat([]);
+    setUnitDraft("");
+    setUnitThinking(false);
+    endChat();
+    closeDrawerOnMobile();
+    setSpace("profile");
   };
 
   // Chat scoped to the open unit — every reply's changes land on the card beside.
@@ -1299,21 +1461,6 @@ export default function AppHome() {
     unitEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [unitChat, unitThinking]);
 
-  // The home is two screens — the ONE surface (rest) with the Global one screen
-  // ABOVE it. dir −1 goes up to the Global, dir 0 returns to the surface.
-  const scrollHome = (dir: -1 | 0) => {
-    const page = homePageRef.current;
-    if (!page) return;
-    page.scrollTo({ top: dir === -1 ? 0 : page.clientHeight, behavior: "smooth" });
-  };
-
-  // Park on the ONE surface before the first paint, so the app never flashes
-  // the Global on the way down.
-  useLayoutEffect(() => {
-    const page = homePageRef.current;
-    if (page) page.scrollTop = page.clientHeight;
-  }, [activeProcess, chat.length, tempChat]);
-
   // Esc backs out of whatever's open — an overlay, then the unit, then the
   // drawer. The workspace should never trap you.
   useEffect(() => {
@@ -1358,6 +1505,45 @@ export default function AppHome() {
   const toggleStep = (p: Process, i: number) =>
     setStepOverrides((s) => ({ ...s, [`${p.id}:${i}`]: !isStepDone(p, i) }));
 
+  // Global's live activity ticker — a rotating line built from the businesses so
+  // the marketplace reads as busy and real-time.
+  const feedActs =
+    lang === "he"
+      ? ["קיבל הזמנה עכשיו", "עונה למישהו כרגע", "נפתח להיום", "הוסיף שירות חדש", "אישר תור"]
+      : ["just took a booking", "is answering someone", "opened for the day", "added a new service", "confirmed a slot"];
+  const feedList = businesses
+    .slice(0, 8)
+    .map((b, i) => `${b.emoji}  ${b.name} · ${feedActs[i % feedActs.length]}`);
+  const feedLine = feedList.length ? feedList[feedIdx % feedList.length] : "";
+  // Global filtered by the selected world.
+  const worldBiz =
+    world === "all" ? businesses : businesses.filter((b) => worldOf(b.category) === world);
+  // Global feed sections — requests waiting on you and news across the network.
+  const gRequests =
+    lang === "he"
+      ? [
+          { who: "AllMove", emoji: "📦", text: "שלחו הצעת מחיר — צריך אישור" },
+          { who: "Sarah Salon", emoji: "💈", text: "מבקשים לאשר את התור למחר" },
+          { who: "Instructor Dana", emoji: "🚗", text: "מציעים שיעור נוסף השבוע" },
+        ]
+      : [
+          { who: "AllMove", emoji: "📦", text: "Sent a quote — needs your OK" },
+          { who: "Sarah Salon", emoji: "💈", text: "Asking to confirm tomorrow's slot" },
+          { who: "Instructor Dana", emoji: "🚗", text: "Offering another lesson this week" },
+        ];
+  const gNews =
+    lang === "he"
+      ? [
+          "3 עסקים חדשים נפתחו בעולם הבריאות השבוע",
+          "ONE01 עדכן שעות פעילות",
+          "פנאי — העולם הכי פעיל היום",
+        ]
+      : [
+          "3 new businesses opened in Health this week",
+          "ONE01 updated its opening hours",
+          "Leisure — the busiest world today",
+        ];
+
   return (
     <main className="product-root" data-theme={theme} dir={lang === "he" ? "rtl" : "ltr"} lang={lang}>
       {/* No splash overlay. The opening IS the home animating in — see the
@@ -1380,13 +1566,13 @@ export default function AppHome() {
             <button
               className="app-brand-btn"
               onClick={() => {
-                // From a unit or a chat, the mark backs you out to home; on the
-                // home surface it opens/closes the side drawer.
-                if (activeProcess || chat.length > 0 || tempChat) goHome();
+                // From a unit, chat, or any non-home space, the mark backs you
+                // out to home; on the home surface it opens/closes the drawer.
+                if (activeProcess || chat.length > 0 || tempChat || space !== "home") goHome();
                 else toggleDrawer();
               }}
               aria-label={
-                activeProcess || chat.length > 0 || tempChat
+                activeProcess || chat.length > 0 || tempChat || space !== "home"
                   ? "ONE — home"
                   : drawerOpen
                     ? "Collapse menu"
@@ -1434,13 +1620,6 @@ export default function AppHome() {
           className={`app-drawer${drawerOpen ? " is-open" : ""}`}
           aria-hidden={!drawerOpen}
         >
-          <div className="drawer-top">
-            <button className="drawer-new" onClick={startTempChat}>
-              <i className="fi fi-rr-edit" aria-hidden="true" />
-              <span>{t.newChat}</span>
-            </button>
-          </div>
-
           <div className="drawer-scroll">
             <div
               className={`drawer-section drawer-profiles${profilesOpen ? " is-open" : ""}`}
@@ -1504,10 +1683,24 @@ export default function AppHome() {
                 <div className="drawer-empty">{t.nothingHere}</div>
               )}
             </div>
+
+            {/* New chat sits at the end of the list — above the footer's
+                separator line. */}
+            <button
+              className="drawer-new"
+              onClick={startNewProcess}
+              title={t.newProcess}
+              aria-label={t.newProcess}
+            >
+              <span className="drawer-new-ico">
+                <i className="fi fi-rr-plus" aria-hidden="true" />
+              </span>
+              <span className="drawer-new-label">{t.newProcess}</span>
+            </button>
           </div>
 
           <div className="drawer-foot">
-            <button className="drawer-row" onClick={() => setOpenSheet("profile")}>
+            <button className="drawer-row" onClick={openProfile}>
               <i className="fi fi-rr-user drawer-row-ico" aria-hidden="true" />
               {t.oneProfile}
             </button>
@@ -1563,11 +1756,24 @@ export default function AppHome() {
                         <>
                           <div className="unit-menu-catch" onClick={() => setUnitMenuOpen(false)} />
                           <div className="unit-menu" role="menu">
-                            <button className="unit-menu-item" onClick={shareUnit} role="menuitem">
-                              <i className="fi fi-rr-share" aria-hidden="true" /> {t.share}
+                            <button
+                              className={`unit-menu-item${unitShared ? " ok" : ""}`}
+                              onClick={shareUnit}
+                              role="menuitem"
+                            >
+                              <i
+                                className={`fi ${unitShared ? "fi-rr-check" : "fi-rr-share"}`}
+                                aria-hidden="true"
+                              />{" "}
+                              {unitShared ? t.copied : t.share}
                             </button>
-                            <button className="unit-menu-item danger" onClick={deleteUnit} role="menuitem">
-                              <i className="fi fi-rr-trash" aria-hidden="true" /> {t.deleteProcess}
+                            <button
+                              className={`unit-menu-item danger${unitConfirmDelete ? " confirm" : ""}`}
+                              onClick={deleteUnit}
+                              role="menuitem"
+                            >
+                              <i className="fi fi-rr-trash" aria-hidden="true" />{" "}
+                              {unitConfirmDelete ? t.confirmDelete : t.deleteProcess}
                             </button>
                           </div>
                         </>
@@ -1628,65 +1834,319 @@ export default function AppHome() {
                 </button>
               )}
               {chat.length === 0 && !tempChat ? (
-                // HOME — two screens: the ONE surface (rest) with the Global one
-                // screen above. Opens parked on the surface.
-                <div className="app-page" ref={homePageRef}>
-                  {/* GLOBAL — one screen up. This is where the businesses list
-                      moved to; it was never sidebar furniture, it's a place. */}
-                  <section className="home-global">
-                    <div className="global-pane">
-                      <h2 className="global-title">Global</h2>
-                      <p className="global-lede">
-                        Every ONE out here can be talked to. Walk in, ask, book — your ONE
-                        handles the rest.
-                      </p>
-                      <div className="global-grid">
-                        {businesses.map((b) => (
-                          <button key={b.id} className="gcard" onClick={() => openBiz(b.id)}>
-                            <span className="gcard-emoji">{b.emoji}</span>
-                            <span className="gcard-name">
-                              {b.name}
-                              {b.ownerKey && ownerKey && b.ownerKey === ownerKey ? " · yours" : ""}
+                space === "profile" ? (
+                  // ── PROFILE — a full canvas screen (not a popup): your ONE,
+                  //    your identities, plan and connections.
+                  <div className="canvas profile-canvas">
+                    <div className="canvas-inner">
+                      <button className="canvas-back" onClick={goHome}>
+                        <span className="canvas-back-ico" aria-hidden="true">‹</span> {t.backHome}
+                      </button>
+                      <div className="profile-hero">
+                        <Orb size={76} />
+                        <div className="profile-title">
+                          ONE{" "}
+                          <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
+                        </div>
+                        <div className="profile-sub">{t.repSub}</div>
+                      </div>
+
+                      <div className="sheet-section">
+                        <h4>{t.account}</h4>
+                        {user ? (
+                          <>
+                            <div className="sheet-row">
+                              <span className="r-label">{user.name ?? user.email ?? "Signed in"}</span>
+                              <span className="r-value" style={{ color: "var(--p-ok)", fontWeight: 600 }}>{t.synced}</span>
+                            </div>
+                            {user.email && user.name && (
+                              <div className="sheet-row">
+                                <span className="r-label" style={{ opacity: 0.6, fontWeight: 400 }}>{user.email}</span>
+                              </div>
+                            )}
+                            <button
+                              className="sheet-pill ghost"
+                              style={{ width: "100%", marginTop: 6, padding: 11 }}
+                              onClick={doSignOut}
+                            >
+                              {t.signOut}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <div className="sheet-sub" style={{ marginBottom: 10 }}>{t.signInBlurb}</div>
+                            <button className="google-btn" onClick={continueWithGoogle}>
+                              <GoogleG /> {t.continueGoogle}
+                            </button>
+                            <div className="auth-or">
+                              <span>{t.orMagic}</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <input
+                                className="app-input"
+                                style={{ boxShadow: "none", background: "var(--p-bg)", flex: 1 }}
+                                type="email"
+                                inputMode="email"
+                                placeholder="you@email.com"
+                                value={authEmail}
+                                onChange={(e) => setAuthEmail(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && sendMagicLink()}
+                              />
+                              <button className="sheet-pill blue" style={{ padding: "0 16px" }} onClick={sendMagicLink}>
+                                {t.sendLink}
+                              </button>
+                            </div>
+                            {authMsg && <div className="auth-msg">{authMsg}</div>}
+                          </>
+                        )}
+                      </div>
+
+                      <div className="sheet-section">
+                        <h4>{t.identity}</h4>
+                        {IDENTITIES.map((id) => (
+                          <button
+                            key={id.id}
+                            className="sheet-row"
+                            style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "start" }}
+                            onClick={() => setActiveIdentityId(id.id)}
+                          >
+                            <span className="r-label">
+                              {id.emoji} {id.name}
                             </span>
-                            <span className="gcard-cat">{b.category}</span>
+                            <span className="r-value">
+                              {id.role}
+                              {id.id === activeIdentityId ? ` · ${t.active}` : ""}
+                            </span>
                           </button>
                         ))}
-                        <button className="gcard gcard-new" onClick={startCreateBusiness}>
-                          <span className="gcard-emoji">＋</span>
-                          <span className="gcard-name">Create a business ONE</span>
-                          <span className="gcard-cat">Set hours, services — or just describe it</span>
+                      </div>
+
+                      <div className="sheet-section">
+                        <h4>{t.plan}</h4>
+                        {plan === "free" ? (
+                          <>
+                            <div className="sheet-row">
+                              <span className="r-label">{t.onFree}</span>
+                              <span className="r-value">{t.unlockMore}</span>
+                            </div>
+                            <button
+                              className="sheet-pill blue"
+                              style={{ width: "100%", marginTop: 4, padding: "12px" }}
+                              onClick={() => setOpenSheet("subscription")}
+                            >
+                              {t.upgrade}
+                            </button>
+                          </>
+                        ) : (
+                          <div className="sheet-row">
+                            <span className="r-label">{t.activePlan}</span>
+                            <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="sheet-section">
+                        <h4>{t.more}</h4>
+                        <div className="sheet-row">
+                          <span className="r-label">{t.memory}</span>
+                          <span className="r-value">{t.memoryVal.replace("{n}", String(PROCESSES.length))}</span>
+                        </div>
+                        <div className="sheet-row">
+                          <span className="r-label">{t.connections}</span>
+                          <span className="r-value">{t.connectionsVal}</span>
+                        </div>
+                        <button
+                          className="sheet-row"
+                          style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "start" }}
+                          onClick={() => setOpenSheet("settings")}
+                        >
+                          <span className="r-label">{t.settings}</span>
+                          <span className="r-value">›</span>
                         </button>
                       </div>
                     </div>
-                  </section>
-                  {/* The ONE surface — no face here (it lives in the top mark);
-                      just the broadcast and the input, centred. Up reveals the
-                      Global. */}
-                  <section className="home-main">
-                    <button
-                      type="button"
-                      className="home-chev up"
-                      onClick={() => scrollHome(-1)}
-                      aria-label="Global"
-                    >
-                      <ChevronUpIcon />
-                    </button>
-                    <div className="home-center">
-                      <div
-                        className={`home-broadcast${!liveBroadcast && bfade ? " is-fading" : ""}`}
+                  </div>
+                ) : (
+                  // HOME / GLOBAL — one canvas with a segmented toggle at the top
+                  // that flips between the ONE surface and the Global worlds.
+                  <div className="home-view">
+                    <div className="space-toggle" role="tablist" aria-label="Home or Global">
+                      <button
+                        role="tab"
+                        aria-selected={space === "home"}
+                        className={`space-seg${space === "home" ? " is-active" : ""}`}
+                        onClick={() => setSpace("home")}
                       >
-                        {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
-                      </div>
-                      <AppInput
-                        value={draft}
-                        onChange={setDraft}
-                        onSend={() => send()}
-                        placeholder={t.talkToOne}
-                        caret
-                      />
+                        <i className="fi fi-rr-home" aria-hidden="true" /> {t.homeTab}
+                      </button>
+                      <button
+                        role="tab"
+                        aria-selected={space === "global"}
+                        className={`space-seg${space === "global" ? " is-active" : ""}`}
+                        onClick={() => setSpace("global")}
+                      >
+                        <i className="fi fi-rr-globe" aria-hidden="true" /> {t.global}
+                      </button>
                     </div>
-                  </section>
-                </div>
+
+                    {space === "global" ? (
+                      // GLOBAL — a marketplace of worlds. Pick a world, walk into
+                      // any ONE.
+                      <div className="global-scroll">
+                        <div className="global-pane">
+                          <div className="global-head">
+                            <div className="global-headtext">
+                              <h2 className="global-title">{t.global}</h2>
+                              <p className="global-lede">{t.globalLede}</p>
+                            </div>
+                            <span className="global-live">
+                              <span className="global-live-dot" />
+                              {t.live} · {businesses.length} {t.onesOnline}
+                            </span>
+                          </div>
+                          {feedLine && (
+                            <div className="global-feed" aria-live="polite">
+                              <span className="global-feed-pulse" aria-hidden="true" />
+                              <span key={feedIdx} className="global-feed-line">{feedLine}</span>
+                            </div>
+                          )}
+                          <div className="global-sec-head">
+                            <h3 className="global-sec-title">{t.worlds}</h3>
+                          </div>
+                          <div className="world-bar" role="tablist" aria-label={t.worlds}>
+                            <button
+                              className={`world-chip${world === "all" ? " is-active" : ""}`}
+                              onClick={() => setWorld("all")}
+                            >
+                              {t.worldAll}
+                            </button>
+                            {WORLD_KEYS.map((k) => (
+                              <button
+                                key={k}
+                                className={`world-chip${world === k ? " is-active" : ""}`}
+                                onClick={() => setWorld(k)}
+                              >
+                                <span className="world-chip-emoji" aria-hidden="true">{WORLD_EMOJI[k]}</span>
+                                {t[WORLD_LABEL[k]]}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="global-grid">
+                            {worldBiz.map((b) => {
+                              const os = now ? openState(b, now) : null;
+                              return (
+                                <button key={b.id} className="gcard" onClick={() => openBiz(b.id)}>
+                                  <span className="gcard-top">
+                                    <span className="gcard-emoji">{b.emoji}</span>
+                                    {os && (
+                                      <span className={`gcard-status${os.open ? " open" : ""}`}>
+                                        <span className="gcard-dot" aria-hidden="true" />
+                                        {os.open ? t.openNow : t.closedNow}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="gcard-name">
+                                    {b.name}
+                                    {b.ownerKey && ownerKey && b.ownerKey === ownerKey ? " · yours" : ""}
+                                  </span>
+                                  <span className="gcard-cat">{b.category}</span>
+                                </button>
+                              );
+                            })}
+                            <button className="gcard gcard-new" onClick={startCreateBusiness}>
+                              <span className="gcard-emoji">＋</span>
+                              <span className="gcard-name">{t.createBiz}</span>
+                              <span className="gcard-cat">{t.createBizSub}</span>
+                            </button>
+                          </div>
+                          {worldBiz.length === 0 && (
+                            <div className="world-empty">{t.emptyWorld}</div>
+                          )}
+
+                          {/* Processes — your active engagements across the network */}
+                          <div className="global-sec-head with-top">
+                            <h3 className="global-sec-title">{t.processes}</h3>
+                            <span className="global-sec-sub">{t.processesSub}</span>
+                          </div>
+                          <div className="glist">
+                            {processes.map((p) => (
+                              <button key={p.id} className="grow" onClick={() => openUnit(p)}>
+                                <span className="grow-emoji">{p.emoji}</span>
+                                <span className="grow-main">
+                                  <span className="grow-who">{p.title}</span>
+                                  <span className="grow-text">{p.relation}</span>
+                                </span>
+                                {p.unread > 0 && <span className="grow-badge">{p.unread}</span>}
+                              </button>
+                            ))}
+                            {processes.length === 0 && (
+                              <div className="world-empty">{t.nothingHere}</div>
+                            )}
+                          </div>
+
+                          {/* Connections — ONEs you're linked to */}
+                          <div className="global-sec-head with-top">
+                            <h3 className="global-sec-title">{t.connections}</h3>
+                            <span className="global-sec-sub">{t.connectionsSub}</span>
+                          </div>
+                          <div className="gconns">
+                            {businesses.slice(0, 8).map((b) => (
+                              <button key={b.id} className="gconn" onClick={() => openBiz(b.id)}>
+                                <span className="gconn-emoji">{b.emoji}</span>
+                                <span className="gconn-name">{b.name}</span>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Requests — waiting on you */}
+                          <div className="global-sec-head with-top">
+                            <h3 className="global-sec-title">{t.requests}</h3>
+                            <span className="global-sec-sub">{t.requestsSub}</span>
+                          </div>
+                          <div className="glist">
+                            {gRequests.map((r, i) => (
+                              <div key={i} className="grow">
+                                <span className="grow-emoji">{r.emoji}</span>
+                                <span className="grow-main">
+                                  <span className="grow-who">{r.who}</span>
+                                  <span className="grow-text">{r.text}</span>
+                                </span>
+                                <span className="grow-cta" aria-hidden="true">›</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* News — across the network */}
+                          <div className="global-sec-head with-top">
+                            <h3 className="global-sec-title">{t.news}</h3>
+                            <span className="global-sec-sub">{t.newsSub}</span>
+                          </div>
+                          <div className="glist">
+                            {gNews.map((n, i) => (
+                              <div key={i} className="gnews">
+                                <span className="gnews-dot" aria-hidden="true" />
+                                <span className="gnews-text">{n}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="home-center">
+                        <div className={`home-broadcast${!liveBroadcast && bfade ? " is-fading" : ""}`}>
+                          {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
+                        </div>
+                        <AppInput
+                          value={draft}
+                          onChange={setDraft}
+                          onSend={() => send()}
+                          placeholder={t.talkToOne}
+                          caret
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
               ) : (
                 <>
                   <div className="app-chat">
@@ -1726,140 +2186,9 @@ export default function AppHome() {
         </section>
       </div>
 
-      {/* ── PROFILE popup ── */}
-      <Sheet open={openSheet === "profile"} onClose={() => setOpenSheet(null)}>
-        <div className="sheet-body">
-          <div className="sheet-hero">
-            <Orb size={72} />
-            <div className="sheet-title">
-              ONE <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
-            </div>
-            <div className="sheet-sub">{t.repSub}</div>
-          </div>
-
-          <div className="sheet-section">
-            <h4>{t.account}</h4>
-            {user ? (
-              <>
-                <div className="sheet-row">
-                  <span className="r-label">{user.name ?? user.email ?? "Signed in"}</span>
-                  <span className="r-value" style={{ color: "var(--p-ok)", fontWeight: 600 }}>{t.synced}</span>
-                </div>
-                {user.email && user.name && (
-                  <div className="sheet-row">
-                    <span className="r-label" style={{ opacity: 0.6, fontWeight: 400 }}>{user.email}</span>
-                  </div>
-                )}
-                <button
-                  className="sheet-pill ghost"
-                  style={{ width: "100%", marginTop: 6, padding: 11 }}
-                  onClick={doSignOut}
-                >
-                  {t.signOut}
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="sheet-sub" style={{ marginBottom: 10 }}>
-                  {t.signInBlurb}
-                </div>
-                <button className="google-btn" onClick={continueWithGoogle}>
-                  <GoogleG /> {t.continueGoogle}
-                </button>
-                <div className="auth-or">
-                  <span>{t.orMagic}</span>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    className="app-input"
-                    style={{ boxShadow: "none", background: "var(--p-bg)", flex: 1 }}
-                    type="email"
-                    inputMode="email"
-                    placeholder="you@email.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && sendMagicLink()}
-                  />
-                  <button className="sheet-pill blue" style={{ padding: "0 16px" }} onClick={sendMagicLink}>
-                    {t.sendLink}
-                  </button>
-                </div>
-                {authMsg && <div className="auth-msg">{authMsg}</div>}
-              </>
-            )}
-          </div>
-
-          <div className="sheet-section">
-            <h4>{t.identity}</h4>
-            {IDENTITIES.map((id) => (
-              <button
-                key={id.id}
-                className="sheet-row"
-                style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "left" }}
-                onClick={() => {
-                  setActiveIdentityId(id.id);
-                  setOpenSheet(null);
-                }}
-              >
-                <span className="r-label">
-                  {id.emoji} {id.name}
-                </span>
-                <span className="r-value">
-                  {id.role}
-                  {id.id === activeIdentityId ? ` · ${t.active}` : ""}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="sheet-section">
-            <h4>{t.plan}</h4>
-            {plan === "free" ? (
-              <>
-                <div className="sheet-row">
-                  <span className="r-label">{t.onFree}</span>
-                  <span className="r-value">{t.unlockMore}</span>
-                </div>
-                <button
-                  className="sheet-pill blue"
-                  style={{ width: "100%", marginTop: 4, padding: "12px" }}
-                  onClick={() => setOpenSheet("subscription")}
-                >
-                  {t.upgrade}
-                </button>
-              </>
-            ) : (
-              <div className="sheet-row">
-                <span className="r-label">{t.activePlan}</span>
-                <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="sheet-section">
-            <h4>{t.more}</h4>
-            <div className="sheet-row">
-              <span className="r-label">{t.memory}</span>
-              <span className="r-value">{t.memoryVal.replace("{n}", String(PROCESSES.length))}</span>
-            </div>
-            <div className="sheet-row">
-              <span className="r-label">{t.connections}</span>
-              <span className="r-value">{t.connectionsVal}</span>
-            </div>
-            <button
-              className="sheet-row"
-              style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "left" }}
-              onClick={() => setOpenSheet("settings")}
-            >
-              <span className="r-label">{t.settings}</span>
-              <span className="r-value">›</span>
-            </button>
-          </div>
-        </div>
-      </Sheet>
 
       {/* ── SUBSCRIPTION popup ── */}
-      <Sheet open={openSheet === "subscription"} onClose={() => setOpenSheet("profile")}>
+      <Sheet open={openSheet === "subscription"} onClose={() => setOpenSheet(null)}>
         <div className="sheet-body">
           <div className="sheet-hero">
             <div className="sheet-title">{t.upgradeOne}</div>
@@ -1877,7 +2206,7 @@ export default function AppHome() {
                 style={{ width: "100%" }}
                 onClick={() => {
                   setPlan("pro");
-                  setOpenSheet("profile");
+                  setOpenSheet(null);
                 }}
               >
                 {t.choosePro}
@@ -1894,7 +2223,7 @@ export default function AppHome() {
                 style={{ width: "100%" }}
                 onClick={() => {
                   setPlan("max");
-                  setOpenSheet("profile");
+                  setOpenSheet(null);
                 }}
               >
                 {t.chooseMax}
