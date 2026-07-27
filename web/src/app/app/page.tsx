@@ -29,6 +29,7 @@ import {
   type GlobalUnit,
 } from "@/lib/globalUnits";
 import { transcribeAudio, startRealtime, type RealtimeHandle } from "@/lib/voice";
+import { searchWeb } from "@/lib/webSearch";
 import {
   ensureSession,
   saveUnits,
@@ -304,6 +305,7 @@ function AppInput({
   caret = false,
   lang = "en",
   onVoiceTap,
+  voiceOn = true,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -311,6 +313,8 @@ function AppInput({
   placeholder?: string;
   /** Quick tap on the (empty) voice button → start a live voice call. */
   onVoiceTap?: () => void;
+  /** When false, the mic (record + call) is disabled — cost switch. */
+  voiceOn?: boolean;
   /** Home: no placeholder copy at all — just a resting caret, so ONE looks
    *  ready to be spoken to rather than instructing you. (Same as the hero.) */
   caret?: boolean;
@@ -361,6 +365,7 @@ function AppInput({
     if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
   };
   const onVoiceDown = () => {
+    if (!voiceOn) return;
     holdingRef.current = false;
     holdTimer.current = window.setTimeout(() => {
       holdingRef.current = true;
@@ -368,6 +373,7 @@ function AppInput({
     }, 220);
   };
   const onVoiceUp = () => {
+    if (!voiceOn) return;
     if (holdTimer.current) {
       window.clearTimeout(holdTimer.current);
       holdTimer.current = null;
@@ -894,6 +900,7 @@ function UnitDetail({
   onAddConnection,
   onCover,
   onStepImage,
+  imagesOn = true,
 }: {
   p: Process;
   businesses: Business[];
@@ -913,6 +920,8 @@ function UnitDetail({
   onCover?: (procId: string, url: string) => void;
   /** Persist a generated image for a specific step (reusable stock). */
   onStepImage?: (procId: string, stepIndex: number, url: string) => void;
+  /** When false, no AI image generation happens (cost switch). */
+  imagesOn?: boolean;
 }) {
   const sources = unitSources(p);
   const he = lang === "he";
@@ -1006,7 +1015,7 @@ function UnitDetail({
       // photo so there's always a cover.
       const topicKey = `unit:${(p.type ?? "").toLowerCase()}:${p.title.trim().toLowerCase()}`;
       const genPrompt = `A clean, modern, minimal editorial cover image that visually represents the goal: "${p.title}". Calm, tasteful, magazine-quality. No text, no words, no letters, no logos, no watermark.`;
-      const gen = await generateImage(genPrompt, topicKey);
+      const gen = imagesOn ? await generateImage(genPrompt, topicKey) : null;
       if (!alive) return;
       if (gen) {
         setCovers([gen]);
@@ -1051,7 +1060,7 @@ function UnitDetail({
   // (same ai-image function + topic-keyed cache as the cover).
   const [stepBusy, setStepBusy] = useState<number | null>(null);
   const genStepImage = async (i: number, label: string) => {
-    if (stepBusy !== null) return;
+    if (!imagesOn || stepBusy !== null) return;
     setStepBusy(i);
     const key = `step:${(p.type ?? "").toLowerCase()}:${p.title.trim().toLowerCase()}:${label.trim().toLowerCase()}`;
     const prompt = `A clean, minimal illustrative image for the task "${label}" (part of "${p.title}"). Tasteful, no text, no words, no letters, no logos.`;
@@ -1156,7 +1165,7 @@ function UnitDetail({
               {p.stepImages?.[i] ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img className="step-img" src={p.stepImages[i]} alt="" loading="lazy" />
-              ) : (
+              ) : imagesOn ? (
                 <button
                   className="step-img-btn"
                   onClick={() => void genStepImage(i, s.label)}
@@ -1170,7 +1179,7 @@ function UnitDetail({
                     <i className="fi fi-rr-picture" aria-hidden="true" />
                   )}
                 </button>
-              )}
+              ) : null}
             </div>
           );
         })}
@@ -1856,6 +1865,11 @@ export default function AppHome() {
   // Appearance + language. Persisted; dark defaults to the OS preference.
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [lang, setLang] = useState<UILang>("en");
+  // Cost switches — turn the paid AI extras off during testing so they don't
+  // burn credits. Default on; persisted. (Chat text always works.)
+  const [aiImages, setAiImages] = useState(true);
+  const [aiVoice, setAiVoice] = useState(true);
+  const [aiWeb, setAiWeb] = useState(true);
   // ONE mirrors the language the user actually wrote in — not the app's UI
   // setting. So every line ONE composes locally (greetings, plan confirmations,
   // offline fallbacks) follows the message, and never replies in English to a
@@ -1869,6 +1883,9 @@ export default function AppHome() {
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
       else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) setTheme("dark");
       if (savedLang === "he" || savedLang === "en") setLang(savedLang);
+      if (localStorage.getItem("one_ai_images") === "0") setAiImages(false);
+      if (localStorage.getItem("one_ai_voice") === "0") setAiVoice(false);
+      if (localStorage.getItem("one_ai_web") === "0") setAiWeb(false);
     } catch {
       /* private mode — defaults are fine */
     }
@@ -1880,6 +1897,18 @@ export default function AppHome() {
   const applyLang = (l: UILang) => {
     setLang(l);
     try { localStorage.setItem("one_lang", l); } catch {}
+  };
+  const applyAiImages = (v: boolean) => {
+    setAiImages(v);
+    try { localStorage.setItem("one_ai_images", v ? "1" : "0"); } catch {}
+  };
+  const applyAiVoice = (v: boolean) => {
+    setAiVoice(v);
+    try { localStorage.setItem("one_ai_voice", v ? "1" : "0"); } catch {}
+  };
+  const applyAiWeb = (v: boolean) => {
+    setAiWeb(v);
+    try { localStorage.setItem("one_ai_web", v ? "1" : "0"); } catch {}
   };
   const t = PRODUCT_UI[lang];
   const [activeProcess, setActiveProcess] = useState<Process | null>(null);
@@ -1971,6 +2000,13 @@ export default function AppHome() {
   const [voiceMuted, setVoiceMuted] = useState(false);
   const [voiceCaption, setVoiceCaption] = useState("");
   const voiceCallRef = useRef<RealtimeHandle | null>(null);
+  // The call rides along as a movable bubble (not a full-screen takeover) so ONE
+  // keeps working in the product WHILE you talk — drag it anywhere, or collapse
+  // it to just the orb. `voicePos` is null until the first drag (CSS-anchored).
+  const [voicePos, setVoicePos] = useState<{ x: number; y: number } | null>(null);
+  const [voiceMini, setVoiceMini] = useState(false);
+  const voiceBubbleRef = useRef<HTMLDivElement | null>(null);
+  const voiceDragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
   // A voice-call turn (yours or ONE's) becomes a real, persisted chat message —
   // routed to the open unit's thread, or the home chat if none is open.
   const pushCallMsg = (role: "user" | "one", text: string) => {
@@ -1989,7 +2025,7 @@ export default function AppHome() {
     }
   };
   const startVoiceCall = async () => {
-    if (voiceCallRef.current || voiceConnecting) return;
+    if (!aiVoice || voiceCallRef.current || voiceConnecting) return;
     setVoiceConnecting(true);
     setVoiceMuted(false);
     setVoiceSpeaking(false);
@@ -1998,8 +2034,18 @@ export default function AppHome() {
       instructions:
         "You are ONE — a warm, concise personal representative on a live voice call. " +
         "Keep replies short and natural. Match the user's language: reply in Hebrew when they speak Hebrew and English when they speak English, and switch fluidly. Open with a brief spoken hello.",
-      onUserText: (t) => pushCallMsg("user", t),
-      onAssistantText: (t) => pushCallMsg("one", t),
+      // Your spoken turn runs through the SAME pipeline as a typed message, so
+      // ONE actually builds/fills a process while you talk (routed to the open
+      // unit, or the home flow if none). ONE's own spoken words show as the live
+      // caption only — the structured reply lands in the thread from the pipeline.
+      onUserText: (t) => {
+        const clean = t.trim();
+        if (!clean) return;
+        setVoiceCaption(clean);
+        if (activeUnitRef.current) void sendToUnit(clean);
+        else void send(clean);
+      },
+      onAssistantText: (t) => setVoiceCaption(t.trim()),
       onSpeaking: (s) => setVoiceSpeaking(s),
       onClose: () => {
         voiceCallRef.current = null;
@@ -2023,11 +2069,38 @@ export default function AppHome() {
     setVoiceConnecting(false);
     setVoiceSpeaking(false);
     setVoiceCaption("");
+    setVoicePos(null);
+    setVoiceMini(false);
   };
   const toggleVoiceMute = () => {
     const next = !voiceMuted;
     setVoiceMuted(next);
     voiceCallRef.current?.setMuted(next);
+  };
+  // ── Drag the call bubble anywhere on screen (pointer-based, corner-clamped) ──
+  const onBubbleDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Don't start a drag from a control — let the button do its job.
+    if ((e.target as HTMLElement).closest("button")) return;
+    const el = voiceBubbleRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    voiceDragRef.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false };
+    el.setPointerCapture(e.pointerId);
+  };
+  const onBubbleMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = voiceDragRef.current;
+    if (!d) return;
+    d.moved = true;
+    const el = voiceBubbleRef.current;
+    const w = el?.offsetWidth ?? 240;
+    const h = el?.offsetHeight ?? 120;
+    const x = Math.min(Math.max(8, e.clientX - d.dx), window.innerWidth - w - 8);
+    const y = Math.min(Math.max(8, e.clientY - d.dy), window.innerHeight - h - 8);
+    setVoicePos({ x, y });
+  };
+  const onBubbleUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    voiceDragRef.current = null;
+    voiceBubbleRef.current?.releasePointerCapture?.(e.pointerId);
   };
   // Which side of the process thread to show — the whole back-and-forth lives
   // here (you ⇄ ONE ⇄ the other party), and this filters it to one voice.
@@ -3873,6 +3946,38 @@ export default function AppHome() {
     // process. (Skipped when a business is named, above, so ONE still consults
     // that business's ONE for "how much is X at <biz>?".)
     if (isPureQuestion(text)) {
+      // Live web first — for a factual question ONE pulls the CURRENT internet
+      // (prices, dates, availability) with real source links, instead of relying
+      // on stale model knowledge. Off (cost switch) or unavailable → falls
+      // through to ONE's ordinary answer below.
+      if (aiWeb) {
+        const web = await searchWeb(text, msgLang(text));
+        if (web) {
+          setThinking(false);
+          const top = web.citations[0];
+          let host = "";
+          if (top) {
+            try {
+              host = new URL(top.url).hostname.replace(/^www\./, "");
+            } catch {
+              /* keep empty */
+            }
+          }
+          setChat((c) => [
+            ...c,
+            {
+              role: "one",
+              text: web.text,
+              cite: {
+                emoji: "🌐",
+                label: top ? top.title.slice(0, 44) : msgLang(text) === "he" ? "מהאינטרנט" : "From the web",
+                host,
+              },
+            },
+          ]);
+          return;
+        }
+      }
       // Regulated domain? Answer FROM the official source and cite it.
       const src = sourceForText(text);
       const srcHint = src
@@ -4973,33 +5078,45 @@ export default function AppHome() {
   return (
     <main className="product-root" data-theme={theme} dir={lang === "he" ? "rtl" : "ltr"} lang={lang}>
       {(voiceCall || voiceConnecting) && (
-        <div className="voice-call" role="dialog" aria-label={lang === "he" ? "שיחה עם ONE" : "Call with ONE"}>
-          <div className="voice-call-center">
-            <div
-              className={`voice-orb-wrap${voiceSpeaking ? " speaking" : ""}${voiceConnecting ? " connecting" : ""}`}
-            >
-              <Orb size={132} alive faceColor="var(--p-face)" eyeColor="var(--p-bg)" />
+        <div
+          ref={voiceBubbleRef}
+          className={`voice-bubble${voiceSpeaking ? " speaking" : ""}${voiceConnecting ? " connecting" : ""}${voiceMini ? " mini" : ""}`}
+          style={voicePos ? { left: voicePos.x, top: voicePos.y, right: "auto", bottom: "auto" } : undefined}
+          onPointerDown={onBubbleDown}
+          onPointerMove={onBubbleMove}
+          onPointerUp={onBubbleUp}
+          role="dialog"
+          aria-label={lang === "he" ? "שיחה עם ONE" : "Call with ONE"}
+        >
+          <div className="vb-grip" aria-hidden="true" />
+          <div className="vb-main">
+            <div className="vb-orb">
+              <Orb size={voiceMini ? 40 : 54} alive faceColor="var(--p-face)" eyeColor="var(--p-bg)" />
             </div>
-            <div className="voice-call-status">
-              {voiceConnecting
-                ? lang === "he"
-                  ? "מתחבר…"
-                  : "Connecting…"
-                : voiceSpeaking
-                  ? "ONE"
-                  : lang === "he"
-                    ? "מקשיב…"
-                    : "Listening…"}
-            </div>
-            {voiceCaption && !voiceConnecting && (
-              <div className="voice-call-caption" dir="auto">
-                {voiceCaption}
+            {!voiceMini && (
+              <div className="vb-body">
+                <div className="vb-status">
+                  {voiceConnecting
+                    ? lang === "he"
+                      ? "מתחבר…"
+                      : "Connecting…"
+                    : voiceSpeaking
+                      ? "ONE"
+                      : lang === "he"
+                        ? "מקשיב…"
+                        : "Listening…"}
+                </div>
+                {voiceCaption && !voiceConnecting && (
+                  <div className="vb-caption" dir="auto">
+                    {voiceCaption}
+                  </div>
+                )}
               </div>
             )}
           </div>
-          <div className="voice-call-bar">
+          <div className="vb-controls">
             <button
-              className={`vc-btn${voiceMuted ? " off" : ""}`}
+              className={`vb-btn${voiceMuted ? " off" : ""}`}
               onClick={toggleVoiceMute}
               disabled={!voiceCall}
               aria-label={voiceMuted ? (lang === "he" ? "בטל השתקה" : "Unmute") : lang === "he" ? "השתק" : "Mute"}
@@ -5007,7 +5124,14 @@ export default function AppHome() {
               <i className={`fi ${voiceMuted ? "fi-rr-microphone-slash" : "fi-rr-microphone"}`} aria-hidden="true" />
             </button>
             <button
-              className="vc-btn vc-end"
+              className="vb-btn"
+              onClick={() => setVoiceMini((m) => !m)}
+              aria-label={voiceMini ? (lang === "he" ? "הרחב" : "Expand") : lang === "he" ? "מזער" : "Minimize"}
+            >
+              <i className={`fi ${voiceMini ? "fi-rr-angle-up" : "fi-rr-angle-down"}`} aria-hidden="true" />
+            </button>
+            <button
+              className="vb-btn vb-end"
               onClick={endVoiceCall}
               aria-label={lang === "he" ? "סיים שיחה" : "End call"}
             >
@@ -5491,6 +5615,7 @@ export default function AppHome() {
                       }}
                       onSend={sendToUnit}
                       onVoiceTap={startVoiceCall}
+                      voiceOn={aiVoice}
                       placeholder={t.tellChanged}
                       lang={lang}
                     />
@@ -5545,6 +5670,7 @@ export default function AppHome() {
                         ),
                       )
                     }
+                    imagesOn={aiImages}
                   />
                 </aside>
               </div>
@@ -6457,6 +6583,7 @@ export default function AppHome() {
                           onChange={setDraft}
                           onSend={() => send()}
                           onVoiceTap={startVoiceCall}
+                      voiceOn={aiVoice}
                           placeholder={t.talkToOne}
                           caret
                           lang={lang}
@@ -6673,6 +6800,7 @@ export default function AppHome() {
                       }}
                       onSend={() => send()}
                       onVoiceTap={startVoiceCall}
+                      voiceOn={aiVoice}
                       placeholder={t.talkToOne}
                       lang={lang}
                     />
@@ -6847,6 +6975,47 @@ export default function AppHome() {
                 </button>
                 <button className={theme === "dark" ? "on" : ""} onClick={() => applyTheme("dark")}>
                   {t.dark}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="sheet-section">
+            <h4>{lang === "he" ? "בינה ועלויות" : "AI & cost"}</h4>
+            <p className="settings-hint">
+              {lang === "he"
+                ? "כבה כדי לחסוך בעלויות בזמן בדיקות — טקסט ממשיך לעבוד."
+                : "Turn off to save cost while testing — text still works."}
+            </p>
+            <div className="sheet-row">
+              <span className="r-label">{lang === "he" ? "תמונות שנוצרות" : "Generated images"}</span>
+              <div className="seg2">
+                <button className={aiImages ? "on" : ""} onClick={() => applyAiImages(true)}>
+                  {lang === "he" ? "פעיל" : "On"}
+                </button>
+                <button className={!aiImages ? "on" : ""} onClick={() => applyAiImages(false)}>
+                  {lang === "he" ? "כבוי" : "Off"}
+                </button>
+              </div>
+            </div>
+            <div className="sheet-row">
+              <span className="r-label">{lang === "he" ? "שיחת קול" : "Voice call"}</span>
+              <div className="seg2">
+                <button className={aiVoice ? "on" : ""} onClick={() => applyAiVoice(true)}>
+                  {lang === "he" ? "פעיל" : "On"}
+                </button>
+                <button className={!aiVoice ? "on" : ""} onClick={() => applyAiVoice(false)}>
+                  {lang === "he" ? "כבוי" : "Off"}
+                </button>
+              </div>
+            </div>
+            <div className="sheet-row">
+              <span className="r-label">{lang === "he" ? "מידע חי מהאינטרנט" : "Live web info"}</span>
+              <div className="seg2">
+                <button className={aiWeb ? "on" : ""} onClick={() => applyAiWeb(true)}>
+                  {lang === "he" ? "פעיל" : "On"}
+                </button>
+                <button className={!aiWeb ? "on" : ""} onClick={() => applyAiWeb(false)}>
+                  {lang === "he" ? "כבוי" : "Off"}
                 </button>
               </div>
             </div>

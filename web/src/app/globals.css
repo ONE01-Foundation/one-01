@@ -3046,6 +3046,13 @@ footer {
   color: var(--p-text);
   box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.25);
 }
+/* Small explanatory caption under a settings group heading. */
+.settings-hint {
+  margin: -4px 0 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--p-text) 52%, transparent);
+}
 
 /* Floating pill header on /app — mirrors the landing nav so the product reads
    as part of the same site. Floats in the space above the app card; hidden on
@@ -6206,48 +6213,75 @@ button.conn-card:hover {
   }
 }
 
-/* ─── Live voice call — a full-screen call view with the ONE orb ──────────── */
-.voice-call {
+/* ─── Live voice call — a movable bubble that floats OVER the product ───────
+   The call never takes the screen: it rides along as a draggable card so ONE
+   keeps working (building/filling processes) while you talk. Anchored bottom-end
+   until you drag it; collapses to just the orb with the minimize control. */
+.voice-bubble {
   position: fixed;
-  inset: 0;
-  z-index: 300;
+  bottom: 20px;
+  inset-inline-end: 20px;
+  z-index: 400;
+  width: 264px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--p-bg);
-  padding: 0 0 42px;
-  animation: chat-rise 260ms ease both;
+  gap: 10px;
+  padding: 12px 14px 12px;
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  border-radius: 20px;
+  box-shadow: 0 18px 48px -12px rgba(0, 0, 0, 0.34), 0 4px 14px rgba(0, 0, 0, 0.12);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  animation: chat-rise 240ms ease both;
 }
-.voice-call-center {
-  flex: 1;
+.voice-bubble:active {
+  cursor: grabbing;
+}
+.voice-bubble.mini {
+  width: auto;
+}
+/* A subtle grab handle so it reads as movable. */
+.vb-grip {
+  width: 34px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--p-line);
+  margin: -2px auto 0;
+}
+.voice-bubble.mini .vb-grip {
+  display: none;
+}
+.vb-main {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
+  gap: 12px;
+  min-width: 0;
 }
-.voice-orb-wrap {
+.vb-orb {
   position: relative;
+  flex: none;
   border-radius: 50%;
-  padding: 12px;
   display: grid;
   place-items: center;
+  padding: 4px;
 }
-.voice-orb-wrap::before {
+.vb-orb::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 3px solid var(--p-ok, #22c55e);
-  opacity: 0.5;
+  border: 2.5px solid var(--p-ok, #22c55e);
+  opacity: 0.45;
   transition: opacity 240ms ease;
 }
-.voice-orb-wrap.speaking::before {
+.voice-bubble.speaking .vb-orb::before {
   opacity: 1;
   animation: vc-ring 1s ease-in-out infinite;
 }
-.voice-orb-wrap.connecting::before {
+.voice-bubble.connecting .vb-orb::before {
   border-color: color-mix(in srgb, var(--p-ok, #22c55e) 40%, transparent);
   border-top-color: var(--p-ok, #22c55e);
   animation: vc-spin 0.9s linear infinite;
@@ -6259,8 +6293,8 @@ button.conn-card:hover {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-ok, #22c55e) 45%, transparent);
   }
   50% {
-    transform: scale(1.06);
-    box-shadow: 0 0 0 14px color-mix(in srgb, var(--p-ok, #22c55e) 0%, transparent);
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--p-ok, #22c55e) 0%, transparent);
   }
 }
 @keyframes vc-spin {
@@ -6268,58 +6302,69 @@ button.conn-card:hover {
     transform: rotate(360deg);
   }
 }
-.voice-call-status {
-  font-size: 15px;
+.vb-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.vb-status {
+  font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.02em;
   color: var(--p-text-3);
 }
-.voice-call-caption {
-  max-width: min(88%, 460px);
-  text-align: center;
-  font-size: 16px;
-  line-height: 1.45;
+.vb-caption {
+  font-size: 13.5px;
+  line-height: 1.4;
   color: var(--p-text);
-  animation: chat-rise 200ms ease both;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.voice-call-bar {
+.vb-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
-  background: var(--p-surface);
-  border: 1px solid var(--p-line);
-  border-radius: 999px;
-  padding: 12px 18px;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.14);
+  justify-content: center;
+  gap: 10px;
 }
-.vc-btn {
-  width: 56px;
-  height: 56px;
+.voice-bubble.mini .vb-controls {
+  gap: 8px;
+}
+.vb-btn {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
   display: grid;
   place-items: center;
-  font-size: 20px;
+  font-size: 15px;
   background: var(--p-bg);
   color: var(--p-text);
   transition: transform 120ms ease, background 140ms ease;
 }
-.vc-btn:hover {
+.vb-btn:hover {
   background: var(--p-line);
 }
-.vc-btn:active {
-  transform: scale(0.94);
+.vb-btn:active {
+  transform: scale(0.92);
 }
-.vc-btn.off {
+.vb-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.vb-btn.off {
   background: color-mix(in srgb, #e5484d 16%, var(--p-bg));
   color: #e5484d;
 }
-.vc-end {
+.vb-end {
   background: #e5484d;
   color: #fff;
 }
-.vc-end:hover {
+.vb-end:hover {
   background: #d13b40;
 }
 
