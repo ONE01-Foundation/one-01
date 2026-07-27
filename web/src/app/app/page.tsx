@@ -2042,6 +2042,59 @@ export default function AppHome() {
     setAuthMsg(null);
   };
 
+  // Remove a profile and everything scoped to it. Safe by design: never delete
+  // the last profile, and confirm first since it drops that profile's
+  // processes, requests and reminders.
+  const deleteIdentity = (id: string) => {
+    if (identities.length <= 1) return;
+    const target = identities.find((i) => i.id === id);
+    const label = target ? `${target.emoji} ${target.name}` : "";
+    const ok =
+      typeof window === "undefined" ||
+      window.confirm(
+        lang === "he"
+          ? `למחוק את הפרופיל ${label}? כל התהליכים, הבקשות והתזכורות שלו יימחקו.`
+          : `Delete the ${label} profile? Its processes, requests and reminders are removed.`,
+      );
+    if (!ok) return;
+    const next = identities.filter((i) => i.id !== id);
+    persistIdentities(next);
+    setUnits((list) => list.filter((u) => u.identityId !== id));
+    persistRequests(requests.filter((r) => r.fromProfileId !== id && r.toProfileId !== id));
+    persistReminders(reminders.filter((r) => r.identityId !== id));
+    if (activeIdentityId === id) setActiveIdentityId(next[0].id);
+  };
+
+  // Start over: clear the demo profiles + all local workspace data, leaving one
+  // clean personal profile (named after the signed-in account when there is
+  // one). Keeps your preferences (language, theme) and saved memory facts.
+  const startFresh = () => {
+    const ok =
+      typeof window === "undefined" ||
+      window.confirm(
+        lang === "he"
+          ? "להתחיל מחדש? כל הפרופילים, התהליכים והחיבורים המקומיים יימחקו ותישאר עם פרופיל אישי אחד נקי."
+          : "Start fresh? All local profiles, processes and connections are cleared, leaving one clean personal profile.",
+      );
+    if (!ok) return;
+    const nm = user?.name || user?.email?.split("@")[0] || (lang === "he" ? "אני" : "Me");
+    const fresh: Identity = {
+      id: `id_${Date.now()}`,
+      name: nm,
+      role: "Personal",
+      emoji: "👤",
+      kind: "personal",
+    };
+    persistIdentities([fresh]);
+    setActiveIdentityId(fresh.id);
+    setUnits([]);
+    persistRequests([]);
+    persistReminders([]);
+    persistContacts([]);
+    setChat([]);
+    setOpenSheet(null);
+  };
+
   const followerName = user?.name ?? user?.email ?? "A customer";
 
   const startCreateBusiness = () => {
@@ -5228,21 +5281,64 @@ export default function AppHome() {
                       <div className="sheet-section">
                         <h4>{t.identity}</h4>
                         {identities.map((id) => (
-                          <button
+                          <div
                             key={id.id}
                             className="sheet-row"
-                            style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "start" }}
-                            onClick={() => setActiveIdentityId(id.id)}
+                            style={{ display: "flex", alignItems: "center", gap: 6 }}
                           >
-                            <span className="r-label">
-                              {id.emoji} {id.name}
-                            </span>
-                            <span className="r-value">
-                              {id.role}
-                              {id.id === activeIdentityId ? ` · ${t.active}` : ""}
-                            </span>
-                          </button>
+                            <button
+                              style={{
+                                flex: 1,
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: 8,
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                textAlign: "start",
+                                padding: 0,
+                                font: "inherit",
+                                color: "inherit",
+                              }}
+                              onClick={() => setActiveIdentityId(id.id)}
+                            >
+                              <span className="r-label">
+                                {id.emoji} {id.name}
+                              </span>
+                              <span className="r-value">
+                                {id.role}
+                                {id.id === activeIdentityId ? ` · ${t.active}` : ""}
+                              </span>
+                            </button>
+                            {identities.length > 1 && (
+                              <button
+                                aria-label={lang === "he" ? "מחק פרופיל" : "Delete profile"}
+                                title={lang === "he" ? "מחק פרופיל" : "Delete profile"}
+                                onClick={() => deleteIdentity(id.id)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "#DC2626",
+                                  padding: 6,
+                                  borderRadius: 8,
+                                  lineHeight: 0,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <i className="fi fi-rr-trash" aria-hidden="true" />
+                              </button>
+                            )}
+                          </div>
                         ))}
+                        <button
+                          className="sheet-pill ghost"
+                          style={{ width: "100%", marginTop: 6, padding: 10 }}
+                          onClick={() => setOpenSheet("newProfile")}
+                        >
+                          + {t.newProfile}
+                        </button>
                       </div>
 
                       <div className="sheet-section">
@@ -6287,6 +6383,16 @@ export default function AppHome() {
                 <span className="r-value">›</span>
               </button>
             )}
+            <button
+              className="sheet-row"
+              style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "left" }}
+              onClick={startFresh}
+            >
+              <span className="r-label" style={{ color: "#DC2626" }}>
+                {lang === "he" ? "התחל מחדש — מחק פרופילים ונתונים" : "Start fresh — clear profiles & data"}
+              </span>
+              <span className="r-value">›</span>
+            </button>
           </div>
           <div className="sheet-section">
             <Link href="/" className="sheet-pill ghost" style={{ display: "inline-block" }}>
