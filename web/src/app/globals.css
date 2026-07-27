@@ -3734,13 +3734,15 @@ footer {
   font-size: 14px;
   color: var(--p-text-3);
 }
-/* Upgrade — outline at rest, fills solid on hover. */
+/* Upgrade — outline at rest, fills to a legible accent on hover. Uses the blue
+   accent (not --p-face, which is near-white in dark mode → white-on-white). */
 .app-nav-upgrade {
   border-color: color-mix(in srgb, var(--p-text) 26%, transparent);
   background: transparent;
+  color: var(--p-text);
 }
 .app-nav-upgrade:hover {
-  background: var(--p-face);
+  background: var(--p-blue);
   border-color: transparent;
   color: #fff;
 }
@@ -3936,6 +3938,35 @@ footer {
 .drawer-profile.active {
   background: color-mix(in srgb, var(--p-text) 7%, transparent);
 }
+/* Active-profile row wraps an edit button that reveals on hover. */
+.drawer-profile-wrap {
+  position: relative;
+}
+.drawer-profile-edit {
+  position: absolute;
+  inset-inline-end: 38px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--p-text) 8%, transparent);
+  color: var(--p-text-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+.drawer-profile-wrap:hover .drawer-profile-edit,
+.drawer-profile-edit:focus-visible {
+  opacity: 1;
+}
+.drawer-profile-edit:hover {
+  background: color-mix(in srgb, var(--p-text) 15%, transparent);
+  color: var(--p-text);
+}
 .drawer-profile-emoji {
   font-size: 19px;
   flex-shrink: 0;
@@ -4047,9 +4078,70 @@ footer {
   place-items: center;
   border-radius: 999px;
   background: var(--p-face);
-  color: #fff;
+  color: var(--p-bg);
   font-size: 11px;
   font-weight: 700;
+  flex-shrink: 0;
+}
+/* A process row is a container: a clickable open-area + a hover ⋮ menu. */
+.drawer-process {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 11px;
+  transition: background 120ms ease;
+}
+.drawer-process:hover {
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+}
+.drawer-process-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 8px;
+  border: none;
+  background: transparent;
+  color: var(--p-text);
+  font-family: var(--sans);
+  text-align: start;
+  cursor: pointer;
+}
+/* An updated process (sorted to the top) gets a small accent dot. */
+.drawer-process.has-update .drawer-process-title::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  background: var(--p-blue, #2f6df6);
+  vertical-align: middle;
+}
+/* ⋮ menu — hidden until the row is hovered (or the button focused). */
+.drawer-process-menu {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  margin-inline-end: 4px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--p-text-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.drawer-process:hover .drawer-process-menu,
+.drawer-process-menu:focus-visible {
+  opacity: 1;
+}
+.drawer-process-menu:hover {
+  background: color-mix(in srgb, var(--p-text) 10%, transparent);
+  color: var(--p-text);
 }
 .drawer-empty {
   padding: 6px 8px;

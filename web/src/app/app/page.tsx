@@ -482,6 +482,8 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     upgrade: "Upgrade",
     tempChat: "Temporary chat",
     exitTemp: "Exit temporary chat",
+    options: "Options",
+    editProfile: "Edit profile",
     tempTag: "Temporary chat · nothing is saved",
     tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
@@ -579,6 +581,8 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     upgrade: "שדרוג",
     tempChat: "צ'אט זמני",
     exitTemp: "צא מצ'אט זמני",
+    options: "אפשרויות",
+    editProfile: "עריכת פרופיל",
     tempTag: "צ'אט זמני · שום דבר לא נשמר",
     tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
@@ -1481,6 +1485,10 @@ export default function AppHome() {
     setActiveProcess(p);
     setFocusId(p.id);
     setUnitMenuOpen(false);
+    // Opening it counts as seeing it — clear the unread badge.
+    if (p.unread > 0) {
+      setUnits((list) => list.map((u) => (u.id === p.id ? { ...u, unread: 0 } : u)));
+    }
     // Restore the saved transcript if this process has one; otherwise greet.
     const stored = units.find((u) => u.id === p.id)?.chat;
     setUnitChat(
@@ -1494,6 +1502,11 @@ export default function AppHome() {
           ],
     );
     closeDrawerOnMobile();
+  };
+  // Open a process straight to its options (⋮ on a drawer row / long-press).
+  const openUnitOptions = (p: Process) => {
+    openUnit(p);
+    setUnitMenuOpen(true);
   };
   const closeUnit = () => {
     setActiveProcess(null);
@@ -1696,7 +1709,11 @@ export default function AppHome() {
     const applyStructured = () => {
       if (res.process) upsert(res.process);
       if (res.broadcast) setLiveBroadcast(res.broadcast);
-      if (res.outreach && res.process && !outreachDoneRef.current.has(res.process.id)) {
+      // Outreach ("the provider's ONE got back to me") belongs to the moment a
+      // process is CREATED — never on follow-up messages to one that already
+      // exists, or it fires the same fake reply again on every turn. In a unit
+      // chat `focus` is always the existing process, so it's suppressed here.
+      if (!focus && res.outreach && res.process && !outreachDoneRef.current.has(res.process.id)) {
         const targetId = res.process.id;
         const o = res.outreach;
         outreachDoneRef.current.add(targetId);
@@ -2066,18 +2083,32 @@ export default function AppHome() {
               <div className="drawer-label">{t.profiles}</div>
               {/* Active profile — click to reveal the others (they also reveal
                   on hover, like a little drawer). */}
-              <button
-                className="drawer-profile active"
-                onClick={() => setProfilesOpen((v) => !v)}
-                aria-expanded={profilesOpen}
-              >
-                <span className="drawer-profile-emoji">{identity.emoji}</span>
-                <span className="drawer-profile-text">
-                  <span className="drawer-profile-name">{identity.name}</span>
-                  <span className="drawer-profile-role">{identity.role}</span>
-                </span>
-                <i className="fi fi-rr-angle-small-down drawer-profile-caret" aria-hidden="true" />
-              </button>
+              <div className="drawer-profile-wrap">
+                <button
+                  className="drawer-profile active"
+                  onClick={() => setProfilesOpen((v) => !v)}
+                  aria-expanded={profilesOpen}
+                >
+                  <span className="drawer-profile-emoji">{identity.emoji}</span>
+                  <span className="drawer-profile-text">
+                    <span className="drawer-profile-name">{identity.name}</span>
+                    <span className="drawer-profile-role">{identity.role}</span>
+                  </span>
+                  <i className="fi fi-rr-angle-small-down drawer-profile-caret" aria-hidden="true" />
+                </button>
+                {/* Reveals on hover — jumps straight to the profile canvas. */}
+                <button
+                  className="drawer-profile-edit"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openProfile();
+                  }}
+                  aria-label={t.editProfile}
+                  title={t.editProfile}
+                >
+                  <i className="fi fi-rr-pencil" aria-hidden="true" />
+                </button>
+              </div>
               <div className="drawer-profiles-more">
                 <div className="drawer-profiles-more-inner">
                   {IDENTITIES.filter((id) => id.id !== activeIdentityId).map((id) => (
@@ -2106,29 +2137,49 @@ export default function AppHome() {
 
             <div className="drawer-section">
               <div className="drawer-label">{t.processes}</div>
-              {processes.map((p) => (
-                <button
-                  key={p.id}
-                  className="drawer-row drawer-process"
-                  onClick={() => openUnit(p)}
-                  title={`${p.title} · ${p.relation}`}
-                >
-                  <span className="drawer-process-emoji">{p.emoji}</span>
-                  <span className="drawer-process-main">
-                    <span className="drawer-process-title">{p.title}</span>
-                    <span className="drawer-process-sub">
-                      {p.relation}
-                      {p.steps.length > 0 && (
-                        <>
-                          {" · "}
-                          {p.steps.filter((_, i) => isStepDone(p, i)).length}/{p.steps.length}
-                        </>
-                      )}
-                    </span>
-                  </span>
-                  {p.unread > 0 && <span className="drawer-process-badge">{p.unread}</span>}
-                </button>
-              ))}
+              {[...processes]
+                .sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0))
+                .map((p) => (
+                  <div
+                    key={p.id}
+                    className={`drawer-process${p.unread > 0 ? " has-update" : ""}`}
+                    title={`${p.title} · ${p.relation}`}
+                  >
+                    <button className="drawer-process-open" onClick={() => openUnit(p)}>
+                      <span className="drawer-process-emoji">{p.emoji}</span>
+                      <span className="drawer-process-main">
+                        <span className="drawer-process-title">{p.title}</span>
+                        <span className="drawer-process-sub">
+                          {p.relation}
+                          {p.steps.length > 0 && (
+                            <>
+                              {" · "}
+                              {p.steps.filter((_, i) => isStepDone(p, i)).length}/{p.steps.length}
+                            </>
+                          )}
+                          {p.time && (
+                            <>
+                              {" · "}
+                              {p.time}
+                            </>
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                    {p.unread > 0 && <span className="drawer-process-badge">{p.unread}</span>}
+                    <button
+                      className="drawer-process-menu"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openUnitOptions(p);
+                      }}
+                      aria-label={t.options}
+                      title={t.options}
+                    >
+                      <i className="fi fi-rr-menu-dots-vertical" aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
               {processes.length === 0 && (
                 <div className="drawer-empty">
                   <span>{t.nothingHere}</span>
