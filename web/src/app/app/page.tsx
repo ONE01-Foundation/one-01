@@ -675,6 +675,69 @@ function unitImageTerms(p: Process): string[] {
   return Array.from(new Set(terms)).slice(0, 4);
 }
 
+// A broad, image-friendly topic for a unit — Wikipedia rarely has an article for
+// a ONE-written action title like "Organize Apartment Move", but Wikimedia
+// Commons has thousands of photos for the KIND of thing it is. Map the process
+// to a category keyword so the cover always has something on-topic to show.
+const UNIT_IMAGE_CATEGORY: { re: RegExp; q: string }[] = [
+  { re: /\b(mov(e|ing)|relocat|apartment|flat|tenant|lease)\b|דיר|מעבר|שכיר/i, q: "living room interior" },
+  { re: /\b(trip|travel|flight|vacation|holiday|tour|abroad|hotel)\b|טיול|חופש|נסיע|טיס/i, q: "tropical beach coastline" },
+  { re: /\b(learn|stud|course|class|lesson|tutor|exam|skill|language)\b|למד|קורס|שיעור|מבחן|תרגול/i, q: "open book library" },
+  { re: /\b(driv|licen[cs]e|car|vehicle)\b|רישיון|נהיג|רכב|מכונית/i, q: "highway car sunset" },
+  { re: /\b(fitness|weight|gym|workout|run|diet|muscle|health goal)\b|כושר|משקל|אימון|דיאט|שריר/i, q: "gym dumbbell training" },
+  { re: /\b(wedding|marri|engag|bride|groom)\b|חתונ|נישואי|אירוסי/i, q: "wedding bride bouquet" },
+  { re: /\b(job|career|cv|resume|interview|hir|employ)\b|עבוד|קריירה|ראיון|קורות חיים/i, q: "modern office desk laptop" },
+  { re: /\b(passport|visa|immigrat|citizen)\b|דרכון|ויזה|הגיר|אזרח/i, q: "passport airport departure" },
+  { re: /\b(doctor|medical|clinic|hospital|dentist|surg|therap)\b|רופא|בריאות|מרפאה|בית חולים|טיפול/i, q: "stethoscope medical clinic" },
+  { re: /\b(tax|account|budget|invoice|loan|mortgage|financ|salary)\b|מס|חשבונ|תקציב|הלווא|משכנת|כספ/i, q: "calculator coins desk" },
+  { re: /\b(renovat|remodel|home improve|furnitur|kitchen|bathroom)\b|שיפוץ|ריהוט|מטבח/i, q: "modern kitchen interior" },
+  { re: /\b(baby|newborn|child|kid|nursery|parent)\b|תינוק|ילד|הורות/i, q: "baby nursery crib" },
+  { re: /\b(pet|dog|cat|puppy|kitten|vet)\b|חיית מחמד|כלב|חתול/i, q: "dog park outdoor" },
+  { re: /\b(event|party|celebrat|birthday|conference)\b|אירוע|מסיב|כנס|יום הולדת/i, q: "birthday balloons celebration" },
+  { re: /\b(business|client|lead|startup|company|market)\b|עסק|לקוח|חברה|שיווק/i, q: "business meeting office table" },
+  { re: /\b(food|restaurant|cook|recipe|meal|cater)\b|אוכל|מסעד|בישול|מתכון/i, q: "restaurant food plate" },
+];
+function unitCategoryQuery(p: Process): string {
+  const hay = `${p.title} ${p.type ?? ""} ${p.summary ?? ""}`;
+  const hit = UNIT_IMAGE_CATEGORY.find((c) => c.re.test(hay));
+  if (hit) return hit.q;
+  // No category — fall back to the cleaned title as a plain search.
+  return unitImageTerms(p)[0] ?? p.title;
+}
+
+// Wikimedia Commons image search — keyless + CORS-friendly (origin=*), with far
+// broader coverage than an article summary. Returns up to `limit` landscape
+// thumbnails for a topic. Silent (empty) on any miss.
+async function commonsImages(query: string, limit = 3): Promise<string[]> {
+  // Skip scanned artwork / diagrams / heraldry that read as "old" not "photo".
+  const NON_PHOTO =
+    /painting|drawing|sketch|engrav|lithograph|etching|portrait of|\bmap\b|diagram|chart|logo|icon|coat[_ ]of[_ ]arms|\bseal\b|\bflag\b|stamp|poster|illustration|manuscript|fresco|mural/i;
+  try {
+    const url =
+      "https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*" +
+      "&generator=search&gsrnamespace=6&gsrlimit=12&gsrsearch=" +
+      encodeURIComponent(`filetype:bitmap ${query}`) +
+      "&prop=imageinfo&iiprop=url&iiurlwidth=1000";
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const j = (await res.json()) as {
+      query?: { pages?: Record<string, { title?: string; imageinfo?: { thumburl?: string }[] }> };
+    };
+    const pages = j.query?.pages ? Object.values(j.query.pages) : [];
+    const photos = pages
+      .filter((pg) => !NON_PHOTO.test(pg.title ?? ""))
+      .map((pg) => pg.imageinfo?.[0]?.thumburl)
+      .filter((u): u is string => typeof u === "string");
+    // Fall back to unfiltered if the filter left us with nothing.
+    const all = pages
+      .map((pg) => pg.imageinfo?.[0]?.thumburl)
+      .filter((u): u is string => typeof u === "string");
+    return (photos.length ? photos : all).slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 // Hebrew for the details card — section headers, plus lookups that translate the
 // common machine-written metric labels / values / quick-actions so a Hebrew card
 // doesn't read half-English. Unknown terms fall back to their original text.
@@ -809,12 +872,19 @@ function UnitDetail({
     let alive = true;
     setCovers([]);
     setCoverIdx(0);
-    Promise.all(unitImageTerms(p).map((tm) => wikiThumbnail(tm)))
-      .then((res) => {
-        if (!alive) return;
-        setCovers(Array.from(new Set(res.filter(Boolean) as string[])));
-      })
-      .catch(() => {});
+    (async () => {
+      // Named topics first (a "Krav Maga" / "Santorini" article photo); if the
+      // title is a generic action phrase Wikipedia can't match, fall back to a
+      // Wikimedia Commons search for the KIND of process, so there's always an
+      // on-topic cover.
+      const wiki = (await Promise.all(unitImageTerms(p).map((tm) => wikiThumbnail(tm)))).filter(
+        Boolean,
+      ) as string[];
+      let urls = wiki;
+      if (urls.length === 0) urls = await commonsImages(unitCategoryQuery(p));
+      if (!alive) return;
+      setCovers(Array.from(new Set(urls)).slice(0, 3));
+    })().catch(() => {});
     return () => {
       alive = false;
     };
