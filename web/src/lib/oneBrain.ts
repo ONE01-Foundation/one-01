@@ -25,14 +25,16 @@ export type ChatMsg = {
   quiz?: { options: string[]; answer: number };
   /** An illustrative image URL (e.g. a Wikipedia thumbnail) shown in the bubble. */
   image?: string;
-  /** Action chips — enable a capability, prompt an upgrade, or share a memory fact. */
+  /** Action chips — enable a capability, upgrade, share a fact, or route into a process. */
   actions?: {
     label: string;
-    kind: "enableCap" | "upgrade" | "shareMem";
+    kind: "enableCap" | "upgrade" | "shareMem" | "routeProcess";
     cap?: string;
     run?: string;
     /** For kind==="shareMem": the MEMORY_CATALOG key this chip grants for the process. */
     mem?: string;
+    /** For kind==="routeProcess": the process id to open and continue the ask inside. */
+    proc?: string;
   }[];
 };
 

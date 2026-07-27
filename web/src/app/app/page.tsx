@@ -737,6 +737,7 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     permPrivate: "Private",
     memPulled: "Pulled from your memory",
     memShare: "Share for this",
+    routeInto: "Continue in ",
     tempTag: "Temporary chat · nothing is saved",
     tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
@@ -858,6 +859,7 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     permPrivate: "פרטי",
     memPulled: "נשלף מהזיכרון שלך",
     memShare: "שתף לצורך זה",
+    routeInto: "המשך ב־",
     tempTag: "צ'אט זמני · שום דבר לא נשמר",
     tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
@@ -1218,6 +1220,28 @@ export default function AppHome() {
     return lang === "he"
       ? `פרטים שהמשתמש שיתף איתך בחופשיות (השתמש בהם בטבעיות, בלי לבקש שוב): ${open.join("; ")}.`
       : `Facts the user has shared openly (use them naturally, don't re-ask): ${open.join("; ")}.`;
+  };
+  // Find the existing process a home-chat message most plausibly belongs to, by
+  // overlap between the message and the process's title/relation words. Powers
+  // the "continue in <process>" routing chip — the home chat is the front door,
+  // the process is where scoped, persisted work actually happens.
+  const ROUTE_STOP = new Set([
+    "the", "a", "an", "for", "to", "my", "me", "on", "of", "and", "is", "in", "with", "about",
+    "את", "של", "לי", "על", "עם", "זה", "מה", "איך", "יש",
+  ]);
+  const matchProcessForText = (text: string): Process | null => {
+    const low = text.toLowerCase();
+    let best: { p: Process; score: number } | null = null;
+    for (const p of processes) {
+      const words = `${p.title} ${p.relation ?? ""}`
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((w) => w.length > 2 && !ROUTE_STOP.has(w));
+      let score = 0;
+      for (const w of words) if (low.includes(w)) score += 1;
+      if (score > 0 && (!best || score > best.score)) best = { p, score };
+    }
+    return best ? best.p : null;
   };
   // Live quiz (the "Quiz teaching" capability). Null when no quiz is running.
   const [quiz, setQuiz] = useState<{
@@ -1920,13 +1944,24 @@ export default function AppHome() {
   // Run an action chip from a ONE message (enable a capability, or upgrade).
   const runChatAction = (a: {
     label: string;
-    kind: "enableCap" | "upgrade" | "shareMem";
+    kind: "enableCap" | "upgrade" | "shareMem" | "routeProcess";
     cap?: string;
     run?: string;
     mem?: string;
+    proc?: string;
   }) => {
     if (a.kind === "upgrade") {
       setOpenSheet("subscription");
+      return;
+    }
+    // Route the ask into the matching process: open it and continue the
+    // conversation there, scoped and saved — not lost in the home chat.
+    if (a.kind === "routeProcess" && a.proc) {
+      const p = processes.find((u) => u.id === a.proc);
+      if (p) {
+        openUnit(p);
+        if (a.run) void sendToUnit(a.run, p);
+      }
       return;
     }
     if (a.kind === "enableCap" && a.cap) {
@@ -2079,7 +2114,27 @@ export default function AppHome() {
       ];
       const reply = await invokeAiChat(messages, { maxTokens: 220 });
       setThinking(false);
-      setChat((c) => [...c, { role: "one", text: reply, chips: suggestChips(reply, lang) }]);
+      // If the ask wasn't itself a new/updated process but clearly belongs to an
+      // existing one, offer to continue it there — scoped and saved — instead of
+      // letting the thread live only in the ephemeral home chat.
+      const routeTo = !res.process ? matchProcessForText(text) : null;
+      setChat((c) => [
+        ...c,
+        routeTo
+          ? {
+              role: "one",
+              text: reply,
+              actions: [
+                {
+                  label: `▸ ${routeTo.emoji} ${t.routeInto}${routeTo.title}`,
+                  kind: "routeProcess" as const,
+                  proc: routeTo.id,
+                  run: text,
+                },
+              ],
+            }
+          : { role: "one", text: reply, chips: suggestChips(reply, lang) },
+      ]);
       applyStructured();
       // A brand-new process gets a tailored multi-stage plan a beat later.
       if (isNewProcess && res.process) void enrichProcessPlan(res.process, text);
@@ -2362,15 +2417,18 @@ export default function AppHome() {
   };
 
   // Chat scoped to the open unit — every reply's changes land on the card beside.
-  const sendToUnit = async (override?: string) => {
-    if (!activeProcess) return;
+  // `target` lets a caller (e.g. home→process routing) send into a specific unit
+  // without waiting for setActiveProcess to flush through React state.
+  const sendToUnit = async (override?: string, target?: Process) => {
+    const proc = target ?? activeProcess;
+    if (!proc) return;
     const text = (override ?? unitDraft).trim();
     if (!text) return;
     const priorChat = unitChat; // snapshot the transcript for the AI, pre-append
     setUnitChat((c) => [...c, { role: "user", text }]);
     setUnitDraft("");
     setUnitThinking(true);
-    const focus = units.find((u) => u.id === activeProcess.id) ?? null;
+    const focus = units.find((u) => u.id === proc.id) ?? null;
     const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus });
 
     const applyStructured = () => {
@@ -2395,7 +2453,7 @@ export default function AppHome() {
     try {
       const done = focus ? focus.steps.filter((_, i) => isStepDone(focus, i)).length : 0;
       const total = focus ? focus.steps.length : 0;
-      const scopeExtra = `You are working on this specific process for them: "${activeProcess.title}" (${activeProcess.relation}${total ? `, ${done}/${total} steps done` : ""}). Keep the reply scoped to moving THIS process forward.`;
+      const scopeExtra = `You are working on this specific process for them: "${proc.title}" (${proc.relation}${total ? `, ${done}/${total} steps done` : ""}). Keep the reply scoped to moving THIS process forward.`;
       const extra = [scopeExtra, memoryContext()].filter(Boolean).join(" ");
       const messages: AiChatMessage[] = [
         { role: "system", content: oneSystemPrompt(lang, extra) },
@@ -2410,7 +2468,7 @@ export default function AppHome() {
       setUnitChat((c) => [...c, { role: "one", text: reply, chips: suggestChips(reply, lang) }]);
       applyStructured();
       // Act, don't just talk: if the message named a time, book it into the unit.
-      const booked = advanceUnitFromChat(activeProcess.id, text);
+      const booked = advanceUnitFromChat(proc.id, text);
       if (booked)
         setUnitChat((c) => [
           ...c,
@@ -2427,7 +2485,7 @@ export default function AppHome() {
         setUnitThinking(false);
         res.lines.forEach((line) => setUnitChat((c) => [...c, { role: "one", text: line }]));
         applyStructured();
-        const booked = advanceUnitFromChat(activeProcess.id, text);
+        const booked = advanceUnitFromChat(proc.id, text);
         if (booked)
           setUnitChat((c) => [
             ...c,
