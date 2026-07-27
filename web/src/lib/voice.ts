@@ -18,6 +18,8 @@ export async function transcribeAudio(blob: Blob): Promise<string | null> {
 // ── Tap-to-talk → live realtime conversation (OpenAI Realtime over WebRTC) ───
 export interface RealtimeHandle {
   stop: () => void;
+  /** Mute/unmute the user's mic (toggles the track, keeps the call open). */
+  setMuted: (muted: boolean) => void;
 }
 
 /**
@@ -30,6 +32,8 @@ export async function startRealtime(opts: {
   instructions?: string;
   onUserText?: (t: string) => void;
   onAssistantText?: (t: string) => void;
+  /** true while ONE is speaking (drives the orb's "live" animation). */
+  onSpeaking?: (speaking: boolean) => void;
   onOpen?: () => void;
   onClose?: () => void;
 }): Promise<RealtimeHandle | null> {
@@ -59,16 +63,27 @@ export async function startRealtime(opts: {
     dc.onmessage = (e) => {
       try {
         const m = JSON.parse(e.data);
+        const type: string = m?.type ?? "";
+        if (type === "output_audio_buffer.started" || type === "response.output_audio.started")
+          opts.onSpeaking?.(true);
+        else if (
+          type === "output_audio_buffer.stopped" ||
+          type === "output_audio_buffer.cleared" ||
+          type === "response.output_audio.done" ||
+          type === "response.done"
+        )
+          opts.onSpeaking?.(false);
         const t = m?.transcript;
-        if (!t) return;
-        if (m.type?.includes("input_audio_transcription")) opts.onUserText?.(t);
-        else if (m.type?.includes("transcript")) opts.onAssistantText?.(t);
+        if (t && type.includes("input_audio_transcription")) opts.onUserText?.(t);
+        else if (t && type.includes("transcript")) opts.onAssistantText?.(t);
       } catch {
         /* non-JSON event */
       }
     };
 
     const stopMic = () => mic.getTracks().forEach((t) => t.stop());
+    const setMuted = (muted: boolean) =>
+      mic.getAudioTracks().forEach((t) => (t.enabled = !muted));
     const stop = () => {
       try {
         dc.close();
@@ -106,7 +121,7 @@ export async function startRealtime(opts: {
     }
     await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
     opts.onOpen?.();
-    return { stop };
+    return { stop, setMuted };
   } catch {
     return null;
   }

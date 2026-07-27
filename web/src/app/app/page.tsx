@@ -303,11 +303,14 @@ function AppInput({
   placeholder,
   caret = false,
   lang = "en",
+  onVoiceTap,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
   placeholder?: string;
+  /** Quick tap on the (empty) voice button → start a live voice call. */
+  onVoiceTap?: () => void;
   /** Home: no placeholder copy at all — just a resting caret, so ONE looks
    *  ready to be spoken to rather than instructing you. (Same as the hero.) */
   caret?: boolean;
@@ -317,11 +320,9 @@ function AppInput({
 }) {
   const [focused, setFocused] = useState(false);
   const [listening, setListening] = useState(false); // hold-to-record
-  const [live, setLive] = useState(false); // tap-to-talk realtime
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const micRef = useRef<MediaStream | null>(null);
-  const rtRef = useRef<RealtimeHandle | null>(null);
   const holdingRef = useRef(false);
   const holdTimer = useRef<number | null>(null);
   const hasText = value.trim().length > 0;
@@ -359,29 +360,6 @@ function AppInput({
   const stopRecording = () => {
     if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
   };
-  const toggleLive = async () => {
-    if (rtRef.current) {
-      rtRef.current.stop();
-      rtRef.current = null;
-      setLive(false);
-      return;
-    }
-    setLive(true);
-    const h = await startRealtime({
-      instructions: he
-        ? "אתה ONE — נציג אישי חם ותמציתי. ענה קצר וטבעי בעברית."
-        : "You are ONE — a warm, concise personal representative. Keep spoken replies short and natural.",
-      onClose: () => {
-        rtRef.current = null;
-        setLive(false);
-      },
-    });
-    if (!h) {
-      setLive(false);
-      return;
-    }
-    rtRef.current = h;
-  };
   const onVoiceDown = () => {
     holdingRef.current = false;
     holdTimer.current = window.setTimeout(() => {
@@ -398,7 +376,7 @@ function AppInput({
       holdingRef.current = false;
       stopRecording();
     } else {
-      void toggleLive();
+      onVoiceTap?.();
     }
   };
   const onVoiceCancel = () => {
@@ -439,8 +417,8 @@ function AppInput({
         />
       </span>
       <button
-        className={`app-bar-go${listening ? " is-listening" : ""}${live ? " is-live" : ""}`}
-        aria-label={hasText ? "Send" : live ? "End voice call" : listening ? "Recording" : "Voice — tap to talk, hold to record"}
+        className={`app-bar-go${listening ? " is-listening" : ""}`}
+        aria-label={hasText ? "Send" : listening ? "Recording" : "Voice — tap to call, hold to record"}
         type="button"
         onClick={hasText ? () => onSend() : undefined}
         onPointerDown={hasText ? undefined : onVoiceDown}
@@ -1953,6 +1931,49 @@ export default function AppHome() {
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
   const [unitDraft, setUnitDraft] = useState("");
   const [unitThinking, setUnitThinking] = useState(false);
+  // ── Live voice call with ONE (Realtime) — a full-screen call view ──────────
+  const [voiceCall, setVoiceCall] = useState<RealtimeHandle | null>(null);
+  const [voiceConnecting, setVoiceConnecting] = useState(false);
+  const [voiceSpeaking, setVoiceSpeaking] = useState(false);
+  const [voiceMuted, setVoiceMuted] = useState(false);
+  const voiceCallRef = useRef<RealtimeHandle | null>(null);
+  const startVoiceCall = async () => {
+    if (voiceCallRef.current || voiceConnecting) return;
+    setVoiceConnecting(true);
+    setVoiceMuted(false);
+    setVoiceSpeaking(false);
+    const h = await startRealtime({
+      instructions:
+        "You are ONE — a warm, concise personal representative on a live voice call. " +
+        "Keep replies short and natural. Match the user's language: reply in Hebrew when they speak Hebrew and English when they speak English, and switch fluidly. Open with a brief spoken hello.",
+      onSpeaking: (s) => setVoiceSpeaking(s),
+      onClose: () => {
+        voiceCallRef.current = null;
+        setVoiceCall(null);
+        setVoiceConnecting(false);
+        setVoiceSpeaking(false);
+      },
+    });
+    if (!h) {
+      setVoiceConnecting(false);
+      return;
+    }
+    voiceCallRef.current = h;
+    setVoiceCall(h);
+    setVoiceConnecting(false);
+  };
+  const endVoiceCall = () => {
+    voiceCallRef.current?.stop();
+    voiceCallRef.current = null;
+    setVoiceCall(null);
+    setVoiceConnecting(false);
+    setVoiceSpeaking(false);
+  };
+  const toggleVoiceMute = () => {
+    const next = !voiceMuted;
+    setVoiceMuted(next);
+    voiceCallRef.current?.setMuted(next);
+  };
   // Which side of the process thread to show — the whole back-and-forth lives
   // here (you ⇄ ONE ⇄ the other party), and this filters it to one voice.
   const [threadFilter, setThreadFilter] = useState<"all" | "you" | "one" | "them">("all");
@@ -4896,6 +4917,45 @@ export default function AppHome() {
 
   return (
     <main className="product-root" data-theme={theme} dir={lang === "he" ? "rtl" : "ltr"} lang={lang}>
+      {(voiceCall || voiceConnecting) && (
+        <div className="voice-call" role="dialog" aria-label={lang === "he" ? "שיחה עם ONE" : "Call with ONE"}>
+          <div className="voice-call-center">
+            <div
+              className={`voice-orb-wrap${voiceSpeaking ? " speaking" : ""}${voiceConnecting ? " connecting" : ""}`}
+            >
+              <Orb size={132} alive faceColor="var(--p-face)" eyeColor="var(--p-bg)" />
+            </div>
+            <div className="voice-call-status">
+              {voiceConnecting
+                ? lang === "he"
+                  ? "מתחבר…"
+                  : "Connecting…"
+                : voiceSpeaking
+                  ? "ONE"
+                  : lang === "he"
+                    ? "מקשיב…"
+                    : "Listening…"}
+            </div>
+          </div>
+          <div className="voice-call-bar">
+            <button
+              className={`vc-btn${voiceMuted ? " off" : ""}`}
+              onClick={toggleVoiceMute}
+              disabled={!voiceCall}
+              aria-label={voiceMuted ? (lang === "he" ? "בטל השתקה" : "Unmute") : lang === "he" ? "השתק" : "Mute"}
+            >
+              <i className={`fi ${voiceMuted ? "fi-rr-microphone-slash" : "fi-rr-microphone"}`} aria-hidden="true" />
+            </button>
+            <button
+              className="vc-btn vc-end"
+              onClick={endVoiceCall}
+              aria-label={lang === "he" ? "סיים שיחה" : "End call"}
+            >
+              <i className="fi fi-rr-cross" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* No splash overlay. The opening IS the home animating in — see the
           awakening effect above: ONE starts as a dot at the centre of the
           screen and grows into place. Same as the landing hero. */}
@@ -5370,6 +5430,7 @@ export default function AppHome() {
                         pumpPresence(unitPresenceRef);
                       }}
                       onSend={sendToUnit}
+                      onVoiceTap={startVoiceCall}
                       placeholder={t.tellChanged}
                       lang={lang}
                     />
@@ -6326,6 +6387,7 @@ export default function AppHome() {
                           value={draft}
                           onChange={setDraft}
                           onSend={() => send()}
+                          onVoiceTap={startVoiceCall}
                           placeholder={t.talkToOne}
                           caret
                           lang={lang}
@@ -6541,6 +6603,7 @@ export default function AppHome() {
                         pumpPresence(homePresenceRef);
                       }}
                       onSend={() => send()}
+                      onVoiceTap={startVoiceCall}
                       placeholder={t.talkToOne}
                       lang={lang}
                     />

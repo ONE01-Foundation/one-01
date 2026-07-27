@@ -6206,6 +6206,115 @@ button.conn-card:hover {
   }
 }
 
+/* ─── Live voice call — a full-screen call view with the ONE orb ──────────── */
+.voice-call {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--p-bg);
+  padding: 0 0 42px;
+  animation: chat-rise 260ms ease both;
+}
+.voice-call-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+.voice-orb-wrap {
+  position: relative;
+  border-radius: 50%;
+  padding: 12px;
+  display: grid;
+  place-items: center;
+}
+.voice-orb-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--p-ok, #22c55e);
+  opacity: 0.5;
+  transition: opacity 240ms ease;
+}
+.voice-orb-wrap.speaking::before {
+  opacity: 1;
+  animation: vc-ring 1s ease-in-out infinite;
+}
+.voice-orb-wrap.connecting::before {
+  border-color: color-mix(in srgb, var(--p-ok, #22c55e) 40%, transparent);
+  border-top-color: var(--p-ok, #22c55e);
+  animation: vc-spin 0.9s linear infinite;
+}
+@keyframes vc-ring {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-ok, #22c55e) 45%, transparent);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--p-ok, #22c55e) 0%, transparent);
+  }
+}
+@keyframes vc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.voice-call-status {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--p-text-3);
+}
+.voice-call-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  border-radius: 999px;
+  padding: 12px 18px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.14);
+}
+.vc-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  background: var(--p-bg);
+  color: var(--p-text);
+  transition: transform 120ms ease, background 140ms ease;
+}
+.vc-btn:hover {
+  background: var(--p-line);
+}
+.vc-btn:active {
+  transform: scale(0.94);
+}
+.vc-btn.off {
+  background: color-mix(in srgb, #e5484d 16%, var(--p-bg));
+  color: #e5484d;
+}
+.vc-end {
+  background: #e5484d;
+  color: #fff;
+}
+.vc-end:hover {
+  background: #d13b40;
+}
+
 /* ─── unit — one pane, switched between the conversation and the details ─── */
 .unit-view {
   position: absolute;
