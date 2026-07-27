@@ -1587,6 +1587,9 @@ export default function AppHome() {
     questions: { q: string; options: string[]; answer: number; explain?: string }[];
     idx: number;
     score: number;
+    /** When set, the quiz runs INSIDE this process's thread (not the home chat),
+     *  and passing it updates the process (ticks a learning step, logs it). */
+    procId?: string;
   } | null>(null);
   // While ONE is working, a status line cycles Thinking → Connecting → Searching
   // → Working (like a coding agent), and the ONE face closes its eyes.
@@ -2218,8 +2221,11 @@ export default function AppHome() {
   };
 
   // ── Quiz teaching capability — turn "quiz me on X" into a real quiz in chat.
-  const runQuiz = async (topic: string) => {
+  const runQuiz = async (topic: string, proc?: Process) => {
     const he = lang === "he";
+    // Route quiz output to the process thread when we're teaching inside a unit.
+    const post = (m: ChatMsg) => (proc ? setUnitChat((c) => [...c, m]) : setChat((c) => [...c, m]));
+    const stopThinking = () => (proc ? setUnitThinking(false) : setThinking(false));
     try {
       const sys = he
         ? 'צור מבחן אמריקאי קצר על הנושא. החזר JSON תקין בלבד: {"topic":"...","questions":[{"q":"...","options":["","","",""],"answer":0,"explain":"..."}]} — topic=שם הנושא באנגלית בכמה מילים לחיפוש בוויקיפדיה, 3 שאלות, 4 אפשרויות לכל אחת, answer=אינדקס התשובה הנכונה (0‑3), explain=משפט הסבר קצר. השאלות בעברית. בלי code fences.'
@@ -2245,41 +2251,37 @@ export default function AppHome() {
             typeof (q as { answer?: unknown }).answer === "number",
         )
         .slice(0, 5);
-      setThinking(false);
+      stopThinking();
       if (questions.length === 0) {
-        setChat((c) => [
-          ...c,
-          { role: "one", text: he ? "לא הצלחתי להכין מבחן כרגע." : "I couldn't build a quiz just now." },
-        ]);
+        post({ role: "one", text: he ? "לא הצלחתי להכין מבחן כרגע." : "I couldn't build a quiz just now." });
         return;
       }
-      setQuiz({ questions, idx: 0, score: 0 });
+      setQuiz({ questions, idx: 0, score: 0, procId: proc?.id });
       const q0 = questions[0];
       // Pull an illustrative image for the topic from Wikipedia (an allowed
       // open-reference source). Best-effort — the quiz shows fine without it.
       const topicTitle = typeof parsed?.topic === "string" && parsed.topic.trim() ? parsed.topic.trim() : topic;
       const img = await wikiThumbnail(topicTitle);
-      setChat((c) => [
-        ...c,
-        {
-          role: "one",
-          text: `❓ ${he ? "שאלה" : "Question"} 1/${questions.length}: ${q0.q}`,
-          quiz: { options: q0.options, answer: q0.answer },
-          image: img ?? undefined,
-        },
-      ]);
+      post({
+        role: "one",
+        text: `❓ ${he ? "שאלה" : "Question"} 1/${questions.length}: ${q0.q}`,
+        quiz: { options: q0.options, answer: q0.answer },
+        image: img ?? undefined,
+      });
     } catch {
-      setThinking(false);
-      setChat((c) => [
-        ...c,
-        { role: "one", text: he ? "לא הצלחתי להכין מבחן כרגע." : "I couldn't build a quiz just now." },
-      ]);
+      stopThinking();
+      post({ role: "one", text: he ? "לא הצלחתי להכין מבחן כרגע." : "I couldn't build a quiz just now." });
     }
   };
-  // Answer the current quiz question (tapping an option chip).
+  // Answer the current quiz question (tapping an option chip). Routes to the
+  // home chat or, when the quiz is running inside a process, that process's
+  // thread — and on completion updates the unit (ticks a learning step, logs it).
   const answerQuiz = (optionIdx: number) => {
     if (!quiz) return;
     const he = lang === "he";
+    const inUnit = !!quiz.procId;
+    const post = (...ms: ChatMsg[]) =>
+      inUnit ? setUnitChat((c) => [...c, ...ms]) : setChat((c) => [...c, ...ms]);
     const q = quiz.questions[quiz.idx];
     const correct = optionIdx === q.answer;
     const nextIdx = quiz.idx + 1;
@@ -2291,35 +2293,65 @@ export default function AppHome() {
       : he
         ? `❌ לא בדיוק — התשובה היא "${q.options[q.answer]}". `
         : `❌ Not quite — the answer is "${q.options[q.answer]}". `;
-    setChat((c) => [
-      ...c,
+    post(
       { role: "user", text: q.options[optionIdx] },
       { role: "one", text: feedback + (q.explain ?? "") },
-    ]);
+    );
     if (nextIdx < quiz.questions.length) {
       const nq = quiz.questions[nextIdx];
-      setQuiz({ questions: quiz.questions, idx: nextIdx, score: nextScore });
-      setChat((c) => [
-        ...c,
-        {
-          role: "one",
-          text: `❓ ${he ? "שאלה" : "Question"} ${nextIdx + 1}/${quiz.questions.length}: ${nq.q}`,
-          quiz: { options: nq.options, answer: nq.answer },
-        },
-      ]);
+      setQuiz({ questions: quiz.questions, idx: nextIdx, score: nextScore, procId: quiz.procId });
+      post({
+        role: "one",
+        text: `❓ ${he ? "שאלה" : "Question"} ${nextIdx + 1}/${quiz.questions.length}: ${nq.q}`,
+        quiz: { options: nq.options, answer: nq.answer },
+      });
     } else {
+      const total = quiz.questions.length;
+      const pct = nextScore / total;
+      const passed = pct >= 0.5;
+      const badge = pct === 1 ? "🏆" : passed ? "🎉" : "📚";
+      post({
+        role: "one",
+        text: he
+          ? `${badge} סיימת! הציון שלך: ${nextScore}/${total}.`
+          : `${badge} Done! You scored ${nextScore}/${total}.`,
+      });
+      // Inside a process, a passing score is real progress: tick the learning
+      // step, log it to the timeline, and drop the "practice" quick-action.
+      if (quiz.procId && passed) {
+        const pid = quiz.procId;
+        setUnits((list) =>
+          list.map((u) =>
+            u.id === pid
+              ? {
+                  ...u,
+                  steps: u.steps.map((sp) =>
+                    /theor|practice|study|quiz|תאורי|תרגול|מבחן|לימוד/i.test(sp.label)
+                      ? { ...sp, done: true }
+                      : sp,
+                  ),
+                  quickActions: (u.quickActions ?? []).filter(
+                    (a) => !/theor|practice|quiz|תאורי|תרגול|מבחן/i.test(a),
+                  ),
+                  decisions: [
+                    he ? `עברת תרגול (${nextScore}/${total})` : `Passed practice (${nextScore}/${total})`,
+                    ...u.decisions,
+                  ],
+                  timeline: [
+                    {
+                      at: "now",
+                      text: he
+                        ? `תרגלת ועברת: ${nextScore}/${total}.`
+                        : `You practiced and passed: ${nextScore}/${total}.`,
+                    },
+                    ...u.timeline,
+                  ],
+                }
+              : u,
+          ),
+        );
+      }
       setQuiz(null);
-      const pct = nextScore / quiz.questions.length;
-      const badge = pct === 1 ? "🏆" : pct >= 0.5 ? "🎉" : "📚";
-      setChat((c) => [
-        ...c,
-        {
-          role: "one",
-          text: he
-            ? `${badge} סיימת! הציון שלך: ${nextScore}/${quiz.questions.length}.`
-            : `${badge} Done! You scored ${nextScore}/${quiz.questions.length}.`,
-        },
-      ]);
     }
   };
   // ── Booking capability — turn "book me X" into real, tappable time slots that
@@ -2589,7 +2621,18 @@ export default function AppHome() {
       return;
     }
     if (capKey === "quiz" && !quiz) {
-      void runQuiz(text);
+      // If the ask clearly belongs to an existing process (e.g. "practice the
+      // theory test" ↔ the driving-licence process), run the quiz INSIDE it so
+      // the learning lands on the unit — not in the ephemeral home chat.
+      const target = matchProcessForText(text);
+      if (target) {
+        setThinking(false); // hand off from the home chat to the process thread
+        openUnit(target);
+        setUnitThinking(true);
+        void runQuiz(text, target);
+      } else {
+        void runQuiz(text);
+      }
       return;
     }
 
@@ -3326,6 +3369,12 @@ export default function AppHome() {
       runReminder(text, proc);
       return;
     }
+    // Quiz inside a process — teach/practice runs in THIS thread and passing it
+    // ticks the learning step + logs it (the capability executing in the unit).
+    if (caps.includes("quiz") && !quiz && capabilityForText(text) === "quiz") {
+      void runQuiz(text, proc);
+      return;
+    }
     const focus = units.find((u) => u.id === proc.id) ?? null;
     const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus });
 
@@ -3993,8 +4042,24 @@ export default function AppHome() {
                       return (
                         <Fragment key={i}>
                           {party === "them" && m.from && <div className="chat-from">{m.from}</div>}
+                          {m.image && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img className="chat-img" src={m.image} alt="" loading="lazy" />
+                          )}
                           <div className={`chat-msg ${cls}`}>{m.text}</div>
-                          {m.booking ? (
+                          {m.quiz ? (
+                            <div className="chat-chips quiz-chips">
+                              {m.quiz.options.map((o, oi) => (
+                                <button
+                                  key={oi}
+                                  className="chat-chip quiz-chip"
+                                  onClick={() => answerQuiz(oi)}
+                                >
+                                  {o}
+                                </button>
+                              ))}
+                            </div>
+                          ) : m.booking ? (
                             <div className="chat-chips booking-chips">
                               {m.booking.slots.map((s) => (
                                 <button

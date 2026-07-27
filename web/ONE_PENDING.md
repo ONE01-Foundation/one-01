@@ -24,7 +24,7 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 5. **Sources actually feed answers** — ONE cites / pulls from the official source when answering a regulated-domain question (licensing, health, gov, NII). Role-gated source-adding is still a disabled placeholder.
 6. **Real external channel behind Drafts** — actually send via email / WhatsApp / an external system (behind permission). Today: draft + simulated reply.
 7. **Live incoming-reply signal** — when the other side answers while you're not in the process, surface it on Home (banner / broadcast: "🚗 Licensing office replied").
-8. **Capability started in Home runs inside the matching process** — e.g. "theory test" in Home should run the quiz inside the license process, not the ephemeral home chat. (Routing chip exists; executing the capability in-unit does not.)
+8. ~~**Capability started in Home runs inside the matching process**~~ ✅ DONE (quiz) — "quiz/practice…" run inside a process runs in THAT process's thread, and a Home quiz that matches an existing process routes into it (opens the unit, teaches there). Passing (≥50%) updates the unit: ticks the learning step, logs a decision + timeline entry, and drops the "practice" quick-action. Booking/reminders already run in-unit via `sendToUnit`.
 9. ~~**Question vs. intent**~~ ✅ DONE — a pure question (interrogative opener or trailing "?", with no action/goal verb) gets a straight AI answer and spawns no process; real intents still create/route processes. `isPureQuestion()` guard in `send()`.
 10. **Wikipedia images in unit details** (done in quizzes; not yet in the process profile).
 11. **Fuller ONE-profile visual redesign** (only capability/memory-led so far).
@@ -42,7 +42,7 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 5. **Forms functional** — fill/track a form. ~~Reminders~~ ✅ DONE — "remind me…" + booking auto-reminder; pending reminders surface atop Updates (done-toggle / open-process / dismiss); persisted.
 6. **Sources feed answers** — when ONE answers a regulated-domain question it cites/pulls the official source; role-gated source-adding (licensing office, etc.).
 7. **Live incoming-reply signal** — Home banner/broadcast when the other side replies while you're away.
-8. **Capability started in Home runs inside the matching process** (theory quiz → license process).
+8. ~~**Capability started in Home runs inside the matching process**~~ ✅ DONE (quiz) — runs in the process thread; a matching Home quiz routes into the unit; passing updates it (step tick + timeline + drops the practice action).
 
 **P2 — richer & smarter**
 9. **Smarter broadcast** — profile- and category-aware, proactive "what's waiting" lines (per `PROFILE_LENS`).
