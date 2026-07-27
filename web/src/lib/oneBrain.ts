@@ -38,12 +38,12 @@ export type ChatMsg = {
   /** Action chips — enable a capability, upgrade, share a fact, or route into a process. */
   actions?: {
     label: string;
-    kind: "enableCap" | "upgrade" | "shareMem" | "routeProcess";
+    kind: "enableCap" | "upgrade" | "shareMem" | "routeProcess" | "routeProfile";
     cap?: string;
     run?: string;
     /** For kind==="shareMem": the MEMORY_CATALOG key this chip grants for the process. */
     mem?: string;
-    /** For kind==="routeProcess": the process id to open and continue the ask inside. */
+    /** For routeProcess: the process id to open. For routeProfile: the identity id to switch to. */
     proc?: string;
   }[];
 };

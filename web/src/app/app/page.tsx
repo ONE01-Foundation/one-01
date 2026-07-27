@@ -2152,7 +2152,7 @@ export default function AppHome() {
   // Run an action chip from a ONE message (enable a capability, or upgrade).
   const runChatAction = (a: {
     label: string;
-    kind: "enableCap" | "upgrade" | "shareMem" | "routeProcess";
+    kind: "enableCap" | "upgrade" | "shareMem" | "routeProcess" | "routeProfile";
     cap?: string;
     run?: string;
     mem?: string;
@@ -2160,6 +2160,15 @@ export default function AppHome() {
   }) => {
     if (a.kind === "upgrade") {
       setOpenSheet("subscription");
+      return;
+    }
+    // Route a personal ask off a business seat: switch to the personal profile
+    // (or open the new-profile chooser) and re-arm the message so you just re-send.
+    if (a.kind === "routeProfile") {
+      if (a.proc) setActiveIdentityId(a.proc);
+      else setOpenSheet("newProfile");
+      if (a.run) setDraft(a.run);
+      setProfilesOpen(false);
       return;
     }
     // Route the ask into the matching process: open it and continue the
@@ -2247,6 +2256,46 @@ export default function AppHome() {
     }
     if (capKey === "quiz" && !quiz) {
       void runQuiz(text);
+      return;
+    }
+
+    // Profile-aware guard: on a business / supplier seat, a clearly personal
+    // request (dentist, doctor, haircut, passport…) shouldn't spawn a business
+    // process. ONE flags the mismatch and offers to handle it on your personal
+    // profile instead — the right ONE for the right hat.
+    const PERSONAL_RE =
+      /\b(dentist|dental|doctor|clinic|gp|therapist|haircut|barber|salon|passport|driver'?s? licen[sc]e|gym|personal train)\b|רופא שיניים|שיניים|רופא|מרפאה|תספורת|מספרה|דרכון|רישיון נהיגה|רשיון נהיגה|חדר כושר|כושר|פיזיותרפ/i;
+    if (
+      (identity.kind ?? "personal") !== "personal" &&
+      PERSONAL_RE.test(text) &&
+      !activeProcess
+    ) {
+      setThinking(false);
+      const personal = identities.find((i) => (i.kind ?? "personal") === "personal");
+      setChat((c) => [
+        ...c,
+        {
+          role: "one",
+          text:
+            lang === "he"
+              ? `זה נשמע אישי, ואתה עכשיו על פרופיל ${identity.role}. לטפל בזה תחת פרופיל אישי?`
+              : `That sounds personal, and you're on your ${identity.role} profile. Handle it on a personal profile instead?`,
+          actions: [
+            personal
+              ? {
+                  label: (lang === "he" ? "👤 עבור ל" : "👤 Switch to ") + personal.name,
+                  kind: "routeProfile" as const,
+                  proc: personal.id,
+                  run: text,
+                }
+              : {
+                  label: lang === "he" ? "👤 צור פרופיל אישי" : "👤 Create a personal profile",
+                  kind: "routeProfile" as const,
+                  run: text,
+                },
+          ],
+        },
+      ]);
       return;
     }
 
