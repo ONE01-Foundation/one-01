@@ -803,6 +803,17 @@ const METRIC_LABEL_HE: Record<string, string> = {
   "number of activities planned": "פעילויות מתוכננות",
   "activities planned": "פעילויות מתוכננות",
   distance: "מרחק ליעד",
+  style: "סגנון",
+  guests: "אורחים",
+  age: "גיל",
+  venue: "מקום",
+  size: "גודל",
+  level: "רמה",
+  goal: "מטרה",
+  frequency: "תדירות",
+  duration: "משך",
+  theme: "נושא",
+  count: "כמות",
 };
 const VALUE_HE: Record<string, string> = {
   "in progress": "בתהליך",
@@ -2009,6 +2020,19 @@ export default function AppHome() {
   useEffect(() => {
     intakeRef.current = intake;
   }, [intake]);
+  // The chat figure "pumps" — a quick scale pop on every keystroke, so ONE feels
+  // alive and reacting to you letter by letter. Uses the Web Animations API on a
+  // ref so it never remounts the Orb (which would kill its blink).
+  const unitPresenceRef = useRef<HTMLSpanElement>(null);
+  const homePresenceRef = useRef<HTMLSpanElement>(null);
+  const pumpPresence = (ref: { current: HTMLSpanElement | null }) => {
+    const el = ref.current;
+    if (!el || typeof el.animate !== "function") return;
+    el.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(1.15)" }, { transform: "scale(1)" }],
+      { duration: 200, easing: "cubic-bezier(.34,1.4,.5,1)" },
+    );
+  };
   // Live form the user is filling (the "Form filling" capability). You type your
   // own values; ONE never invents them. Singular, like the quiz.
   const [activeForm, setActiveForm] = useState<{
@@ -2907,6 +2931,29 @@ export default function AppHome() {
     echo({ role: "user", text: answerText });
     setIntake(null);
     if (!proc) return;
+    // Write the answer into the unit NOW — so the card visibly BUILDS during the
+    // interview (a growing metric row + saved fields), not only at the end.
+    const he = msgLang(`${proc.title} ${cur.topic}`) === "he";
+    setUnits((list) =>
+      list.map((u) => {
+        if (u.id !== cur.procId) return u;
+        const key = cur.field.trim().toLowerCase();
+        const metrics = u.metrics ?? [];
+        const nextMetrics = metrics.some((m) => m.label.trim().toLowerCase() === key)
+          ? metrics.map((m) => (m.label.trim().toLowerCase() === key ? { ...m, value: answerText } : m))
+          : [...metrics, { label: cur.field, value: answerText }];
+        return {
+          ...u,
+          fields: { ...(u.fields ?? {}), [cur.field]: answerText },
+          metrics: nextMetrics,
+          time: "now",
+          timeline: [
+            { at: "now", text: he ? `סיפרת: ${answerText}.` : `You told me: ${answerText}.` },
+            ...u.timeline,
+          ],
+        };
+      }),
+    );
     const answers = [
       ...cur.answers,
       { field: cur.field, question: cur.question, answer: answerText },
@@ -3726,9 +3773,13 @@ export default function AppHome() {
         ];
         upsert({ ...res.process, chat: seed });
         if (res.broadcast) setLiveBroadcast(res.broadcast);
-        openUnit({ ...res.process, chat: seed });
-        setUnitChat(seed);
-        setChat([]);
+        // Only hand the user INTO the new unit once it's a real, recognisable
+        // one — its title + emoji are ready. Never open a bare shell.
+        if (res.process.title?.trim() && res.process.emoji?.trim()) {
+          openUnit({ ...res.process, chat: seed });
+          setUnitChat(seed);
+          setChat([]);
+        }
         void enrichProcessPlan(res.process, text, true);
       } else {
         // A plain reply, or an update to an existing process — stays in the home
@@ -3773,9 +3824,11 @@ export default function AppHome() {
           ];
           upsert({ ...res.process, chat: seed });
           if (res.broadcast) setLiveBroadcast(res.broadcast);
-          openUnit({ ...res.process, chat: seed });
-          setUnitChat(seed);
-          setChat([]);
+          if (res.process.title?.trim() && res.process.emoji?.trim()) {
+            openUnit({ ...res.process, chat: seed });
+            setUnitChat(seed);
+            setChat([]);
+          }
         } else {
           setChat((c) => [...c, { role: "one", text: line }]);
           applyStructured();
@@ -4368,7 +4421,17 @@ export default function AppHome() {
       const done = focus ? focus.steps.filter((_, i) => isStepDone(focus, i)).length : 0;
       const total = focus ? focus.steps.length : 0;
       const scopeExtra = `You are working on this specific process for them: "${proc.title}" (${proc.relation}${total ? `, ${done}/${total} steps done` : ""}). Keep the reply scoped to moving THIS process forward.`;
-      const extra = [scopeExtra, memoryContext()].filter(Boolean).join(" ");
+      // Everything already gathered about this process (intake answers in
+      // `fields` + curated `metrics`). Feed it so ONE builds on what it knows
+      // and never re-asks something already answered (e.g. it's a pool party).
+      const known = [
+        ...Object.entries((focus ?? proc).fields ?? {}).map(([k, v]) => `${k}: ${v}`),
+        ...((focus ?? proc).metrics ?? []).map((m) => `${m.label}: ${m.value}`),
+      ].filter((s) => s && !/:\s*$/.test(s));
+      const factsExtra = known.length
+        ? `Known details for this process — treat as decided, do NOT ask about any of these again, build on them: ${known.join("; ")}.`
+        : "";
+      const extra = [scopeExtra, factsExtra, memoryContext()].filter(Boolean).join(" ");
       const messages: AiChatMessage[] = [
         { role: "system", content: oneSystemPrompt(lang, extra) },
         ...priorChat.slice(-8).map((m) => ({
@@ -5140,16 +5203,26 @@ export default function AppHome() {
                         home: blinks at rest, wakes while you type, concentrates
                         (eyes shut) while it works. */}
                     <div className="chat-presence-row" aria-live="polite">
-                      <Orb
-                        size={30}
-                        alive={!unitThinking}
-                        closed={unitThinking}
-                        look={unitDraft.trim() && !unitThinking ? -0.28 : 0}
-                        faceColor="var(--p-face)"
-                        eyeColor="var(--p-bg)"
-                        className={`chat-presence${unitDraft.trim() && !unitThinking ? " awake" : ""}`}
-                      />
-                      {unitThinking && <span className="chat-presence-hint">{statusLabel}</span>}
+                      <span ref={unitPresenceRef} className="chat-presence-pump">
+                        <Orb
+                          size={30}
+                          alive
+                          look={unitDraft.trim() && !unitThinking ? -0.28 : 0}
+                          faceColor="var(--p-face)"
+                          eyeColor="var(--p-bg)"
+                          className={`chat-presence${unitDraft.trim() && !unitThinking ? " awake" : ""}${unitThinking ? " thinking" : ""}`}
+                        />
+                      </span>
+                      {unitThinking && (
+                        <span className="chat-presence-hint">
+                          {statusLabel}
+                          <span className="think-dots" aria-hidden="true">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                        </span>
+                      )}
                     </div>
                     {activeForm && activeForm.procId === activeProcess?.id && formCard}
                     <div ref={unitEndRef} />
@@ -5157,7 +5230,10 @@ export default function AppHome() {
                   <div className="app-dock unit-dock">
                     <AppInput
                       value={unitDraft}
-                      onChange={setUnitDraft}
+                      onChange={(v) => {
+                        setUnitDraft(v);
+                        pumpPresence(unitPresenceRef);
+                      }}
                       onSend={sendToUnit}
                       placeholder={t.tellChanged}
                       lang={lang}
@@ -6238,16 +6314,26 @@ export default function AppHome() {
                         blinks at rest, wakes (leans in, eyes forward) while you
                         type, closes its eyes while it works. */}
                     <div className="chat-presence-row" aria-live="polite">
-                      <Orb
-                        size={30}
-                        alive={!thinking}
-                        closed={thinking}
-                        look={draft.trim() && !thinking ? -0.28 : 0}
-                        faceColor="var(--p-face)"
-                        eyeColor="var(--p-bg)"
-                        className={`chat-presence${draft.trim() && !thinking ? " awake" : ""}`}
-                      />
-                      {thinking && <span className="chat-presence-hint">{statusLabel}</span>}
+                      <span ref={homePresenceRef} className="chat-presence-pump">
+                        <Orb
+                          size={30}
+                          alive
+                          look={draft.trim() && !thinking ? -0.28 : 0}
+                          faceColor="var(--p-face)"
+                          eyeColor="var(--p-bg)"
+                          className={`chat-presence${draft.trim() && !thinking ? " awake" : ""}${thinking ? " thinking" : ""}`}
+                        />
+                      </span>
+                      {thinking && (
+                        <span className="chat-presence-hint">
+                          {statusLabel}
+                          <span className="think-dots" aria-hidden="true">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                        </span>
+                      )}
                     </div>
                     {activeForm && !activeForm.procId && formCard}
                     <div ref={chatEndRef} />
@@ -6256,7 +6342,10 @@ export default function AppHome() {
                   <div className="app-dock">
                     <AppInput
                       value={draft}
-                      onChange={setDraft}
+                      onChange={(v) => {
+                        setDraft(v);
+                        pumpPresence(homePresenceRef);
+                      }}
                       onSend={() => send()}
                       placeholder={t.talkToOne}
                       lang={lang}
