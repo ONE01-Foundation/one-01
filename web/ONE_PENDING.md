@@ -25,7 +25,7 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 6. **Real external channel behind Drafts** — actually send via email / WhatsApp / an external system (behind permission). Today: draft + simulated reply.
 7. **Live incoming-reply signal** — when the other side answers while you're not in the process, surface it on Home (banner / broadcast: "🚗 Licensing office replied").
 8. **Capability started in Home runs inside the matching process** — e.g. "theory test" in Home should run the quiz inside the license process, not the ephemeral home chat. (Routing chip exists; executing the capability in-unit does not.)
-9. **Question vs. intent** — a pure question ("how long does X take?") shouldn't always spawn a process; distinguish "just answer" from "start a process".
+9. ~~**Question vs. intent**~~ ✅ DONE — a pure question (interrogative opener or trailing "?", with no action/goal verb) gets a straight AI answer and spawns no process; real intents still create/route processes. `isPureQuestion()` guard in `send()`.
 10. **Wikipedia images in unit details** (done in quizzes; not yet in the process profile).
 11. **Fuller ONE-profile visual redesign** (only capability/memory-led so far).
 12. **Voice input** — the mic button is currently decorative.
@@ -48,7 +48,7 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 9. **Smarter broadcast** — profile- and category-aware, proactive "what's waiting" lines (per `PROFILE_LENS`).
 10. **Business worlds + listings** in Global (suppliers/compliance/marketing) so a business profile has real content, not just the "both" worlds.
 11. **Broadcast/suggestions/capabilities per profile kind** (the lens already carries the hook).
-12. **Question-vs-intent** — a pure question shouldn't always spawn a process.
+12. ~~**Question-vs-intent**~~ ✅ DONE — pure questions answer directly, no process (`isPureQuestion` guard).
 13. **Real voice input** (mic is decorative); Wikipedia images in unit details; fuller ONE-profile redesign.
 
 **P3 — trust & scale**

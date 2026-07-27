@@ -429,6 +429,20 @@ function capabilityForText(text: string): string | null {
   for (const c of CAP_INTENT) if (c.re.test(text)) return c.key;
   return null;
 }
+
+// Question vs. intent. A "pure question" asks for information ("how long does a
+// passport take?") — it should get a straight answer, not spawn a process. We
+// treat it as a question when it opens with an interrogative or ends with "?",
+// AND carries no action/goal verb (which would make it an actual intent).
+const QUESTION_OPENERS =
+  /^(how|what|when|where|why|who|which|is|are|do|does|can|could|should|will|would)\b|^(כמה|מתי|איפה|למה|מדוע|מי|איך|האם|מה|כיצד)\b/i;
+const ACTION_VERBS =
+  /\b(book|schedule|reserve|remind|renew|apply|register|cancel|order|buy|pay|plan|set ?up|find me|get me|help me|open|start|create|sign ?up|send|email|call|track|manage)\b|תזמ|קבע|תזכיר|לחדש|להגיש|להירשם|לבטל|להזמין|לקנות|לשלם|לתכנן|תמצא|תפתח|תתחיל|תיצור|תשלח|תתקשר|אני רוצה|אני צריך|תעזור|תטפל/i;
+function isPureQuestion(text: string): boolean {
+  const t = text.trim();
+  const looksLikeQuestion = QUESTION_OPENERS.test(t) || /\?\s*$/.test(t);
+  return looksLikeQuestion && !ACTION_VERBS.test(t);
+}
 function capName(key: string, lang: "en" | "he"): string {
   const c = CAPABILITY_CATALOG.find((x) => x.key === key);
   return c ? (lang === "he" ? c.he : c.en) : key;
@@ -2647,6 +2661,37 @@ export default function AppHome() {
     // Reminders capability: "remind me…" becomes a real held reminder.
     if (capKey === "reminders") {
       runReminder(text);
+      return;
+    }
+
+    // Question vs. intent — a pure question gets a straight answer, not a new
+    // process. (Skipped when a business is named, above, so ONE still consults
+    // that business's ONE for "how much is X at <biz>?".)
+    if (isPureQuestion(text)) {
+      try {
+        const reply = await invokeAiChat(
+          [
+            { role: "system", content: oneSystemPrompt(lang, memoryContext()) },
+            ...priorChat.slice(-8).map((m) => ({
+              role: (m.role === "one" ? "assistant" : "user") as AiChatMessage["role"],
+              content: m.text,
+            })),
+            { role: "user", content: text },
+          ],
+          { maxTokens: 240 },
+        );
+        setThinking(false);
+        setChat((c) => [...c, { role: "one", text: reply }]);
+      } catch {
+        setThinking(false);
+        setChat((c) => [
+          ...c,
+          {
+            role: "one",
+            text: lang === "he" ? "לא הצלחתי לענות על זה כרגע." : "I couldn't answer that just now.",
+          },
+        ]);
+      }
       return;
     }
 
