@@ -57,6 +57,9 @@ export type ChatMsg = {
   };
   /** An illustrative image URL (e.g. a Wikipedia thumbnail) shown in the bubble. */
   image?: string;
+  /** Set when this message came from (or was synced to) a shared-unit thread —
+   *  the id in shared_unit_messages. Marks it so the mirror won't re-post it. */
+  sid?: string;
   /** A source ONE drew on when answering a regulated-domain question. */
   cite?: { emoji: string; label: string; host: string };
   /** Action chips — enable a capability, upgrade, share a fact, or route into a process. */

@@ -36,7 +36,6 @@ import {
   getSharedMessages,
   postSharedMessage,
   listSharedMembers,
-  type SharedMessage,
 } from "@/lib/sharedUnits";
 import {
   ensureSession,
@@ -2745,29 +2744,44 @@ export default function AppHome() {
   // Announce a live event in the broadcast slot, in the app's language.
   const announce = (en: string, he: string) => setLiveBroadcast(lang === "he" ? he : en);
 
+  // Real relative time from an epoch stamp ("now", "5m", "2h", "3d") — recomputed
+  // as `now` ticks, so the side list and timelines show live, honest times.
+  const relTime = (ms?: number): string => {
+    if (!ms) return "";
+    const ref = typeof now === "number" ? now : Date.now();
+    const diff = Math.max(0, ref - ms);
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return lang === "he" ? "עכשיו" : "now";
+    if (m < 60) return lang === "he" ? `לפני ${m} ד׳` : `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return lang === "he" ? `לפני ${h} ש׳` : `${h}h`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return lang === "he" ? `לפני ${d} י׳` : `${d}d`;
+    const w = Math.floor(d / 7);
+    return lang === "he" ? `לפני ${w} שב׳` : `${w}w`;
+  };
+
   // The live process behind the open sheet, so edits show immediately.
   const activeLive = activeProcess ? units.find((u) => u.id === activeProcess.id) ?? activeProcess : null;
 
-  // ── Shared units — a unit two or more people correspond inside ─────────────
-  // Share a unit → everyone with the link joins the same room and talks there,
-  // alongside ONE. Backed by the shared_units RPCs; the thread is polled live.
+  // ── Shared units — a unit turns from private to SHARED, and its own chat
+  //    becomes a group thread (like a WhatsApp group): you, ONE, and the people
+  //    you share it with, all in the unit's conversation, live on both sides.
+  //    The participants come from your connections (the driving instructor, the
+  //    coach…). No separate room — the unit's chat IS the group.
   const myName = (identity?.name || "").trim() || (lang === "he" ? "אני" : "You");
-  const [sharedMsgs, setSharedMsgs] = useState<Record<string, SharedMessage[]>>({});
   const [sharedMembers, setSharedMembers] = useState<Record<string, string[]>>({});
-  const [sharedDraft, setSharedDraft] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
+  // Per-code set of shared-message ids already reflected in the unit chat (so the
+  // poll never double-appends, and our own posts don't echo back as new).
+  const sharedSeenRef = useRef<Record<string, Set<string>>>({});
+  const seenSet = (code: string) => (sharedSeenRef.current[code] ??= new Set());
   const sharedAnsweredRef = useRef<Set<string>>(new Set());
   const sharedOpenedRef = useRef<Record<string, string>>({});
-  const mergeSharedMsg = (code: string, incoming: SharedMessage[]) => {
-    setSharedMsgs((prev) => {
-      const cur = prev[code] ?? [];
-      const seen = new Set(cur.map((m) => m.id));
-      const add = incoming.filter((m) => !seen.has(m.id));
-      if (!add.length) return prev;
-      const next = [...cur, ...add].sort((a, b) => a.created_at.localeCompare(b.created_at));
-      return { ...prev, [code]: next };
-    });
-  };
+  // Mirror bookkeeping: how far into unitChat we've pushed to the server, and for
+  // which code — so we mirror new local turns exactly once.
+  const mirroredCountRef = useRef(0);
+  const mirroredCodeRef = useRef<string | null>(null);
   const startSharedRoom = async (proc: Process) => {
     if (proc.shareCode || shareBusy) return;
     setShareBusy(true);
@@ -2781,16 +2795,23 @@ export default function AppHome() {
       unit: snap,
       author: myName,
     });
+    if (!su) {
+      setShareBusy(false);
+      return;
+    }
+    // Seed the room with your connections on this unit (they show as members).
+    const people = (proc.people ?? []).filter((p) => p && p.trim() && p !== myName);
+    for (const p of people) void joinSharedUnit(su.code, p);
     setShareBusy(false);
-    if (!su) return;
     setUnits((list) =>
       list.map((u) => (u.id === proc.id ? { ...u, shareCode: su.code, shareOwner: true } : u)),
     );
-    setSharedMembers((m) => ({ ...m, [su.code]: [myName] }));
+    setSharedMembers((m) => ({ ...m, [su.code]: [myName, ...people] }));
     sharedOpenedRef.current[su.code] = new Date().toISOString();
   };
-  // Owner's ONE answers a question raised in the room — live web first, then AI.
-  const answerInRoom = async (code: string, prompt: string) => {
+  // Owner's ONE answers a question a participant raised — live web first, then
+  // AI — appended into the unit chat (which mirrors it out to everyone).
+  const answerInRoom = async (prompt: string) => {
     let text = "";
     const l = msgLang(prompt);
     if (aiWeb && isPureQuestion(prompt)) {
@@ -2810,25 +2831,9 @@ export default function AppHome() {
         text = "";
       }
     }
-    if (text.trim()) {
-      const msg = await postSharedMessage(code, "ONE", "one", text.trim());
-      if (msg) mergeSharedMsg(code, [msg]);
-    }
+    if (text.trim()) setUnitChat((c) => [...c, { role: "one", party: "one", text: text.trim() }]);
   };
-  const postToRoom = async (proc: Process, text: string) => {
-    const code = proc.shareCode;
-    const body = text.trim();
-    if (!code || !body) return;
-    setSharedDraft("");
-    const msg = await postSharedMessage(code, myName, "human", body);
-    if (msg) mergeSharedMsg(code, [msg]);
-    // If I own the room, ONE answers questions posed here (so everyone sees it).
-    if (proc.shareOwner && (/\?\s*$/.test(body) || /\bone\b|וואן/i.test(body))) {
-      if (msg) sharedAnsweredRef.current.add(msg.id);
-      void answerInRoom(code, body);
-    }
-  };
-  // Land in a shared room from a ?join=CODE link.
+  // Land in a shared unit from a ?join=CODE link — the unit becomes yours too.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const code = new URLSearchParams(window.location.search).get("join");
@@ -2875,7 +2880,37 @@ export default function AppHome() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Poll the open room's thread + members every few seconds; owner's ONE replies.
+  // Mirror new LOCAL turns (yours + ONE's) out to the shared thread, once each.
+  useEffect(() => {
+    const code = activeLive?.shareCode;
+    if (!code) {
+      mirroredCodeRef.current = null;
+      return;
+    }
+    if (mirroredCodeRef.current !== code) {
+      // Switched into this shared unit — don't re-send pre-share history.
+      mirroredCodeRef.current = code;
+      mirroredCountRef.current = unitChat.length;
+      return;
+    }
+    const from = mirroredCountRef.current;
+    if (unitChat.length <= from) return;
+    const slice = unitChat.slice(from);
+    mirroredCountRef.current = unitChat.length;
+    void (async () => {
+      for (const m of slice) {
+        if (m.sid) continue; // came from the server already
+        const party = m.party ?? (m.role === "user" ? "you" : "one");
+        if (party === "them") continue; // not ours to mirror
+        const role: "human" | "one" = party === "one" ? "one" : "human";
+        const posted = await postSharedMessage(code, role === "one" ? "ONE" : myName, role, m.text);
+        if (posted) seenSet(code).add(posted.id);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitChat, activeLive?.shareCode]);
+  // Poll the shared thread + members; append everyone else's turns into the unit
+  // chat (as a group), and let the owner's ONE answer questions raised there.
   useEffect(() => {
     const code = activeLive?.shareCode;
     if (!code) return;
@@ -2888,11 +2923,27 @@ export default function AppHome() {
         listSharedMembers(code),
       ]);
       if (stop) return;
-      if (msgs.length) mergeSharedMsg(code, msgs);
+      const seen = seenSet(code);
+      const fresh = msgs.filter((m) => !seen.has(m.id));
+      for (const m of fresh) {
+        seen.add(m.id);
+        if (m.role === "human" && m.author === myName) continue; // our own echo
+        const party: "one" | "them" = m.role === "one" ? "one" : "them";
+        setUnitChat((c) => [
+          ...c,
+          {
+            role: m.role === "one" ? "one" : "user",
+            party,
+            from: party === "them" ? m.author : undefined,
+            text: m.text,
+            sid: m.id,
+          },
+        ]);
+      }
       if (mems.length) setSharedMembers((m) => ({ ...m, [code]: mems.map((x) => x.name) }));
       if (owner) {
         const openedAt = sharedOpenedRef.current[code] ?? "";
-        for (const m of msgs) {
+        for (const m of fresh) {
           if (m.role !== "human" || m.author === myName) continue;
           if (sharedAnsweredRef.current.has(m.id)) continue;
           if (m.created_at <= openedAt) {
@@ -2901,7 +2952,7 @@ export default function AppHome() {
           }
           if (!(/\?\s*$/.test(m.text) || /\bone\b|וואן/i.test(m.text))) continue;
           sharedAnsweredRef.current.add(m.id);
-          void answerInRoom(code, m.text);
+          void answerInRoom(m.text);
         }
       }
     };
@@ -4484,7 +4535,12 @@ export default function AppHome() {
   // Kebab-menu actions on the open process.
   const shareUnit = () => {
     if (!activeProcess) return;
-    const text = `${activeProcess.emoji} ${activeProcess.title}${activeProcess.nextAction ? " — " + activeProcess.nextAction : ""}`;
+    // A shared unit copies its JOIN LINK (others land in the same group); an
+    // unshared one copies a plain summary.
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://one01.io";
+    const text = activeProcess.shareCode
+      ? `${origin}/app?join=${activeProcess.shareCode}`
+      : `${activeProcess.emoji} ${activeProcess.title}${activeProcess.nextAction ? " — " + activeProcess.nextAction : ""}`;
     try {
       void navigator.clipboard?.writeText(text);
     } catch {
@@ -5022,11 +5078,14 @@ export default function AppHome() {
   }, [unitChat, unitThinking]);
 
   // Persist the unit's transcript back into the process, so closing and
-  // reopening it (or a reload) restores the whole conversation.
+  // reopening it (or a reload) restores the whole conversation. Any change to
+  // the transcript is real activity, so we stamp `updatedAt` here — that's what
+  // drives the live relative time in the side list.
   useEffect(() => {
     if (!activeProcess || unitChat.length === 0) return;
+    const stamp = Date.now();
     setUnits((list) =>
-      list.map((u) => (u.id === activeProcess.id ? { ...u, chat: unitChat } : u)),
+      list.map((u) => (u.id === activeProcess.id ? { ...u, chat: unitChat, updatedAt: stamp } : u)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unitChat, activeProcess?.id]);
@@ -5488,9 +5547,11 @@ export default function AppHome() {
 
             <div className="drawer-section">
               <div className="drawer-label">{t.processes}</div>
-              {[...processes]
-                .sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0))
-                .map((p) => (
+              {/* Stable order — never reshuffle just because you opened one (which
+                  clears its unread). New units are prepended, so recent stays on top. */}
+              {processes.map((p) => {
+                const when = p.updatedAt ? relTime(p.updatedAt) : "";
+                return (
                   <div
                     key={p.id}
                     className={`drawer-process${p.unread > 0 ? " has-update" : ""}`}
@@ -5508,10 +5569,10 @@ export default function AppHome() {
                               {p.steps.filter((_, i) => isStepDone(p, i)).length}/{p.steps.length}
                             </>
                           )}
-                          {p.time && (
+                          {when && (
                             <>
                               {" · "}
-                              {p.time}
+                              {when}
                             </>
                           )}
                         </span>
@@ -5530,7 +5591,8 @@ export default function AppHome() {
                       <i className="fi fi-rr-menu-dots-vertical" aria-hidden="true" />
                     </button>
                   </div>
-                ))}
+                );
+              })}
               {processes.length === 0 && (
                 <div className="drawer-empty">
                   <span>{t.nothingHere}</span>
@@ -5609,7 +5671,16 @@ export default function AppHome() {
                         <span>{activeLive.title}</span>
                       </div>
                       <div className="unit-topbar-sub">
-                        {activeLive.relation}
+                        {activeLive.shareCode ? (
+                          <span className="unit-shared-tag">
+                            <i className="fi fi-rr-users" aria-hidden="true" />{" "}
+                            {lang === "he" ? "משותף" : "Shared"}
+                            {" · "}
+                            {(sharedMembers[activeLive.shareCode] ?? [myName]).length}
+                          </span>
+                        ) : (
+                          activeLive.relation
+                        )}
                         <span className="unit-topbar-dot">·</span>
                         {activeLive.steps.filter((_, i) => isStepDone(activeLive, i)).length}/
                         {activeLive.steps.length} {t.done}
@@ -5629,17 +5700,42 @@ export default function AppHome() {
                         <>
                           <div className="unit-menu-catch" onClick={() => setUnitMenuOpen(false)} />
                           <div className="unit-menu" role="menu">
-                            <button
-                              className={`unit-menu-item${unitShared ? " ok" : ""}`}
-                              onClick={shareUnit}
-                              role="menuitem"
-                            >
-                              <i
-                                className={`fi ${unitShared ? "fi-rr-check" : "fi-rr-share"}`}
-                                aria-hidden="true"
-                              />{" "}
-                              {unitShared ? t.copied : t.share}
-                            </button>
+                            {activeLive.shareCode ? (
+                              <button
+                                className={`unit-menu-item${unitShared ? " ok" : ""}`}
+                                onClick={shareUnit}
+                                role="menuitem"
+                              >
+                                <i
+                                  className={`fi ${unitShared ? "fi-rr-check" : "fi-rr-link"}`}
+                                  aria-hidden="true"
+                                />{" "}
+                                {unitShared
+                                  ? t.copied
+                                  : lang === "he"
+                                    ? "העתק קישור שיתוף"
+                                    : "Copy share link"}
+                              </button>
+                            ) : (
+                              <button
+                                className="unit-menu-item"
+                                onClick={() => {
+                                  setUnitMenuOpen(false);
+                                  void startSharedRoom(activeLive);
+                                }}
+                                role="menuitem"
+                                disabled={shareBusy}
+                              >
+                                <i className="fi fi-rr-share" aria-hidden="true" />{" "}
+                                {shareBusy
+                                  ? lang === "he"
+                                    ? "משתף…"
+                                    : "Sharing…"
+                                  : lang === "he"
+                                    ? "שתף יחידה (הפוך לקבוצה)"
+                                    : "Share unit (make it a group)"}
+                              </button>
+                            )}
                             <button
                               className="unit-menu-item"
                               onClick={wipeUnitChat}
@@ -5663,6 +5759,18 @@ export default function AppHome() {
                       ×
                     </button>
                   </div>
+                  {activeLive.shareCode && (
+                    <div className="unit-shared-bar">
+                      <div className="usb-members">
+                        {(sharedMembers[activeLive.shareCode] ?? [myName]).map((n) => (
+                          <span key={n} className="usb-chip">
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                      <ShareLink code={activeLive.shareCode} lang={lang} />
+                    </div>
+                  )}
                   <div className="unit-chat-scroll">
                     {/* Once the other side is in the thread, let you filter the
                         conversation down to one voice — you / ONE / them. */}
@@ -5703,7 +5811,10 @@ export default function AppHome() {
                             <img className="chat-img" src={m.image} alt="" loading="lazy" />
                           )}
                           <div className={`chat-msg ${cls}`}>{m.text}</div>
-                          {m.intake ? (
+                          {/* Answer chips belong only to the CURRENT question —
+                              the last message. Once you answer (and ONE moves on),
+                              older chips disappear instead of lingering. */}
+                          {m.intake && i === unitChat.length - 1 ? (
                             <div className="chat-chips intake-chips">
                               {m.intake.options.map((o, oi) => (
                                 <button
@@ -5828,96 +5939,6 @@ export default function AppHome() {
                   aria-label="Resize details"
                 />
                 <aside className="unit-aside" style={{ width: asideW }}>
-                  {activeLive && (
-                    <section className="shared-room">
-                      <div className="shared-room-head">
-                        <span className="sr-title">
-                          <i className="fi fi-rr-users" aria-hidden="true" />{" "}
-                          {lang === "he" ? "חדר משותף" : "Shared room"}
-                        </span>
-                        {activeLive.shareCode && (
-                          <span className="sr-count">
-                            {(sharedMembers[activeLive.shareCode] ?? [myName]).length}{" "}
-                            {lang === "he" ? "משתתפים" : "in room"}
-                          </span>
-                        )}
-                      </div>
-                      {!activeLive.shareCode ? (
-                        <>
-                          <p className="sr-hint">
-                            {lang === "he"
-                              ? "שתף את היחידה כדי שכמה אנשים יתכתבו כאן יחד, ו‑ONE איתם."
-                              : "Share this unit so a few people can talk here together — with ONE in the room."}
-                          </p>
-                          <button
-                            className="sr-share-btn"
-                            onClick={() => startSharedRoom(activeLive)}
-                            disabled={shareBusy}
-                          >
-                            <i className="fi fi-rr-share" aria-hidden="true" />{" "}
-                            {shareBusy
-                              ? lang === "he"
-                                ? "יוצר…"
-                                : "Creating…"
-                              : lang === "he"
-                                ? "שתף יחידה"
-                                : "Share unit"}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <ShareLink code={activeLive.shareCode} lang={lang} />
-                          <div className="sr-members">
-                            {(sharedMembers[activeLive.shareCode] ?? [myName]).map((n) => (
-                              <span key={n} className="sr-chip">
-                                {n}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="sr-thread">
-                            {(sharedMsgs[activeLive.shareCode] ?? []).length === 0 ? (
-                              <p className="sr-empty">
-                                {lang === "he"
-                                  ? "עדיין אין הודעות — פתחו שיחה כאן."
-                                  : "No messages yet — start the conversation."}
-                              </p>
-                            ) : (
-                              (sharedMsgs[activeLive.shareCode] ?? []).map((m) => (
-                                <div
-                                  key={m.id}
-                                  className={`sr-msg ${m.role === "one" ? "one" : m.author === myName ? "me" : "them"}`}
-                                >
-                                  <span className="sr-author">
-                                    {m.role === "one" ? "ONE" : m.author}
-                                  </span>
-                                  <span className="sr-text" dir="auto">
-                                    {m.text}
-                                  </span>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                          <div className="sr-compose">
-                            <input
-                              value={sharedDraft}
-                              onChange={(e) => setSharedDraft(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") postToRoom(activeLive, sharedDraft);
-                              }}
-                              placeholder={lang === "he" ? "כתוב לחדר…" : "Message the room…"}
-                              dir="auto"
-                            />
-                            <button
-                              onClick={() => postToRoom(activeLive, sharedDraft)}
-                              aria-label={lang === "he" ? "שלח" : "Send"}
-                            >
-                              <i className="fi fi-rr-paper-plane" aria-hidden="true" />
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </section>
-                  )}
                   <UnitDetail
                     p={activeLive}
                     businesses={businesses}
