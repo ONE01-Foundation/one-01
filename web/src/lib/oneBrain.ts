@@ -39,6 +39,16 @@ export type ChatMsg = {
    * `procId` is the process the slot books into (absent = create one).
    */
   booking?: { slots: string[]; topic: string; procId?: string };
+  /**
+   * Candidate providers ONE found/generated for a need — tapping one adds it to
+   * your directory + connections and offers to reach out. `procId` ties them to
+   * the process they were found for.
+   */
+  providers?: {
+    need: string;
+    procId?: string;
+    items: { name: string; category: string; area: string; blurb: string }[];
+  };
   /** An illustrative image URL (e.g. a Wikipedia thumbnail) shown in the bubble. */
   image?: string;
   /** A source ONE drew on when answering a regulated-domain question. */

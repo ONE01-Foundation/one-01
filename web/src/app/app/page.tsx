@@ -433,6 +433,14 @@ const CAPABILITY_CATALOG: Capability[] = [
     descHe: "אוסף אפשרויות ומשווה ביניהן בשבילך.",
   },
   {
+    key: "providers",
+    emoji: "🧭",
+    en: "Find providers",
+    he: "איתור ספקים",
+    descEn: "Finds providers for a need — adds them and reaches out.",
+    descHe: "מאתר ספקים לצורך — מוסיף אותם ופונה אליהם.",
+  },
+  {
     key: "translate",
     emoji: "🌐",
     en: "Translate",
@@ -468,6 +476,7 @@ const CAP_INTENT: { key: string; re: RegExp }[] = [
   { key: "translate", re: /translate|תרגם|תתרגם|תרגום ל/i },
   { key: "travel", re: /plan (a )?trip|itinerary|תכנן(?: לי)? טיול|מסלול טיול|לתכנן חופשה/i },
   { key: "negotiate", re: /negotiate|haggle|get a better (price|deal)|תנהל מו"מ|להתמקח|לנהל משא ומתן/i },
+  { key: "providers", re: /\b(find|get|get me|find me)\b(?: me)?(?: a| an| some)?(?: [\w'-]+){0,4} (providers?|suppliers?|vendors?|instructors?|teachers?|coach(?:es)?|tutors?|trainers?|contractors?|professionals?|experts?|compan(?:y|ies)|business(?:es)?|specialists?|agenc(?:y|ies)|freelancers?|pros?)\b|\bwho can\b|\brecommend( me)? (a|an|some)|\bneed (a|an|some)(?: [\w'-]+){0,4} (provider|supplier|instructor|teacher|coach|tutor|contractor|professional|expert|specialist)|תמצא(?: לי)? (ספק|מורה|מדריך|מאמן|בעל מקצוע|חברה|נותן שירות)|מצא(?: לי)? (ספק|מורה|מדריך|מאמן|בעל מקצוע)|תמליץ(?: לי)? על|מי יכול/i },
   { key: "research", re: /research|compare|which is better|תשווה|השוואה בין|מה עדיף|תחקור/i },
 ];
 function capabilityForText(text: string): string | null {
@@ -1654,7 +1663,7 @@ export default function AppHome() {
   const pgPanelRef = useRef<HTMLDivElement>(null);
   // The capabilities ONE has switched on (persisted locally). Toggled from the
   // profile; enabled from Global's "add a capability".
-  const [caps, setCaps] = useState<string[]>(["booking", "reminders"]);
+  const [caps, setCaps] = useState<string[]>(["booking", "reminders", "providers"]);
   useEffect(() => {
     try {
       const raw = localStorage.getItem("one_caps");
@@ -2605,6 +2614,108 @@ export default function AppHome() {
       setChat((c) => [...c, msg]);
     }
   };
+  // ── Providers capability — ONE finds candidate providers for a need (it
+  //    generates realistic options when it has none on file), you add the ones
+  //    you like, and it drops an outreach draft to reach them.
+  const runProviders = async (text: string, proc?: Process) => {
+    const he = /[֐-׿]/.test(text) || lang === "he";
+    const post = (m: ChatMsg) => (proc ? setUnitChat((c) => [...c, m]) : setChat((c) => [...c, m]));
+    const stop = () => (proc ? setUnitThinking(false) : setThinking(false));
+    const need = proc ? `${proc.title} — ${text}` : text;
+    try {
+      const sys = he
+        ? 'הצע 4 ספקים/נותני שירות ריאליסטיים בישראל לצורך שניתן. החזר JSON תקין בלבד: {"items":[{"name":"","category":"","area":"","blurb":""}]} — name=שם העסק, category=תחום, area=אזור/עיר, blurb=משפט קצר. בלי code fences.'
+        : 'Suggest 4 realistic providers for the given need (in Israel). Return ONLY valid JSON: {"items":[{"name":"","category":"","area":"","blurb":""}]} — name=business name, category=field, area=city/area, blurb=one short line. No code fences.';
+      const raw = await invokeAiChat(
+        [
+          { role: "system", content: sys },
+          { role: "user", content: need },
+        ],
+        { maxTokens: 420, temperature: 0.6 },
+      );
+      const body = raw.replace(/```json|```/g, "");
+      const s = body.indexOf("{");
+      const e = body.lastIndexOf("}");
+      const parsed = s >= 0 && e > s ? JSON.parse(body.slice(s, e + 1)) : null;
+      const items = (Array.isArray(parsed?.items) ? parsed.items : [])
+        .filter(
+          (x: unknown): x is { name: string; category?: string; area?: string; blurb?: string } =>
+            !!x && typeof (x as { name?: unknown }).name === "string" && !!(x as { name: string }).name.trim(),
+        )
+        .slice(0, 4)
+        .map((x: { name: string; category?: string; area?: string; blurb?: string }) => ({
+          name: x.name.slice(0, 60),
+          category: (x.category ?? "").slice(0, 50),
+          area: (x.area ?? "").slice(0, 40),
+          blurb: (x.blurb ?? "").slice(0, 120),
+        }));
+      stop();
+      if (!items.length) {
+        post({ role: "one", text: he ? "לא מצאתי ספקים כרגע." : "I couldn't find providers just now." });
+        return;
+      }
+      post({
+        role: "one",
+        text: he
+          ? "מצאתי כמה ספקים אפשריים. הוסף אחד ואטפל בפנייה:"
+          : "I found a few providers. Add one and I'll handle the outreach:",
+        providers: { need: text, procId: proc?.id, items },
+      });
+    } catch {
+      stop();
+      post({ role: "one", text: he ? "לא מצאתי ספקים כרגע." : "I couldn't find providers just now." });
+    }
+  };
+  const createProvider = (
+    item: { name: string; category: string; area: string; blurb: string },
+    procId?: string,
+  ) => {
+    const he = lang === "he";
+    const biz: Business = {
+      id: `prov_${Date.now()}`,
+      name: item.name,
+      emoji: "🏢",
+      category: item.category || (he ? "ספק" : "Provider"),
+      rating: 0,
+      reviews: 0,
+      address: item.area || "",
+      phone: "",
+      blurb: item.blurb || "",
+      hours: [],
+      services: [],
+      slots: [],
+    };
+    setBusinesses((list) => [biz, ...list]);
+    const proc = procId ? units.find((u) => u.id === procId) : null;
+    const confirm: ChatMsg = {
+      role: "one",
+      text: proc
+        ? he
+          ? `✅ הוספתי את ${biz.name} לספקים ולתהליך "${proc.title}". מכין פנייה בטיוטות.`
+          : `✅ Added ${biz.name} to your providers and to "${proc.title}". Preparing an outreach draft in Drafts.`
+        : he
+          ? `✅ הוספתי את ${biz.name} לאנשי הקשר שלך.`
+          : `✅ Added ${biz.name} to your connections.`,
+    };
+    if (proc) {
+      setUnits((list) =>
+        list.map((u) =>
+          u.id === proc.id
+            ? {
+                ...u,
+                people: Array.from(new Set([...(u.people ?? []), biz.name])),
+                businessId: u.businessId ?? biz.id,
+              }
+            : u,
+        ),
+      );
+      setUnitChat((c) => [...c, confirm]);
+      void composeDraft(proc, he ? `פנה אל ${biz.name} בנוגע ל${proc.title}` : `Reach out to ${biz.name} about ${proc.title}`);
+    } else {
+      addContact(biz.name);
+      setChat((c) => [...c, confirm]);
+    }
+  };
   // Book a chosen slot into a process — creating a lightweight one if needed —
   // writing the time to the timeline, a "When" metric, and a confirmation line.
   const bookSlot = (slot: string, topic: string, procId?: string) => {
@@ -2973,6 +3084,11 @@ export default function AppHome() {
     // Forms capability: ONE sets up the form for you to fill (never auto-filled).
     if (capKey === "forms" && !activeForm) {
       runForm(text);
+      return;
+    }
+    // Providers capability: ONE finds candidate providers you can add + reach.
+    if (capKey === "providers") {
+      void runProviders(text);
       return;
     }
 
@@ -3690,6 +3806,11 @@ export default function AppHome() {
     // Forms inside a process — fill a form straight into THIS process's drafts.
     if (caps.includes("forms") && !activeForm && capabilityForText(text) === "forms") {
       runForm(text, proc);
+      return;
+    }
+    // Providers inside a process — find + add providers for THIS process.
+    if (caps.includes("providers") && capabilityForText(text) === "providers") {
+      void runProviders(text, proc);
       return;
     }
     const focus = units.find((u) => u.id === proc.id) ?? null;
@@ -4414,6 +4535,26 @@ export default function AppHome() {
                                   onClick={() => bookSlot(s, m.booking!.topic, m.booking!.procId)}
                                 >
                                   📅 {s}
+                                </button>
+                              ))}
+                            </div>
+                          ) : m.providers ? (
+                            <div className="prov-list">
+                              {m.providers.items.map((p, pi) => (
+                                <button
+                                  key={pi}
+                                  className="prov-card"
+                                  onClick={() => createProvider(p, m.providers!.procId)}
+                                >
+                                  <span className="prov-avatar" aria-hidden="true">🏢</span>
+                                  <span className="prov-body">
+                                    <span className="prov-name">{p.name}</span>
+                                    <span className="prov-meta">
+                                      {[p.category, p.area].filter(Boolean).join(" · ")}
+                                    </span>
+                                    {p.blurb && <span className="prov-blurb">{p.blurb}</span>}
+                                  </span>
+                                  <span className="prov-add" aria-hidden="true">＋</span>
                                 </button>
                               ))}
                             </div>
@@ -5433,6 +5574,26 @@ export default function AppHome() {
                                 onClick={() => bookSlot(s, m.booking!.topic, m.booking!.procId)}
                               >
                                 📅 {s}
+                              </button>
+                            ))}
+                          </div>
+                        ) : m.providers ? (
+                          <div className="prov-list">
+                            {m.providers.items.map((p, pi) => (
+                              <button
+                                key={pi}
+                                className="prov-card"
+                                onClick={() => createProvider(p, m.providers!.procId)}
+                              >
+                                <span className="prov-avatar" aria-hidden="true">🏢</span>
+                                <span className="prov-body">
+                                  <span className="prov-name">{p.name}</span>
+                                  <span className="prov-meta">
+                                    {[p.category, p.area].filter(Boolean).join(" · ")}
+                                  </span>
+                                  {p.blurb && <span className="prov-blurb">{p.blurb}</span>}
+                                </span>
+                                <span className="prov-add" aria-hidden="true">＋</span>
                               </button>
                             ))}
                           </div>
