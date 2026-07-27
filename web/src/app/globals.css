@@ -5357,6 +5357,221 @@ button.conn-card:hover {
   color: var(--p-text);
   background: var(--p-bg);
 }
+
+/* ── Supplier inbox — incoming request cards ─────────────────────── */
+.drawer-badge {
+  margin-inline-start: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--p-accent, #2563eb);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+}
+.inbox-card {
+  border: 1px solid var(--p-line);
+  border-radius: 16px;
+  background: var(--p-surface, var(--p-bg));
+  padding: 14px 16px;
+}
+.inbox-card.is-new {
+  border-color: color-mix(in srgb, var(--p-accent, #2563eb) 40%, var(--p-line));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--p-accent, #2563eb) 12%, transparent);
+}
+.inbox-card.is-declined {
+  opacity: 0.62;
+}
+.inbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.inbox-from {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--p-text);
+}
+.inbox-avatar {
+  font-size: 18px;
+}
+.inbox-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+.inbox-status.st-new {
+  background: color-mix(in srgb, var(--p-accent, #2563eb) 14%, transparent);
+  color: var(--p-accent, #2563eb);
+}
+.inbox-status.st-accepted {
+  background: color-mix(in srgb, #16a34a 15%, transparent);
+  color: #16a34a;
+}
+.inbox-status.st-declined {
+  background: var(--p-bg);
+  color: var(--p-text-3);
+}
+.inbox-title {
+  margin-top: 10px;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--p-text);
+}
+.inbox-msg {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--p-text-2);
+}
+.inbox-reply-sent {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--p-bg);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--p-text-2);
+}
+.inbox-reply-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--p-text-3);
+  margin-bottom: 3px;
+}
+.inbox-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.inbox-btn {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--p-line);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--p-bg);
+  color: var(--p-text);
+}
+.inbox-btn.accept {
+  background: var(--p-accent, #2563eb);
+  border-color: var(--p-accent, #2563eb);
+  color: #fff;
+}
+.inbox-btn.accept:hover {
+  filter: brightness(1.05);
+}
+.inbox-btn.decline:hover {
+  background: var(--p-surface, var(--p-bg));
+  color: var(--p-text);
+}
+.inbox-reply {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.inbox-reply .mem-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  background: var(--p-bg);
+}
+
+/* ── Live incoming-reply banner (Home) ───────────────────────────── */
+.reply-signal {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--p-accent, #2563eb) 35%, var(--p-line));
+  background: color-mix(in srgb, var(--p-accent, #2563eb) 8%, var(--p-surface, var(--p-bg)));
+  cursor: pointer;
+  text-align: start;
+  animation: reply-pop 0.35s ease;
+  transition: filter 0.15s ease;
+}
+.reply-signal:hover {
+  filter: brightness(1.02);
+}
+.reply-signal.inbox-lead {
+  border-color: color-mix(in srgb, #16a34a 35%, var(--p-line));
+  background: color-mix(in srgb, #16a34a 8%, var(--p-surface, var(--p-bg)));
+}
+.reply-signal.inbox-lead .reply-signal-dot {
+  background: #16a34a;
+  box-shadow: 0 0 0 4px color-mix(in srgb, #16a34a 20%, transparent);
+}
+.reply-signal.inbox-lead .reply-signal-title {
+  color: #16a34a;
+}
+@keyframes reply-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.reply-signal-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--p-accent, #2563eb);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--p-accent, #2563eb) 20%, transparent);
+}
+.reply-signal-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reply-signal-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--p-accent, #2563eb);
+}
+.reply-signal-text {
+  font-size: 13px;
+  color: var(--p-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reply-signal-cta {
+  flex-shrink: 0;
+  font-size: 20px;
+  color: var(--p-text-3);
+}
 .global-title {
   margin: 0;
   font-size: 30px;

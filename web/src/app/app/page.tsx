@@ -15,6 +15,7 @@ import {
   type Business,
   type UnitDraft,
   type Identity,
+  type InboundRequest,
 } from "@/lib/mockData";
 import { interpret, type ChatMsg } from "@/lib/oneBrain";
 import { bizReply, openState, findBusiness } from "@/lib/bizBrain";
@@ -1235,10 +1236,71 @@ export default function AppHome() {
   const [openSheet, setOpenSheet] = useState<null | "settings" | "subscription" | "newProfile">(
     null,
   );
+  // The two-sided loop: requests that crossed profiles, landing in a supplier
+  // profile's inbox. Persisted; seeded once so a supplier seat has something to
+  // answer the first time you switch to it.
+  const [requests, setRequests] = useState<InboundRequest[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("one_requests");
+      if (raw) {
+        setRequests(JSON.parse(raw));
+        return;
+      }
+    } catch {
+      /* fall through to seed */
+    }
+    setRequests([
+      {
+        id: "req_seed",
+        toProfileId: "supplier_demo",
+        fromName: "Ariel",
+        title: "Appointment request",
+        message: "Hi — I'd like to book a first session this week. Mornings work best. What have you got?",
+        status: "new",
+        at: "now",
+      },
+    ]);
+  }, []);
+  const persistRequests = (next: InboundRequest[]) => {
+    setRequests(next);
+    try {
+      localStorage.setItem("one_requests", JSON.stringify(next));
+    } catch {
+      /* storage blocked */
+    }
+  };
+  const sendRequest = (
+    toProfileId: string,
+    title: string,
+    message: string,
+    fromName: string,
+    opts?: { fromProfileId?: string; procId?: string },
+  ) =>
+    persistRequests([
+      {
+        id: `req_${Date.now()}`,
+        toProfileId,
+        fromName,
+        fromProfileId: opts?.fromProfileId,
+        procId: opts?.procId,
+        title,
+        message,
+        status: "new",
+        at: "now",
+      },
+      ...requests,
+    ]);
+  const updateRequest = (id: string, patch: Partial<InboundRequest>) =>
+    persistRequests(requests.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  // Per-request reply text the supplier is composing in the inbox.
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   // The main canvas shows one of three "spaces": the ONE home (broadcast +
   // input), the Global marketplace, or the ONE profile — all on-canvas, no
   // popups. A segmented toggle flips Home ⇄ Global; the drawer opens Profile.
-  const [space, setSpace] = useState<"home" | "global" | "profile" | "connections">("home");
+  const [space, setSpace] = useState<"home" | "global" | "profile" | "connections" | "inbox">(
+    "home",
+  );
   const [world, setWorld] = useState<"all" | WorldKey>("all");
   // Switching profile resets the Global world tab — a consumer tab shouldn't
   // linger when you flip to a business hat that can't see it.
@@ -1737,6 +1799,17 @@ export default function AppHome() {
     return [...fromCloud, ...own].sort((a, b) => b.unread - a.unread);
   }, [activeIdentityId, units, incomingBookings]);
 
+  // Live incoming-reply signal — a request YOU sent (from this profile) that the
+  // other side has now answered, and you haven't seen the answer yet. This is
+  // the return leg of the two-sided loop, surfaced on Home as a banner.
+  const incomingReplies = useMemo(
+    () =>
+      requests.filter(
+        (r) => r.fromProfileId === activeIdentityId && r.reply && !r.replySeen,
+      ),
+    [requests, activeIdentityId],
+  );
+
   // The pulse is a LIVE digest, not a static loop: ONE reads the active identity's
   // real units and tells you what's actually waiting — so it updates the moment
   // you resolve something (confirm a booking, mark paid) and speaks in whichever
@@ -1748,6 +1821,23 @@ export default function AppHome() {
     const greetEn = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
     const greetHe = hour < 5 ? "לילה טוב" : hour < 12 ? "בוקר טוב" : hour < 18 ? "צהריים טובים" : "ערב טוב";
     const greet = `${he ? greetHe : greetEn}, ${identity.name}.`;
+    // Supplier lens: ONE leads with the inbox, not "start a process".
+    if ((identity.kind ?? "personal") === "supplier") {
+      const newCount = requests.filter(
+        (r) => r.toProfileId === activeIdentityId && r.status === "new",
+      ).length;
+      return newCount > 0
+        ? [
+            he
+              ? `${greet} ${newCount} ${newCount === 1 ? "פנייה חדשה מחכה" : "פניות חדשות מחכות"} לך.`
+              : `${greet} ${newCount} new request${newCount > 1 ? "s" : ""} waiting on you.`,
+            he ? "פתח את תיבת הפניות כדי לענות." : "Open your inbox to answer.",
+          ]
+        : [
+            greet,
+            he ? "אין פניות חדשות כרגע." : "No new requests right now.",
+          ];
+    }
     const waiting = processes.filter((p) => p.unread > 0);
     if (waiting.length === 0) {
       return [
@@ -1767,7 +1857,7 @@ export default function AppHome() {
         : (p.nextAction ?? p.summary),
     );
     return [header, ...items];
-  }, [processes, identity.name, now, lang]);
+  }, [processes, identity.name, identity.kind, requests, activeIdentityId, now, lang]);
 
   // Announce a live event in the broadcast slot, in the app's language.
   const announce = (en: string, he: string) => setLiveBroadcast(lang === "he" ? he : en);
@@ -2515,6 +2605,34 @@ export default function AppHome() {
     );
     closeDrawerOnMobile();
   };
+  // Answer the return leg of the two-sided loop: mark the reply seen, fold it
+  // into the originating process's thread (as the other side speaking), and open
+  // that process so you land right where the conversation continues.
+  const openReplySignal = (req: InboundRequest) => {
+    updateRequest(req.id, { replySeen: true });
+    const proc = units.find((u) => u.id === req.procId);
+    if (proc) {
+      const supplierName =
+        identities.find((i) => i.id === req.toProfileId)?.name ??
+        (lang === "he" ? "הצד השני" : "the other side");
+      const replyMsg: ChatMsg = {
+        role: "one",
+        party: "them",
+        from: supplierName,
+        text: req.reply ?? "",
+      };
+      setUnits((list) =>
+        list.map((u) =>
+          u.id === proc.id
+            ? { ...u, unread: 0, chat: [...(u.chat ?? []), replyMsg] }
+            : u,
+        ),
+      );
+      openUnit({ ...proc, chat: [...(proc.chat ?? []), replyMsg] });
+    } else {
+      openInbox();
+    }
+  };
   // Open a process straight to its options (⋮ on a drawer row / long-press).
   const openUnitOptions = (p: Process) => {
     openUnit(p);
@@ -2667,6 +2785,15 @@ export default function AppHome() {
     endChat();
     closeDrawerOnMobile();
     setSpace("connections");
+  };
+  const openInbox = () => {
+    setActiveProcess(null);
+    setUnitChat([]);
+    setUnitDraft("");
+    setUnitThinking(false);
+    endChat();
+    closeDrawerOnMobile();
+    setSpace("inbox");
   };
 
   // Pull a concrete "when" out of a message (a day and/or a real clock time),
@@ -2844,6 +2971,24 @@ export default function AppHome() {
               : `📨 Sent to ${to}${draft.subject ? ` re "${draft.subject}"` : ""}. I'll update you the moment they reply.`,
         },
       ]);
+      // If the recipient IS one of your supplier profiles, drop a real request
+      // into that profile's inbox — the actual two-sided handshake. (Otherwise
+      // the AI-played counterpart answers in-thread as before.)
+      const toLc = to.toLowerCase();
+      const supplier = identities.find(
+        (i) =>
+          i.kind === "supplier" &&
+          (toLc.includes(i.name.toLowerCase()) || i.name.toLowerCase().includes(toLc)),
+      );
+      if (supplier) {
+        sendRequest(
+          supplier.id,
+          draft.subject || (lang === "he" ? "פנייה חדשה" : "New request"),
+          draft.body,
+          identity.name,
+          { fromProfileId: activeIdentityId, procId: activeProcess?.id },
+        );
+      }
       // The other side answers — an AI plays the recipient, inside the thread.
       void counterpartReply(to, `${draft.subject ? draft.subject + " — " : ""}${draft.body}`).then(
         (reply) => {
@@ -3176,6 +3321,11 @@ export default function AppHome() {
   const lens = PROFILE_LENS[identity.kind ?? "personal"];
   const allowedWorlds = WORLD_KEYS.filter((k) => lens.worldScopes.includes(WORLD_SCOPE[k]));
   const worldAllowed = (b: Business) => allowedWorlds.includes(worldOf(b.category));
+  // Supplier lens leads with the inbox: how many requests are waiting on you.
+  const inboxNew = requests.filter(
+    (r) => r.toProfileId === activeIdentityId && r.status === "new",
+  ).length;
+  const inboxTotal = requests.filter((r) => r.toProfileId === activeIdentityId).length;
   // Global filtered by profile lens first, then by the selected world tab.
   const worldBiz = (world === "all" ? businesses : businesses.filter((b) => worldOf(b.category) === world)).filter(
     worldAllowed,
@@ -3435,6 +3585,18 @@ export default function AppHome() {
               <i className="fi fi-rr-users-alt drawer-row-ico" aria-hidden="true" />
               {t.connectionsNav}
             </button>
+            {identity.kind === "supplier" && (
+              <button className="drawer-row" onClick={openInbox}>
+                <i className="fi fi-rr-inbox drawer-row-ico" aria-hidden="true" />
+                {lang === "he" ? "תיבת פניות" : "Inbox"}
+                {(() => {
+                  const unread = requests.filter(
+                    (r) => r.toProfileId === activeIdentityId && r.status === "new",
+                  ).length;
+                  return unread > 0 ? <span className="drawer-badge">{unread}</span> : null;
+                })()}
+              </button>
+            )}
             <button className="drawer-row" onClick={() => setOpenSheet("settings")}>
               <i className="fi fi-rr-settings-sliders drawer-row-ico" aria-hidden="true" />
               {t.settings}
@@ -3850,6 +4012,162 @@ export default function AppHome() {
                       </div>
                     </div>
                   </div>
+                ) : space === "inbox" ? (
+                  // ── INBOX (supplier seat) — incoming requests addressed to
+                  //    this profile. Accept / decline + reply, closing the
+                  //    two-sided loop with the personal side that sent them.
+                  <div className="canvas profile-canvas">
+                    <div className="canvas-inner">
+                      <button className="canvas-back" onClick={goHome}>
+                        <span className="canvas-back-ico" aria-hidden="true">‹</span> {t.backHome}
+                      </button>
+                      <div className="prof-sec-head" style={{ marginTop: 4 }}>
+                        <h4 style={{ fontSize: 22 }}>
+                          {lang === "he" ? "תיבת פניות" : "Inbox"}
+                        </h4>
+                        <span className="prof-sec-sub">
+                          {lang === "he"
+                            ? `פניות שהגיעו אל ${identity.name}`
+                            : `Requests addressed to ${identity.name}`}
+                        </span>
+                      </div>
+
+                      {(() => {
+                        const mine = requests
+                          .filter((r) => r.toProfileId === activeIdentityId)
+                          .sort((a, b) =>
+                            a.status === "new" && b.status !== "new"
+                              ? -1
+                              : a.status !== "new" && b.status === "new"
+                                ? 1
+                                : 0,
+                          );
+                        if (mine.length === 0) {
+                          return (
+                            <p className="conn-empty" style={{ marginTop: 18 }}>
+                              {lang === "he"
+                                ? "אין פניות עדיין. כשמישהו יפנה אל הפרופיל הזה, זה יופיע כאן."
+                                : "No requests yet. When someone reaches this profile, it lands here."}
+                            </p>
+                          );
+                        }
+                        return (
+                          <div className="inbox-list">
+                            {mine.map((r) => (
+                              <div className={`inbox-card is-${r.status}`} key={r.id}>
+                                <div className="inbox-head">
+                                  <span className="inbox-from">
+                                    <span className="inbox-avatar">🧑</span>
+                                    {r.fromName}
+                                  </span>
+                                  <span className={`inbox-status st-${r.status}`}>
+                                    {r.status === "new"
+                                      ? lang === "he"
+                                        ? "חדש"
+                                        : "New"
+                                      : r.status === "accepted"
+                                        ? lang === "he"
+                                          ? "התקבל"
+                                          : "Accepted"
+                                        : lang === "he"
+                                          ? "נדחה"
+                                          : "Declined"}
+                                  </span>
+                                </div>
+                                <div className="inbox-title">{r.title}</div>
+                                <p className="inbox-msg">{r.message}</p>
+
+                                {r.reply && (
+                                  <div className="inbox-reply-sent">
+                                    <span className="inbox-reply-label">
+                                      {lang === "he" ? "התשובה שלך" : "Your reply"}
+                                    </span>
+                                    {r.reply}
+                                  </div>
+                                )}
+
+                                {r.status === "new" ? (
+                                  <>
+                                    <div className="inbox-actions">
+                                      <button
+                                        className="inbox-btn accept"
+                                        onClick={() => updateRequest(r.id, { status: "accepted" })}
+                                      >
+                                        {lang === "he" ? "קבל" : "Accept"}
+                                      </button>
+                                      <button
+                                        className="inbox-btn decline"
+                                        onClick={() => updateRequest(r.id, { status: "declined" })}
+                                      >
+                                        {lang === "he" ? "דחה" : "Decline"}
+                                      </button>
+                                    </div>
+                                    <div className="inbox-reply">
+                                      <input
+                                        className="mem-input"
+                                        value={replyDrafts[r.id] ?? ""}
+                                        placeholder={
+                                          lang === "he" ? "כתוב תשובה…" : "Write a reply…"
+                                        }
+                                        onChange={(e) =>
+                                          setReplyDrafts((d) => ({ ...d, [r.id]: e.target.value }))
+                                        }
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter" && (replyDrafts[r.id] ?? "").trim()) {
+                                            updateRequest(r.id, {
+                                              reply: replyDrafts[r.id].trim(),
+                                              status: "accepted",
+                                            });
+                                            setReplyDrafts((d) => ({ ...d, [r.id]: "" }));
+                                          }
+                                        }}
+                                      />
+                                      <button
+                                        className="sheet-pill"
+                                        disabled={!(replyDrafts[r.id] ?? "").trim()}
+                                        onClick={() => {
+                                          updateRequest(r.id, {
+                                            reply: (replyDrafts[r.id] ?? "").trim(),
+                                            status: "accepted",
+                                          });
+                                          setReplyDrafts((d) => ({ ...d, [r.id]: "" }));
+                                        }}
+                                      >
+                                        {lang === "he" ? "שלח" : "Send"}
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : !r.reply ? (
+                                  <div className="inbox-reply">
+                                    <input
+                                      className="mem-input"
+                                      value={replyDrafts[r.id] ?? ""}
+                                      placeholder={
+                                        lang === "he" ? "הוסף תשובה…" : "Add a reply…"
+                                      }
+                                      onChange={(e) =>
+                                        setReplyDrafts((d) => ({ ...d, [r.id]: e.target.value }))
+                                      }
+                                    />
+                                    <button
+                                      className="sheet-pill"
+                                      disabled={!(replyDrafts[r.id] ?? "").trim()}
+                                      onClick={() => {
+                                        updateRequest(r.id, { reply: (replyDrafts[r.id] ?? "").trim() });
+                                        setReplyDrafts((d) => ({ ...d, [r.id]: "" }));
+                                      }}
+                                    >
+                                      {lang === "he" ? "שלח" : "Send"}
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 ) : space === "connections" ? (
                   // ── CONNECTIONS — your network: the businesses your processes
                   //    are with, the people across them, and contacts you add.
@@ -4229,6 +4547,50 @@ export default function AppHome() {
                         <ChevronUpIcon />
                       </button>
                       <div className="home-center">
+                        {lens.homeMode === "inbox" && inboxTotal > 0 && (
+                          <button className="reply-signal inbox-lead" onClick={openInbox}>
+                            <span className="reply-signal-dot" aria-hidden="true" />
+                            <span className="reply-signal-body">
+                              <span className="reply-signal-title">
+                                {inboxNew > 0
+                                  ? lang === "he"
+                                    ? `${inboxNew} פניות חדשות ממתינות לך`
+                                    : `${inboxNew} new request${inboxNew > 1 ? "s" : ""} waiting`
+                                  : lang === "he"
+                                    ? "תיבת הפניות"
+                                    : "Your inbox"}
+                              </span>
+                              <span className="reply-signal-text">
+                                {lang === "he"
+                                  ? "פתח כדי לענות ולתאם"
+                                  : "Open to answer and coordinate"}
+                              </span>
+                            </span>
+                            <span className="reply-signal-cta" aria-hidden="true">›</span>
+                          </button>
+                        )}
+                        {incomingReplies.length > 0 && (
+                          <button
+                            className="reply-signal"
+                            onClick={() => openReplySignal(incomingReplies[0])}
+                          >
+                            <span className="reply-signal-dot" aria-hidden="true" />
+                            <span className="reply-signal-body">
+                              <span className="reply-signal-title">
+                                {lang === "he"
+                                  ? `${identities.find((i) => i.id === incomingReplies[0].toProfileId)?.name ?? "הצד השני"} ענה`
+                                  : `${identities.find((i) => i.id === incomingReplies[0].toProfileId)?.name ?? "The other side"} replied`}
+                                {incomingReplies.length > 1
+                                  ? ` · +${incomingReplies.length - 1}`
+                                  : ""}
+                              </span>
+                              <span className="reply-signal-text">
+                                {incomingReplies[0].reply}
+                              </span>
+                            </span>
+                            <span className="reply-signal-cta" aria-hidden="true">›</span>
+                          </button>
+                        )}
                         <div
                           key={liveBroadcast ?? "resting"}
                           className={`home-broadcast${liveBroadcast ? " is-live" : ""}${

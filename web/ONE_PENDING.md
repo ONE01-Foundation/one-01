@@ -18,7 +18,7 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 ## 🔲 Discussed but NOT done yet — needs completing
 
 1. ~~**Create-profile: types, not only business.**~~ ✅ DONE — chooser (Personal/Business/Supplier) + stateful persisted identities.
-2. **True two-sided testing (partly done).** ✅ A supplier *seat* now exists (switch to "Test Provider" or create a supplier profile). ⏳ STILL OPEN: answering a *specific* incoming request cross-profile — a real handshake — needs a request bus so a process opened on the personal side shows up in the supplier's inbox to answer.
+2. ~~**True two-sided testing.**~~ ✅ DONE — request bus + supplier inbox. Approving a draft addressed to a supplier profile drops a real `InboundRequest` into that profile's inbox (drawer "Inbox" entry + unread badge, shown only on supplier seats). The supplier Accepts/Declines and replies; the reply flows back to the sender's Home as a live banner that opens the originating process with the answer folded into the thread. Supplier home leads with the inbox (broadcast + banner). Persisted in `one_requests`.
 3. **Make Booking a real capability** (like Quiz) — propose times as chips, tapping books into the process + timeline.
 4. **Make Forms / Reminders real** — currently declarative toggles.
 5. **Sources actually feed answers** — ONE cites / pulls from the official source when answering a regulated-domain question (licensing, health, gov, NII). Role-gated source-adding is still a disabled placeholder.
@@ -33,9 +33,9 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 ## More important things to do — prioritized (2026-07)
 
 **P0 — core loop must feel real**
-1. **Request bus / two-sided handshake** — a process opened on the personal side lands in the supplier's inbox; the supplier answers → it flows back. This is the spine of the network.
-2. **Supplier home = inbox mode** — wire `PROFILE_LENS.homeMode="inbox"`: incoming requests instead of "start a process".
-3. **Real send channel behind Drafts** — actually deliver an approved draft (email / WhatsApp / link), behind a permission gate. Today it's simulated in-thread.
+1. ~~**Request bus / two-sided handshake**~~ ✅ DONE — process on the personal side lands in the supplier's inbox; the supplier answers → flows back to Home as a live banner. Spine of the network.
+2. ~~**Supplier home = inbox mode**~~ ✅ DONE — supplier lens leads with the inbox (broadcast + banner + drawer badge) instead of "start a process".
+3. **Real send channel behind Drafts** — actually deliver an approved draft (email / WhatsApp / link), behind a permission gate. Today it's simulated in-thread. _(The internal supplier handshake is now real; external channels remain.)_
 
 **P1 — make ONE genuinely capable**
 4. **Booking capability functional** (like Quiz) — propose real slots as chips, tapping books into the process + timeline.

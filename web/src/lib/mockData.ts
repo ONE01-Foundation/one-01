@@ -20,6 +20,33 @@ export interface Step {
   done: boolean;
 }
 
+/**
+ * A request that crossed profiles — the spine of the two-sided loop. When a
+ * personal ONE reaches out to a provider, an InboundRequest lands in that
+ * supplier profile's inbox; the supplier accepts/declines and replies, and it
+ * flows back. Persisted locally in `one_requests`.
+ */
+export interface InboundRequest {
+  id: string;
+  /** The supplier identity (profile) this request is addressed to. */
+  toProfileId: string;
+  /** Who it's from (the requester's name/label). */
+  fromName: string;
+  /** The sending identity (profile) — so a reply can flow back to its home. */
+  fromProfileId?: string;
+  /** The process on the sender's side this request originated from. */
+  procId?: string;
+  title: string;
+  message: string;
+  status: "new" | "accepted" | "declined";
+  /** The supplier's reply once they answer. */
+  reply?: string;
+  /** Set once the sender has seen the supplier's reply (clears the signal). */
+  replySeen?: boolean;
+  /** A wall-clock stamp string ("now" / a time), for display only. */
+  at: string;
+}
+
 export interface TimelineEvent {
   at: string;
   text: string;
