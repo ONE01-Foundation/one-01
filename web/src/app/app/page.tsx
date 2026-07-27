@@ -484,6 +484,7 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     exitTemp: "Exit temporary chat",
     options: "Options",
     editProfile: "Edit profile",
+    wipeChat: "Wipe chat",
     tempTag: "Temporary chat · nothing is saved",
     tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
@@ -583,6 +584,7 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     exitTemp: "צא מצ'אט זמני",
     options: "אפשרויות",
     editProfile: "עריכת פרופיל",
+    wipeChat: "נקה צ'אט",
     tempTag: "צ'אט זמני · שום דבר לא נשמר",
     tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
@@ -1551,6 +1553,18 @@ export default function AppHome() {
       setUnitMenuOpen(false);
     }, 1100);
   };
+  // Wipe just the conversation (keep the process). Resets to the opening line.
+  const wipeUnitChat = () => {
+    if (!activeProcess) return;
+    const p = activeProcess;
+    const greeting = {
+      role: "one" as const,
+      text: `Here's ${p.title}.${p.nextAction ? " " + p.nextAction : " Tell me what changed and I'll update it."}`,
+    };
+    setUnitChat([greeting]);
+    setUnits((list) => list.map((u) => (u.id === p.id ? { ...u, chat: [greeting] } : u)));
+    setUnitMenuOpen(false);
+  };
   const deleteUnit = () => {
     if (!activeProcess) return;
     // Deleting is irreversible — require a confirming second tap.
@@ -2272,6 +2286,13 @@ export default function AppHome() {
                                 aria-hidden="true"
                               />{" "}
                               {unitShared ? t.copied : t.share}
+                            </button>
+                            <button
+                              className="unit-menu-item"
+                              onClick={wipeUnitChat}
+                              role="menuitem"
+                            >
+                              <i className="fi fi-rr-eraser" aria-hidden="true" /> {t.wipeChat}
                             </button>
                             <button
                               className={`unit-menu-item danger${unitConfirmDelete ? " confirm" : ""}`}
