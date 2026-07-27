@@ -881,6 +881,7 @@ export default function AppHome() {
   // scrolling up at the top (or the ↑ chevron), exactly like the landing hero.
   const homePageRef = useRef<HTMLDivElement>(null);
   const [globalOpen, setGlobalOpen] = useState(false);
+  const pgPanelRef = useRef<HTMLDivElement>(null);
   // While ONE is working, a status line cycles Thinking → Connecting → Searching
   // → Working (like a coding agent), and the ONE face closes its eyes.
   const [statusIdx, setStatusIdx] = useState(0);
@@ -1160,6 +1161,9 @@ export default function AppHome() {
     return [header, ...items];
   }, [processes, identity.name, now, lang]);
 
+  // Announce a live event in the broadcast slot, in the app's language.
+  const announce = (en: string, he: string) => setLiveBroadcast(lang === "he" ? he : en);
+
   // The live process behind the open sheet, so edits show immediately.
   const activeLive = activeProcess ? units.find((u) => u.id === activeProcess.id) ?? activeProcess : null;
 
@@ -1192,7 +1196,7 @@ export default function AppHome() {
         steps: p.steps.map((s) => (/confirm/i.test(s.label) ? { ...s, done: true } : s)),
         timeline: [{ at: "now", text: `You confirmed ${when}.` }, ...p.timeline],
       });
-      setLiveBroadcast(`You confirmed ${p.relation}'s ${when}.`);
+      announce(`You confirmed ${p.relation}'s ${when}.`, `אישרת את ${when} של ${p.relation}.`);
       window.setTimeout(() => {
         setUnits((list) =>
           list.map((u) =>
@@ -1209,7 +1213,7 @@ export default function AppHome() {
               : u,
           ),
         );
-        setLiveBroadcast(`${p.relation} is set for ${when}.`);
+        announce(`${p.relation} is set for ${when}.`, `${p.relation} מסודר ל${when}.`);
       }, 2200);
       return;
     }
@@ -1228,7 +1232,7 @@ export default function AppHome() {
         steps: p.steps.map((s) => (/payment|paid/i.test(s.label) ? { ...s, done: true } : s)),
         timeline: [{ at: "now", text: "Marked as paid." }, ...p.timeline],
       });
-      setLiveBroadcast(`${p.relation}'s invoice marked paid.`);
+      announce(`${p.relation}'s invoice marked paid.`, `החשבונית של ${p.relation} סומנה כשולמה.`);
       return;
     }
 
@@ -1297,7 +1301,7 @@ export default function AppHome() {
       upsert(p);
       setFocusId(p.id);
     }
-    setLiveBroadcast(`Booked ${what} at ${biz.name}.`);
+    announce(`Booked ${what} at ${biz.name}.`, `קבעתי ${what} ב${biz.name}.`);
     // Your ONE writes the booking into the shared marketplace (Supabase), so the
     // provider's ONE can see it from its own side.
     void createBooking(biz.id, identity.name, service, slot);
@@ -1319,7 +1323,7 @@ export default function AppHome() {
             : u,
         ),
       );
-      setLiveBroadcast(`${biz.name} confirmed your ${what}.`);
+      announce(`${biz.name} confirmed your ${what}.`, `${biz.name} אישר את ${what} שלך.`);
     }, 2400);
     return `✅ Booked — ${what} at ${biz.name}. It's in your processes now.`;
   };
@@ -1719,6 +1723,50 @@ export default function AppHome() {
       window.clearTimeout(timer);
     };
   }, [globalOpen, space, activeProcess, chat.length]);
+
+  // …and scrolling DOWN at the very top of the open panel (or dragging it down)
+  // lowers Global back out of view — the natural reverse of the reveal.
+  useEffect(() => {
+    if (!globalOpen) return;
+    const panel = pgPanelRef.current;
+    if (!panel) return;
+    let acc = 0;
+    let timer = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (panel.scrollTop > 0) {
+        acc = 0;
+        return;
+      }
+      if (e.deltaY > 0) {
+        acc += e.deltaY;
+        if (acc > 60) {
+          acc = 0;
+          setGlobalOpen(false);
+        }
+      } else {
+        acc = 0;
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => (acc = 0), 260);
+    };
+    let startY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (panel.scrollTop > 0) return;
+      if ((e.touches[0]?.clientY ?? 0) - startY > 70) setGlobalOpen(false);
+    };
+    panel.addEventListener("wheel", onWheel, { passive: true });
+    panel.addEventListener("touchstart", onTouchStart, { passive: true });
+    panel.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      panel.removeEventListener("wheel", onWheel);
+      panel.removeEventListener("touchstart", onTouchStart);
+      panel.removeEventListener("touchmove", onTouchMove);
+      window.clearTimeout(timer);
+    };
+  }, [globalOpen]);
 
   // Esc backs out of whatever's open — an overlay, then the unit, then the
   // drawer. The workspace should never trap you.
@@ -2279,13 +2327,10 @@ export default function AppHome() {
                       />
                       <div
                         className="pg-sheet-panel"
+                        ref={pgPanelRef}
                         role="dialog"
                         aria-modal="true"
                         aria-label={t.global}
-                        onWheel={(e) => {
-                          if (e.currentTarget.scrollTop <= 0 && e.deltaY > 40)
-                            setGlobalOpen(false);
-                        }}
                       >
                         <button
                           className="pg-sheet-grab"
@@ -2460,7 +2505,12 @@ export default function AppHome() {
                         <ChevronUpIcon />
                       </button>
                       <div className="home-center">
-                        <div className={`home-broadcast${!liveBroadcast && bfade ? " is-fading" : ""}`}>
+                        <div
+                          key={liveBroadcast ?? "resting"}
+                          className={`home-broadcast${liveBroadcast ? " is-live" : ""}${
+                            !liveBroadcast && bfade ? " is-fading" : ""
+                          }`}
+                        >
                           {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
                         </div>
                         <AppInput
