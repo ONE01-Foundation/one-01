@@ -2596,6 +2596,30 @@ export default function AppHome() {
           : u,
       ),
     );
+  // The other side answers — for real. ONE hands the outreach to an AI playing
+  // the recipient (office / business / person) so the reply reads like a genuine
+  // response, still inside the thread. Falls back to a polite ack if offline.
+  const counterpartReply = async (fromName: string, gist: string): Promise<string> => {
+    const he = lang === "he";
+    const fallback = he
+      ? "קיבלנו את הפנייה, תודה. נחזור אליך עם פרטים בהקדם."
+      : "Got your message, thank you. We'll come back to you with details shortly.";
+    try {
+      const sys = he
+        ? `אתה "${fromName}" — הנמען של פנייה מלקוח. השב בקצרה (1‑2 משפטים), אמין ומנומס, בגוף ראשון מטעם ${fromName}, כאילו קיבלת את הפנייה עכשיו. עברית. בלי הקדמות ובלי חתימה.`
+        : `You are "${fromName}", the recipient of a customer's outreach. Reply briefly (1-2 sentences), realistic and polite, first person as ${fromName}, as if you just received it. No preamble, no signature.`;
+      const reply = await invokeAiChat(
+        [
+          { role: "system", content: sys },
+          { role: "user", content: gist },
+        ],
+        { maxTokens: 120, temperature: 0.6 },
+      );
+      return reply.trim() || fallback;
+    } catch {
+      return fallback;
+    }
+  };
   const approveDraft = (procId: string, draftId: string) => {
     const proc = units.find((u) => u.id === procId);
     const draft = proc?.drafts?.find((d) => d.id === draftId);
@@ -2626,21 +2650,12 @@ export default function AppHome() {
               : `📨 Sent to ${to}${draft.subject ? ` re "${draft.subject}"` : ""}. I'll update you the moment they reply.`,
         },
       ]);
-      // A short beat later, the other side answers — inside the thread.
-      window.setTimeout(() => {
-        setUnitChat((c) => [
-          ...c,
-          {
-            role: "one",
-            party: "them",
-            from: to,
-            text:
-              lang === "he"
-                ? "קיבלנו את הפנייה, תודה. נחזור אליך עם פרטים בהקדם."
-                : "Got your message, thank you. We'll come back to you with details shortly.",
-          },
-        ]);
-      }, 2600);
+      // The other side answers — an AI plays the recipient, inside the thread.
+      void counterpartReply(to, `${draft.subject ? draft.subject + " — " : ""}${draft.body}`).then(
+        (reply) => {
+          setUnitChat((c) => [...c, { role: "one", party: "them", from: to, text: reply }]);
+        },
+      );
     }
   };
   const removeDraft = (procId: string, draftId: string) =>
@@ -2665,6 +2680,25 @@ export default function AppHome() {
     // "Write the email / message them" → ONE composes a real outward draft you
     // can review in the Drafts section, instead of just replying about it.
     if (DRAFT_INTENT.test(text.toLowerCase())) {
+      // If the other side is already in this thread, don't draft a fresh card —
+      // just relay the follow-up to them and surface their reply, keeping the
+      // back-and-forth flowing inside the process.
+      const priorThem = [...priorChat].reverse().find((m) => m.party === "them");
+      if (priorThem) {
+        const to = priorThem.from || (lang === "he" ? "הצד השני" : "the other side");
+        setUnitThinking(false);
+        setUnitChat((c) => [
+          ...c,
+          {
+            role: "one",
+            party: "one",
+            text: lang === "he" ? `📨 העברתי ל${to}.` : `📨 Passed that to ${to}.`,
+          },
+        ]);
+        const reply = await counterpartReply(to, text);
+        setUnitChat((c) => [...c, { role: "one", party: "them", from: to, text: reply }]);
+        return;
+      }
       const ok = await composeDraft(proc, text);
       setUnitThinking(false);
       setUnitChat((c) => [
