@@ -4729,6 +4729,26 @@ footer {
   background: color-mix(in srgb, var(--p-blue) 85%, #000);
   color: #fff;
 }
+/* Intake interview — the answer choices ONE offers to tailor a process. Reads
+   like the primary next thing to do; a quiet hint says you can type instead. */
+.intake-chips {
+  align-items: center;
+}
+.chat-chip.intake-chip {
+  border-color: color-mix(in srgb, var(--p-face) 22%, var(--p-line));
+  background: var(--p-surface);
+  color: var(--p-text);
+  font-weight: 600;
+}
+.chat-chip.intake-chip:hover {
+  border-color: var(--p-face);
+  background: color-mix(in srgb, var(--p-face) 6%, var(--p-surface));
+}
+.intake-hint {
+  font-size: 12px;
+  color: var(--p-text-3);
+  align-self: center;
+}
 /* Bookable time slots — a distinct, calendar-tinted chip. */
 .chat-chip.booking-chip {
   border-color: color-mix(in srgb, var(--p-blue) 40%, var(--p-line));

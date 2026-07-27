@@ -1910,6 +1910,21 @@ export default function AppHome() {
      *  and passing it updates the process (ticks a learning step, logs it). */
     procId?: string;
   } | null>(null);
+  // A running intake interview — ONE asks the user to tailor a process, one
+  // question at a time, with tappable choices (they can also type). Answers
+  // accumulate; when ONE has enough it writes a tailored plan and starts leading.
+  const [intake, setIntake] = useState<{
+    procId: string;
+    topic: string;
+    field: string;
+    question: string;
+    answers: { field: string; question: string; answer: string }[];
+    asked: number;
+  } | null>(null);
+  const intakeRef = useRef<typeof intake>(null);
+  useEffect(() => {
+    intakeRef.current = intake;
+  }, [intake]);
   // Live form the user is filling (the "Form filling" capability). You type your
   // own values; ONE never invents them. Singular, like the quiz.
   const [activeForm, setActiveForm] = useState<{
@@ -2552,9 +2567,194 @@ export default function AppHome() {
           })),
         });
       }
+      // …then ONE takes the lead: a short, choice-driven interview to tailor the
+      // plan to THIS person, before it starts driving it forward. Only in the
+      // unit flow, so the questions land in the open thread you're looking at.
+      if (toUnit) {
+        postFollowUp({
+          role: "one",
+          text: he
+            ? "כדי להתאים את זה בול אליך, כמה שאלות קצרות — אפשר להקיש בחירה או לכתוב 👇"
+            : "To tailor this to you, a few quick questions — tap a choice or just type 👇",
+        });
+        void askIntake({ ...proc, title: cleanTitle ?? proc.title }, intent, [], 0);
+      }
     } catch {
       /* Any failure (offline, bad JSON) — keep the template plan. */
     }
+  };
+
+  // ── Intake interview — ONE becomes the expert for a goal: it asks the user a
+  //    few tailoring questions (tappable choices, or type), gathers the answers
+  //    into the process, then writes a personalised plan and starts leading.
+  const MAX_INTAKE = 4;
+  // Route a chat line into the right place for a process (open unit vs saved).
+  const postToProc = (proc: Process, m: ChatMsg) => {
+    if (activeUnitRef.current === proc.id) setUnitChat((c) => [...c, m]);
+    else
+      setUnits((list) =>
+        list.map((u) => (u.id === proc.id ? { ...u, chat: [...(u.chat ?? []), m] } : u)),
+      );
+  };
+  const setProcThinking = (proc: Process, v: boolean) =>
+    activeUnitRef.current === proc.id ? setUnitThinking(v) : setThinking(v);
+  // Close the interview: a dedicated AI call that turns the answers into a
+  // tailored plan + a first-person "here's what we're doing, starting now" lead,
+  // then writes it into the process. This is ONE taking the wheel.
+  const finishIntake = async (
+    proc: Process,
+    topic: string,
+    answers: { field: string; question: string; answer: string }[],
+  ) => {
+    const he = msgLang(`${proc.title} ${topic}`) === "he";
+    const prior = answers.map((a) => `- ${a.question} → ${a.answer}`).join("\n");
+    setProcThinking(proc, true);
+    let lead = he
+      ? "יש לי תמונה מלאה. אני לוקח מכאן — מתחילים."
+      : "I've got the full picture. I'll take it from here — let's start.";
+    let steps: string[] = [];
+    let metrics: { label: string; value: string }[] = [];
+    try {
+      const sys = he
+        ? `אתה ONE — המומחה האישי של המשתמש למטרה "${proc.title}". על סמך התשובות שלו בנה תכנית מותאמת אישית והתחל להוביל. החזר JSON תקין בלבד: {"lead":"","steps":["",""],"metrics":[{"label":"","value":""}]} — lead=פסקה קצרה בגוף ראשון שמסכמת את הכיוון המותאם ואומרת מה המהלך הראשון שמתחילים בו עכשיו, steps=3‑5 צעדים מותאמים לפי סדר, metrics=1‑3 מדדים למעקב. הכל בעברית. בלי code fences.`
+        : `You are ONE — the user's personal expert for the goal "${proc.title}". Using their answers, build a tailored plan and start leading. Return ONLY valid JSON: {"lead":"","steps":["",""],"metrics":[{"label":"","value":""}]} — lead=a short first-person paragraph summarising the tailored direction and the first move to start right now, steps=3‑5 tailored ordered steps, metrics=1‑3 metrics to track. No code fences.`;
+      const raw = await invokeAiChat(
+        [
+          { role: "system", content: sys },
+          { role: "user", content: `Goal: ${proc.title} — ${topic}\nAnswers:\n${prior || "(none)"}` },
+        ],
+        { maxTokens: 520, temperature: 0.5 },
+      );
+      const body = raw.replace(/```json|```/g, "");
+      const s = body.indexOf("{");
+      const e = body.lastIndexOf("}");
+      const parsed = s >= 0 && e > s ? JSON.parse(body.slice(s, e + 1)) : null;
+      if (parsed) {
+        if (typeof parsed.lead === "string" && parsed.lead.trim()) lead = parsed.lead.trim();
+        if (Array.isArray(parsed.steps))
+          steps = parsed.steps.filter((x: unknown) => typeof x === "string" && !!(x as string).trim()).slice(0, 6);
+        if (Array.isArray(parsed.metrics))
+          metrics = parsed.metrics
+            .filter(
+              (m: unknown): m is { label: string; value: string } =>
+                !!m &&
+                typeof (m as { label?: unknown }).label === "string" &&
+                typeof (m as { value?: unknown }).value === "string",
+            )
+            .slice(0, 4);
+      }
+    } catch {
+      /* keep the fallback lead + existing plan */
+    }
+    setProcThinking(proc, false);
+    setIntake(null);
+    setUnits((list) =>
+      list.map((u) =>
+        u.id === proc.id
+          ? {
+              ...u,
+              fields: {
+                ...(u.fields ?? {}),
+                ...Object.fromEntries(answers.map((a) => [a.field, a.answer])),
+              },
+              steps: steps.length ? steps.map((label) => ({ label, done: false })) : u.steps,
+              progress: steps.length ? { done: 0, total: steps.length } : u.progress,
+              metrics: metrics.length ? metrics : u.metrics,
+              decisions: [he ? "סוכם כיוון מותאם אישית" : "Locked a tailored direction", ...u.decisions],
+            }
+          : u,
+      ),
+    );
+    postToProc(proc, { role: "one", text: lead });
+    const firstStep = (steps.length ? steps : proc.steps.map((sp) => sp.label))[0];
+    if (firstStep)
+      postToProc(proc, {
+        role: "one",
+        text: he ? `מהלך ראשון: ${firstStep}` : `First move: ${firstStep}`,
+        chips: he ? ["קדימה", "שנה משהו"] : ["Let's go", "Adjust something"],
+      });
+  };
+  const askIntake = async (
+    proc: Process,
+    topic: string,
+    answers: { field: string; question: string; answer: string }[],
+    asked: number,
+  ) => {
+    // Hit the cap? Skip straight to the tailored close.
+    if (asked >= MAX_INTAKE) {
+      await finishIntake(proc, topic, answers);
+      return;
+    }
+    const he = msgLang(`${proc.title} ${topic}`) === "he";
+    setProcThinking(proc, true);
+    try {
+      const prior = answers.map((a) => `- ${a.question} → ${a.answer}`).join("\n");
+      const sys = he
+        ? `אתה ONE — הנציג והמומחה האישי של המשתמש למטרה "${proc.title}". אתה מראיין אותו בקצרה כדי לבנות תכנית מותאמת. שאל את השאלה הבאה הכי מועילה (אחת בלבד). החזר JSON תקין בלבד: {"question":"","options":["","",""],"field":"","done":false} — question=שאלה אחת קצרה, options=3‑4 בחירות קונקרטיות קצרות (המשתמש יכול גם לכתוב), field=מילה שמתארת מה נאסף, done=true רק אם כבר יש לך מספיק לתכנית טובה. הכל בעברית חוץ מ‑field. בלי code fences.`
+        : `You are ONE — the user's personal representative and expert for the goal "${proc.title}". You briefly interview them to build a tailored plan. Ask the single most useful next question. Return ONLY valid JSON: {"question":"","options":["","",""],"field":"","done":false} — question=one short question, options=3‑4 concrete short choices (the user may also type), field=a word for what it captures, done=true only if you already have enough for a good plan. No code fences.`;
+      const raw = await invokeAiChat(
+        [
+          { role: "system", content: sys },
+          {
+            role: "user",
+            content: `Goal: ${proc.title} — ${topic}\nAnswers so far:\n${prior || "(none yet)"}`,
+          },
+        ],
+        { maxTokens: 320, temperature: 0.5 },
+      );
+      const body = raw.replace(/```json|```/g, "");
+      const s = body.indexOf("{");
+      const e = body.lastIndexOf("}");
+      const parsed = s >= 0 && e > s ? JSON.parse(body.slice(s, e + 1)) : null;
+      const options = (Array.isArray(parsed?.options) ? parsed.options : [])
+        .filter((o: unknown): o is string => typeof o === "string" && !!o.trim())
+        .map((o: string) => o.trim().slice(0, 60))
+        .slice(0, 4);
+      // No usable question, or the model says it's done → close + lead.
+      if (
+        !parsed ||
+        parsed.done ||
+        typeof parsed.question !== "string" ||
+        !parsed.question.trim() ||
+        options.length < 2
+      ) {
+        await finishIntake(proc, topic, answers);
+        return;
+      }
+      setProcThinking(proc, false);
+      const question = parsed.question.trim().slice(0, 220);
+      const field =
+        typeof parsed.field === "string" && parsed.field.trim()
+          ? parsed.field.trim().slice(0, 30)
+          : `q${asked + 1}`;
+      setIntake({ procId: proc.id, topic, field, question, answers, asked });
+      postToProc(proc, { role: "one", text: question, intake: { options, field, procId: proc.id } });
+    } catch {
+      setProcThinking(proc, false);
+      setIntake(null);
+    }
+  };
+  // Record an intake answer (a tapped choice OR typed text) and move on.
+  const answerIntake = (answerText: string) => {
+    const cur = intakeRef.current;
+    if (!cur) return;
+    const proc = units.find((u) => u.id === cur.procId);
+    const toUnit = activeUnitRef.current === cur.procId;
+    const echo = (m: ChatMsg) => {
+      if (toUnit) setUnitChat((c) => [...c, m]);
+      else
+        setUnits((list) =>
+          list.map((u) => (u.id === cur.procId ? { ...u, chat: [...(u.chat ?? []), m] } : u)),
+        );
+    };
+    echo({ role: "user", text: answerText });
+    setIntake(null);
+    if (!proc) return;
+    const answers = [
+      ...cur.answers,
+      { field: cur.field, question: cur.question, answer: answerText },
+    ];
+    void askIntake(proc, cur.topic, answers, cur.asked + 1);
   };
 
   // ── Quiz teaching capability — turn "quiz me on X" into a real quiz in chat.
@@ -3905,6 +4105,14 @@ export default function AppHome() {
     if (!proc) return;
     const text = (override ?? unitDraft).trim();
     if (!text) return;
+    // Mid-interview? A typed line answers ONE's current tailoring question (the
+    // choices are optional — you can always just write). ONE then continues the
+    // interview or, when it has enough, writes your plan and leads.
+    if (intakeRef.current && intakeRef.current.procId === proc.id) {
+      setUnitDraft("");
+      answerIntake(text);
+      return;
+    }
     const priorChat = unitChat; // snapshot the transcript for the AI, pre-append
     setUnitChat((c) => [...c, { role: "user", text }]);
     setUnitDraft("");
@@ -4680,7 +4888,22 @@ export default function AppHome() {
                             <img className="chat-img" src={m.image} alt="" loading="lazy" />
                           )}
                           <div className={`chat-msg ${cls}`}>{m.text}</div>
-                          {m.quiz ? (
+                          {m.intake ? (
+                            <div className="chat-chips intake-chips">
+                              {m.intake.options.map((o, oi) => (
+                                <button
+                                  key={oi}
+                                  className="chat-chip intake-chip"
+                                  onClick={() => answerIntake(o)}
+                                >
+                                  {o}
+                                </button>
+                              ))}
+                              <span className="intake-hint">
+                                {lang === "he" ? "או כתוב תשובה משלך" : "or type your own"}
+                              </span>
+                            </div>
+                          ) : m.quiz ? (
                             <div className="chat-chips quiz-chips">
                               {m.quiz.options.map((o, oi) => (
                                 <button

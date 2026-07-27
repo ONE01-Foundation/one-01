@@ -34,6 +34,12 @@ export type ChatMsg = {
   /** A multiple-choice quiz question — tapping an option answers it. */
   quiz?: { options: string[]; answer: number };
   /**
+   * An intake question ONE asks to tailor a process — tapping a choice answers
+   * it (you can also just type). `field` labels what it captures; `procId` is
+   * the process being tailored. ONE runs a short interview, then leads.
+   */
+  intake?: { options: string[]; field: string; procId: string };
+  /**
    * Bookable time slots ONE found — tapping one books it into the process
    * (timeline + a "When" metric) and confirms. `topic` labels the booking;
    * `procId` is the process the slot books into (absent = create one).
