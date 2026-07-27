@@ -25,6 +25,8 @@ export type ChatMsg = {
   quiz?: { options: string[]; answer: number };
   /** An illustrative image URL (e.g. a Wikipedia thumbnail) shown in the bubble. */
   image?: string;
+  /** Action chips — enable a capability ONE needs, or prompt an upgrade. */
+  actions?: { label: string; kind: "enableCap" | "upgrade"; cap?: string; run?: string }[];
 };
 
 export interface Outreach {

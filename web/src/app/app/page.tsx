@@ -383,7 +383,52 @@ const CAPABILITY_CATALOG: Capability[] = [
     descEn: "Gathers options and compares them for you.",
     descHe: "אוסף אפשרויות ומשווה ביניהן בשבילך.",
   },
+  {
+    key: "translate",
+    emoji: "🌐",
+    en: "Translate",
+    he: "תרגום",
+    descEn: "Translates messages and documents between languages.",
+    descHe: "מתרגם הודעות ומסמכים בין שפות.",
+  },
+  {
+    key: "travel",
+    emoji: "✈️",
+    en: "Trip planning",
+    he: "תכנון טיולים",
+    descEn: "Plans routes, stays and bookings for a trip.",
+    descHe: "מתכנן מסלול, לינה והזמנות לטיול.",
+  },
+  {
+    key: "negotiate",
+    emoji: "🤝",
+    en: "Negotiate",
+    he: "משא ומתן",
+    descEn: "Handles back-and-forth to get you a better deal.",
+    descHe: "מנהל את המשא ומתן כדי להשיג לך עסקה טובה יותר.",
+  },
 ];
+// Capabilities behind a paid plan (a subscription is required to switch on).
+const PREMIUM_CAPS = ["research", "travel", "negotiate"];
+// Map a free-text ask to the capability it needs (first match wins).
+const CAP_INTENT: { key: string; re: RegExp }[] = [
+  { key: "quiz", re: /\b(quiz|test)\s+me\b|\bteach me\b|תבחן אות|בחן אות|תלמד אות|למד אות|מבחן|תרגול/i },
+  { key: "booking", re: /\bbook\b|schedule|appointment|reserve|קבע(?: לי)? תור|לקבוע תור|תזמן|להזמין תור/i },
+  { key: "forms", re: /fill (out )?(the )?form|application form|למלא (לי )?טופס|תמלא טופס|בקשה רשמית/i },
+  { key: "reminders", re: /remind me|set a reminder|תזכיר לי|קבע תזכורת|תזכורת/i },
+  { key: "translate", re: /translate|תרגם|תתרגם|תרגום ל/i },
+  { key: "travel", re: /plan (a )?trip|itinerary|תכנן(?: לי)? טיול|מסלול טיול|לתכנן חופשה/i },
+  { key: "negotiate", re: /negotiate|haggle|get a better (price|deal)|תנהל מו"מ|להתמקח|לנהל משא ומתן/i },
+  { key: "research", re: /research|compare|which is better|תשווה|השוואה בין|מה עדיף|תחקור/i },
+];
+function capabilityForText(text: string): string | null {
+  for (const c of CAP_INTENT) if (c.re.test(text)) return c.key;
+  return null;
+}
+function capName(key: string, lang: "en" | "he"): string {
+  const c = CAPABILITY_CATALOG.find((x) => x.key === key);
+  return c ? (lang === "he" ? c.he : c.en) : key;
+}
 
 // ── Official / trusted sources ONE may draw on in Global. `official` sources are
 //    authoritative (gov offices); `reference` are open knowledge (Wikipedia).
@@ -655,6 +700,7 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     reference: "Open reference",
     addSource: "Add a source",
     addSourceHint: "Adding channels is role-based — coming soon",
+    capNeedRun: "Switch it on",
     tempTag: "Temporary chat · nothing is saved",
     tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
@@ -767,6 +813,7 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     reference: "מקור פתוח",
     addSource: "הוסף מקור",
     addSourceHint: "הוספת ערוצים היא לפי הרשאות — בקרוב",
+    capNeedRun: "הפעל את זה",
     tempTag: "צ'אט זמני · שום דבר לא נשמר",
     tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
@@ -1575,8 +1622,8 @@ export default function AppHome() {
     try {
       const he = lang === "he";
       const sys = he
-        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."]} — 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, 2 עד 3 מדדים חשובים, ו‑2 עד 3 פעולות מהירות קצרות. הכול בעברית. בלי טקסט נוסף ובלי code fences.'
-        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."]} — 4 to 6 concrete, time-ordered steps, 2 to 3 key metrics, and 2 to 3 short quick-action labels. No prose, no code fences.';
+        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."]} — title=שם תהליך קצר וברור (2‑4 מילים) שמתאר את המטרה, emoji=אימוג\'י מתאים אחד, 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, 2 עד 3 מדדים חשובים, ו‑2 עד 3 פעולות מהירות קצרות. הכול בעברית. בלי טקסט נוסף ובלי code fences.'
+        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."]} — title=a short, clear process name (2-4 words) describing the goal, emoji=one fitting emoji, 4 to 6 concrete time-ordered steps, 2 to 3 key metrics, and 2 to 3 short quick-action labels. No prose, no code fences.';
       const raw = await invokeAiChat(
         [
           { role: "system", content: sys },
@@ -1606,11 +1653,21 @@ export default function AppHome() {
       const quickActions: string[] = Array.isArray(parsed.quickActions)
         ? parsed.quickActions.filter((a: unknown) => typeof a === "string" && a.trim()).slice(0, 4)
         : [];
+      // ONE decides a clean process name + emoji from what it understood — the
+      // card reads as a real named process, not the raw sentence you typed.
+      const cleanTitle =
+        typeof parsed?.title === "string" && parsed.title.trim().length >= 2
+          ? parsed.title.trim().slice(0, 40)
+          : null;
+      const cleanEmoji =
+        typeof parsed?.emoji === "string" && parsed.emoji.trim() ? parsed.emoji.trim().slice(0, 2) : null;
       setUnits((list) =>
         list.map((u) =>
           u.id === proc.id
             ? {
                 ...u,
+                title: cleanTitle ?? u.title,
+                emoji: cleanEmoji ?? u.emoji,
                 steps: steps.map((label) => ({ label, done: false })),
                 progress: { done: 0, total: steps.length },
                 metrics: metrics.length ? metrics : u.metrics,
@@ -1640,11 +1697,7 @@ export default function AppHome() {
     }
   };
 
-  // ── Quiz teaching capability ────────────────────────────────────────────
-  const isQuizIntent = (t: string) =>
-    /\b(quiz|test)\s+me\b|\bteach me\b|\bteach me about\b/i.test(t) ||
-    /תבחן אותי|בחן אותי|תלמד אותי|למד אותי|מבחן על|שאל אותי|תעביר לי מבחן/.test(t);
-  // Turn a "quiz me on X" into a real multiple-choice quiz in chat.
+  // ── Quiz teaching capability — turn "quiz me on X" into a real quiz in chat.
   const runQuiz = async (topic: string) => {
     const he = lang === "he";
     try {
@@ -1690,7 +1743,7 @@ export default function AppHome() {
         ...c,
         {
           role: "one",
-          text: `${he ? "שאלה" : "Question"} 1/${questions.length}: ${q0.q}`,
+          text: `❓ ${he ? "שאלה" : "Question"} 1/${questions.length}: ${q0.q}`,
           quiz: { options: q0.options, answer: q0.answer },
           image: img ?? undefined,
         },
@@ -1713,11 +1766,11 @@ export default function AppHome() {
     const nextScore = quiz.score + (correct ? 1 : 0);
     const feedback = correct
       ? he
-        ? "נכון! "
-        : "Correct! "
+        ? "✅ נכון! "
+        : "✅ Correct! "
       : he
-        ? `לא בדיוק — התשובה היא "${q.options[q.answer]}". `
-        : `Not quite — the answer is "${q.options[q.answer]}". `;
+        ? `❌ לא בדיוק — התשובה היא "${q.options[q.answer]}". `
+        : `❌ Not quite — the answer is "${q.options[q.answer]}". `;
     setChat((c) => [
       ...c,
       { role: "user", text: q.options[optionIdx] },
@@ -1730,21 +1783,44 @@ export default function AppHome() {
         ...c,
         {
           role: "one",
-          text: `${he ? "שאלה" : "Question"} ${nextIdx + 1}/${quiz.questions.length}: ${nq.q}`,
+          text: `❓ ${he ? "שאלה" : "Question"} ${nextIdx + 1}/${quiz.questions.length}: ${nq.q}`,
           quiz: { options: nq.options, answer: nq.answer },
         },
       ]);
     } else {
       setQuiz(null);
+      const pct = nextScore / quiz.questions.length;
+      const badge = pct === 1 ? "🏆" : pct >= 0.5 ? "🎉" : "📚";
       setChat((c) => [
         ...c,
         {
           role: "one",
           text: he
-            ? `סיימת! הציון שלך: ${nextScore}/${quiz.questions.length}.`
-            : `Done! You scored ${nextScore}/${quiz.questions.length}.`,
+            ? `${badge} סיימת! הציון שלך: ${nextScore}/${quiz.questions.length}.`
+            : `${badge} Done! You scored ${nextScore}/${quiz.questions.length}.`,
         },
       ]);
+    }
+  };
+  // Run an action chip from a ONE message (enable a capability, or upgrade).
+  const runChatAction = (a: {
+    label: string;
+    kind: "enableCap" | "upgrade";
+    cap?: string;
+    run?: string;
+  }) => {
+    if (a.kind === "upgrade") {
+      setOpenSheet("subscription");
+      return;
+    }
+    if (a.kind === "enableCap" && a.cap) {
+      persistCaps(caps.includes(a.cap) ? caps : [...caps, a.cap]);
+      const name = capName(a.cap, lang);
+      setChat((c) => [
+        ...c,
+        { role: "one", text: lang === "he" ? `✅ ״${name}״ פעילה עכשיו.` : `✅ “${name}” is on now.` },
+      ]);
+      if (a.cap === "quiz" && a.run) void runQuiz(a.run);
     }
   };
 
@@ -1756,9 +1832,43 @@ export default function AppHome() {
     setDraft("");
     setThinking(true);
 
-    // Capability: Quiz teaching. When it's on and you ask to be quizzed/taught,
-    // ONE runs a real multiple-choice quiz instead of opening a process.
-    if (caps.includes("quiz") && !quiz && isQuizIntent(text)) {
+    // Capabilities gate. If the ask maps to a capability that isn't switched on,
+    // ONE offers to add it (or prompts an upgrade for a paid one) instead of just
+    // failing silently. Quiz, when on, runs; other enabled caps fall through to
+    // the normal flow (which creates/updates a process).
+    const capKey = capabilityForText(text);
+    if (capKey && !caps.includes(capKey)) {
+      setThinking(false);
+      const name = capName(capKey, lang);
+      const emoji = CAPABILITY_CATALOG.find((c) => c.key === capKey)?.emoji ?? "";
+      if (PREMIUM_CAPS.includes(capKey) && plan === "free") {
+        setChat((c) => [
+          ...c,
+          {
+            role: "one",
+            text:
+              lang === "he"
+                ? `${emoji} ״${name}״ היא יכולת בתוכנית משודרגת. לשדרג כדי להפעיל?`
+                : `${emoji} “${name}” is a Plus capability. Upgrade to switch it on?`,
+            actions: [{ label: t.upgrade, kind: "upgrade" }],
+          },
+        ]);
+      } else {
+        setChat((c) => [
+          ...c,
+          {
+            role: "one",
+            text:
+              lang === "he"
+                ? `${emoji} אני יכול לעשות את זה עם היכולת ״${name}״ — היא עדיין לא מופעלת.`
+                : `${emoji} I can do that with the “${name}” capability — it isn't switched on yet.`,
+            actions: [{ label: `${emoji} ${t.capNeedRun}`, kind: "enableCap", cap: capKey, run: text }],
+          },
+        ]);
+      }
+      return;
+    }
+    if (capKey === "quiz" && !quiz) {
       void runQuiz(text);
       return;
     }
@@ -3290,6 +3400,18 @@ export default function AppHome() {
                                 onClick={() => answerQuiz(oi)}
                               >
                                 {o}
+                              </button>
+                            ))}
+                          </div>
+                        ) : m.actions && m.actions.length > 0 ? (
+                          <div className="chat-chips">
+                            {m.actions.map((a, ai) => (
+                              <button
+                                key={ai}
+                                className="chat-chip chip-cta"
+                                onClick={() => runChatAction(a)}
+                              >
+                                {a.label}
                               </button>
                             ))}
                           </div>

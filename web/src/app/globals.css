@@ -4710,6 +4710,16 @@ footer {
   background: color-mix(in srgb, var(--p-text) 5%, var(--p-surface));
   transform: translateY(-1px);
 }
+/* A call-to-action chip (e.g. "switch on a capability") reads as primary. */
+.chat-chip.chip-cta {
+  background: var(--p-blue);
+  border-color: transparent;
+  color: #fff;
+}
+.chat-chip.chip-cta:hover {
+  background: color-mix(in srgb, var(--p-blue) 85%, #000);
+  color: #fff;
+}
 /* The broadcast, right above the input. A fixed two-line box, BOTTOM-aligned so
    the line always sits just above the input; a second line grows upward and the
    input never moves. */
