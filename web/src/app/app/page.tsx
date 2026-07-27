@@ -1213,6 +1213,9 @@ export default function AppHome() {
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
   const [unitDraft, setUnitDraft] = useState("");
   const [unitThinking, setUnitThinking] = useState(false);
+  // Which side of the process thread to show — the whole back-and-forth lives
+  // here (you ⇄ ONE ⇄ the other party), and this filters it to one voice.
+  const [threadFilter, setThreadFilter] = useState<"all" | "you" | "one" | "them">("all");
   // A business's ONE "reaches out" at most ONCE per process — otherwise the
   // "the provider got back to me…" line repeats on every follow-up and reads
   // robotic. Track which processes have already had their outreach.
@@ -2256,6 +2259,7 @@ export default function AppHome() {
     setActiveProcess(p);
     setFocusId(p.id);
     setUnitMenuOpen(false);
+    setThreadFilter("all");
     // Opening it counts as seeing it — clear the unread badge.
     if (p.unread > 0) {
       setUnits((list) => list.map((u) => (u.id === p.id ? { ...u, unread: 0 } : u)));
@@ -2540,7 +2544,9 @@ export default function AppHome() {
           : u,
       ),
     );
-  const approveDraft = (procId: string, draftId: string) =>
+  const approveDraft = (procId: string, draftId: string) => {
+    const proc = units.find((u) => u.id === procId);
+    const draft = proc?.drafts?.find((d) => d.id === draftId);
     setUnits((list) =>
       list.map((u) =>
         u.id === procId
@@ -2553,6 +2559,38 @@ export default function AppHome() {
           : u,
       ),
     );
+    // Approving sends the message into the process thread (not off to WhatsApp/
+    // email) — ONE delivers it to the other side, who then replies right here.
+    if (draft && activeProcess?.id === procId) {
+      const to = draft.to || (lang === "he" ? "הצד השני" : "the other side");
+      setUnitChat((c) => [
+        ...c,
+        {
+          role: "one",
+          party: "one",
+          text:
+            lang === "he"
+              ? `📨 שלחתי ל${to}${draft.subject ? ` בנושא "${draft.subject}"` : ""}. אעדכן ברגע שתהיה תשובה.`
+              : `📨 Sent to ${to}${draft.subject ? ` re "${draft.subject}"` : ""}. I'll update you the moment they reply.`,
+        },
+      ]);
+      // A short beat later, the other side answers — inside the thread.
+      window.setTimeout(() => {
+        setUnitChat((c) => [
+          ...c,
+          {
+            role: "one",
+            party: "them",
+            from: to,
+            text:
+              lang === "he"
+                ? "קיבלנו את הפנייה, תודה. נחזור אליך עם פרטים בהקדם."
+                : "Got your message, thank you. We'll come back to you with details shortly.",
+          },
+        ]);
+      }, 2600);
+    }
+  };
   const removeDraft = (procId: string, draftId: string) =>
     setUnits((list) =>
       list.map((u) =>
@@ -3187,20 +3225,53 @@ export default function AppHome() {
                     </button>
                   </div>
                   <div className="unit-chat-scroll">
-                    {unitChat.map((m, i) => (
-                      <Fragment key={i}>
-                        <div className={`chat-msg ${m.role}`}>{m.text}</div>
-                        {m.chips && m.chips.length > 0 && (
-                          <div className="chat-chips">
-                            {m.chips.map((c) => (
-                              <button key={c} className="chat-chip" onClick={() => sendToUnit(c)}>
-                                {c}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </Fragment>
-                    ))}
+                    {/* Once the other side is in the thread, let you filter the
+                        conversation down to one voice — you / ONE / them. */}
+                    {unitChat.some((mm) => mm.party === "them") && (
+                      <div className="thread-filter">
+                        {(["all", "you", "one", "them"] as const).map((f) => (
+                          <button
+                            key={f}
+                            className={`thread-chip${threadFilter === f ? " is-on" : ""}`}
+                            onClick={() => setThreadFilter(f)}
+                          >
+                            {f === "all"
+                              ? lang === "he"
+                                ? "הכל"
+                                : "All"
+                              : f === "you"
+                                ? lang === "he"
+                                  ? "אני"
+                                  : "You"
+                                : f === "one"
+                                  ? "ONE"
+                                  : lang === "he"
+                                    ? "הצד השני"
+                                    : "Them"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {unitChat.map((m, i) => {
+                      const party = m.party ?? (m.role === "user" ? "you" : "one");
+                      if (threadFilter !== "all" && party !== threadFilter) return null;
+                      const cls = party === "you" ? "user" : party === "them" ? "them" : "one";
+                      return (
+                        <Fragment key={i}>
+                          {party === "them" && m.from && <div className="chat-from">{m.from}</div>}
+                          <div className={`chat-msg ${cls}`}>{m.text}</div>
+                          {m.chips && m.chips.length > 0 && (
+                            <div className="chat-chips">
+                              {m.chips.map((c) => (
+                                <button key={c} className="chat-chip" onClick={() => sendToUnit(c)}>
+                                  {c}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                     {unitThinking && (
                       <div className="unit-status" aria-live="polite">
                         <Orb

@@ -19,6 +19,16 @@ import type { Process, Metric } from "./mockData";
 export type ChatMsg = {
   role: "user" | "one";
   text: string;
+  /**
+   * Who is speaking, for a multi-party process thread: "you" (the user), "one"
+   * (their agent), or "them" (the other side — a business or person the process
+   * is with). Defaults from `role` when absent. This is what lets the whole
+   * back-and-forth live inside the process instead of scattered across
+   * WhatsApp/email, with a filter to show just one side.
+   */
+  party?: "you" | "one" | "them";
+  /** Display name of the "them" speaker (the office / business / person). */
+  from?: string;
   /** Optional quick-reply chips ONE offers — tap to answer (times, days, …). */
   chips?: string[];
   /** A multiple-choice quiz question — tapping an option answers it. */

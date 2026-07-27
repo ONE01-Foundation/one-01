@@ -5230,6 +5230,47 @@ footer {
   opacity: 0.55;
   cursor: default;
 }
+/* ── Multi-party process thread — you ⇄ ONE ⇄ the other side, with a filter ── */
+.thread-filter {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 2px 0 10px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.thread-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--p-line);
+  background: var(--p-bg);
+  color: var(--p-text-2);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.thread-chip.is-on {
+  background: var(--p-face);
+  color: var(--p-bg);
+  border-color: var(--p-face);
+}
+/* The other side's messages — a distinct look, opposite the user's. */
+.chat-from {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--p-text-3);
+  margin: 6px 0 2px 2px;
+}
+.chat-msg.them {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--p-blue) 14%, var(--p-surface));
+  border: 1px solid color-mix(in srgb, var(--p-blue) 30%, transparent);
+  color: var(--p-text);
+  border-bottom-left-radius: 6px;
+}
 .global-title {
   margin: 0;
   font-size: 30px;
