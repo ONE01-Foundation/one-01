@@ -7,6 +7,12 @@ export interface Identity {
   name: string;
   role: string;
   emoji: string;
+  /**
+   * What kind of profile this is. "personal" = you as a private person,
+   * "business" = a business you run, "supplier" = the OTHER side (a provider)
+   * — used to test a two-sided process from the provider's seat.
+   */
+  kind?: "personal" | "business" | "supplier";
 }
 
 export interface Step {
@@ -191,8 +197,11 @@ export const BUSINESSES: Business[] = [
 ];
 
 export const IDENTITIES: Identity[] = [
-  { id: "ariel", name: "Ariel", role: "Personal", emoji: "👤" },
-  { id: "one01", name: "ONE01", role: "Business", emoji: "🏢" },
+  { id: "ariel", name: "Ariel", role: "Personal", emoji: "👤", kind: "personal" },
+  { id: "one01", name: "ONE01", role: "Business", emoji: "🏢", kind: "business" },
+  // A ready-made provider seat, so you can switch over and test a process from
+  // the OTHER side (receiving/answering a request) without building one first.
+  { id: "supplier_demo", name: "Test Provider", role: "Supplier", emoji: "🏪", kind: "supplier" },
 ];
 
 export const PROCESSES: Process[] = [

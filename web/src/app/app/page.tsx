@@ -14,6 +14,7 @@ import {
   type Process,
   type Business,
   type UnitDraft,
+  type Identity,
 } from "@/lib/mockData";
 import { interpret, type ChatMsg } from "@/lib/oneBrain";
 import { bizReply, openState, findBusiness } from "@/lib/bizBrain";
@@ -1175,8 +1176,43 @@ function parseIntents(raw: string): string[] {
 
 export default function AppHome() {
   const [plan, setPlan] = useState<PlanTier>("free");
+  // Profiles ("identities") are stateful so you can add your own — personal,
+  // business, or a supplier (provider) seat for two-sided testing. Persisted.
+  const [identities, setIdentities] = useState<Identity[]>(IDENTITIES);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("one_identities");
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length) setIdentities(saved);
+    } catch {
+      /* first run / blocked storage */
+    }
+  }, []);
+  const persistIdentities = (next: Identity[]) => {
+    setIdentities(next);
+    try {
+      localStorage.setItem("one_identities", JSON.stringify(next));
+    } catch {
+      /* storage blocked */
+    }
+  };
+  const [newProfileName, setNewProfileName] = useState("");
+  const createIdentity = (kind: "personal" | "business" | "supplier", name: string) => {
+    const n = name.trim();
+    if (!n) return;
+    const emoji = kind === "business" ? "🏢" : kind === "supplier" ? "🏪" : "👤";
+    const role = kind === "business" ? "Business" : kind === "supplier" ? "Supplier" : "Personal";
+    const id = `id_${Date.now()}`;
+    persistIdentities([...identities, { id, name: n, role, emoji, kind }]);
+    setActiveIdentityId(id);
+    setNewProfileName("");
+    setOpenSheet(null);
+    setProfilesOpen(false);
+  };
   const [activeIdentityId, setActiveIdentityId] = useState(IDENTITIES[0].id);
-  const [openSheet, setOpenSheet] = useState<null | "settings" | "subscription">(null);
+  const [openSheet, setOpenSheet] = useState<null | "settings" | "subscription" | "newProfile">(
+    null,
+  );
   // The main canvas shows one of three "spaces": the ONE home (broadcast +
   // input), the Global marketplace, or the ONE profile — all on-canvas, no
   // popups. A segmented toggle flips Home ⇄ Global; the drawer opens Profile.
@@ -1665,7 +1701,7 @@ export default function AppHome() {
   };
 
   const planMeta = PLAN_META[plan];
-  const identity = IDENTITIES.find((i) => i.id === activeIdentityId)!;
+  const identity = identities.find((i) => i.id === activeIdentityId) ?? identities[0];
 
   const processes = useMemo(() => {
     const own = units.filter((p) => p.identityId === activeIdentityId);
@@ -3212,7 +3248,7 @@ export default function AppHome() {
               </div>
               <div className="drawer-profiles-more">
                 <div className="drawer-profiles-more-inner">
-                  {IDENTITIES.filter((id) => id.id !== activeIdentityId).map((id) => (
+                  {identities.filter((id) => id.id !== activeIdentityId).map((id) => (
                     <button
                       key={id.id}
                       className="drawer-profile"
@@ -3228,7 +3264,10 @@ export default function AppHome() {
                       </span>
                     </button>
                   ))}
-                  <button className="drawer-row drawer-row-new" onClick={startCreateBusiness}>
+                  <button
+                    className="drawer-row drawer-row-new"
+                    onClick={() => setOpenSheet("newProfile")}
+                  >
                     <i className="fi fi-rr-plus drawer-row-ico" aria-hidden="true" />
                     {t.newProfile}
                   </button>
@@ -3667,7 +3706,7 @@ export default function AppHome() {
 
                       <div className="sheet-section">
                         <h4>{t.identity}</h4>
-                        {IDENTITIES.map((id) => (
+                        {identities.map((id) => (
                           <button
                             key={id.id}
                             className="sheet-row"
@@ -4235,6 +4274,53 @@ export default function AppHome() {
 
 
       {/* ── SUBSCRIPTION popup ── */}
+      {/* New profile — pick a TYPE (not only business): a personal ONE, a
+          business ONE, or a supplier (provider) seat you can switch to and
+          answer from, to test a process from the other side. */}
+      <Sheet open={openSheet === "newProfile"} onClose={() => setOpenSheet(null)}>
+        <div className="sheet-body">
+          <div className="sheet-hero">
+            <div className="sheet-title">{lang === "he" ? "פרופיל חדש" : "New profile"}</div>
+            <div className="sheet-sub">
+              {lang === "he"
+                ? "בחר סוג ותן שם — ONE נפרד לכל כובע שאתה לובש."
+                : "Pick a type and name it — a separate ONE for each hat you wear."}
+            </div>
+          </div>
+          <input
+            className="mem-input np-name"
+            value={newProfileName}
+            placeholder={lang === "he" ? "שם הפרופיל" : "Profile name"}
+            onChange={(e) => setNewProfileName(e.target.value)}
+          />
+          <div className="np-types">
+            {(
+              [
+                { k: "personal", emoji: "👤", en: "Personal", he: "אישי", dEn: "You, as a private person", dHe: "אתה, כאדם פרטי" },
+                { k: "business", emoji: "🏢", en: "Business", he: "עסק", dEn: "A business you run", dHe: "עסק שאתה מנהל" },
+                { k: "supplier", emoji: "🏪", en: "Supplier", he: "ספק", dEn: "A provider seat — test the other side of a process", dHe: "מושב ספק — לבדוק את הצד השני של תהליך" },
+              ] as const
+            ).map((ty) => (
+              <button
+                key={ty.k}
+                className="np-type"
+                disabled={!newProfileName.trim()}
+                onClick={() => createIdentity(ty.k, newProfileName)}
+              >
+                <span className="np-type-emoji">{ty.emoji}</span>
+                <span className="np-type-body">
+                  <span className="np-type-name">{lang === "he" ? ty.he : ty.en}</span>
+                  <span className="np-type-desc">{lang === "he" ? ty.dHe : ty.dEn}</span>
+                </span>
+                <span className="np-type-go" aria-hidden="true">
+                  ›
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </Sheet>
+
       <Sheet open={openSheet === "subscription"} onClose={() => setOpenSheet(null)}>
         <div className="sheet-body">
           <div className="sheet-hero">

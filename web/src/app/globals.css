@@ -6457,6 +6457,76 @@ button.conn-card:hover {
 .conn-add-btn:hover {
   border-color: var(--p-blue);
 }
+/* ── New-profile chooser — pick a type (personal / business / supplier) ───── */
+.np-name {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 12px;
+  background: var(--p-bg);
+  margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.np-types {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.np-type {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  background: var(--p-surface);
+  font-family: var(--sans);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+.np-type:hover:not(:disabled) {
+  border-color: var(--p-face);
+  transform: translateY(-1px);
+}
+.np-type:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.np-type-emoji {
+  font-size: 24px;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--p-bg);
+}
+.np-type-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.np-type-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--p-text);
+}
+.np-type-desc {
+  font-size: 12.5px;
+  color: var(--p-text-3);
+  line-height: 1.4;
+}
+.np-type-go {
+  color: var(--p-text-3);
+  font-size: 20px;
+  flex-shrink: 0;
+}
 
 /* ─── RTL (Hebrew) ─────────────────────────────────────────
    Most of the landing is flex/grid, so dir="rtl" mirrors it for free.
