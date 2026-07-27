@@ -4720,6 +4720,16 @@ footer {
   background: color-mix(in srgb, var(--p-blue) 85%, #000);
   color: #fff;
 }
+/* Bookable time slots — a distinct, calendar-tinted chip. */
+.chat-chip.booking-chip {
+  border-color: color-mix(in srgb, var(--p-blue) 40%, var(--p-line));
+  background: color-mix(in srgb, var(--p-blue) 8%, var(--p-surface));
+  color: var(--p-text);
+}
+.chat-chip.booking-chip:hover {
+  border-color: var(--p-blue);
+  background: color-mix(in srgb, var(--p-blue) 16%, var(--p-surface));
+}
 /* The broadcast, right above the input. A fixed two-line box, BOTTOM-aligned so
    the line always sits just above the input; a second line grows upward and the
    input never moves. */

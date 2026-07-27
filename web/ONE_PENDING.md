@@ -19,7 +19,7 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 
 1. ~~**Create-profile: types, not only business.**~~ ✅ DONE — chooser (Personal/Business/Supplier) + stateful persisted identities.
 2. ~~**True two-sided testing.**~~ ✅ DONE — request bus + supplier inbox. Approving a draft addressed to a supplier profile drops a real `InboundRequest` into that profile's inbox (drawer "Inbox" entry + unread badge, shown only on supplier seats). The supplier Accepts/Declines and replies; the reply flows back to the sender's Home as a live banner that opens the originating process with the answer folded into the thread. Supplier home leads with the inbox (broadcast + banner). Persisted in `one_requests`.
-3. **Make Booking a real capability** (like Quiz) — propose times as chips, tapping books into the process + timeline.
+3. ~~**Make Booking a real capability**~~ ✅ DONE — "book me X" (home or inside a process) proposes real time slots as chips (generated from the clock, skipping Fri/Sat). Tapping one books it into a process: writes a "When" metric, a timeline entry, a decision, ticks the booking step, and confirms — creating a lightweight process if there wasn't one, then opening it.
 4. **Make Forms / Reminders real** — currently declarative toggles.
 5. **Sources actually feed answers** — ONE cites / pulls from the official source when answering a regulated-domain question (licensing, health, gov, NII). Role-gated source-adding is still a disabled placeholder.
 6. **Real external channel behind Drafts** — actually send via email / WhatsApp / an external system (behind permission). Today: draft + simulated reply.
@@ -38,7 +38,7 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 3. **Real send channel behind Drafts** — actually deliver an approved draft (email / WhatsApp / link), behind a permission gate. Today it's simulated in-thread. _(The internal supplier handshake is now real; external channels remain.)_
 
 **P1 — make ONE genuinely capable**
-4. **Booking capability functional** (like Quiz) — propose real slots as chips, tapping books into the process + timeline.
+4. ~~**Booking capability functional**~~ ✅ DONE — real slots as chips; tapping books into the process (When metric + timeline + decision + step tick), from home or inside a unit.
 5. **Forms & reminders functional** — fill/track a form; set a reminder that actually surfaces.
 6. **Sources feed answers** — when ONE answers a regulated-domain question it cites/pulls the official source; role-gated source-adding (licensing office, etc.).
 7. **Live incoming-reply signal** — Home banner/broadcast when the other side replies while you're away.

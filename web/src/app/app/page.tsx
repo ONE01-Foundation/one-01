@@ -2266,6 +2266,132 @@ export default function AppHome() {
       ]);
     }
   };
+  // ── Booking capability — turn "book me X" into real, tappable time slots that
+  //    land in a process (timeline + a "When" metric + a confirmation), the way
+  //    Quiz lands a score. Slots come from the clock, skipping the Israeli weekend.
+  const bookingSlots = (): string[] => {
+    const he = lang === "he";
+    const base = now ?? new Date();
+    const dHe = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+    const dEn = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const times = ["09:00", "11:30", "14:00", "16:30"];
+    const out: string[] = [];
+    for (let off = 1; off < 16 && out.length < 4; off++) {
+      const d = new Date(base.getTime() + off * 86400000);
+      const dow = d.getDay();
+      if (dow === 5 || dow === 6) continue; // skip Fri/Sat
+      const day = he
+        ? `יום ${dHe[dow]} ${d.getDate()}/${d.getMonth() + 1}`
+        : `${dEn[dow]} ${d.getDate()}/${d.getMonth() + 1}`;
+      out.push(`${day} · ${times[out.length]}`);
+    }
+    return out;
+  };
+  // A short label for the thing being booked (strip the "book me a…" scaffolding).
+  const bookingLabel = (text: string): string => {
+    const he = /[֐-׿]/.test(text);
+    const s = he
+      ? text
+          .replace(/קבע(?:ו|י|ה)?\s*(?:לי)?|לקבוע|תזמ(?:ן|ני)|להזמין|תור|בבקשה|אצל/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+      : text
+          .replace(
+            /\b(book|schedule|reserve|set ?up|make|arrange|get|me|an?|the|please|appointment|slot|for|with|to)\b/gi,
+            " ",
+          )
+          .replace(/\s+/g, " ")
+          .trim();
+    return s || (he ? "הפגישה" : "the appointment");
+  };
+  // Offer bookable slots in a chat (the home chat, or a specific process's thread).
+  const runBooking = (text: string, proc?: Process) => {
+    const he = lang === "he";
+    const topic = bookingLabel(text);
+    const msg: ChatMsg = {
+      role: "one",
+      text: he
+        ? `מצאתי כמה זמנים פנויים ל${topic}. בחר אחד ואקבע אותו:`
+        : `I found open times for ${topic}. Tap one and I'll lock it in:`,
+      booking: { slots: bookingSlots(), topic, procId: proc?.id },
+    };
+    if (proc) {
+      setUnitThinking(false);
+      setUnitChat((c) => [...c, msg]);
+    } else {
+      setThinking(false);
+      setChat((c) => [...c, msg]);
+    }
+  };
+  // Book a chosen slot into a process — creating a lightweight one if needed —
+  // writing the time to the timeline, a "When" metric, and a confirmation line.
+  const bookSlot = (slot: string, topic: string, procId?: string) => {
+    const he = lang === "he";
+    const existing = procId ? units.find((u) => u.id === procId) : null;
+    const target: Process =
+      existing ?? {
+        id: `book_${Date.now()}`,
+        identityId: activeIdentityId,
+        emoji: "📅",
+        title: he ? `תור — ${topic}` : `Appointment — ${topic}`,
+        time: "now",
+        unread: 0,
+        summary: "",
+        relation: he ? "קביעת תור" : "Booking",
+        progress: { done: 0, total: 2 },
+        people: [],
+        steps: [
+          { label: he ? "לבחור זמן" : "Pick a time", done: false },
+          { label: he ? "לאשר את התור" : "Confirm the appointment", done: false },
+        ],
+        decisions: [],
+        timeline: [],
+        type: "booking",
+        metrics: [],
+      };
+    const whenLabel = he ? "מועד" : "When";
+    const metrics = target.metrics ?? [];
+    const nextMetrics = metrics.some((m) => m.label === whenLabel)
+      ? metrics.map((m) => (m.label === whenLabel ? { ...m, value: slot } : m))
+      : [...metrics, { label: whenLabel, value: slot }];
+    const booked: Process = {
+      ...target,
+      time: "now",
+      unread: 0,
+      summary: he ? `נקבע: ${slot}.` : `Booked: ${slot}.`,
+      nextAction: he ? `אשלח תזכורת 24 שעות לפני ${slot}.` : `I'll remind you 24h before ${slot}.`,
+      metrics: nextMetrics,
+      steps: target.steps.map((s) =>
+        /book|confirm|time|schedul|זמן|תור|לאשר|לבחור/i.test(s.label) ? { ...s, done: true } : s,
+      ),
+      timeline: [
+        { at: "now", text: he ? `קבעת ל${slot}.` : `You booked ${slot}.` },
+        ...target.timeline,
+      ],
+      decisions: [he ? `מועד נבחר: ${slot}` : `Time chosen: ${slot}`, ...target.decisions],
+    };
+    const confirm: ChatMsg = {
+      role: "one",
+      text: he
+        ? `✅ קבעתי — ${slot}. הוספתי את זה לתהליך והכנתי תזכורת 24 שעות לפני.`
+        : `✅ Locked in — ${slot}. Added to the process, with a reminder 24h before.`,
+    };
+    // Collapse the tapped slot-picker back to plain text so it isn't left
+    // re-tappable (the effect that persists the thread would keep it otherwise).
+    const settle = (m: ChatMsg): ChatMsg => (m.booking ? { ...m, booking: undefined } : m);
+    if (existing && procId) {
+      // Booking inside an open process — stay put, append to its thread.
+      upsert(booked);
+      setUnitChat((c) => [...c.map(settle), { role: "user", text: slot }, confirm]);
+    } else {
+      // Booking from home — create the process, seed its thread, and open it.
+      upsert({ ...booked, chat: [confirm] });
+      setChat((c) => c.map(settle));
+      announce(`Booked: ${slot}`, `נקבע: ${slot}`);
+      openUnit(booked);
+      setUnitChat([confirm]);
+    }
+  };
   // Run an action chip from a ONE message (enable a capability, or upgrade).
   const runChatAction = (a: {
     label: string;
@@ -2432,6 +2558,13 @@ export default function AppHome() {
           setChat((c) => [...c, { role: "one", text: `Their open times: ${biz.slots.join(", ")}. Say "book <time>" and I'll lock it — or open ${biz.name} to see more.` }]);
         }
       }, 780);
+      return;
+    }
+
+    // Booking capability (switched on, no specific business named): ONE proposes
+    // real time slots as chips; tapping one books it into a process.
+    if (capKey === "booking") {
+      runBooking(text);
       return;
     }
 
@@ -3053,6 +3186,12 @@ export default function AppHome() {
               : "I couldn't draft that just now. Want me to try again?",
         },
       ]);
+      return;
+    }
+    // Booking inside a process — ONE proposes real slots that book straight into
+    // THIS process's timeline (the "into the process" half of the capability).
+    if (caps.includes("booking") && capabilityForText(text) === "booking") {
+      runBooking(text, proc);
       return;
     }
     const focus = units.find((u) => u.id === proc.id) ?? null;
@@ -3719,14 +3858,29 @@ export default function AppHome() {
                         <Fragment key={i}>
                           {party === "them" && m.from && <div className="chat-from">{m.from}</div>}
                           <div className={`chat-msg ${cls}`}>{m.text}</div>
-                          {m.chips && m.chips.length > 0 && (
-                            <div className="chat-chips">
-                              {m.chips.map((c) => (
-                                <button key={c} className="chat-chip" onClick={() => sendToUnit(c)}>
-                                  {c}
+                          {m.booking ? (
+                            <div className="chat-chips booking-chips">
+                              {m.booking.slots.map((s) => (
+                                <button
+                                  key={s}
+                                  className="chat-chip booking-chip"
+                                  onClick={() => bookSlot(s, m.booking!.topic, m.booking!.procId)}
+                                >
+                                  📅 {s}
                                 </button>
                               ))}
                             </div>
+                          ) : (
+                            m.chips &&
+                            m.chips.length > 0 && (
+                              <div className="chat-chips">
+                                {m.chips.map((c) => (
+                                  <button key={c} className="chat-chip" onClick={() => sendToUnit(c)}>
+                                    {c}
+                                  </button>
+                                ))}
+                              </div>
+                            )
                           )}
                         </Fragment>
                       );
@@ -4674,6 +4828,18 @@ export default function AppHome() {
                                 onClick={() => answerQuiz(oi)}
                               >
                                 {o}
+                              </button>
+                            ))}
+                          </div>
+                        ) : m.booking ? (
+                          <div className="chat-chips booking-chips">
+                            {m.booking.slots.map((s) => (
+                              <button
+                                key={s}
+                                className="chat-chip booking-chip"
+                                onClick={() => bookSlot(s, m.booking!.topic, m.booking!.procId)}
+                              >
+                                📅 {s}
                               </button>
                             ))}
                           </div>

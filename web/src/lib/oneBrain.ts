@@ -33,6 +33,12 @@ export type ChatMsg = {
   chips?: string[];
   /** A multiple-choice quiz question — tapping an option answers it. */
   quiz?: { options: string[]; answer: number };
+  /**
+   * Bookable time slots ONE found — tapping one books it into the process
+   * (timeline + a "When" metric) and confirms. `topic` labels the booking;
+   * `procId` is the process the slot books into (absent = create one).
+   */
+  booking?: { slots: string[]; topic: string; procId?: string };
   /** An illustrative image URL (e.g. a Wikipedia thumbnail) shown in the bubble. */
   image?: string;
   /** Action chips — enable a capability, upgrade, share a fact, or route into a process. */
