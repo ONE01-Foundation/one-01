@@ -6556,6 +6556,87 @@ button.conn-card:hover {
   color: var(--p-text-3);
   text-align: center;
 }
+/* ── Richer upgrade window — 3 tiers with feature lists + current highlight ── */
+.plan-tiers.rich {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+@media (max-width: 620px) {
+  .plan-tiers.rich {
+    grid-template-columns: 1fr;
+  }
+}
+.plan-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 16px;
+  background: var(--p-surface);
+}
+.plan-card.is-rec {
+  border-color: var(--p-blue);
+  box-shadow: 0 0 0 1px var(--p-blue) inset;
+}
+.plan-card.is-current {
+  border-color: var(--p-ok);
+}
+.plan-badge {
+  position: absolute;
+  top: -9px;
+  inset-inline-start: 14px;
+  background: var(--p-blue);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.plan-card .t-name {
+  font-size: 15px;
+  font-weight: 800;
+}
+.plan-card .t-price {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--p-text);
+  line-height: 1;
+}
+.plan-card .t-per {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--p-text-3);
+}
+.plan-feats {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plan-feats li {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--p-text-2);
+  display: flex;
+  gap: 6px;
+}
+.pf-check {
+  color: var(--p-ok);
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.plan-foot {
+  margin: 12px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--p-text-3);
+}
 
 /* ─── RTL (Hebrew) ─────────────────────────────────────────
    Most of the landing is flex/grid, so dir="rtl" mirrors it for free.

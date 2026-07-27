@@ -4426,52 +4426,84 @@ export default function AppHome() {
             <div className="sheet-title">{t.upgradeOne}</div>
             <div className="sheet-sub">{t.choosePlan}</div>
           </div>
-          <div className="plan-tiers">
-            <div className="plan-tier">
-              <div className="t-name" style={{ color: "var(--p-blue)" }}>
-                Pro
-              </div>
-              <div className="t-price">₪29</div>
-              <div className="t-per">{t.perMonth}</div>
-              <button
-                className="sheet-pill blue"
-                style={{ width: "100%" }}
-                onClick={() => {
-                  setPlan("pro");
-                  setOpenSheet(null);
-                }}
-              >
-                {t.choosePro}
-              </button>
-            </div>
-            <div className="plan-tier">
-              <div className="t-name" style={{ color: "var(--p-purple)" }}>
-                Max
-              </div>
-              <div className="t-price">₪69</div>
-              <div className="t-per">{t.perMonth}</div>
-              <button
-                className="sheet-pill purple"
-                style={{ width: "100%" }}
-                onClick={() => {
-                  setPlan("max");
-                  setOpenSheet(null);
-                }}
-              >
-                {t.chooseMax}
-              </button>
-            </div>
+          <div className="plan-tiers rich">
+            {(
+              [
+                {
+                  key: "free",
+                  name: "Free",
+                  price: "₪0",
+                  accent: "var(--p-text-3)",
+                  feats:
+                    lang === "he"
+                      ? ["צ׳אט ותהליכים ללא הגבלה", "פרופיל אחד", "יכולת מבחנים", "זיכרון בסיסי"]
+                      : ["Unlimited chat & processes", "1 profile", "Quiz capability", "Basic memory"],
+                },
+                {
+                  key: "pro",
+                  name: "Pro",
+                  price: "₪29",
+                  accent: "var(--p-blue)",
+                  rec: true,
+                  feats:
+                    lang === "he"
+                      ? ["כל מה שב‑Free", "פרופילים מרובים", "קביעת תורים · תזכורות · טפסים", "טיוטות + חיבורים", "עדיפות בתשובות"]
+                      : ["Everything in Free", "Multiple profiles", "Booking · reminders · forms", "Drafts + connections", "Priority replies"],
+                },
+                {
+                  key: "max",
+                  name: "Max",
+                  price: "₪69",
+                  accent: "var(--p-purple)",
+                  feats:
+                    lang === "he"
+                      ? ["כל מה שב‑Pro", "פרימיום: מחקר · נסיעות · מו״מ", "מושב ספק + מקורות רשמיים", "הצד השני עונה מהר יותר", "תמיכה מועדפת"]
+                      : ["Everything in Pro", "Premium: research · travel · negotiate", "Supplier seat + official sources", "Faster counterpart replies", "Priority support"],
+                },
+              ] as { key: PlanTier; name: string; price: string; accent: string; rec?: boolean; feats: string[] }[]
+            ).map((tier) => {
+              const current = plan === tier.key;
+              return (
+                <div key={tier.key} className={`plan-card${current ? " is-current" : ""}${tier.rec ? " is-rec" : ""}`}>
+                  {tier.rec && <span className="plan-badge">{lang === "he" ? "הכי פופולרי" : "Most popular"}</span>}
+                  <div className="t-name" style={{ color: tier.accent }}>{tier.name}</div>
+                  <div className="t-price">
+                    {tier.price}
+                    <span className="t-per">{lang === "he" ? " /חודש" : " /mo"}</span>
+                  </div>
+                  <ul className="plan-feats">
+                    {tier.feats.map((f) => (
+                      <li key={f}>
+                        <span className="pf-check" aria-hidden="true">✓</span> {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    className={`sheet-pill${tier.key === "pro" ? " blue" : tier.key === "max" ? " purple" : ""}`}
+                    style={{ width: "100%" }}
+                    disabled={current}
+                    onClick={() => {
+                      setPlan(tier.key);
+                      setOpenSheet(null);
+                    }}
+                  >
+                    {current
+                      ? lang === "he"
+                        ? "התוכנית שלך ✓"
+                        : "Your plan ✓"
+                      : lang === "he"
+                        ? `בחר ${tier.name}`
+                        : `Choose ${tier.name}`}
+                  </button>
+                </div>
+              );
+            })}
           </div>
-          <div className="sheet-section">
-            <div className="sheet-row">
-              <span className="r-label">Pro</span>
-              <span className="r-value">{t.proFeat}</span>
-            </div>
-            <div className="sheet-row">
-              <span className="r-label">Max</span>
-              <span className="r-value">{t.maxFeat}</span>
-            </div>
-          </div>
+          <p className="plan-foot">
+            {lang === "he"
+              ? "אפשר לבטל בכל רגע. המחירים לפרופיל; פרופיל עסקי/ספק כלול ב‑Pro ומעלה."
+              : "Cancel anytime. Prices are per profile; business/supplier seats are included from Pro up."}
+          </p>
         </div>
       </Sheet>
 
