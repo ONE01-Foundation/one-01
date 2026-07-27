@@ -893,6 +893,7 @@ function UnitDetail({
   onWorkStep,
   onAddConnection,
   onCover,
+  onStepImage,
 }: {
   p: Process;
   businesses: Business[];
@@ -910,6 +911,8 @@ function UnitDetail({
   onAddConnection: (p: Process) => void;
   /** Persist a generated cover image onto the unit (reusable stock). */
   onCover?: (procId: string, url: string) => void;
+  /** Persist a generated image for a specific step (reusable stock). */
+  onStepImage?: (procId: string, stepIndex: number, url: string) => void;
 }) {
   const sources = unitSources(p);
   const he = lang === "he";
@@ -1044,6 +1047,18 @@ function UnitDetail({
     setMx(0);
     setMy(0);
   };
+  // Generate a picture for a specific step, on demand — stored as reusable stock
+  // (same ai-image function + topic-keyed cache as the cover).
+  const [stepBusy, setStepBusy] = useState<number | null>(null);
+  const genStepImage = async (i: number, label: string) => {
+    if (stepBusy !== null) return;
+    setStepBusy(i);
+    const key = `step:${(p.type ?? "").toLowerCase()}:${p.title.trim().toLowerCase()}:${label.trim().toLowerCase()}`;
+    const prompt = `A clean, minimal illustrative image for the task "${label}" (part of "${p.title}"). Tasteful, no text, no words, no letters, no logos.`;
+    const url = await generateImage(prompt, key);
+    setStepBusy(null);
+    if (url) onStepImage?.(p.id, i, url);
+  };
   return (
     <div className="unit-detail-body" onMouseMove={onParallax} onMouseLeave={resetParallax}>
       {covers.length > 0 && (
@@ -1138,6 +1153,24 @@ function UnitDetail({
                 <span className="step-text">{s.label}</span>
                 {!done && <span className="step-go" aria-hidden="true">→</span>}
               </button>
+              {p.stepImages?.[i] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="step-img" src={p.stepImages[i]} alt="" loading="lazy" />
+              ) : (
+                <button
+                  className="step-img-btn"
+                  onClick={() => void genStepImage(i, s.label)}
+                  disabled={stepBusy !== null}
+                  aria-label={he ? "צור תמונה לשלב" : "Generate an image for this step"}
+                  title={he ? "צור תמונה" : "Generate image"}
+                >
+                  {stepBusy === i ? (
+                    <span className="step-img-spin" aria-hidden="true" />
+                  ) : (
+                    <i className="fi fi-rr-picture" aria-hidden="true" />
+                  )}
+                </button>
+              )}
             </div>
           );
         })}
@@ -5501,6 +5534,15 @@ export default function AppHome() {
                     onCover={(procId, url) =>
                       setUnits((list) =>
                         list.map((u) => (u.id === procId ? { ...u, coverImage: url } : u)),
+                      )
+                    }
+                    onStepImage={(procId, i, url) =>
+                      setUnits((list) =>
+                        list.map((u) =>
+                          u.id === procId
+                            ? { ...u, stepImages: { ...(u.stepImages ?? {}), [i]: url } }
+                            : u,
+                        ),
                       )
                     }
                   />

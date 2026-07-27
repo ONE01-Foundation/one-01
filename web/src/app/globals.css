@@ -7265,6 +7265,45 @@ button.conn-card:hover {
   color: var(--p-text-3);
   text-decoration: line-through;
 }
+/* Per-step image — tap the picture button to generate one, then it shows as a
+   little thumbnail (stored as reusable stock). */
+.step-img-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--p-line);
+  background: var(--p-surface);
+  color: var(--p-text-3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  transition: background 140ms ease, color 140ms ease;
+}
+.step-img-btn:hover:not(:disabled) {
+  background: var(--p-bg);
+  color: var(--p-text);
+}
+.step-img-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.step-img {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.step-img-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--p-line);
+  border-top-color: var(--p-blue, #4b7bff);
+  animation: vc-spin 0.7s linear infinite;
+}
 /* The unit's own broadcast — big, text-only, like the home broadcast but scoped
    to THIS process. ONE's pulse of tips / what's next, fading between lines. */
 .unit-broadcast {
