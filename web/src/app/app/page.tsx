@@ -28,6 +28,7 @@ import {
   forkGlobalUnit,
   type GlobalUnit,
 } from "@/lib/globalUnits";
+import { transcribeAudio, startRealtime, type RealtimeHandle } from "@/lib/voice";
 import {
   ensureSession,
   saveUnits,
@@ -315,51 +316,100 @@ function AppInput({
   lang?: "en" | "he";
 }) {
   const [focused, setFocused] = useState(false);
-  const [listening, setListening] = useState(false);
-  const recRef = useRef<{ stop: () => void } | null>(null);
+  const [listening, setListening] = useState(false); // hold-to-record
+  const [live, setLive] = useState(false); // tap-to-talk realtime
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const micRef = useRef<MediaStream | null>(null);
+  const rtRef = useRef<RealtimeHandle | null>(null);
+  const holdingRef = useRef(false);
+  const holdTimer = useRef<number | null>(null);
   const hasText = value.trim().length > 0;
   const he = lang === "he";
 
-  // Real voice input via the browser's Web Speech API — the mic dictates into
-  // the same input, so "talk to ONE" is literal. Falls back silently (the mic
-  // just does nothing) where the API isn't available.
-  const toggleVoice = () => {
-    if (listening) {
-      recRef.current?.stop();
+  // HOLD the voice button → record; on release → Whisper transcribes into the
+  // input. TAP it → open a live spoken conversation with ONE (Realtime). Both
+  // degrade silently where mic / APIs aren't available.
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micRef.current = stream;
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data.size) chunksRef.current.push(e.data);
+      };
+      mr.onstop = async () => {
+        micRef.current?.getTracks().forEach((t) => t.stop());
+        micRef.current = null;
+        setListening(false);
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (blob.size > 800) {
+          const text = await transcribeAudio(blob);
+          if (text) onChange((value.trim() ? value.trim() + " " : "") + text);
+        }
+      };
+      recorderRef.current = mr;
+      mr.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+  const stopRecording = () => {
+    if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
+  };
+  const toggleLive = async () => {
+    if (rtRef.current) {
+      rtRef.current.stop();
+      rtRef.current = null;
+      setLive(false);
       return;
     }
-    const SR =
-      typeof window !== "undefined" &&
-      ((window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown })
-        .SpeechRecognition ||
-        (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition);
-    if (!SR) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rec: any = new (SR as any)();
-    let stored = "en";
-    try {
-      stored = localStorage.getItem("one_lang") || "en";
-    } catch {
-      /* default en */
+    setLive(true);
+    const h = await startRealtime({
+      instructions: he
+        ? "אתה ONE — נציג אישי חם ותמציתי. ענה קצר וטבעי בעברית."
+        : "You are ONE — a warm, concise personal representative. Keep spoken replies short and natural.",
+      onClose: () => {
+        rtRef.current = null;
+        setLive(false);
+      },
+    });
+    if (!h) {
+      setLive(false);
+      return;
     }
-    rec.lang = stored === "he" ? "he-IL" : "en-US";
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.onresult = (e: {
-      results: ArrayLike<{ 0: { transcript: string } }>;
-    }) => {
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      onChange(text);
-    };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => {
-      setListening(false);
-      recRef.current = null;
-    };
-    recRef.current = rec;
-    setListening(true);
-    rec.start();
+    rtRef.current = h;
+  };
+  const onVoiceDown = () => {
+    holdingRef.current = false;
+    holdTimer.current = window.setTimeout(() => {
+      holdingRef.current = true;
+      void startRecording();
+    }, 220);
+  };
+  const onVoiceUp = () => {
+    if (holdTimer.current) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+    if (holdingRef.current) {
+      holdingRef.current = false;
+      stopRecording();
+    } else {
+      void toggleLive();
+    }
+  };
+  const onVoiceCancel = () => {
+    if (holdTimer.current) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+    if (holdingRef.current) {
+      holdingRef.current = false;
+      stopRecording();
+    }
   };
 
   return (
@@ -389,10 +439,13 @@ function AppInput({
         />
       </span>
       <button
-        className={`app-bar-go${listening ? " is-listening" : ""}`}
-        aria-label={hasText ? "Send" : listening ? "Stop" : "Voice"}
+        className={`app-bar-go${listening ? " is-listening" : ""}${live ? " is-live" : ""}`}
+        aria-label={hasText ? "Send" : live ? "End voice call" : listening ? "Recording" : "Voice — tap to talk, hold to record"}
         type="button"
-        onClick={() => (hasText ? onSend() : toggleVoice())}
+        onClick={hasText ? () => onSend() : undefined}
+        onPointerDown={hasText ? undefined : onVoiceDown}
+        onPointerUp={hasText ? undefined : onVoiceUp}
+        onPointerLeave={hasText ? undefined : onVoiceCancel}
       >
         {hasText ? <SendIcon /> : <VoiceIcon />}
       </button>

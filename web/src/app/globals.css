@@ -6190,6 +6190,21 @@ button.conn-card:hover {
     box-shadow: 0 0 0 8px color-mix(in srgb, #e5484d 0%, transparent);
   }
 }
+/* Tap-to-talk live realtime call — a calm blue pulse (vs. the red recording). */
+.app-bar-go.is-live {
+  background: var(--p-blue, #4b7bff);
+  color: #fff;
+  animation: live-pulse 1.4s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-blue, #4b7bff) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 9px color-mix(in srgb, var(--p-blue, #4b7bff) 0%, transparent);
+  }
+}
 
 /* ─── unit — one pane, switched between the conversation and the details ─── */
 .unit-view {
