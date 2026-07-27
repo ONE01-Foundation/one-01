@@ -385,6 +385,25 @@ const CAPABILITY_CATALOG: Capability[] = [
   },
 ];
 
+// ── Official / trusted sources ONE may draw on in Global. `official` sources are
+//    authoritative (gov offices); `reference` are open knowledge (Wikipedia).
+//    Adding custom channels is role-gated (coming) — see the Global note.
+interface Source {
+  key: string;
+  emoji: string;
+  en: string;
+  he: string;
+  kind: "official" | "reference";
+  host: string;
+}
+const SOURCE_CATALOG: Source[] = [
+  { key: "licensing", emoji: "🚗", en: "Licensing Authority", he: "רשות הרישוי", kind: "official", host: "gov.il" },
+  { key: "gov", emoji: "🏛️", en: "Government portal", he: "פורטל השירותים הממשלתי", kind: "official", host: "gov.il" },
+  { key: "nii", emoji: "📋", en: "National Insurance", he: "ביטוח לאומי", kind: "official", host: "btl.gov.il" },
+  { key: "health", emoji: "🩺", en: "Ministry of Health", he: "משרד הבריאות", kind: "official", host: "health.gov.il" },
+  { key: "wikipedia", emoji: "📚", en: "Wikipedia", he: "ויקיפדיה", kind: "reference", host: "wikipedia.org" },
+];
+
 // Hebrew for the details card — section headers, plus lookups that translate the
 // common machine-written metric labels / values / quick-actions so a Hebrew card
 // doesn't read half-English. Unknown terms fall back to their original text.
@@ -610,6 +629,12 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     capAdd: "Add",
     capAdded: "Added",
     capsGlobalSub: "Switch on more of what ONE can do",
+    sources: "Official sources",
+    sourcesSub: "Trusted places ONE draws information from",
+    official: "Official",
+    reference: "Open reference",
+    addSource: "Add a source",
+    addSourceHint: "Adding channels is role-based — coming soon",
     tempTag: "Temporary chat · nothing is saved",
     tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
@@ -716,6 +741,12 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     capAdd: "הוסף",
     capAdded: "נוסף",
     capsGlobalSub: "הפעל עוד ממה ש‑ONE יודע לעשות",
+    sources: "מקורות רשמיים",
+    sourcesSub: "מקומות מהימנים שמהם ONE שואב מידע",
+    official: "רשמי",
+    reference: "מקור פתוח",
+    addSource: "הוסף מקור",
+    addSourceHint: "הוספת ערוצים היא לפי הרשאות — בקרוב",
     tempTag: "צ'אט זמני · שום דבר לא נשמר",
     tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
@@ -3033,6 +3064,31 @@ export default function AppHome() {
                                 </div>
                               );
                             })}
+                          </div>
+
+                          {/* Official sources — the trusted places ONE draws on.
+                              Adding custom channels is role-gated (coming). */}
+                          <div className="global-sec-head with-top">
+                            <h3 className="global-sec-title">{t.sources}</h3>
+                            <span className="global-sec-sub">{t.sourcesSub}</span>
+                          </div>
+                          <div className="gsources">
+                            {SOURCE_CATALOG.map((s) => (
+                              <div key={s.key} className="gsource">
+                                <span className="gsource-emoji" aria-hidden="true">{s.emoji}</span>
+                                <span className="gsource-main">
+                                  <span className="gsource-name">{lang === "he" ? s.he : s.en}</span>
+                                  <span className="gsource-host">{s.host}</span>
+                                </span>
+                                <span className={`gsource-badge ${s.kind}`}>
+                                  {s.kind === "official" ? t.official : t.reference}
+                                </span>
+                              </div>
+                            ))}
+                            <button className="gsource-add" disabled title={t.addSourceHint}>
+                              <span aria-hidden="true">＋</span> {t.addSource}
+                              <span className="gsource-add-hint">{t.addSourceHint}</span>
+                            </button>
                           </div>
 
                           {/* Processes — your active engagements across the network */}
