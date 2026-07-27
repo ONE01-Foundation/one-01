@@ -5474,7 +5474,8 @@ footer {
   background: color-mix(in srgb, var(--p-blue) 14%, var(--p-surface));
   border: 1px solid color-mix(in srgb, var(--p-blue) 30%, transparent);
   color: var(--p-text);
-  border-bottom-left-radius: 6px;
+  /* Tail on the inline-start bottom corner — bottom-left in LTR, bottom-right in RTL. */
+  border-end-start-radius: 6px;
 }
 /* ── Connections — your network of businesses, process-people & contacts ───── */
 .conn-grid {
@@ -6433,7 +6434,9 @@ button.conn-card:hover {
   /* --p-face is near-white in dark mode, so a fixed white would vanish; use the
      page background as the text colour so it contrasts in both themes. */
   color: var(--p-bg);
-  border-bottom-right-radius: 6px;
+  /* Logical corner — the "tail" sits on the block-end / inline-end corner, so it
+     follows writing direction: bottom-right in LTR, bottom-LEFT in Hebrew RTL. */
+  border-end-end-radius: 6px;
 }
 /* ONE speaks flat on the canvas — no bubble, no border. Only YOUR messages
    carry a bubble; ONE's replies read like the page talking back to you. */
@@ -7013,6 +7016,63 @@ button.conn-card:hover {
   margin: 2px 0 18px;
   min-height: 1.4em;
   animation: chat-rise 420ms ease both;
+}
+/* A tiny live pulse before ONE's status line — signals "ONE is on it". */
+.unit-live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-inline-end: 9px;
+  vertical-align: middle;
+  background: var(--p-ok, #22c55e);
+  box-shadow: 0 0 0 0 var(--p-ok, #22c55e);
+  animation: unit-live-pulse 2.4s ease-out infinite;
+}
+@keyframes unit-live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-ok, #22c55e) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--p-ok, #22c55e) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-ok, #22c55e) 0%, transparent);
+  }
+}
+/* ── Progress hero — the card's emotional core: how far this goal has come ──── */
+.unit-progress {
+  margin: 2px 0 16px;
+}
+.unit-progress-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+.unit-progress-pct {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--p-text);
+}
+.unit-progress-sub {
+  font-size: 13px;
+  color: var(--p-text-3);
+}
+.unit-progress-track {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--p-line);
+  overflow: hidden;
+}
+.unit-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--p-blue, #4b7bff), var(--p-purple, #8b5cf6));
+  transition: width 620ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 /* ── Contextual cover — cross-fading topic images behind the unit's pulse ──── */
 .unit-cover {

@@ -782,6 +782,27 @@ const METRIC_LABEL_HE: Record<string, string> = {
   date: "תאריך",
   time: "שעה",
   people: "אנשים",
+  current: "נוכחי",
+  target: "יעד",
+  progress: "התקדמות",
+  "cal / day": "קלוריות ליום",
+  "cal/day": "קלוריות ליום",
+  "workouts / wk": "אימונים בשבוע",
+  "workouts/wk": "אימונים בשבוע",
+  weight: "משקל",
+  amount: "סכום",
+  quote: "הצעת מחיר",
+  slot: "משבצת",
+  lesson: "שיעור",
+  test: "מבחן",
+  next: "הבא",
+  "next session": "מפגש הבא",
+  activities: "פעילויות",
+  "total cost": "עלות כוללת",
+  "days until departure": "ימים ליציאה",
+  "number of activities planned": "פעילויות מתוכננות",
+  "activities planned": "פעילויות מתוכננות",
+  distance: "מרחק ליעד",
 };
 const VALUE_HE: Record<string, string> = {
   "in progress": "בתהליך",
@@ -791,6 +812,11 @@ const VALUE_HE: Record<string, string> = {
   done: "הושלם",
   booked: "נקבע",
   "not started": "טרם התחיל",
+  scheduled: "מתוזמן",
+  ready: "מוכן",
+  "on track": "במסלול",
+  active: "פעיל",
+  completed: "הושלם",
 };
 const ACTION_HE: Record<string, string> = {
   "book appointment": "קבע תור",
@@ -839,6 +865,34 @@ function UnitDetail({
   const locMetric = (s: string) => (he ? METRIC_LABEL_HE[s.trim().toLowerCase()] ?? s : s);
   const locValue = (s: string) => (he ? VALUE_HE[s.trim().toLowerCase()] ?? s : s);
   const locAction = (s: string) => (he ? ACTION_HE[s.trim().toLowerCase()] ?? s : s);
+  // Timeline stamps ("now" / "Today" / "3 days ago" / weekday) → Hebrew.
+  const locTime = (at: string): string => {
+    if (!he) return at;
+    const s = at.trim().toLowerCase();
+    const direct: Record<string, string> = {
+      now: "עכשיו",
+      today: "היום",
+      yesterday: "אתמול",
+      tomorrow: "מחר",
+      sun: "א׳",
+      mon: "ב׳",
+      tue: "ג׳",
+      wed: "ד׳",
+      thu: "ה׳",
+      fri: "ו׳",
+      sat: "ש׳",
+    };
+    if (direct[s]) return direct[s];
+    let m = s.match(/^(\d+)\s*days?\s*ago$/);
+    if (m) return `לפני ${m[1]} ימים`;
+    m = s.match(/^(\d+)\s*(?:h|hours?|hrs?)\s*ago$/);
+    if (m) return `לפני ${m[1]} שעות`;
+    m = s.match(/^(\d+)\s*min(?:ute)?s?\s*ago$/);
+    if (m) return `לפני ${m[1]} דקות`;
+    m = s.match(/^(\d+)\s*weeks?\s*ago$/);
+    if (m) return `לפני ${m[1]} שבועות`;
+    return at;
+  };
   // A tiny emoji that matches what the action DOES — so chips read at a glance.
   const qaEmoji = (label: string): string => {
     const l = label.toLowerCase();
@@ -864,6 +918,11 @@ function UnitDetail({
   // The unit's own little broadcast — tips / news / what-to-know for THIS
   // process — rotating above the metrics.
   const brief = [p.nextAction, ...(p.insights ?? [])].filter(Boolean) as string[];
+  // Progress toward done — the card's emotional core. Prefer the curated
+  // done/total when present, else count ticked steps live.
+  const stepsDone = p.steps.filter((_, i) => isStepDone(p, i)).length;
+  const prog = p.progress ?? { done: stepsDone, total: p.steps.length };
+  const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
   const [briefIdx, setBriefIdx] = useState(0);
   useEffect(() => {
     if (brief.length < 2) return;
@@ -933,8 +992,26 @@ function UnitDetail({
           <span className="unit-cover-fade" />
         </div>
       )}
+
+      {prog.total > 0 && (
+        <div className="unit-progress">
+          <div className="unit-progress-head">
+            <span className="unit-progress-pct">{pct}%</span>
+            <span className="unit-progress-sub">
+              {he
+                ? `${prog.done} מתוך ${prog.total} שלבים${pct >= 100 ? " · הושלם" : ""}`
+                : `${prog.done} of ${prog.total} steps${pct >= 100 ? " · done" : ""}`}
+            </span>
+          </div>
+          <div className="unit-progress-track">
+            <span className="unit-progress-fill" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      )}
+
       {brief.length > 0 && (
         <div className="unit-broadcast" aria-live="polite" key={briefIdx}>
+          <span className="unit-live-dot" aria-hidden="true" />
           {brief[briefIdx % brief.length]}
         </div>
       )}
@@ -1114,7 +1191,7 @@ function UnitDetail({
           <div className="timeline-item" key={i}>
             <span className="timeline-dot" />
             <span>
-              <b style={{ fontWeight: 600 }}>{ev.at}</b> — {ev.text}
+              <b style={{ fontWeight: 600 }}>{locTime(ev.at)}</b> — {ev.text}
             </span>
           </div>
         ))}
@@ -3590,6 +3667,7 @@ export default function AppHome() {
       now: Date.now(),
       processes,
       focus,
+      lang,
     });
     // Is this a brand-new process (vs. an update to an existing one)?
     const isNewProcess = !!res.process && !processes.some((p) => p.id === res.process!.id);
@@ -3911,6 +3989,7 @@ export default function AppHome() {
           now: Date.now() + i,
           processes,
           focus: null,
+          lang,
         });
         if (res.process) upsert(res.process);
       });
@@ -4264,7 +4343,7 @@ export default function AppHome() {
       return;
     }
     const focus = units.find((u) => u.id === proc.id) ?? null;
-    const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus });
+    const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus, lang });
 
     const applyStructured = () => {
       if (res.process) upsert(res.process);

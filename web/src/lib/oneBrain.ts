@@ -102,6 +102,8 @@ export interface BrainContext {
   processes: Process[];
   /** The process currently being refined (last created / discussed). */
   focus: Process | null;
+  /** App language, so scaffolding text (timeline, etc.) matches the UI. */
+  lang?: "en" | "he";
 }
 
 interface Domain {
@@ -431,7 +433,12 @@ function build(domain: Domain, text: string, ctx: BrainContext): Process {
     people: [...domain.people],
     steps: domain.steps.map((label) => ({ label, done: false })),
     decisions: domain.firstDecision ? [domain.firstDecision] : [],
-    timeline: [{ at: "now", text: "You asked ONE to take this on." }],
+    timeline: [
+      {
+        at: "now",
+        text: ctx.lang === "he" ? "ביקשת מ‑ONE לקחת את זה על עצמו." : "You asked ONE to take this on.",
+      },
+    ],
     type: domain.id,
     fields,
     nextAction: profile.nextAction(fields),
