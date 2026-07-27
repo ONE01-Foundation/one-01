@@ -4398,6 +4398,52 @@ footer {
   font-size: 14px;
   color: var(--p-text-2);
 }
+
+/* ─── ONE working — status line + eyes-shut face (like a coding agent) ────── */
+.unit-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px 8px;
+}
+.unit-status-orb {
+  flex: 0 0 auto;
+  animation: statusOrbPulse 1.5s ease-in-out infinite;
+}
+@keyframes statusOrbPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+.unit-status-text {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--p-text-3);
+  animation: statusPulse 1.4s ease-in-out infinite;
+}
+@keyframes statusPulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* The brand mark's eyes close to slits while ONE is working. */
+.one-word-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 220ms ease;
+}
+.app-brand-mark.is-working .one-word-eye {
+  animation: none;
+  transform: scaleY(0.14);
+}
 /* The broadcast, right above the input. A fixed two-line box, BOTTOM-aligned so
    the line always sits just above the input; a second line grows upward and the
    input never moves. */

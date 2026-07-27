@@ -553,6 +553,10 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     connectionsSub: "ONEs you're linked to",
     news: "News",
     newsSub: "Across the network",
+    statusThinking: "Thinking…",
+    statusConnecting: "Connecting…",
+    statusSearching: "Searching…",
+    statusWorking: "Working…",
   },
   he: {
     upgrade: "שדרוג",
@@ -637,6 +641,10 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     connectionsSub: "ONE שאתם מחוברים אליהם",
     news: "חדשות",
     newsSub: "מהרשת",
+    statusThinking: "חושב…",
+    statusConnecting: "מתחבר…",
+    statusSearching: "מחפש…",
+    statusWorking: "עובד…",
   },
 };
 
@@ -797,6 +805,16 @@ export default function AppHome() {
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
   const [unitDraft, setUnitDraft] = useState("");
   const [unitThinking, setUnitThinking] = useState(false);
+  // While ONE is working, a status line cycles Thinking → Connecting → Searching
+  // → Working (like a coding agent), and the ONE face closes its eyes.
+  const [statusIdx, setStatusIdx] = useState(0);
+  const oneWorking = thinking || unitThinking;
+  useEffect(() => {
+    if (!oneWorking) return;
+    setStatusIdx(0);
+    const id = setInterval(() => setStatusIdx((i) => i + 1), 1100);
+    return () => clearInterval(id);
+  }, [oneWorking]);
   // One unit store — seeds + anything ONE creates, so every surface stays in sync.
   const [units, setUnits] = useState<Process[]>(PROCESSES);
   // The process ONE is currently refining, and its latest live broadcast line.
@@ -1593,6 +1611,9 @@ export default function AppHome() {
           "Leisure — the busiest world today",
         ];
 
+  const STATUS_KEYS = ["statusThinking", "statusConnecting", "statusSearching", "statusWorking"] as const;
+  const statusLabel = t[STATUS_KEYS[statusIdx % STATUS_KEYS.length]];
+
   return (
     <main className="product-root" data-theme={theme} dir={lang === "he" ? "rtl" : "ltr"} lang={lang}>
       {/* No splash overlay. The opening IS the home animating in — see the
@@ -1628,7 +1649,7 @@ export default function AppHome() {
                     : "Open menu"
               }
             >
-              <OneWord className="app-brand-mark" />
+              <OneWord className={`app-brand-mark${oneWorking ? " is-working" : ""}`} />
             </button>
             <button
               className={`app-drawer-toggle${drawerOpen ? " is-open" : ""}`}
@@ -1839,10 +1860,15 @@ export default function AppHome() {
                       </div>
                     ))}
                     {unitThinking && (
-                      <div className="chat-msg one thinking" aria-label="ONE is thinking">
-                        <span />
-                        <span />
-                        <span />
+                      <div className="unit-status" aria-live="polite">
+                        <Orb
+                          size={22}
+                          closed
+                          faceColor="var(--p-face)"
+                          eyeColor="var(--p-bg)"
+                          className="unit-status-orb"
+                        />
+                        <span className="unit-status-text">{statusLabel}</span>
                       </div>
                     )}
                     <div ref={unitEndRef} />
@@ -2211,10 +2237,15 @@ export default function AppHome() {
                       </div>
                     ))}
                     {thinking && (
-                      <div className="chat-msg one thinking" aria-label="ONE is thinking">
-                        <span />
-                        <span />
-                        <span />
+                      <div className="unit-status" aria-live="polite">
+                        <Orb
+                          size={22}
+                          closed
+                          faceColor="var(--p-face)"
+                          eyeColor="var(--p-bg)"
+                          className="unit-status-orb"
+                        />
+                        <span className="unit-status-text">{statusLabel}</span>
                       </div>
                     )}
                     <div ref={chatEndRef} />

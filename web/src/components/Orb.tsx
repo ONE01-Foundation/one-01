@@ -11,6 +11,7 @@ export function Orb({
   gaze = 0,
   eyeR = 8,
   alive = false,
+  closed = false,
   className,
 }: {
   size?: number;
@@ -22,12 +23,16 @@ export function Orb({
   eyeR?: number;
   /** When true the eyes blink on a slow cadence (feels alive). */
   alive?: boolean;
+  /** When true the eyes close to slits — ONE is concentrating / working. */
+  closed?: boolean;
   className?: string;
 }) {
   // Eye geometry in a 100×100 viewBox.
   const cy = 45 + look * 6;
   const cx = 16 + gaze * 5;
   const eyeClass = alive ? "orb-eye" : undefined;
+  const lx = 34 + cx - 16;
+  const rx = 66 + cx - 16;
   return (
     <svg
       width={size}
@@ -38,8 +43,18 @@ export function Orb({
       aria-hidden="true"
     >
       <circle cx="50" cy="50" r="50" fill={faceColor} />
-      <circle className={eyeClass} cx={34 + cx - 16} cy={cy} r={eyeR} fill={eyeColor} />
-      <circle className={eyeClass} cx={66 + cx - 16} cy={cy} r={eyeR} fill={eyeColor} />
+      {closed ? (
+        <>
+          {/* Closed eyes — thin rounded slits. */}
+          <rect x={lx - eyeR} y={cy - eyeR * 0.28} width={eyeR * 2} height={eyeR * 0.56} rx={eyeR * 0.28} fill={eyeColor} />
+          <rect x={rx - eyeR} y={cy - eyeR * 0.28} width={eyeR * 2} height={eyeR * 0.56} rx={eyeR * 0.28} fill={eyeColor} />
+        </>
+      ) : (
+        <>
+          <circle className={eyeClass} cx={lx} cy={cy} r={eyeR} fill={eyeColor} />
+          <circle className={eyeClass} cx={rx} cy={cy} r={eyeR} fill={eyeColor} />
+        </>
+      )}
     </svg>
   );
 }
