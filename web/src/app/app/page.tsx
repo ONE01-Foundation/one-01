@@ -299,7 +299,52 @@ function AppInput({
   caret?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<{ stop: () => void } | null>(null);
   const hasText = value.trim().length > 0;
+
+  // Real voice input via the browser's Web Speech API — the mic dictates into
+  // the same input, so "talk to ONE" is literal. Falls back silently (the mic
+  // just does nothing) where the API isn't available.
+  const toggleVoice = () => {
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const SR =
+      typeof window !== "undefined" &&
+      ((window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown })
+        .SpeechRecognition ||
+        (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition);
+    if (!SR) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = new (SR as any)();
+    let stored = "en";
+    try {
+      stored = localStorage.getItem("one_lang") || "en";
+    } catch {
+      /* default en */
+    }
+    rec.lang = stored === "he" ? "he-IL" : "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.onresult = (e: {
+      results: ArrayLike<{ 0: { transcript: string } }>;
+    }) => {
+      let text = "";
+      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+      onChange(text);
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      recRef.current = null;
+    };
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
+
   return (
     <div className="app-bar">
       <button className="app-bar-plus" aria-label="Add" type="button">
@@ -325,10 +370,10 @@ function AppInput({
         />
       </span>
       <button
-        className="app-bar-go"
-        aria-label={hasText ? "Send" : "Voice"}
+        className={`app-bar-go${listening ? " is-listening" : ""}`}
+        aria-label={hasText ? "Send" : listening ? "Stop" : "Voice"}
         type="button"
-        onClick={() => hasText && onSend()}
+        onClick={() => (hasText ? onSend() : toggleVoice())}
       >
         {hasText ? <SendIcon /> : <VoiceIcon />}
       </button>
