@@ -799,6 +799,14 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     memPulled: "Pulled from your memory",
     memShare: "Share for this",
     routeInto: "Continue in ",
+    connectionsNav: "Connections",
+    connectionsNavSub: "Everyone your ONE is dealing with — businesses, people, contacts you keep.",
+    connBusinesses: "Businesses",
+    connBizEmpty: "No connected businesses yet — they appear here once a process is with one.",
+    connPeople: "People in your processes",
+    connPeopleEmpty: "People show up here as your processes gather them.",
+    connMine: "My contacts",
+    connAddPlaceholder: "Add a name",
     tempTag: "Temporary chat · nothing is saved",
     tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
@@ -921,6 +929,14 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     memPulled: "נשלף מהזיכרון שלך",
     memShare: "שתף לצורך זה",
     routeInto: "המשך ב־",
+    connectionsNav: "חיבורים",
+    connectionsNavSub: "כל מי שה‑ONE שלך מתעסק איתו — עסקים, אנשים, ואנשי קשר שאתה שומר.",
+    connBusinesses: "עסקים",
+    connBizEmpty: "עדיין אין עסקים מחוברים — הם יופיעו כאן ברגע שתהליך מתנהל מול אחד.",
+    connPeople: "אנשים בתהליכים שלך",
+    connPeopleEmpty: "אנשים יופיעו כאן ככל שהתהליכים שלך אוספים אותם.",
+    connMine: "אנשי הקשר שלי",
+    connAddPlaceholder: "הוסף שם",
     tempTag: "צ'אט זמני · שום דבר לא נשמר",
     tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
@@ -1106,7 +1122,7 @@ export default function AppHome() {
   // The main canvas shows one of three "spaces": the ONE home (broadcast +
   // input), the Global marketplace, or the ONE profile — all on-canvas, no
   // popups. A segmented toggle flips Home ⇄ Global; the drawer opens Profile.
-  const [space, setSpace] = useState<"home" | "global" | "profile">("home");
+  const [space, setSpace] = useState<"home" | "global" | "profile" | "connections">("home");
   const [world, setWorld] = useState<"all" | WorldKey>("all");
   // Appearance + language. Persisted; dark defaults to the OS preference.
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -1216,6 +1232,33 @@ export default function AppHome() {
   // Which side of the process thread to show — the whole back-and-forth lives
   // here (you ⇄ ONE ⇄ the other party), and this filters it to one voice.
   const [threadFilter, setThreadFilter] = useState<"all" | "you" | "one" | "them">("all");
+  // Your connections — people you add by hand. Businesses & process-people are
+  // derived live from your data; these are the extra contacts you keep yourself.
+  const [contacts, setContacts] = useState<string[]>([]);
+  const [contactDraft, setContactDraft] = useState("");
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("one_contacts");
+      if (raw) setContacts(JSON.parse(raw));
+    } catch {
+      /* first run / blocked storage */
+    }
+  }, []);
+  const persistContacts = (next: string[]) => {
+    setContacts(next);
+    try {
+      localStorage.setItem("one_contacts", JSON.stringify(next));
+    } catch {
+      /* storage blocked */
+    }
+  };
+  const addContact = (name: string) => {
+    const n = name.trim();
+    if (!n || contacts.includes(n)) return;
+    persistContacts([...contacts, n]);
+    setContactDraft("");
+  };
+  const removeContact = (name: string) => persistContacts(contacts.filter((c) => c !== name));
   // A business's ONE "reaches out" at most ONCE per process — otherwise the
   // "the provider got back to me…" line repeats on every follow-up and reads
   // robotic. Track which processes have already had their outreach.
@@ -2422,6 +2465,15 @@ export default function AppHome() {
     closeDrawerOnMobile();
     setSpace("profile");
   };
+  const openConnections = () => {
+    setActiveProcess(null);
+    setUnitChat([]);
+    setUnitDraft("");
+    setUnitThinking(false);
+    endChat();
+    closeDrawerOnMobile();
+    setSpace("connections");
+  };
 
   // Pull a concrete "when" out of a message (a day and/or a real clock time),
   // in English or Hebrew. Returns null when there's no bookable time — so ONE
@@ -3138,6 +3190,10 @@ export default function AppHome() {
               <i className="fi fi-rr-user drawer-row-ico" aria-hidden="true" />
               {t.oneProfile}
             </button>
+            <button className="drawer-row" onClick={openConnections}>
+              <i className="fi fi-rr-users-alt drawer-row-ico" aria-hidden="true" />
+              {t.connectionsNav}
+            </button>
             <button className="drawer-row" onClick={() => setOpenSheet("settings")}>
               <i className="fi fi-rr-settings-sliders drawer-row-ico" aria-hidden="true" />
               {t.settings}
@@ -3535,6 +3591,118 @@ export default function AppHome() {
                           <span className="r-value">›</span>
                         </button>
                       </div>
+                    </div>
+                  </div>
+                ) : space === "connections" ? (
+                  // ── CONNECTIONS — your network: the businesses your processes
+                  //    are with, the people across them, and contacts you add.
+                  <div className="canvas profile-canvas">
+                    <div className="canvas-inner">
+                      <button className="canvas-back" onClick={goHome}>
+                        <span className="canvas-back-ico" aria-hidden="true">‹</span> {t.backHome}
+                      </button>
+                      <div className="prof-sec-head" style={{ marginTop: 4 }}>
+                        <h4 style={{ fontSize: 22 }}>{t.connectionsNav}</h4>
+                        <span className="prof-sec-sub">{t.connectionsNavSub}</span>
+                      </div>
+
+                      {(() => {
+                        const connBiz = businesses.filter((b) =>
+                          units.some((p) => p.businessId === b.id),
+                        );
+                        const people = Array.from(
+                          new Set(units.flatMap((p) => p.people ?? [])),
+                        ).map((name) => ({
+                          name,
+                          from: units.find((p) => (p.people ?? []).includes(name))?.title ?? "",
+                        }));
+                        return (
+                          <>
+                            <div className="sheet-section">
+                              <h4>{t.connBusinesses}</h4>
+                              {connBiz.length === 0 ? (
+                                <p className="conn-empty">{t.connBizEmpty}</p>
+                              ) : (
+                                <div className="conn-grid">
+                                  {connBiz.map((b) => (
+                                    <button
+                                      className="conn-card"
+                                      key={b.id}
+                                      onClick={() => openBiz(b.id)}
+                                    >
+                                      <span className="conn-avatar">{b.emoji}</span>
+                                      <span className="conn-body">
+                                        <span className="conn-name">{b.name}</span>
+                                        <span className="conn-rel">{b.category}</span>
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="sheet-section">
+                              <h4>{t.connPeople}</h4>
+                              {people.length === 0 ? (
+                                <p className="conn-empty">{t.connPeopleEmpty}</p>
+                              ) : (
+                                <div className="conn-grid">
+                                  {people.map((p) => (
+                                    <div className="conn-card" key={p.name}>
+                                      <span className="conn-avatar">🧑</span>
+                                      <span className="conn-body">
+                                        <span className="conn-name">{p.name}</span>
+                                        {p.from && <span className="conn-rel">{p.from}</span>}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="sheet-section">
+                              <h4>{t.connMine}</h4>
+                              <div className="conn-add">
+                                <input
+                                  className="mem-input conn-add-input"
+                                  value={contactDraft}
+                                  placeholder={t.connAddPlaceholder}
+                                  onChange={(e) => setContactDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") addContact(contactDraft);
+                                  }}
+                                />
+                                <button
+                                  className="sheet-pill"
+                                  onClick={() => addContact(contactDraft)}
+                                  disabled={!contactDraft.trim()}
+                                >
+                                  {t.memAddValue}
+                                </button>
+                              </div>
+                              {contacts.length > 0 && (
+                                <div className="conn-grid" style={{ marginTop: 10 }}>
+                                  {contacts.map((name) => (
+                                    <div className="conn-card" key={name}>
+                                      <span className="conn-avatar">👤</span>
+                                      <span className="conn-body">
+                                        <span className="conn-name">{name}</span>
+                                      </span>
+                                      <button
+                                        className="conn-remove"
+                                        onClick={() => removeContact(name)}
+                                        aria-label="Remove"
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 ) : (
