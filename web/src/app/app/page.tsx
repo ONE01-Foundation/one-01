@@ -254,7 +254,7 @@ function ChevronDownIcon() {
    leaves no trace. */
 function PlusIcon() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   );
@@ -272,9 +272,14 @@ function KebabIcon() {
 /** Voice bars — the resting state of the dock's action button, as in the app's
     hero. It flips to the send arrow the moment there's something to send. */
 function VoiceIcon() {
+  // Three rounded waveform bars — identical geometry to the mobile app's
+  // VoiceIcon (src/components/mvp/icons.tsx), so the "talk to ONE" mark reads
+  // the same on web and phone.
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M8 8v8M12 4v16M16 8v8M4 10.5v3M20 10.5v3" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <rect x="14.107" y="3.885" width="3.786" height="24.23" rx="1.893" fill="currentColor" />
+      <rect x="21.214" y="8.272" width="3.786" height="15.144" rx="1.893" fill="currentColor" />
+      <rect x="7.101" y="11.342" width="3.786" height="9.086" rx="1.893" fill="currentColor" />
     </svg>
   );
 }
@@ -646,6 +651,30 @@ async function wikiThumbnail(title: string): Promise<string | null> {
   }
 }
 
+// Candidate topics to illustrate a unit with — the title (minus its leading
+// verb), its last words, and its type. UnitDetail fetches a Wikipedia image for
+// each and rotates through whichever resolve, so a "Trip to Santorini" shows
+// Santorini and a "Learn Krav Maga" shows Krav Maga.
+function unitImageTerms(p: Process): string[] {
+  const cleaned = p.title
+    .replace(
+      /^(learn|study|plan(?:ning)?|book|get|find|renew|apply(?: for)?|buy|sell|start|open|move(?: to)?|trip to|travel to|fly to|visit|organi[sz]e|prepare(?: for)?)\s+/i,
+      "",
+    )
+    .replace(/["'?!.]/g, "")
+    .trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  const terms = [
+    cleaned,
+    words.slice(-2).join(" "),
+    words[words.length - 1] ?? "",
+    p.type ?? "",
+  ]
+    .map((s) => s.trim())
+    .filter((s) => s.length > 2);
+  return Array.from(new Set(terms)).slice(0, 4);
+}
+
 // Hebrew for the details card — section headers, plus lookups that translate the
 // common machine-written metric labels / values / quick-actions so a Hebrew card
 // doesn't read half-English. Unknown terms fall back to their original text.
@@ -771,23 +800,83 @@ function UnitDetail({
     const id = window.setInterval(() => setBriefIdx((i) => (i + 1) % brief.length), 4200);
     return () => window.clearInterval(id);
   }, [brief.length]);
+
+  // Contextual cover — fetch a few Wikipedia images for this unit's topic and
+  // cross-fade between whichever resolve. Silent + graceful: no band if none.
+  const [covers, setCovers] = useState<string[]>([]);
+  const [coverIdx, setCoverIdx] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setCovers([]);
+    setCoverIdx(0);
+    Promise.all(unitImageTerms(p).map((tm) => wikiThumbnail(tm)))
+      .then((res) => {
+        if (!alive) return;
+        setCovers(Array.from(new Set(res.filter(Boolean) as string[])));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [p.id, p.title, p.type]);
+  useEffect(() => {
+    if (covers.length < 2) return;
+    const id = window.setInterval(() => setCoverIdx((i) => (i + 1) % covers.length), 5200);
+    return () => window.clearInterval(id);
+  }, [covers.length]);
+
+  // Mouse parallax — the metric row drifts toward the pointer, each metric with
+  // its own depth, so the stats feel like they float over the cover.
+  const [mx, setMx] = useState(0);
+  const [my, setMy] = useState(0);
+  const onParallax = (e: React.MouseEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setMx(((e.clientX - r.left) / r.width) * 2 - 1);
+    setMy(((e.clientY - r.top) / r.height) * 2 - 1);
+  };
+  const resetParallax = () => {
+    setMx(0);
+    setMy(0);
+  };
   return (
-    <div className="unit-detail-body">
+    <div className="unit-detail-body" onMouseMove={onParallax} onMouseLeave={resetParallax}>
+      {covers.length > 0 && (
+        <div className="unit-cover" aria-hidden="true">
+          {covers.map((src, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={src}
+              className={`unit-cover-img${i === coverIdx ? " is-on" : ""}`}
+              src={src}
+              alt=""
+              loading="lazy"
+              style={{ transform: `translate(${mx * -10}px, ${my * -6}px) scale(1.08)` }}
+            />
+          ))}
+          <span className="unit-cover-fade" />
+        </div>
+      )}
       {brief.length > 0 && (
-        <div className="unit-broadcast" aria-live="polite">
-          <span className="unit-broadcast-dot" aria-hidden="true" />
-          <span className="unit-broadcast-text">{brief[briefIdx % brief.length]}</span>
+        <div className="unit-broadcast" aria-live="polite" key={briefIdx}>
+          {brief[briefIdx % brief.length]}
         </div>
       )}
 
       {p.metrics && p.metrics.length > 0 && (
-        <div className="metric-grid">
-          {p.metrics.map((m) => (
-            <div className="metric" key={m.label}>
-              <div className="metric-value">{locValue(m.value)}</div>
-              <div className="metric-label">{locMetric(m.label)}</div>
-            </div>
-          ))}
+        <div className="metric-row">
+          {p.metrics.map((m, i) => {
+            const depth = 4 + i * 3;
+            return (
+              <div
+                className="metric"
+                key={m.label}
+                style={{ transform: `translate(${mx * depth}px, ${my * (depth * 0.4)}px)` }}
+              >
+                <div className="metric-value">{locValue(m.value)}</div>
+                <div className="metric-label">{locMetric(m.label)}</div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -1763,6 +1852,9 @@ export default function AppHome() {
   // → Working (like a coding agent), and the ONE face closes its eyes.
   const [statusIdx, setStatusIdx] = useState(0);
   const oneWorking = thinking || unitThinking;
+  // A conversation is open (home chat, temp chat, or inside a unit). The living
+  // ONE moves into the chat then, so the top brand mark holds still + closes.
+  const chatFocused = chat.length > 0 || tempChat || !!activeProcess;
   useEffect(() => {
     if (!oneWorking) return;
     setStatusIdx(0);
@@ -4187,7 +4279,11 @@ export default function AppHome() {
                     : "Open menu"
               }
             >
-              <OneWord className={`app-brand-mark${oneWorking ? " is-working" : ""}`} />
+              <OneWord
+                className={`app-brand-mark${
+                  oneWorking && !chatFocused ? " is-working" : ""
+                }${chatFocused ? " chat-focused" : ""}`}
+              />
             </button>
             <button
               className={`app-drawer-toggle${drawerOpen ? " is-open" : ""}`}
@@ -4573,18 +4669,21 @@ export default function AppHome() {
                         </Fragment>
                       );
                     })}
-                    {unitThinking && (
-                      <div className="unit-status" aria-live="polite">
-                        <Orb
-                          size={22}
-                          closed
-                          faceColor="var(--p-face)"
-                          eyeColor="var(--p-bg)"
-                          className="unit-status-orb"
-                        />
-                        <span className="unit-status-text">{statusLabel}</span>
-                      </div>
-                    )}
+                    {/* ONE's living presence in the unit thread — same figure as
+                        home: blinks at rest, wakes while you type, concentrates
+                        (eyes shut) while it works. */}
+                    <div className="chat-presence-row" aria-live="polite">
+                      <Orb
+                        size={30}
+                        alive={!unitThinking}
+                        closed={unitThinking}
+                        look={unitDraft.trim() && !unitThinking ? -0.28 : 0}
+                        faceColor="var(--p-face)"
+                        eyeColor="var(--p-bg)"
+                        className={`chat-presence${unitDraft.trim() && !unitThinking ? " awake" : ""}`}
+                      />
+                      {unitThinking && <span className="chat-presence-hint">{statusLabel}</span>}
+                    </div>
                     {activeForm && activeForm.procId === activeProcess?.id && formCard}
                     <div ref={unitEndRef} />
                   </div>
@@ -5623,18 +5722,21 @@ export default function AppHome() {
                         )}
                       </Fragment>
                     ))}
-                    {thinking && (
-                      <div className="unit-status" aria-live="polite">
-                        <Orb
-                          size={22}
-                          closed
-                          faceColor="var(--p-face)"
-                          eyeColor="var(--p-bg)"
-                          className="unit-status-orb"
-                        />
-                        <span className="unit-status-text">{statusLabel}</span>
-                      </div>
-                    )}
+                    {/* ONE's living presence, pinned at the end of the thread —
+                        blinks at rest, wakes (leans in, eyes forward) while you
+                        type, closes its eyes while it works. */}
+                    <div className="chat-presence-row" aria-live="polite">
+                      <Orb
+                        size={30}
+                        alive={!thinking}
+                        closed={thinking}
+                        look={draft.trim() && !thinking ? -0.28 : 0}
+                        faceColor="var(--p-face)"
+                        eyeColor="var(--p-bg)"
+                        className={`chat-presence${draft.trim() && !thinking ? " awake" : ""}`}
+                      />
+                      {thinking && <span className="chat-presence-hint">{statusLabel}</span>}
+                    </div>
                     {activeForm && !activeForm.procId && formCard}
                     <div ref={chatEndRef} />
                   </div>

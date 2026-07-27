@@ -4639,7 +4639,7 @@ footer {
 .one-word-eye {
   transform-box: fill-box;
   transform-origin: center;
-  transition: transform 220ms ease;
+  transition: transform 220ms ease, opacity 260ms ease;
 }
 .app-brand-mark {
   transform-box: fill-box;
@@ -4647,6 +4647,15 @@ footer {
 }
 .app-brand-mark.is-working {
   animation: brandBreathe 2.4s ease-in-out infinite;
+}
+/* Chat is open → the living ONE is now the figure IN the conversation. The top
+   mark holds still (no breathe/scan) and closes its eyes, so there's only one
+   ONE looking at you at a time. */
+.app-brand-mark.chat-focused {
+  animation: none;
+}
+.app-brand-mark.chat-focused .one-word-eye {
+  opacity: 0;
 }
 @keyframes brandBreathe {
   0%,
@@ -5988,15 +5997,15 @@ button.conn-card:hover {
     0 0 0 3px color-mix(in srgb, var(--p-face) 8%, transparent);
 }
 .app-bar-plus {
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--p-text-3);
+  color: var(--p-text-2);
   cursor: pointer;
   transition: color 140ms ease, background 140ms ease;
 }
@@ -6395,12 +6404,45 @@ button.conn-card:hover {
   color: var(--p-bg);
   border-bottom-right-radius: 6px;
 }
+/* ONE speaks flat on the canvas — no bubble, no border. Only YOUR messages
+   carry a bubble; ONE's replies read like the page talking back to you. */
 .chat-msg.one {
   align-self: flex-start;
-  background: var(--p-surface);
+  background: transparent;
   color: var(--p-text);
-  border: 1px solid var(--p-line);
-  border-bottom-left-radius: 6px;
+  border: none;
+  max-width: 90%;
+  padding: 3px 2px;
+  border-radius: 0;
+}
+/* ── ONE's presence in the chat — a small living face pinned at the end of the
+   thread (the "black dot" that's always there). It blinks at rest and wakes
+   (leans in, eyes forward) the moment you start typing. This is the one figure
+   that moves during a reply — the top mark stays put. */
+.chat-presence-row {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 2px 0 4px;
+  min-height: 34px;
+}
+.chat-presence {
+  flex: 0 0 auto;
+  transition: transform 260ms cubic-bezier(0.34, 1.4, 0.5, 1);
+  transform: translateY(0) scale(1);
+}
+.chat-presence.awake {
+  transform: translateY(-1px) scale(1.14);
+}
+.chat-presence-hint {
+  font-size: 12.5px;
+  color: var(--p-text-3);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.chat-presence.awake + .chat-presence-hint {
+  opacity: 1;
 }
 /* An illustrative image inside a chat bubble (e.g. a quiz topic from Wikipedia). */
 .chat-img {
@@ -6594,6 +6636,19 @@ button.conn-card:hover {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 10px;
   margin: 18px 0 20px;
+}
+/* Metrics as a floating row that drifts under the pointer (see UnitDetail's
+   parallax). Each metric translates on its own depth for a layered feel. */
+.metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0 20px;
+}
+.metric-row .metric {
+  flex: 1 1 108px;
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
 }
 .metric {
   background: var(--p-bg);
@@ -6916,35 +6971,50 @@ button.conn-card:hover {
   color: var(--p-text-3);
   text-decoration: line-through;
 }
-/* The unit's own broadcast band — tips/news for THIS process, above metrics. */
+/* The unit's own broadcast — big, text-only, like the home broadcast but scoped
+   to THIS process. ONE's pulse of tips / what's next, fading between lines. */
 .unit-broadcast {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 11px 13px;
-  margin-bottom: 14px;
-  border: 1px solid color-mix(in srgb, var(--p-blue) 28%, transparent);
-  background: color-mix(in srgb, var(--p-blue) 9%, var(--p-surface));
-  border-radius: 12px;
-}
-.unit-broadcast-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--p-blue);
-  flex-shrink: 0;
-  animation: unitBroadcastPulse 2s ease-in-out infinite;
-}
-@keyframes unitBroadcastPulse {
-  50% {
-    opacity: 0.35;
-  }
-}
-.unit-broadcast-text {
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 18.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: -0.012em;
   color: var(--p-text);
-  animation: chat-rise 300ms ease both;
+  margin: 2px 0 18px;
+  min-height: 1.4em;
+  animation: chat-rise 420ms ease both;
+}
+/* ── Contextual cover — cross-fading topic images behind the unit's pulse ──── */
+.unit-cover {
+  position: relative;
+  margin: -4px -4px 14px;
+  height: 168px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--p-bg);
+  isolation: isolate;
+}
+.unit-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 900ms ease, transform 300ms ease-out;
+}
+.unit-cover-img.is-on {
+  opacity: 1;
+}
+/* Soft fade at the foot so the pulse text below reads cleanly. */
+.unit-cover-fade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 55%,
+    color-mix(in srgb, var(--p-surface) 62%, transparent) 100%
+  );
 }
 .conn-add-btn {
   border: 1px solid var(--p-line);
