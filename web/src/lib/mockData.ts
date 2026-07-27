@@ -26,6 +26,25 @@ export interface Step {
  * supplier profile's inbox; the supplier accepts/declines and replies, and it
  * flows back. Persisted locally in `one_requests`.
  */
+/**
+ * A reminder ONE holds for you — the "nudges you before anything is due"
+ * capability made real. Set from "remind me…", or created automatically when a
+ * booking is confirmed. Scoped to a profile, optionally tied to a process.
+ * Persisted locally in `one_reminders`.
+ */
+export interface Reminder {
+  id: string;
+  /** The identity (profile) this reminder belongs to. */
+  identityId: string;
+  /** What to be reminded of. */
+  text: string;
+  /** A human "when" label ("tomorrow 09:00", "24h before Tue 3/8"). */
+  at: string;
+  /** The process this reminder is attached to (opens it when tapped). */
+  procId?: string;
+  done: boolean;
+}
+
 export interface InboundRequest {
   id: string;
   /** The supplier identity (profile) this request is addressed to. */

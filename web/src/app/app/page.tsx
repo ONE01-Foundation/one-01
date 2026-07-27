@@ -16,6 +16,7 @@ import {
   type UnitDraft,
   type Identity,
   type InboundRequest,
+  type Reminder,
 } from "@/lib/mockData";
 import { interpret, type ChatMsg } from "@/lib/oneBrain";
 import { bizReply, openState, findBusiness } from "@/lib/bizBrain";
@@ -1295,6 +1296,34 @@ export default function AppHome() {
     persistRequests(requests.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   // Per-request reply text the supplier is composing in the inbox.
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+
+  // Reminders ONE holds for you — set from "remind me…" or created when a
+  // booking is confirmed. Persisted; surfaced on Home when pending.
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("one_reminders");
+      if (raw) setReminders(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const persistReminders = (next: Reminder[]) => {
+    setReminders(next);
+    try {
+      localStorage.setItem("one_reminders", JSON.stringify(next));
+    } catch {
+      /* storage blocked */
+    }
+  };
+  const addReminder = (identityId: string, text: string, at: string, procId?: string) =>
+    persistReminders([
+      { id: `rem_${Date.now()}_${Math.round(performance.now())}`, identityId, text, at, procId, done: false },
+      ...reminders,
+    ]);
+  const toggleReminder = (id: string) =>
+    persistReminders(reminders.map((r) => (r.id === id ? { ...r, done: !r.done } : r)));
+  const dismissReminder = (id: string) => persistReminders(reminders.filter((r) => r.id !== id));
   // The main canvas shows one of three "spaces": the ONE home (broadcast +
   // input), the Global marketplace, or the ONE profile — all on-canvas, no
   // popups. A segmented toggle flips Home ⇄ Global; the drawer opens Profile.
@@ -2323,6 +2352,34 @@ export default function AppHome() {
       setChat((c) => [...c, msg]);
     }
   };
+  // Reminders capability — "remind me…" becomes a real, held reminder (surfaced
+  // on Home when pending), scoped to a process when we're inside one.
+  const runReminder = (text: string, proc?: Process) => {
+    const he = /[֐-׿]/.test(text) || lang === "he";
+    const when = extractWhen(text) ?? (he ? "בקרוב" : "soon");
+    const what =
+      (he
+        ? text.replace(/תזכיר לי\s*(?:ל|ש)?|קבע תזכורת\s*(?:ל)?|תזכורת\s*(?:ל)?/g, " ")
+        : text.replace(
+            /\b(remind me(?: to| that| about)?|set a reminder(?: to| for| about)?|reminder)\b/gi,
+            " ",
+          )
+      )
+        .replace(/\s+/g, " ")
+        .trim() || (he ? "התזכורת" : "the reminder");
+    addReminder(proc?.identityId ?? activeIdentityId, what, when, proc?.id);
+    const msg: ChatMsg = {
+      role: "one",
+      text: he ? `⏰ אזכיר לך: ${what} — ${when}.` : `⏰ I'll remind you: ${what} — ${when}.`,
+    };
+    if (proc) {
+      setUnitThinking(false);
+      setUnitChat((c) => [...c, msg]);
+    } else {
+      setThinking(false);
+      setChat((c) => [...c, msg]);
+    }
+  };
   // Book a chosen slot into a process — creating a lightweight one if needed —
   // writing the time to the timeline, a "When" metric, and a confirmation line.
   const bookSlot = (slot: string, topic: string, procId?: string) => {
@@ -2376,6 +2433,13 @@ export default function AppHome() {
         ? `✅ קבעתי — ${slot}. הוספתי את זה לתהליך והכנתי תזכורת 24 שעות לפני.`
         : `✅ Locked in — ${slot}. Added to the process, with a reminder 24h before.`,
     };
+    // Booking always leaves a real reminder behind — the promise made concrete.
+    addReminder(
+      booked.identityId,
+      he ? `לפני ${topic}` : `Before ${topic}`,
+      he ? `24 שעות לפני ${slot}` : `24h before ${slot}`,
+      booked.id,
+    );
     // Collapse the tapped slot-picker back to plain text so it isn't left
     // re-tappable (the effect that persists the thread would keep it otherwise).
     const settle = (m: ChatMsg): ChatMsg => (m.booking ? { ...m, booking: undefined } : m);
@@ -2565,6 +2629,11 @@ export default function AppHome() {
     // real time slots as chips; tapping one books it into a process.
     if (capKey === "booking") {
       runBooking(text);
+      return;
+    }
+    // Reminders capability: "remind me…" becomes a real held reminder.
+    if (capKey === "reminders") {
+      runReminder(text);
       return;
     }
 
@@ -3194,6 +3263,11 @@ export default function AppHome() {
       runBooking(text, proc);
       return;
     }
+    // Reminders inside a process — a held reminder attached to THIS process.
+    if (caps.includes("reminders") && capabilityForText(text) === "reminders") {
+      runReminder(text, proc);
+      return;
+    }
     const focus = units.find((u) => u.id === proc.id) ?? null;
     const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus });
 
@@ -3471,6 +3545,10 @@ export default function AppHome() {
   );
   // Updates surface (scroll down) — processes, the ones needing you first.
   const updatesList = [...processes].sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0));
+  // Pending reminders for this profile — surfaced atop Updates ("what's waiting").
+  const pendingReminders = reminders.filter(
+    (r) => r.identityId === activeIdentityId && !r.done,
+  );
   // Global feed sections — requests waiting on you and news across the network.
   const gRequests =
     lang === "he"
@@ -4773,6 +4851,44 @@ export default function AppHome() {
                     {/* UPDATES — scroll down. Recent activity across your processes. */}
                     <section className="home-updates">
                       <div className="updates-pane">
+                        {pendingReminders.length > 0 && (
+                          <div className="rem-band">
+                            <div className="rem-band-head">
+                              <span className="rem-band-title">
+                                ⏰ {lang === "he" ? "תזכורות" : "Reminders"}
+                              </span>
+                              <span className="rem-band-count">{pendingReminders.length}</span>
+                            </div>
+                            {pendingReminders.map((r) => (
+                              <div className="rem-row" key={r.id}>
+                                <button
+                                  className="rem-check"
+                                  onClick={() => toggleReminder(r.id)}
+                                  aria-label={lang === "he" ? "סמן כבוצע" : "Mark done"}
+                                />
+                                <button
+                                  className="rem-body"
+                                  onClick={() => {
+                                    const proc = r.procId
+                                      ? units.find((u) => u.id === r.procId)
+                                      : null;
+                                    if (proc) openUnit(proc);
+                                  }}
+                                >
+                                  <span className="rem-text">{r.text}</span>
+                                  <span className="rem-when">{r.at}</span>
+                                </button>
+                                <button
+                                  className="rem-dismiss"
+                                  onClick={() => dismissReminder(r.id)}
+                                  aria-label={lang === "he" ? "מחק" : "Dismiss"}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <div className="global-sec-head">
                           <h3 className="global-sec-title">{t.updates}</h3>
                           <span className="global-sec-sub">{t.updatesSub}</span>
