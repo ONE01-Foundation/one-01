@@ -5894,6 +5894,10 @@ button.conn-card:hover {
   align-items: center;
   gap: 8px;
   height: 62px;
+  /* Lock the control order regardless of language — the "+" stays on the left
+     and the voice/send disc on the right, even in Hebrew (RTL). The input's own
+     dir="auto" still right-aligns Hebrew text inside the field. */
+  direction: ltr;
   padding: 0 8px 0 16px;
   border-radius: 999px;
   background: var(--p-surface);

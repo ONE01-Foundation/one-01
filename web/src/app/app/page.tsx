@@ -273,8 +273,8 @@ function KebabIcon() {
     hero. It flips to the send arrow the moment there's something to send. */
 function VoiceIcon() {
   return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M8 8.5v7M12 4.5v15M16 8.5v7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 8v8M12 4v16M16 8v8M4 10.5v3M20 10.5v3" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1643,6 +1643,9 @@ export default function AppHome() {
   // "the provider got back to me…" line repeats on every follow-up and reads
   // robotic. Track which processes have already had their outreach.
   const outreachDoneRef = useRef<Set<string>>(new Set());
+  // Which unit is open right now — read by delayed work (e.g. the process plan)
+  // so a late message lands on the unit only if you're still in it.
+  const activeUnitRef = useRef<string | null>(null);
   // The home is a vertical scroll of two surfaces — the ONE surface (rest, top)
   // and Updates (down). Global lives above as a rising overlay sheet, reached by
   // scrolling up at the top (or the ↑ chevron), exactly like the landing hero.
@@ -2266,7 +2269,21 @@ export default function AppHome() {
   // When ONE opens a NEW process, it turns the intention into a real multi-stage
   // plan — an AI-generated, time-ordered step list (+ a couple of key metrics)
   // tailored to what the user actually asked for, replacing the generic template.
-  const enrichProcessPlan = async (proc: Process, intent: string) => {
+  const enrichProcessPlan = async (proc: Process, intent: string, toUnit = false) => {
+    // Route a follow-up line to the right thread: the unit (if we handed off to
+    // it and you're still there), the process's saved transcript (if you left),
+    // or the home chat (the classic flow).
+    const postFollowUp = (m: ChatMsg) => {
+      if (!toUnit) {
+        setChat((c) => (c.length ? [...c, m] : c));
+        return;
+      }
+      if (activeUnitRef.current === proc.id) setUnitChat((c) => [...c, m]);
+      else
+        setUnits((list) =>
+          list.map((u) => (u.id === proc.id ? { ...u, chat: [...(u.chat ?? []), m] } : u)),
+        );
+    };
     try {
       // Mirror the language the user wrote the intent in, not the app setting.
       const he = msgLang(intent) === "he";
@@ -2327,20 +2344,13 @@ export default function AppHome() {
       );
       // Reflect back what ONE understood, and invite a confirm / tweak — so a
       // created process reads as "here's my plan, approve it" not a black box.
-      setChat((c) =>
-        c.length
-          ? [
-              ...c,
-              {
-                role: "one",
-                text: he
-                  ? `הכנתי תכנית ל"${proc.title}": ${steps.length} שלבים, מתחילים ב"${steps[0]}". רוצה לשנות משהו?`
-                  : `I've drafted a plan for "${proc.title}": ${steps.length} steps, starting with "${steps[0]}". Want to change anything?`,
-                chips: he ? ["מעולה, קדימה", "שנה משהו"] : ["Looks good", "Change something"],
-              },
-            ]
-          : c,
-      );
+      postFollowUp({
+        role: "one",
+        text: he
+          ? `הכנתי תכנית ל"${proc.title}": ${steps.length} שלבים, מתחילים ב"${steps[0]}". רוצה לשנות משהו?`
+          : `I've drafted a plan for "${proc.title}": ${steps.length} steps, starting with "${steps[0]}". Want to change anything?`,
+        chips: he ? ["מעולה, קדימה", "שנה משהו"] : ["Looks good", "Change something"],
+      });
       // Memory pull. ONE looks at the personal facts this process needs and that
       // you've actually filled in: "open" facts it uses right away and tells you
       // it did; "ask" facts it won't touch until you tap "Share for this".
@@ -2356,23 +2366,20 @@ export default function AppHome() {
       const toAsk = wanted.filter((f) => memory[f.key]?.perm === "ask");
       if (pulled.length) {
         const listing = pulled.map((f) => `${f.emoji} ${he ? f.he : f.en}`).join(he ? "، " : ", ");
-        setChat((c) => [...c, { role: "one", text: `🧠 ${t.memPulled}: ${listing}` }]);
+        postFollowUp({ role: "one", text: `🧠 ${t.memPulled}: ${listing}` });
       }
       if (toAsk.length) {
-        setChat((c) => [
-          ...c,
-          {
-            role: "one",
-            text: he
-              ? `לתהליך הזה כדאי גם: ${toAsk.map((f) => `${f.emoji} ${f.he}`).join("، ")}. לשתף?`
-              : `This one could also use: ${toAsk.map((f) => `${f.emoji} ${f.en}`).join(", ")}. Share them?`,
-            actions: toAsk.map((f) => ({
-              label: `${f.emoji} ${t.memShare}`,
-              kind: "shareMem" as const,
-              mem: f.key,
-            })),
-          },
-        ]);
+        postFollowUp({
+          role: "one",
+          text: he
+            ? `לתהליך הזה כדאי גם: ${toAsk.map((f) => `${f.emoji} ${f.he}`).join("، ")}. לשתף?`
+            : `This one could also use: ${toAsk.map((f) => `${f.emoji} ${f.en}`).join(", ")}. Share them?`,
+          actions: toAsk.map((f) => ({
+            label: `${f.emoji} ${t.memShare}`,
+            kind: "shareMem" as const,
+            mem: f.key,
+          })),
+        });
       }
     } catch {
       /* Any failure (offline, bad JSON) — keep the template plan. */
@@ -3072,50 +3079,71 @@ export default function AppHome() {
       ];
       const reply = await invokeAiChat(messages, { maxTokens: 220 });
       setThinking(false);
-      // If the ask wasn't itself a new/updated process but clearly belongs to an
-      // existing one, offer to continue it there — scoped and saved — instead of
-      // letting the thread live only in the ephemeral home chat.
-      const routeTo = !res.process ? matchProcessForText(text) : null;
-      setChat((c) => [
-        ...c,
-        routeTo
-          ? {
-              role: "one",
-              text: reply,
-              actions: [
-                {
-                  label: `▸ ${routeTo.emoji} ${t.routeInto}${routeTo.title}`,
-                  kind: "routeProcess" as const,
-                  proc: routeTo.id,
-                  run: text,
-                },
-              ],
-            }
-          : { role: "one", text: reply, chips: suggestChips(reply, lang) },
-      ]);
-      applyStructured();
-      // A brand-new process gets a tailored multi-stage plan a beat later.
-      if (isNewProcess && res.process) void enrichProcessPlan(res.process, text);
+      if (isNewProcess && res.process) {
+        // The home chat BECOMES the unit chat: seed the new unit's thread with
+        // this exchange, open it there, and clear the home chat so the whole
+        // conversation (and everything that follows) lives in the process — not
+        // orphaned on the home canvas.
+        const seed: ChatMsg[] = [
+          { role: "user", text },
+          { role: "one", text: reply },
+        ];
+        upsert({ ...res.process, chat: seed });
+        if (res.broadcast) setLiveBroadcast(res.broadcast);
+        openUnit({ ...res.process, chat: seed });
+        setUnitChat(seed);
+        setChat([]);
+        void enrichProcessPlan(res.process, text, true);
+      } else {
+        // A plain reply, or an update to an existing process — stays in the home
+        // chat. If it clearly belongs to a process, offer to continue it there.
+        const routeTo = !res.process ? matchProcessForText(text) : null;
+        setChat((c) => [
+          ...c,
+          routeTo
+            ? {
+                role: "one",
+                text: reply,
+                actions: [
+                  {
+                    label: `▸ ${routeTo.emoji} ${t.routeInto}${routeTo.title}`,
+                    kind: "routeProcess" as const,
+                    proc: routeTo.id,
+                    run: text,
+                  },
+                ],
+              }
+            : { role: "one", text: reply, chips: suggestChips(reply, lang) },
+        ]);
+        applyStructured();
+      }
     } catch {
       // AI unreachable — degrade gracefully with an HONEST, message-mirrored
       // line (never the local brain's fabricated "reaching out to N companies").
       window.setTimeout(() => {
         setThinking(false);
         const he = msgLang(text) === "he";
-        setChat((c) => [
-          ...c,
-          {
-            role: "one",
-            text: res.process
-              ? he
-                ? `פתחתי את "${res.process.title}" ואני על זה. לא הצלחתי להתחבר כרגע — נסה שוב עוד רגע ואתן לך תשובה מלאה.`
-                : `I've opened "${res.process.title}" and I'm on it. I couldn't connect just now — try again in a moment for a full reply.`
-              : he
-                ? "רשמתי — אני על זה. לא הצלחתי להתחבר כרגע, נסה שוב עוד רגע."
-                : "Noted — I'm on it. I couldn't connect just now; try again in a moment.",
-          },
-        ]);
-        applyStructured();
+        const line = res.process
+          ? he
+            ? `פתחתי את "${res.process.title}" ואני על זה. לא הצלחתי להתחבר כרגע — נסה שוב עוד רגע ואתן לך תשובה מלאה.`
+            : `I've opened "${res.process.title}" and I'm on it. I couldn't connect just now — try again in a moment for a full reply.`
+          : he
+            ? "רשמתי — אני על זה. לא הצלחתי להתחבר כרגע, נסה שוב עוד רגע."
+            : "Noted — I'm on it. I couldn't connect just now; try again in a moment.";
+        if (isNewProcess && res.process) {
+          const seed: ChatMsg[] = [
+            { role: "user", text },
+            { role: "one", text: line },
+          ];
+          upsert({ ...res.process, chat: seed });
+          if (res.broadcast) setLiveBroadcast(res.broadcast);
+          openUnit({ ...res.process, chat: seed });
+          setUnitChat(seed);
+          setChat([]);
+        } else {
+          setChat((c) => [...c, { role: "one", text: line }]);
+          applyStructured();
+        }
       }, 600);
     }
   };
@@ -3297,6 +3325,9 @@ export default function AppHome() {
     if (!page) return;
     page.scrollTo({ top: dir * page.clientHeight, behavior: "smooth" });
   };
+  useEffect(() => {
+    activeUnitRef.current = activeProcess?.id ?? null;
+  }, [activeProcess]);
   // The ONE mark is "home": drop whatever you're in and return to the hero.
   const goHome = () => {
     setActiveProcess(null);
