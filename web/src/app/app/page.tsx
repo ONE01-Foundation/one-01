@@ -876,9 +876,11 @@ export default function AppHome() {
   // "the provider got back to me…" line repeats on every follow-up and reads
   // robotic. Track which processes have already had their outreach.
   const outreachDoneRef = useRef<Set<string>>(new Set());
-  // The home is a vertical scroll of three surfaces — Global (up), the ONE
-  // surface (rest, middle), Updates (down). Parked on the middle before paint.
+  // The home is a vertical scroll of two surfaces — the ONE surface (rest, top)
+  // and Updates (down). Global lives above as a rising overlay sheet, reached by
+  // scrolling up at the top (or the ↑ chevron), exactly like the landing hero.
   const homePageRef = useRef<HTMLDivElement>(null);
+  const [globalOpen, setGlobalOpen] = useState(false);
   // While ONE is working, a status line cycles Thinking → Connecting → Searching
   // → Working (like a coding agent), and the ONE face closes its eyes.
   const [statusIdx, setStatusIdx] = useState(0);
@@ -1519,12 +1521,12 @@ export default function AppHome() {
     setUnitMenuOpen(false);
     closeUnit();
   };
-  // Scroll the home to one of its three surfaces: -1 Global (top), 0 the ONE
-  // surface (rest, middle), 1 Updates (bottom).
-  const scrollHome = (dir: -1 | 0 | 1) => {
+  // Scroll the home to one of its two surfaces: 0 the ONE surface (top, rest),
+  // 1 Updates (below). Global is not a scroll target — it rises as an overlay.
+  const scrollHome = (dir: 0 | 1) => {
     const page = homePageRef.current;
     if (!page) return;
-    page.scrollTo({ top: (dir + 1) * page.clientHeight, behavior: "smooth" });
+    page.scrollTo({ top: dir * page.clientHeight, behavior: "smooth" });
   };
   // The ONE mark is "home": drop whatever you're in and return to the hero.
   const goHome = () => {
@@ -1535,6 +1537,7 @@ export default function AppHome() {
     endChat();
     closeDrawer();
     setSpace("home");
+    setGlobalOpen(false);
     requestAnimationFrame(() => scrollHome(0));
   };
   // Generate examples — ONE asks the AI for a few realistic life intents, then
@@ -1665,26 +1668,72 @@ export default function AppHome() {
     unitEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [unitChat, unitThinking]);
 
-  // Park the home scroll on the middle (the ONE surface) before first paint, so
-  // it never flashes Global or Updates on the way in.
+  // Park the home scroll on the ONE surface (top) before first paint, so it
+  // never flashes Updates on the way in.
   useLayoutEffect(() => {
     const page = homePageRef.current;
-    if (page) page.scrollTop = page.clientHeight;
+    if (page) page.scrollTop = 0;
   }, [activeProcess, chat.length, tempChat, space]);
+
+  // Global rises as an overlay when you scroll UP at the very top of the home —
+  // an accumulator on the wheel (and a touch-drag downward) crosses a threshold,
+  // mirroring the landing hero's Global reveal. Only armed on the resting home.
+  useEffect(() => {
+    const page = homePageRef.current;
+    if (!page) return;
+    if (globalOpen || space !== "home" || activeProcess || chat.length > 0) return;
+    let acc = 0;
+    let timer = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (page.scrollTop > 2) {
+        acc = 0;
+        return;
+      }
+      if (e.deltaY < 0) {
+        acc += -e.deltaY;
+        if (acc > 130) {
+          acc = 0;
+          setGlobalOpen(true);
+        }
+      } else {
+        acc = 0;
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => (acc = 0), 260);
+    };
+    let startY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (page.scrollTop > 2) return;
+      if ((e.touches[0]?.clientY ?? 0) - startY > 90) setGlobalOpen(true);
+    };
+    page.addEventListener("wheel", onWheel, { passive: true });
+    page.addEventListener("touchstart", onTouchStart, { passive: true });
+    page.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      page.removeEventListener("wheel", onWheel);
+      page.removeEventListener("touchstart", onTouchStart);
+      page.removeEventListener("touchmove", onTouchMove);
+      window.clearTimeout(timer);
+    };
+  }, [globalOpen, space, activeProcess, chat.length]);
 
   // Esc backs out of whatever's open — an overlay, then the unit, then the
   // drawer. The workspace should never trap you.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (openSheet) setOpenSheet(null);
+      if (globalOpen) setGlobalOpen(false);
+      else if (openSheet) setOpenSheet(null);
       else if (activeProcess) closeUnit();
       else if (drawerOpen) closeDrawer();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openSheet, activeProcess, drawerOpen]);
+  }, [globalOpen, openSheet, activeProcess, drawerOpen]);
 
   // rotating broadcast line (fade between). Re-keyed on identity so switching
   // ONEs restarts the rotation in that ONE's voice.
@@ -2216,9 +2265,40 @@ export default function AppHome() {
                 ) : (
                   // HOME / GLOBAL — one canvas with a segmented toggle at the top
                   // that flips between the ONE surface and the Global worlds.
-                  <div className="app-page" ref={homePageRef}>
-                    {/* GLOBAL — scroll up. Worlds marketplace + your network. */}
-                    <section className="home-global">
+                  <>
+                    {/* GLOBAL — rises as an overlay sheet when you scroll up at
+                        the top of the home (or tap the ↑ chevron), exactly like
+                        the landing hero's Global reveal. */}
+                    <div
+                      className={`pg-sheet${globalOpen ? " open" : ""}`}
+                      aria-hidden={!globalOpen}
+                    >
+                      <div
+                        className="pg-sheet-scrim"
+                        onClick={() => setGlobalOpen(false)}
+                      />
+                      <div
+                        className="pg-sheet-panel"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={t.global}
+                        onWheel={(e) => {
+                          if (e.currentTarget.scrollTop <= 0 && e.deltaY > 40)
+                            setGlobalOpen(false);
+                        }}
+                      >
+                        <button
+                          className="pg-sheet-grab"
+                          onClick={() => setGlobalOpen(false)}
+                          aria-label="Close"
+                        />
+                        <button
+                          className="pg-sheet-close"
+                          onClick={() => setGlobalOpen(false)}
+                          aria-label="Close"
+                        >
+                          ✕
+                        </button>
                       <div className="global-pane">
                           <div className="global-head">
                             <div className="global-headtext">
@@ -2366,13 +2446,15 @@ export default function AppHome() {
                             ))}
                           </div>
                         </div>
-                    </section>
-                    {/* ONE surface — rest. Scroll up = Global, down = Updates. */}
+                      </div>
+                    </div>
+                    <div className="app-page" ref={homePageRef}>
+                    {/* ONE surface — rest (top). Scroll down = Updates. */}
                     <section className="home-main">
                       <button
                         type="button"
                         className="home-chev up"
-                        onClick={() => scrollHome(-1)}
+                        onClick={() => setGlobalOpen(true)}
                         aria-label={t.global}
                       >
                         <ChevronUpIcon />
@@ -2423,6 +2505,7 @@ export default function AppHome() {
                       </div>
                     </section>
                   </div>
+                  </>
                 )
               ) : (
                 <>
