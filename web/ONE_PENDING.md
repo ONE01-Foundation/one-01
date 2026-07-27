@@ -46,7 +46,7 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 
 **P2 — richer & smarter**
 9. **Smarter broadcast** — profile- and category-aware, proactive "what's waiting" lines (per `PROFILE_LENS`).
-10. **Business worlds + listings** in Global (suppliers/compliance/marketing) so a business profile has real content, not just the "both" worlds.
+10. ~~**Business worlds + listings** in Global~~ ✅ DONE — added 📦 Suppliers / 📋 Compliance / 📣 Marketing worlds (business-scope) + seeded business-facing listings (PackPro, Ledgerly, BrightReach); the cloud directory now MERGES over the seed instead of replacing it, so a business profile has real Global content (verified: 0 → 5 businesses) while a personal profile still sees only consumer/both worlds.
 11. **Broadcast/suggestions/capabilities per profile kind** (the lens already carries the hook).
 12. ~~**Question-vs-intent**~~ ✅ DONE — pure questions answer directly, no process (`isPureQuestion` guard).
 13. **Real voice input** (mic is decorative); Wikipedia images in unit details; fuller ONE-profile redesign.

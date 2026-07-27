@@ -1077,6 +1077,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     wHome: "Home",
     wFood: "Food",
     wCommunity: "Community",
+    wSuppliers: "Suppliers",
+    wCompliance: "Compliance",
+    wMarketing: "Marketing",
     emptyWorld: "No ONEs here yet — be the first.",
     backHome: "Back",
     newProcess: "New process",
@@ -1200,6 +1203,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     homeTab: "בית",
     worlds: "עולמות",
     worldAll: "הכול",
+    wSuppliers: "ספקים",
+    wCompliance: "רגולציה",
+    wMarketing: "שיווק",
     wHealth: "בריאות",
     wLearning: "לימודים",
     wLeisure: "פנאי",
@@ -1240,6 +1246,9 @@ const WORLD_KEYS = [
   "home",
   "food",
   "community",
+  "suppliers",
+  "compliance",
+  "marketing",
 ] as const;
 type WorldKey = (typeof WORLD_KEYS)[number];
 const WORLD_EMOJI: Record<WorldKey, string> = {
@@ -1250,6 +1259,9 @@ const WORLD_EMOJI: Record<WorldKey, string> = {
   home: "🏠",
   food: "🍽️",
   community: "🏘️",
+  suppliers: "📦",
+  compliance: "📋",
+  marketing: "📣",
 };
 // Which dict key labels each world.
 const WORLD_LABEL: Record<WorldKey, string> = {
@@ -1260,13 +1272,24 @@ const WORLD_LABEL: Record<WorldKey, string> = {
   home: "wHome",
   food: "wFood",
   community: "wCommunity",
+  suppliers: "wSuppliers",
+  compliance: "wCompliance",
+  marketing: "wMarketing",
 };
 function worldOf(category: string): WorldKey {
   const c = category.toLowerCase();
+  // Business-facing worlds first — a supplier/accountant/agency shouldn't be
+  // mislabelled a consumer "community" business.
+  if (/(supplier|wholesale|manufactur|distribut|logistics|packaging|materials|parts|inventory)/.test(c))
+    return "suppliers";
+  if (/(account|bookkeep|legal|lawyer|compliance|audit|payroll|regulat|licens|permit|tax advisor)/.test(c))
+    return "compliance";
+  if (/(marketing|advertis|agency|branding|design|seo|social media|pr|content|studio\b)/.test(c))
+    return "marketing";
   if (/(gym|fitness|health|clinic|doctor|dentist|wellness|therap|medic|pharma|nutrition)/.test(c)) return "health";
-  if (/(instructor|teacher|school|course|tutor|driving|lesson|academ|learn|studio)/.test(c)) return "learning";
+  if (/(instructor|teacher|school|course|tutor|driving|lesson|academ|learn)/.test(c)) return "learning";
   if (/(salon|hair|nail|beauty|spa|barber|entertain|game|sport|travel|tour|leisure|event)/.test(c)) return "leisure";
-  if (/(bank|account|finance|insur|invest|tax|loan|mortgage)/.test(c)) return "finance";
+  if (/(bank|finance|insur|invest|loan|mortgage)/.test(c)) return "finance";
   if (/(mov|clean|repair|plumb|electr|renov|construct|handyman|home|garden)/.test(c)) return "home";
   if (/(restaurant|cafe|food|bakery|cater|grocery|deli|coffee)/.test(c)) return "food";
   return "community";
@@ -1282,6 +1305,9 @@ const WORLD_SCOPE: Record<WorldKey, WorldScope> = {
   finance: "both",
   home: "both",
   community: "both",
+  suppliers: "business",
+  compliance: "business",
+  marketing: "business",
 };
 // The lens each profile kind sees the app through — which Global worlds show,
 // and how "home" reads. One source of truth; the UI reads from it.
@@ -1864,11 +1890,14 @@ export default function AppHome() {
     }
   };
 
-  // Load the business directory from Supabase (public read, no auth needed).
+  // Load the business directory from Supabase (public read, no auth needed) and
+  // MERGE it over the local seed — the cloud wins on shared ids, but the seeded
+  // demo listings (incl. the business-facing ones) stay in the directory.
   useEffect(() => {
     let cancelled = false;
     fetchProviders().then((list) => {
-      if (!cancelled && list) setBusinesses(list);
+      if (!cancelled && list)
+        setBusinesses([...list, ...BUSINESSES.filter((b) => !list.some((x) => x.id === b.id))]);
     });
     return () => {
       cancelled = true;
