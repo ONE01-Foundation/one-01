@@ -332,6 +332,59 @@ function AppInput({
   );
 }
 
+// ── ONE's capabilities — the skills you switch on. A small catalog you enable
+//    from the profile (or add from Global); each is a thing ONE can DO for you.
+interface Capability {
+  key: string;
+  emoji: string;
+  en: string;
+  he: string;
+  descEn: string;
+  descHe: string;
+}
+const CAPABILITY_CATALOG: Capability[] = [
+  {
+    key: "booking",
+    emoji: "📅",
+    en: "Appointment booking",
+    he: "קביעת תורים",
+    descEn: "Finds open times and books with providers.",
+    descHe: "מוצא זמנים פנויים וקובע מול נותני שירות.",
+  },
+  {
+    key: "reminders",
+    emoji: "⏰",
+    en: "Reminders",
+    he: "תזכורות",
+    descEn: "Nudges you before anything is due.",
+    descHe: "מזכיר לך לפני כל מועד.",
+  },
+  {
+    key: "forms",
+    emoji: "🗂️",
+    en: "Form filling",
+    he: "מילוי טפסים",
+    descEn: "Fills out forms and applications for you.",
+    descHe: "ממלא עבורך טפסים ובקשות.",
+  },
+  {
+    key: "quiz",
+    emoji: "🎓",
+    en: "Quiz teaching",
+    he: "לימוד עם מבחנים",
+    descEn: "Teaches a topic with multiple-choice quizzes.",
+    descHe: "מלמד נושא עם מבחני בחירה אמריקאיים.",
+  },
+  {
+    key: "research",
+    emoji: "🔎",
+    en: "Research & compare",
+    he: "מחקר והשוואה",
+    descEn: "Gathers options and compares them for you.",
+    descHe: "אוסף אפשרויות ומשווה ביניהן בשבילך.",
+  },
+];
+
 // Hebrew for the details card — section headers, plus lookups that translate the
 // common machine-written metric labels / values / quick-actions so a Hebrew card
 // doesn't read half-English. Unknown terms fall back to their original text.
@@ -551,6 +604,12 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     options: "Options",
     editProfile: "Edit profile",
     wipeChat: "Wipe chat",
+    capabilities: "Capabilities",
+    capabilitiesSub: "What ONE can do for you",
+    addCapability: "Add a capability",
+    capAdd: "Add",
+    capAdded: "Added",
+    capsGlobalSub: "Switch on more of what ONE can do",
     tempTag: "Temporary chat · nothing is saved",
     tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
@@ -651,6 +710,12 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     options: "אפשרויות",
     editProfile: "עריכת פרופיל",
     wipeChat: "נקה צ'אט",
+    capabilities: "יכולות",
+    capabilitiesSub: "מה ONE יכול לעשות בשבילך",
+    addCapability: "הוסף יכולת",
+    capAdd: "הוסף",
+    capAdded: "נוסף",
+    capsGlobalSub: "הפעל עוד ממה ש‑ONE יודע לעשות",
     tempTag: "צ'אט זמני · שום דבר לא נשמר",
     tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
@@ -953,6 +1018,27 @@ export default function AppHome() {
   const homePageRef = useRef<HTMLDivElement>(null);
   const [globalOpen, setGlobalOpen] = useState(false);
   const pgPanelRef = useRef<HTMLDivElement>(null);
+  // The capabilities ONE has switched on (persisted locally). Toggled from the
+  // profile; enabled from Global's "add a capability".
+  const [caps, setCaps] = useState<string[]>(["booking", "reminders"]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("one_caps");
+      if (raw) setCaps(JSON.parse(raw));
+    } catch {
+      /* first run / blocked storage — keep defaults */
+    }
+  }, []);
+  const persistCaps = (next: string[]) => {
+    setCaps(next);
+    try {
+      localStorage.setItem("one_caps", JSON.stringify(next));
+    } catch {
+      /* storage blocked — session-only is fine */
+    }
+  };
+  const toggleCap = (key: string) =>
+    persistCaps(caps.includes(key) ? caps.filter((k) => k !== key) : [...caps, key]);
   // While ONE is working, a status line cycles Thinking → Connecting → Searching
   // → Working (like a coding agent), and the ONE face closes its eyes.
   const [statusIdx, setStatusIdx] = useState(0);
@@ -2543,6 +2629,48 @@ export default function AppHome() {
                         <div className="profile-sub">{t.repSub}</div>
                       </div>
 
+                      {/* Capabilities — the skills ONE has switched on. The
+                          headline of the redesigned profile. */}
+                      <div className="sheet-section">
+                        <div className="prof-sec-head">
+                          <h4>{t.capabilities}</h4>
+                          <span className="prof-sec-sub">{t.capabilitiesSub}</span>
+                        </div>
+                        <div className="cap-grid">
+                          {CAPABILITY_CATALOG.map((c) => {
+                            const on = caps.includes(c.key);
+                            return (
+                              <button
+                                key={c.key}
+                                className={`cap-card${on ? " on" : ""}`}
+                                onClick={() => toggleCap(c.key)}
+                                aria-pressed={on}
+                              >
+                                <span className="cap-emoji" aria-hidden="true">{c.emoji}</span>
+                                <span className="cap-text">
+                                  <span className="cap-name">{lang === "he" ? c.he : c.en}</span>
+                                  <span className="cap-desc">
+                                    {lang === "he" ? c.descHe : c.descEn}
+                                  </span>
+                                </span>
+                                <span className={`cap-toggle${on ? " on" : ""}`} aria-hidden="true">
+                                  <span className="cap-knob" />
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button
+                          className="sheet-pill ghost cap-add-link"
+                          onClick={() => {
+                            goHome();
+                            requestAnimationFrame(() => setGlobalOpen(true));
+                          }}
+                        >
+                          + {t.addCapability}
+                        </button>
+                      </div>
+
                       <div className="sheet-section">
                         <h4>{t.account}</h4>
                         {user ? (
@@ -2761,6 +2889,35 @@ export default function AppHome() {
                           {worldBiz.length === 0 && (
                             <div className="world-empty">{t.emptyWorld}</div>
                           )}
+
+                          {/* Capabilities — switch on more of what ONE can do. */}
+                          <div className="global-sec-head with-top">
+                            <h3 className="global-sec-title">{t.capabilities}</h3>
+                            <span className="global-sec-sub">{t.capsGlobalSub}</span>
+                          </div>
+                          <div className="gcaps">
+                            {CAPABILITY_CATALOG.map((c) => {
+                              const on = caps.includes(c.key);
+                              return (
+                                <div key={c.key} className={`gcap${on ? " on" : ""}`}>
+                                  <span className="gcap-emoji" aria-hidden="true">{c.emoji}</span>
+                                  <span className="gcap-main">
+                                    <span className="gcap-name">{lang === "he" ? c.he : c.en}</span>
+                                    <span className="gcap-desc">
+                                      {lang === "he" ? c.descHe : c.descEn}
+                                    </span>
+                                  </span>
+                                  <button
+                                    className={`gcap-add${on ? " added" : ""}`}
+                                    onClick={() => !on && persistCaps([...caps, c.key])}
+                                    disabled={on}
+                                  >
+                                    {on ? t.capAdded : t.capAdd}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
 
                           {/* Processes — your active engagements across the network */}
                           <div className="global-sec-head with-top">
