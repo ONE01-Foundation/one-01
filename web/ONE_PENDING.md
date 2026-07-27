@@ -30,7 +30,34 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 11. **Fuller ONE-profile visual redesign** (only capability/memory-led so far).
 12. **Voice input** — the mic button is currently decorative.
 
+## More important things to do — prioritized (2026-07)
+
+**P0 — core loop must feel real**
+1. **Request bus / two-sided handshake** — a process opened on the personal side lands in the supplier's inbox; the supplier answers → it flows back. This is the spine of the network.
+2. **Supplier home = inbox mode** — wire `PROFILE_LENS.homeMode="inbox"`: incoming requests instead of "start a process".
+3. **Real send channel behind Drafts** — actually deliver an approved draft (email / WhatsApp / link), behind a permission gate. Today it's simulated in-thread.
+
+**P1 — make ONE genuinely capable**
+4. **Booking capability functional** (like Quiz) — propose real slots as chips, tapping books into the process + timeline.
+5. **Forms & reminders functional** — fill/track a form; set a reminder that actually surfaces.
+6. **Sources feed answers** — when ONE answers a regulated-domain question it cites/pulls the official source; role-gated source-adding (licensing office, etc.).
+7. **Live incoming-reply signal** — Home banner/broadcast when the other side replies while you're away.
+8. **Capability started in Home runs inside the matching process** (theory quiz → license process).
+
+**P2 — richer & smarter**
+9. **Smarter broadcast** — profile- and category-aware, proactive "what's waiting" lines (per `PROFILE_LENS`).
+10. **Business worlds + listings** in Global (suppliers/compliance/marketing) so a business profile has real content, not just the "both" worlds.
+11. **Broadcast/suggestions/capabilities per profile kind** (the lens already carries the hook).
+12. **Question-vs-intent** — a pure question shouldn't always spawn a process.
+13. **Real voice input** (mic is decorative); Wikipedia images in unit details; fuller ONE-profile redesign.
+
+**P3 — trust & scale**
+14. **Real accounts + cloud sync** of identities/memory/processes (today localStorage).
+15. **Payments** behind the upgrade window (Stripe) — currently just sets the plan locally.
+16. **Notifications** (push/email) for process updates.
+
 ## Notes
 
 - AI backend (`ai-chat` edge function) is confirmed working (200, mirrors language).
 - Supabase env is configured in `web/.env.local`.
+- Profile lens: `WORLD_SCOPE` + `PROFILE_LENS` in page.tsx already filter Global worlds by profile kind; `homeMode` is defined but inbox UI isn't wired yet (P0 #2).
