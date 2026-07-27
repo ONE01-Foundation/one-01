@@ -557,6 +557,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     statusConnecting: "Connecting…",
     statusSearching: "Searching…",
     statusWorking: "Working…",
+    genExamples: "Generate examples",
+    generating: "Generating…",
+    emptyProcesses: "No processes yet. Tell ONE an intention — or:",
   },
   he: {
     upgrade: "שדרוג",
@@ -645,6 +648,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     statusConnecting: "מתחבר…",
     statusSearching: "מחפש…",
     statusWorking: "עובד…",
+    genExamples: "צור דוגמאות",
+    generating: "יוצר…",
+    emptyProcesses: "אין עדיין תהליכים. ספרו ל‑ONE כוונה — או:",
   },
 };
 
@@ -706,6 +712,29 @@ function suggestChips(reply: string, lang: "en" | "he"): string[] | undefined {
   return he
     ? ["היום", "מחר", "השבוע", "אבחר תאריך"]
     : ["Today", "Tomorrow", "This week", "Pick a date"];
+}
+
+// Parse the AI's "generate examples" reply into a list of short intents. Tries
+// a JSON array first, then falls back to line-splitting so a non-JSON reply
+// still works.
+function parseIntents(raw: string): string[] {
+  const arr = raw.match(/\[[\s\S]*\]/);
+  if (arr) {
+    try {
+      const parsed = JSON.parse(arr[0]);
+      if (Array.isArray(parsed)) {
+        const strs = parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+        if (strs.length) return strs.slice(0, 4);
+      }
+    } catch {
+      /* fall through to line-splitting */
+    }
+  }
+  return raw
+    .split("\n")
+    .map((l) => l.replace(/^[-*\d.\s"']+/, "").replace(/["']\s*,?\s*$/, "").trim())
+    .filter((l) => l.length > 2 && l.length < 80)
+    .slice(0, 3);
 }
 
 export default function AppHome() {
@@ -822,6 +851,10 @@ export default function AppHome() {
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
   const [unitDraft, setUnitDraft] = useState("");
   const [unitThinking, setUnitThinking] = useState(false);
+  // A business's ONE "reaches out" at most ONCE per process — otherwise the
+  // "the provider got back to me…" line repeats on every follow-up and reads
+  // robotic. Track which processes have already had their outreach.
+  const outreachDoneRef = useRef<Set<string>>(new Set());
   // While ONE is working, a status line cycles Thinking → Connecting → Searching
   // → Working (like a coding agent), and the ONE face closes its eyes.
   const [statusIdx, setStatusIdx] = useState(0);
@@ -832,8 +865,11 @@ export default function AppHome() {
     const id = setInterval(() => setStatusIdx((i) => i + 1), 1100);
     return () => clearInterval(id);
   }, [oneWorking]);
-  // One unit store — seeds + anything ONE creates, so every surface stays in sync.
-  const [units, setUnits] = useState<Process[]>(PROCESSES);
+  // One unit store. A fresh account starts EMPTY — no hardcoded examples. The
+  // user creates real processes by talking to ONE, or taps "Generate examples"
+  // to have ONE spin up a few from the AI. Saved units hydrate over this.
+  const [units, setUnits] = useState<Process[]>([]);
+  const [generating, setGenerating] = useState(false);
   // The process ONE is currently refining, and its latest live broadcast line.
   const [focusId, setFocusId] = useState<string | null>(null);
   const [liveBroadcast, setLiveBroadcast] = useState<string | null>(null);
@@ -1316,9 +1352,10 @@ export default function AppHome() {
         setFocusId(res.process.id);
       }
       if (res.broadcast) setLiveBroadcast(res.broadcast);
-      if (res.outreach && res.process) {
+      if (res.outreach && res.process && !outreachDoneRef.current.has(res.process.id)) {
         const targetId = res.process.id;
         const o = res.outreach;
+        outreachDoneRef.current.add(targetId);
         window.setTimeout(() => {
           setUnits((list) => list.map((p) => (p.id === targetId ? o.apply(p) : p)));
           setChat((c) => (c.length ? [...c, { role: "one", text: o.line }] : c));
@@ -1460,6 +1497,48 @@ export default function AppHome() {
     closeDrawer();
     setSpace("home");
   };
+  // Generate examples — ONE asks the AI for a few realistic life intents, then
+  // builds a complete process from each (via the local brain, so they're
+  // schema-valid). No hardcoded demo data; every example is freshly generated.
+  const generateExamples = async () => {
+    if (generating) return;
+    setGenerating(true);
+    const build = (intents: string[]) => {
+      intents.forEach((intent, i) => {
+        const res = interpret(intent, {
+          identityId: activeIdentityId,
+          now: Date.now() + i,
+          processes,
+          focus: null,
+        });
+        if (res.process) upsert(res.process);
+      });
+    };
+    try {
+      const sys =
+        lang === "he"
+          ? 'החזר אך ורק מערך JSON של 3 כוונות חיים קצרות בגוף ראשון שאדם היה מבקש מנציג אישי לטפל בהן, כל אחת 3–6 מילים. דוגמה: ["לחדש דרכון","למצוא רופא שיניים","לתכנן סוף שבוע ברומא"]. בלי מספור ובלי טקסט נוסף.'
+          : 'Return ONLY a JSON array of 3 short first-person life intentions a person would ask a personal representative to handle, each 3-6 words. Example: ["Renew my passport","Find a new dentist","Plan a weekend in Rome"]. No numbering, no extra text.';
+      const raw = await invokeAiChat(
+        [
+          { role: "system", content: sys },
+          { role: "user", content: "Generate 3." },
+        ],
+        { maxTokens: 140, temperature: 0.9 },
+      );
+      const intents = parseIntents(raw);
+      build(intents.length ? intents : []);
+    } catch {
+      build(
+        lang === "he"
+          ? ["לחדש דרכון", "למצוא רופא שיניים", "לתכנן סוף שבוע ברומא"]
+          : ["Renew my passport", "Find a new dentist", "Plan a weekend in Rome"],
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // ONE profile — now a full canvas screen, not a popup.
   const openProfile = () => {
     setActiveProcess(null);
@@ -1486,9 +1565,10 @@ export default function AppHome() {
     const applyStructured = () => {
       if (res.process) upsert(res.process);
       if (res.broadcast) setLiveBroadcast(res.broadcast);
-      if (res.outreach && res.process) {
+      if (res.outreach && res.process && !outreachDoneRef.current.has(res.process.id)) {
         const targetId = res.process.id;
         const o = res.outreach;
+        outreachDoneRef.current.add(targetId);
         window.setTimeout(() => {
           setUnits((list) => list.map((pp) => (pp.id === targetId ? o.apply(pp) : pp)));
           setUnitChat((c) => [...c, { role: "one", text: o.line }]);
@@ -1767,7 +1847,12 @@ export default function AppHome() {
                 </button>
               ))}
               {processes.length === 0 && (
-                <div className="drawer-empty">{t.nothingHere}</div>
+                <div className="drawer-empty">
+                  <span>{t.nothingHere}</span>
+                  <button className="drawer-gen" onClick={generateExamples} disabled={generating}>
+                    <span aria-hidden="true">✨</span> {generating ? t.generating : t.genExamples}
+                  </button>
+                </div>
               )}
             </div>
 
@@ -2181,7 +2266,17 @@ export default function AppHome() {
                               </button>
                             ))}
                             {processes.length === 0 && (
-                              <div className="world-empty">{t.nothingHere}</div>
+                              <div className="world-empty">
+                                <div>{t.emptyProcesses}</div>
+                                <button
+                                  className="gen-btn"
+                                  onClick={generateExamples}
+                                  disabled={generating}
+                                >
+                                  <span aria-hidden="true">✨</span>{" "}
+                                  {generating ? t.generating : t.genExamples}
+                                </button>
+                              </div>
                             )}
                           </div>
 
