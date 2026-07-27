@@ -294,6 +294,7 @@ function AppInput({
   onSend,
   placeholder,
   caret = false,
+  lang = "en",
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -302,11 +303,15 @@ function AppInput({
   /** Home: no placeholder copy at all — just a resting caret, so ONE looks
    *  ready to be spoken to rather than instructing you. (Same as the hero.) */
   caret?: boolean;
+  /** App language — sets which side the empty caret rests on (Hebrew → right).
+   *  Once you type, `dir="auto"` follows the language you're actually typing. */
+  lang?: "en" | "he";
 }) {
   const [focused, setFocused] = useState(false);
   const [listening, setListening] = useState(false);
   const recRef = useRef<{ stop: () => void } | null>(null);
   const hasText = value.trim().length > 0;
+  const he = lang === "he";
 
   // Real voice input via the browser's Web Speech API — the mic dictates into
   // the same input, so "talk to ONE" is literal. Falls back silently (the mic
@@ -355,11 +360,13 @@ function AppInput({
       <button className="app-bar-plus" aria-label="Add" type="button">
         <PlusIcon />
       </button>
-      <span className="app-bar-wrap">
+      <span className="app-bar-wrap" dir={he ? "rtl" : "ltr"}>
         {caret && !value && !focused && <span className="app-bar-caret" aria-hidden="true" />}
         <input
           className="app-bar-input"
-          dir="auto"
+          // Empty → rest the caret on the app-language side (Hebrew right, English
+          // left). Once you type, `auto` follows the language you're typing in.
+          dir={value ? "auto" : he ? "rtl" : "ltr"}
           placeholder={caret ? undefined : placeholder}
           aria-label={placeholder}
           value={value}
@@ -4419,20 +4426,35 @@ export default function AppHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalOpen, openSheet, activeProcess, drawerOpen]);
 
-  // rotating broadcast line (fade between). Re-keyed on identity so switching
-  // ONEs restarts the rotation in that ONE's voice.
+  // Broadcast pulse — instead of ticking through the lines forever (which reads
+  // as a nagging loop), ONE rests on the opening line most of the time and only
+  // sweeps through what's waiting now and then. So: long dwell on line 0, a brisk
+  // pass across the rest, then settle back and pause. Re-runs when the lines
+  // actually change (new process/reminder) or the ONE switches.
   useEffect(() => {
     setBi(0);
-    const t = setInterval(() => {
+    setBfade(false);
+    const n = broadcastLines.length;
+    if (n < 2) return; // nothing to sweep — hold the single line
+    let idx = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const advance = () => {
       setBfade(true);
-      setTimeout(() => {
-        setBi((i) => (i + 1) % broadcastLines.length);
+      timer = setTimeout(() => {
+        idx = (idx + 1) % n;
+        setBi(idx);
         setBfade(false);
-      }, 280);
-    }, 4200);
-    return () => clearInterval(t);
+        schedule();
+      }, 300);
+    };
+    const schedule = () => {
+      // Settled on the opening line → a long, calm pause; mid-sweep → brisk.
+      timer = setTimeout(advance, idx === 0 ? 13000 : 4400);
+    };
+    schedule();
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIdentityId]);
+  }, [activeIdentityId, broadcastLines]);
 
   // A live announcement ("Booked…", "You confirmed…") holds the pulse for a
   // moment, then settles back into the resting digest — announce, then resume.
@@ -5000,6 +5022,7 @@ export default function AppHome() {
                       onChange={setUnitDraft}
                       onSend={sendToUnit}
                       placeholder={t.tellChanged}
+                      lang={lang}
                     />
                   </div>
                 </div>
@@ -5854,6 +5877,7 @@ export default function AppHome() {
                           onSend={() => send()}
                           placeholder={t.talkToOne}
                           caret
+                          lang={lang}
                         />
                       </div>
                       <button
@@ -6054,6 +6078,7 @@ export default function AppHome() {
                       onChange={setDraft}
                       onSend={() => send()}
                       placeholder={t.talkToOne}
+                      lang={lang}
                     />
                   </div>
                 </>

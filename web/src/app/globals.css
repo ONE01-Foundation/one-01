@@ -6060,9 +6060,20 @@ button.conn-card:hover {
   border: none;
   background: transparent;
   outline: none;
+  /* Kill the browser's native text-field chrome (the box some browsers draw
+     around a focused input) — the pill IS the field. */
+  -webkit-appearance: none;
+  appearance: none;
+  box-shadow: none;
   font-family: var(--sans);
   font-size: 16px;
   color: var(--p-text);
+}
+.app-bar-input:focus,
+.app-bar-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border: none;
 }
 .app-bar-input::placeholder {
   color: var(--p-text-3);
