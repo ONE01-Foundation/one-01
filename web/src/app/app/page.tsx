@@ -2614,10 +2614,11 @@ export default function AppHome() {
       : "I've got the full picture. I'll take it from here — let's start.";
     let steps: string[] = [];
     let metrics: { label: string; value: string }[] = [];
+    let firstAction = "";
     try {
       const sys = he
-        ? `אתה ONE — המומחה האישי של המשתמש למטרה "${proc.title}". על סמך התשובות שלו בנה תכנית מותאמת אישית והתחל להוביל. החזר JSON תקין בלבד: {"lead":"","steps":["",""],"metrics":[{"label":"","value":""}]} — lead=פסקה קצרה בגוף ראשון שמסכמת את הכיוון המותאם ואומרת מה המהלך הראשון שמתחילים בו עכשיו, steps=3‑5 צעדים מותאמים לפי סדר, metrics=1‑3 מדדים למעקב. הכל בעברית. בלי code fences.`
-        : `You are ONE — the user's personal expert for the goal "${proc.title}". Using their answers, build a tailored plan and start leading. Return ONLY valid JSON: {"lead":"","steps":["",""],"metrics":[{"label":"","value":""}]} — lead=a short first-person paragraph summarising the tailored direction and the first move to start right now, steps=3‑5 tailored ordered steps, metrics=1‑3 metrics to track. No code fences.`;
+        ? `אתה ONE — המומחה האישי של המשתמש למטרה "${proc.title}". על סמך התשובות שלו בנה תכנית מותאמת אישית והתחל להוביל. החזר JSON תקין בלבד: {"lead":"","firstAction":"","steps":["",""],"metrics":[{"label":"","value":""}]} — lead=פסקה קצרה בגוף ראשון שמסכמת את הכיוון המותאם, firstAction=משפט אחד קצר ויוזם שבו אתה מציע לקחת את המהלך הראשון בעצמך עכשיו (למשל למצוא מורה, לקבוע זמן, להכין תכנית שבועית) ומסתיים בשאלה קצרה, steps=3‑5 צעדים מותאמים לפי סדר, metrics=1‑3 מדדים למעקב. הכל בעברית. בלי code fences.`
+        : `You are ONE — the user's personal expert for the goal "${proc.title}". Using their answers, build a tailored plan and start leading. Return ONLY valid JSON: {"lead":"","firstAction":"","steps":["",""],"metrics":[{"label":"","value":""}]} — lead=a short first-person paragraph summarising the tailored direction, firstAction=one short proactive sentence where YOU offer to take the first move yourself right now (e.g. find a coach, book a slot, draft the week's plan) ending in a brief question, steps=3‑5 tailored ordered steps, metrics=1‑3 metrics to track. No code fences.`;
       const raw = await invokeAiChat(
         [
           { role: "system", content: sys },
@@ -2631,6 +2632,8 @@ export default function AppHome() {
       const parsed = s >= 0 && e > s ? JSON.parse(body.slice(s, e + 1)) : null;
       if (parsed) {
         if (typeof parsed.lead === "string" && parsed.lead.trim()) lead = parsed.lead.trim();
+        if (typeof parsed.firstAction === "string" && parsed.firstAction.trim())
+          firstAction = parsed.firstAction.trim();
         if (Array.isArray(parsed.steps))
           steps = parsed.steps.filter((x: unknown) => typeof x === "string" && !!(x as string).trim()).slice(0, 6);
         if (Array.isArray(parsed.metrics))
@@ -2666,13 +2669,24 @@ export default function AppHome() {
       ),
     );
     postToProc(proc, { role: "one", text: lead });
+    // ONE doesn't just name the first step — it offers to TAKE it, and the
+    // "yes" chip actually puts ONE to work on it (routes through the same
+    // in-unit work flow as tapping a step).
     const firstStep = (steps.length ? steps : proc.steps.map((sp) => sp.label))[0];
-    if (firstStep)
-      postToProc(proc, {
-        role: "one",
-        text: he ? `מהלך ראשון: ${firstStep}` : `First move: ${firstStep}`,
-        chips: he ? ["קדימה", "שנה משהו"] : ["Let's go", "Adjust something"],
-      });
+    const goChip = he ? "קדימה, תתחיל" : "Go ahead, start";
+    postToProc(proc, {
+      role: "one",
+      text:
+        firstAction ||
+        (firstStep
+          ? he
+            ? `מתחילים מ: ${firstStep}. שאקח את זה?`
+            : `We start with: ${firstStep}. Want me to take it on?`
+          : he
+            ? "מוכן להתחיל?"
+            : "Ready to start?"),
+      chips: [goChip, he ? "שנה משהו בתכנית" : "Adjust the plan"],
+    });
   };
   const askIntake = async (
     proc: Process,
