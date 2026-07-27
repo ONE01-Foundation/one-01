@@ -1359,6 +1359,58 @@ export default function AppHome() {
     }, 640);
   };
 
+  // When ONE opens a NEW process, it turns the intention into a real multi-stage
+  // plan — an AI-generated, time-ordered step list (+ a couple of key metrics)
+  // tailored to what the user actually asked for, replacing the generic template.
+  const enrichProcessPlan = async (proc: Process, intent: string) => {
+    try {
+      const he = lang === "he";
+      const sys = he
+        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"steps":["...","..."],"metrics":[{"label":"...","value":"..."}]} — 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, ו‑2 עד 3 מדדים חשובים. הכול בעברית. בלי טקסט נוסף ובלי code fences.'
+        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"steps":["...","..."],"metrics":[{"label":"...","value":"..."}]} — 4 to 6 concrete, time-ordered steps and 2 to 3 key metrics. No prose, no code fences.';
+      const raw = await invokeAiChat(
+        [
+          { role: "system", content: sys },
+          { role: "user", content: `${proc.title} — ${intent}` },
+        ],
+        { maxTokens: 320, temperature: 0.4 },
+      );
+      const body = raw.replace(/```json|```/g, "");
+      const start = body.indexOf("{");
+      const end = body.lastIndexOf("}");
+      if (start < 0 || end <= start) return;
+      const parsed = JSON.parse(body.slice(start, end + 1));
+      const steps: string[] = Array.isArray(parsed.steps)
+        ? parsed.steps.filter((s: unknown) => typeof s === "string" && s.trim()).slice(0, 6)
+        : [];
+      if (steps.length < 2) return;
+      const metrics = Array.isArray(parsed.metrics)
+        ? parsed.metrics
+            .filter(
+              (m: unknown): m is { label: string; value: string } =>
+                !!m &&
+                typeof (m as { label?: unknown }).label === "string" &&
+                typeof (m as { value?: unknown }).value === "string",
+            )
+            .slice(0, 4)
+        : [];
+      setUnits((list) =>
+        list.map((u) =>
+          u.id === proc.id
+            ? {
+                ...u,
+                steps: steps.map((label) => ({ label, done: false })),
+                progress: { done: 0, total: steps.length },
+                metrics: metrics.length ? metrics : u.metrics,
+              }
+            : u,
+        ),
+      );
+    } catch {
+      /* Any failure (offline, bad JSON) — keep the template plan. */
+    }
+  };
+
   const send = async (override?: string) => {
     const text = (override ?? draft).trim();
     if (!text) return;
@@ -1393,6 +1445,8 @@ export default function AppHome() {
       processes,
       focus,
     });
+    // Is this a brand-new process (vs. an update to an existing one)?
+    const isNewProcess = !!res.process && !processes.some((p) => p.id === res.process!.id);
 
     // The structured side (created/updated process, broadcast, ONE-to-ONE
     // outreach) applies whether ONE speaks via the real model or the fallback.
@@ -1430,6 +1484,8 @@ export default function AppHome() {
       setThinking(false);
       setChat((c) => [...c, { role: "one", text: reply, chips: suggestChips(reply, lang) }]);
       applyStructured();
+      // A brand-new process gets a tailored multi-stage plan a beat later.
+      if (isNewProcess && res.process) void enrichProcessPlan(res.process, text);
     } catch {
       // Offline / unconfigured — fall back to the local brain's canned lines.
       window.setTimeout(() => {
