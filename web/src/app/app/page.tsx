@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Orb } from "@/components/Orb";
 import { OneWord } from "@/components/Logo";
@@ -228,6 +228,21 @@ function ArrowIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+/* Home scroll affordances — up reveals Global, down reveals Updates. */
+function ChevronUpIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 15l6-6 6 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function ChevronDownIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -560,6 +575,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     genExamples: "Generate examples",
     generating: "Generating…",
     emptyProcesses: "No processes yet. Tell ONE an intention — or:",
+    updates: "Updates",
+    updatesSub: "What moved across your processes",
+    updatesEmpty: "Nothing new. ONE will surface updates here.",
   },
   he: {
     upgrade: "שדרוג",
@@ -651,6 +669,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     genExamples: "צור דוגמאות",
     generating: "יוצר…",
     emptyProcesses: "אין עדיין תהליכים. ספרו ל‑ONE כוונה — או:",
+    updates: "עדכונים",
+    updatesSub: "מה זז בתהליכים שלכם",
+    updatesEmpty: "אין חדש. ONE יציג כאן עדכונים.",
   },
 };
 
@@ -855,6 +876,9 @@ export default function AppHome() {
   // "the provider got back to me…" line repeats on every follow-up and reads
   // robotic. Track which processes have already had their outreach.
   const outreachDoneRef = useRef<Set<string>>(new Set());
+  // The home is a vertical scroll of three surfaces — Global (up), the ONE
+  // surface (rest, middle), Updates (down). Parked on the middle before paint.
+  const homePageRef = useRef<HTMLDivElement>(null);
   // While ONE is working, a status line cycles Thinking → Connecting → Searching
   // → Working (like a coding agent), and the ONE face closes its eyes.
   const [statusIdx, setStatusIdx] = useState(0);
@@ -1495,6 +1519,13 @@ export default function AppHome() {
     setUnitMenuOpen(false);
     closeUnit();
   };
+  // Scroll the home to one of its three surfaces: -1 Global (top), 0 the ONE
+  // surface (rest, middle), 1 Updates (bottom).
+  const scrollHome = (dir: -1 | 0 | 1) => {
+    const page = homePageRef.current;
+    if (!page) return;
+    page.scrollTo({ top: (dir + 1) * page.clientHeight, behavior: "smooth" });
+  };
   // The ONE mark is "home": drop whatever you're in and return to the hero.
   const goHome = () => {
     setActiveProcess(null);
@@ -1504,6 +1535,7 @@ export default function AppHome() {
     endChat();
     closeDrawer();
     setSpace("home");
+    requestAnimationFrame(() => scrollHome(0));
   };
   // Generate examples — ONE asks the AI for a few realistic life intents, then
   // builds a complete process from each (via the local brain, so they're
@@ -1633,6 +1665,13 @@ export default function AppHome() {
     unitEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [unitChat, unitThinking]);
 
+  // Park the home scroll on the middle (the ONE surface) before first paint, so
+  // it never flashes Global or Updates on the way in.
+  useLayoutEffect(() => {
+    const page = homePageRef.current;
+    if (page) page.scrollTop = page.clientHeight;
+  }, [activeProcess, chat.length, tempChat, space]);
+
   // Esc backs out of whatever's open — an overlay, then the unit, then the
   // drawer. The workspace should never trap you.
   useEffect(() => {
@@ -1690,6 +1729,8 @@ export default function AppHome() {
   // Global filtered by the selected world.
   const worldBiz =
     world === "all" ? businesses : businesses.filter((b) => worldOf(b.category) === world);
+  // Updates surface (scroll down) — processes, the ones needing you first.
+  const updatesList = [...processes].sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0));
   // Global feed sections — requests waiting on you and news across the network.
   const gRequests =
     lang === "he"
@@ -2175,31 +2216,10 @@ export default function AppHome() {
                 ) : (
                   // HOME / GLOBAL — one canvas with a segmented toggle at the top
                   // that flips between the ONE surface and the Global worlds.
-                  <div className="home-view">
-                    <div className="space-toggle" role="tablist" aria-label="Home or Global">
-                      <button
-                        role="tab"
-                        aria-selected={space === "home"}
-                        className={`space-seg${space === "home" ? " is-active" : ""}`}
-                        onClick={() => setSpace("home")}
-                      >
-                        <i className="fi fi-rr-home" aria-hidden="true" /> {t.homeTab}
-                      </button>
-                      <button
-                        role="tab"
-                        aria-selected={space === "global"}
-                        className={`space-seg${space === "global" ? " is-active" : ""}`}
-                        onClick={() => setSpace("global")}
-                      >
-                        <i className="fi fi-rr-globe" aria-hidden="true" /> {t.global}
-                      </button>
-                    </div>
-
-                    {space === "global" ? (
-                      // GLOBAL — a marketplace of worlds. Pick a world, walk into
-                      // any ONE.
-                      <div className="global-scroll">
-                        <div className="global-pane">
+                  <div className="app-page" ref={homePageRef}>
+                    {/* GLOBAL — scroll up. Worlds marketplace + your network. */}
+                    <section className="home-global">
+                      <div className="global-pane">
                           <div className="global-head">
                             <div className="global-headtext">
                               <h2 className="global-title">{t.global}</h2>
@@ -2346,8 +2366,17 @@ export default function AppHome() {
                             ))}
                           </div>
                         </div>
-                      </div>
-                    ) : (
+                    </section>
+                    {/* ONE surface — rest. Scroll up = Global, down = Updates. */}
+                    <section className="home-main">
+                      <button
+                        type="button"
+                        className="home-chev up"
+                        onClick={() => scrollHome(-1)}
+                        aria-label={t.global}
+                      >
+                        <ChevronUpIcon />
+                      </button>
                       <div className="home-center">
                         <div className={`home-broadcast${!liveBroadcast && bfade ? " is-fading" : ""}`}>
                           {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
@@ -2360,7 +2389,39 @@ export default function AppHome() {
                           caret
                         />
                       </div>
-                    )}
+                      <button
+                        type="button"
+                        className="home-chev down"
+                        onClick={() => scrollHome(1)}
+                        aria-label={t.updates}
+                      >
+                        <ChevronDownIcon />
+                      </button>
+                    </section>
+                    {/* UPDATES — scroll down. Recent activity across your processes. */}
+                    <section className="home-updates">
+                      <div className="updates-pane">
+                        <div className="global-sec-head">
+                          <h3 className="global-sec-title">{t.updates}</h3>
+                          <span className="global-sec-sub">{t.updatesSub}</span>
+                        </div>
+                        <div className="glist">
+                          {updatesList.map((p) => (
+                            <button key={p.id} className="grow" onClick={() => openUnit(p)}>
+                              <span className="grow-emoji">{p.emoji}</span>
+                              <span className="grow-main">
+                                <span className="grow-who">{p.title}</span>
+                                <span className="grow-text">{p.nextAction ?? p.summary}</span>
+                              </span>
+                              {p.unread > 0 && <span className="grow-badge">{p.unread}</span>}
+                            </button>
+                          ))}
+                          {updatesList.length === 0 && (
+                            <div className="world-empty">{t.updatesEmpty}</div>
+                          )}
+                        </div>
+                      </div>
+                    </section>
                   </div>
                 )
               ) : (

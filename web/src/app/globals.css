@@ -4074,16 +4074,31 @@ footer {
   /* Clears the top bar, which floats over the canvas. */
   inset: 58px 0 0;
   overflow-y: auto;
-  scroll-snap-type: y mandatory;
+  /* Proximity (not mandatory) so tall surfaces like Global scroll freely and
+     only snap near a boundary. */
+  scroll-snap-type: y proximity;
   scrollbar-width: none;
 }
 .app-page::-webkit-scrollbar {
   display: none;
 }
 .home-global,
-.home-main {
+.home-main,
+.home-updates {
   min-height: 100%;
   scroll-snap-align: start;
+}
+/* Global (up) and Updates (down) — tinted so they read as their own places. */
+.home-global {
+  background: color-mix(in srgb, var(--p-text) 3%, var(--p-bg));
+}
+.home-updates {
+  background: color-mix(in srgb, var(--p-text) 3%, var(--p-bg));
+}
+.updates-pane {
+  max-width: 640px;
+  margin-inline: auto;
+  padding: 40px 26px 120px;
 }
 /* The ONE surface — the broadcast and the input, centred. No face here; it
    lives in the top mark. */
@@ -4585,6 +4600,10 @@ footer {
   top: 30px;
   opacity: 0.6;
   animation: heroCue 2.8s ease-in-out infinite;
+}
+.home-chev.down {
+  bottom: 30px;
+  opacity: 0.6;
 }
 @keyframes heroCue {
   0%,
