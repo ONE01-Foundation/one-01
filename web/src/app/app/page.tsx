@@ -1936,16 +1936,37 @@ export default function AppHome() {
   const [voiceConnecting, setVoiceConnecting] = useState(false);
   const [voiceSpeaking, setVoiceSpeaking] = useState(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
+  const [voiceCaption, setVoiceCaption] = useState("");
   const voiceCallRef = useRef<RealtimeHandle | null>(null);
+  // A voice-call turn (yours or ONE's) becomes a real, persisted chat message —
+  // routed to the open unit's thread, or the home chat if none is open.
+  const pushCallMsg = (role: "user" | "one", text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    const msg: ChatMsg = { role, text: t };
+    setVoiceCaption(t);
+    const uid = activeUnitRef.current;
+    if (uid) {
+      setUnitChat((c) => [...c, msg]);
+      setUnits((list) =>
+        list.map((u) => (u.id === uid ? { ...u, chat: [...(u.chat ?? []), msg] } : u)),
+      );
+    } else {
+      setChat((c) => [...c, msg]);
+    }
+  };
   const startVoiceCall = async () => {
     if (voiceCallRef.current || voiceConnecting) return;
     setVoiceConnecting(true);
     setVoiceMuted(false);
     setVoiceSpeaking(false);
+    setVoiceCaption("");
     const h = await startRealtime({
       instructions:
         "You are ONE — a warm, concise personal representative on a live voice call. " +
         "Keep replies short and natural. Match the user's language: reply in Hebrew when they speak Hebrew and English when they speak English, and switch fluidly. Open with a brief spoken hello.",
+      onUserText: (t) => pushCallMsg("user", t),
+      onAssistantText: (t) => pushCallMsg("one", t),
       onSpeaking: (s) => setVoiceSpeaking(s),
       onClose: () => {
         voiceCallRef.current = null;
@@ -1968,6 +1989,7 @@ export default function AppHome() {
     setVoiceCall(null);
     setVoiceConnecting(false);
     setVoiceSpeaking(false);
+    setVoiceCaption("");
   };
   const toggleVoiceMute = () => {
     const next = !voiceMuted;
@@ -4936,6 +4958,11 @@ export default function AppHome() {
                     ? "מקשיב…"
                     : "Listening…"}
             </div>
+            {voiceCaption && !voiceConnecting && (
+              <div className="voice-call-caption" dir="auto">
+                {voiceCaption}
+              </div>
+            )}
           </div>
           <div className="voice-call-bar">
             <button
