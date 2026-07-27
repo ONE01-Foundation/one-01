@@ -4034,6 +4034,24 @@ export default function AppHome() {
                               </button>
                             ))}
                           </div>
+                          {/* Live metrics for the current world — they shift as you
+                              switch category, so Global reads as a living network. */}
+                          <div className="global-metrics">
+                            <div className="gm-stat">
+                              <span className="gm-num">{worldBiz.length}</span>
+                              <span className="gm-label">{lang === "he" ? "🏪 עסקים" : "🏪 Businesses"}</span>
+                            </div>
+                            <div className="gm-stat">
+                              <span className="gm-num">
+                                {worldBiz.filter((b) => (now ? openState(b, now)?.open : false)).length}
+                              </span>
+                              <span className="gm-label">{lang === "he" ? "🟢 פתוחים עכשיו" : "🟢 Open now"}</span>
+                            </div>
+                            <div className="gm-stat">
+                              <span className="gm-num">{processes.length}</span>
+                              <span className="gm-label">{lang === "he" ? "📋 תהליכים שלך" : "📋 Your processes"}</span>
+                            </div>
+                          </div>
                           <div className="global-grid">
                             {worldBiz.map((b) => {
                               const os = now ? openState(b, now) : null;

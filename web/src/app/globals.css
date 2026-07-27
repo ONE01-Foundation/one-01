@@ -6527,6 +6527,35 @@ button.conn-card:hover {
   font-size: 20px;
   flex-shrink: 0;
 }
+/* ── Global live metrics — counts that shift with the selected world ──────── */
+.global-metrics {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.gm-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 8px;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  background: var(--p-surface);
+}
+.gm-num {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--p-text);
+  line-height: 1;
+}
+.gm-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--p-text-3);
+  text-align: center;
+}
 
 /* ─── RTL (Hebrew) ─────────────────────────────────────────
    Most of the landing is flex/grid, so dir="rtl" mirrors it for free.
