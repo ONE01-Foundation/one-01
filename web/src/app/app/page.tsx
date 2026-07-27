@@ -1039,6 +1039,12 @@ export default function AppHome() {
   };
   const toggleCap = (key: string) =>
     persistCaps(caps.includes(key) ? caps.filter((k) => k !== key) : [...caps, key]);
+  // Live quiz (the "Quiz teaching" capability). Null when no quiz is running.
+  const [quiz, setQuiz] = useState<{
+    questions: { q: string; options: string[]; answer: number; explain?: string }[];
+    idx: number;
+    score: number;
+  } | null>(null);
   // While ONE is working, a status line cycles Thinking → Connecting → Searching
   // → Working (like a coding agent), and the ONE face closes its eyes.
   const [statusIdx, setStatusIdx] = useState(0);
@@ -1583,6 +1589,109 @@ export default function AppHome() {
     }
   };
 
+  // ── Quiz teaching capability ────────────────────────────────────────────
+  const isQuizIntent = (t: string) =>
+    /\b(quiz|test)\s+me\b|\bteach me\b|\bteach me about\b/i.test(t) ||
+    /תבחן אותי|בחן אותי|תלמד אותי|למד אותי|מבחן על|שאל אותי|תעביר לי מבחן/.test(t);
+  // Turn a "quiz me on X" into a real multiple-choice quiz in chat.
+  const runQuiz = async (topic: string) => {
+    const he = lang === "he";
+    try {
+      const sys = he
+        ? 'צור מבחן אמריקאי קצר על הנושא. החזר JSON תקין בלבד: {"questions":[{"q":"...","options":["","","",""],"answer":0,"explain":"..."}]} — 3 שאלות, 4 אפשרויות לכל אחת, answer=אינדקס התשובה הנכונה (0‑3), explain=משפט הסבר קצר. הכול בעברית. בלי code fences.'
+        : 'Create a short multiple-choice quiz on the topic. Return ONLY valid JSON: {"questions":[{"q":"...","options":["","","",""],"answer":0,"explain":"..."}]} — 3 questions, 4 options each, answer=index of the correct option (0-3), explain=a short explanation. No code fences.';
+      const raw = await invokeAiChat(
+        [
+          { role: "system", content: sys },
+          { role: "user", content: topic },
+        ],
+        { maxTokens: 700, temperature: 0.5 },
+      );
+      const body = raw.replace(/```json|```/g, "");
+      const s = body.indexOf("{");
+      const e = body.lastIndexOf("}");
+      const parsed = s >= 0 && e > s ? JSON.parse(body.slice(s, e + 1)) : null;
+      const questions = (Array.isArray(parsed?.questions) ? parsed.questions : [])
+        .filter(
+          (q: unknown): q is { q: string; options: string[]; answer: number; explain?: string } =>
+            !!q &&
+            typeof (q as { q?: unknown }).q === "string" &&
+            Array.isArray((q as { options?: unknown }).options) &&
+            (q as { options: unknown[] }).options.length >= 2 &&
+            typeof (q as { answer?: unknown }).answer === "number",
+        )
+        .slice(0, 5);
+      setThinking(false);
+      if (questions.length === 0) {
+        setChat((c) => [
+          ...c,
+          { role: "one", text: he ? "לא הצלחתי להכין מבחן כרגע." : "I couldn't build a quiz just now." },
+        ]);
+        return;
+      }
+      setQuiz({ questions, idx: 0, score: 0 });
+      const q0 = questions[0];
+      setChat((c) => [
+        ...c,
+        {
+          role: "one",
+          text: `${he ? "שאלה" : "Question"} 1/${questions.length}: ${q0.q}`,
+          quiz: { options: q0.options, answer: q0.answer },
+        },
+      ]);
+    } catch {
+      setThinking(false);
+      setChat((c) => [
+        ...c,
+        { role: "one", text: he ? "לא הצלחתי להכין מבחן כרגע." : "I couldn't build a quiz just now." },
+      ]);
+    }
+  };
+  // Answer the current quiz question (tapping an option chip).
+  const answerQuiz = (optionIdx: number) => {
+    if (!quiz) return;
+    const he = lang === "he";
+    const q = quiz.questions[quiz.idx];
+    const correct = optionIdx === q.answer;
+    const nextIdx = quiz.idx + 1;
+    const nextScore = quiz.score + (correct ? 1 : 0);
+    const feedback = correct
+      ? he
+        ? "נכון! "
+        : "Correct! "
+      : he
+        ? `לא בדיוק — התשובה היא "${q.options[q.answer]}". `
+        : `Not quite — the answer is "${q.options[q.answer]}". `;
+    setChat((c) => [
+      ...c,
+      { role: "user", text: q.options[optionIdx] },
+      { role: "one", text: feedback + (q.explain ?? "") },
+    ]);
+    if (nextIdx < quiz.questions.length) {
+      const nq = quiz.questions[nextIdx];
+      setQuiz({ questions: quiz.questions, idx: nextIdx, score: nextScore });
+      setChat((c) => [
+        ...c,
+        {
+          role: "one",
+          text: `${he ? "שאלה" : "Question"} ${nextIdx + 1}/${quiz.questions.length}: ${nq.q}`,
+          quiz: { options: nq.options, answer: nq.answer },
+        },
+      ]);
+    } else {
+      setQuiz(null);
+      setChat((c) => [
+        ...c,
+        {
+          role: "one",
+          text: he
+            ? `סיימת! הציון שלך: ${nextScore}/${quiz.questions.length}.`
+            : `Done! You scored ${nextScore}/${quiz.questions.length}.`,
+        },
+      ]);
+    }
+  };
+
   const send = async (override?: string) => {
     const text = (override ?? draft).trim();
     if (!text) return;
@@ -1590,6 +1699,13 @@ export default function AppHome() {
     setChat((c) => [...c, { role: "user", text }]);
     setDraft("");
     setThinking(true);
+
+    // Capability: Quiz teaching. When it's on and you ask to be quizzed/taught,
+    // ONE runs a real multiple-choice quiz instead of opening a process.
+    if (caps.includes("quiz") && !quiz && isQuizIntent(text)) {
+      void runQuiz(text);
+      return;
+    }
 
     // Business-aware: if I mention a business at home, my ONE consults ITS ONE —
     // so it knows their hours/prices and can even book, without me leaving home.
@@ -3078,14 +3194,29 @@ export default function AppHome() {
                     {chat.map((m, i) => (
                       <Fragment key={i}>
                         <div className={`chat-msg ${m.role}`}>{m.text}</div>
-                        {m.chips && m.chips.length > 0 && (
-                          <div className="chat-chips">
-                            {m.chips.map((c) => (
-                              <button key={c} className="chat-chip" onClick={() => send(c)}>
-                                {c}
+                        {m.quiz ? (
+                          <div className="chat-chips quiz-chips">
+                            {m.quiz.options.map((o, oi) => (
+                              <button
+                                key={oi}
+                                className="chat-chip quiz-chip"
+                                onClick={() => answerQuiz(oi)}
+                              >
+                                {o}
                               </button>
                             ))}
                           </div>
+                        ) : (
+                          m.chips &&
+                          m.chips.length > 0 && (
+                            <div className="chat-chips">
+                              {m.chips.map((c) => (
+                                <button key={c} className="chat-chip" onClick={() => send(c)}>
+                                  {c}
+                                </button>
+                              ))}
+                            </div>
+                          )
                         )}
                       </Fragment>
                     ))}

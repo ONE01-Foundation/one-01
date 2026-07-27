@@ -21,6 +21,8 @@ export type ChatMsg = {
   text: string;
   /** Optional quick-reply chips ONE offers — tap to answer (times, days, …). */
   chips?: string[];
+  /** A multiple-choice quiz question — tapping an option answers it. */
+  quiz?: { options: string[]; answer: number };
 };
 
 export interface Outreach {
