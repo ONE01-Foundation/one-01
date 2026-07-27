@@ -11,12 +11,14 @@ _Living checklist of everything we discussed, so nothing gets lost. Branch: `mvp
 - **Home → process routing** — "Continue in <process>" chip routes a home-chat ask into the matching process.
 - **Connections** — businesses + people + a hand-added contacts list.
 - **Sources** in Global — official/reference badges (declarative).
-- **Chat fix (this session)** — replies now mirror the message language (no more English replies to Hebrew); honest fallback instead of fabricated "reaching out to 3 moving companies".
+- **Chat fix** — replies now mirror the message language (no more English replies to Hebrew); honest fallback instead of fabricated "reaching out to 3 moving companies".
+- **Unit card upgrades** — a live broadcast band above the metrics; emoji quick-actions that drop off once done; next-steps that ONE works on in chat (not a checkbox); "+ add connection".
+- **Profiles by type** — "New profile" chooser (Personal / Business / Supplier), stateful + persisted identities, plus a ready-made "Test Provider" supplier seat to view a process from the other side.
 
 ## 🔲 Discussed but NOT done yet — needs completing
 
-1. **Create-profile: types, not only business.** "New profile" today jumps straight to the *business* creation flow. Needs a chooser — **Personal / Business / Supplier(provider)** — and a real create-identity flow that adds to your Profiles list (not only the Global directory).
-2. **Trial "supplier" profile + true two-sided testing.** A profile that represents the *other* side so you can switch to it and actually answer as the supplier — testing a full process end-to-end with two real sides (today the other side is AI-simulated inside the thread).
+1. ~~**Create-profile: types, not only business.**~~ ✅ DONE — chooser (Personal/Business/Supplier) + stateful persisted identities.
+2. **True two-sided testing (partly done).** ✅ A supplier *seat* now exists (switch to "Test Provider" or create a supplier profile). ⏳ STILL OPEN: answering a *specific* incoming request cross-profile — a real handshake — needs a request bus so a process opened on the personal side shows up in the supplier's inbox to answer.
 3. **Make Booking a real capability** (like Quiz) — propose times as chips, tapping books into the process + timeline.
 4. **Make Forms / Reminders real** — currently declarative toggles.
 5. **Sources actually feed answers** — ONE cites / pulls from the official source when answering a regulated-domain question (licensing, health, gov, NII). Role-gated source-adding is still a disabled placeholder.
