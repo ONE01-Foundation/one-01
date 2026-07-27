@@ -31,6 +31,14 @@ import {
 import { transcribeAudio, startRealtime, type RealtimeHandle } from "@/lib/voice";
 import { searchWeb } from "@/lib/webSearch";
 import {
+  createSharedUnit,
+  joinSharedUnit,
+  getSharedMessages,
+  postSharedMessage,
+  listSharedMembers,
+  type SharedMessage,
+} from "@/lib/sharedUnits";
+import {
   ensureSession,
   saveUnits,
   loadUnits,
@@ -884,6 +892,31 @@ const ACTION_HE: Record<string, string> = {
   "confirm booking": "אשר הזמנה",
   "propose another time": "הצע זמן אחר",
 };
+
+// The join link for a shared unit + a one-tap copy. Anyone who opens it lands in
+// the same room and can correspond there alongside ONE.
+function ShareLink({ code, lang }: { code: string; lang: "en" | "he" }) {
+  const [copied, setCopied] = useState(false);
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://one01.io";
+  const link = `${origin}/app?join=${code}`;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+  return (
+    <div className="sr-link">
+      <code className="sr-link-code">{link}</code>
+      <button className="sr-copy" onClick={copy}>
+        {copied ? (lang === "he" ? "הועתק" : "Copied") : lang === "he" ? "העתק" : "Copy"}
+      </button>
+    </div>
+  );
+}
 
 function UnitDetail({
   p,
@@ -2714,6 +2747,172 @@ export default function AppHome() {
 
   // The live process behind the open sheet, so edits show immediately.
   const activeLive = activeProcess ? units.find((u) => u.id === activeProcess.id) ?? activeProcess : null;
+
+  // ── Shared units — a unit two or more people correspond inside ─────────────
+  // Share a unit → everyone with the link joins the same room and talks there,
+  // alongside ONE. Backed by the shared_units RPCs; the thread is polled live.
+  const myName = (identity?.name || "").trim() || (lang === "he" ? "אני" : "You");
+  const [sharedMsgs, setSharedMsgs] = useState<Record<string, SharedMessage[]>>({});
+  const [sharedMembers, setSharedMembers] = useState<Record<string, string[]>>({});
+  const [sharedDraft, setSharedDraft] = useState("");
+  const [shareBusy, setShareBusy] = useState(false);
+  const sharedAnsweredRef = useRef<Set<string>>(new Set());
+  const sharedOpenedRef = useRef<Record<string, string>>({});
+  const mergeSharedMsg = (code: string, incoming: SharedMessage[]) => {
+    setSharedMsgs((prev) => {
+      const cur = prev[code] ?? [];
+      const seen = new Set(cur.map((m) => m.id));
+      const add = incoming.filter((m) => !seen.has(m.id));
+      if (!add.length) return prev;
+      const next = [...cur, ...add].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      return { ...prev, [code]: next };
+    });
+  };
+  const startSharedRoom = async (proc: Process) => {
+    if (proc.shareCode || shareBusy) return;
+    setShareBusy(true);
+    const snap: Record<string, unknown> = { ...proc };
+    delete snap.chat;
+    delete snap.drafts;
+    const su = await createSharedUnit({
+      title: proc.title,
+      emoji: proc.emoji,
+      type: proc.type ?? null,
+      unit: snap,
+      author: myName,
+    });
+    setShareBusy(false);
+    if (!su) return;
+    setUnits((list) =>
+      list.map((u) => (u.id === proc.id ? { ...u, shareCode: su.code, shareOwner: true } : u)),
+    );
+    setSharedMembers((m) => ({ ...m, [su.code]: [myName] }));
+    sharedOpenedRef.current[su.code] = new Date().toISOString();
+  };
+  // Owner's ONE answers a question raised in the room — live web first, then AI.
+  const answerInRoom = async (code: string, prompt: string) => {
+    let text = "";
+    const l = msgLang(prompt);
+    if (aiWeb && isPureQuestion(prompt)) {
+      const web = await searchWeb(prompt, l);
+      if (web) text = web.text;
+    }
+    if (!text) {
+      try {
+        text = await invokeAiChat(
+          [
+            { role: "system", content: oneSystemPrompt(l, memoryContext()) },
+            { role: "user", content: prompt },
+          ],
+          { maxTokens: 200 },
+        );
+      } catch {
+        text = "";
+      }
+    }
+    if (text.trim()) {
+      const msg = await postSharedMessage(code, "ONE", "one", text.trim());
+      if (msg) mergeSharedMsg(code, [msg]);
+    }
+  };
+  const postToRoom = async (proc: Process, text: string) => {
+    const code = proc.shareCode;
+    const body = text.trim();
+    if (!code || !body) return;
+    setSharedDraft("");
+    const msg = await postSharedMessage(code, myName, "human", body);
+    if (msg) mergeSharedMsg(code, [msg]);
+    // If I own the room, ONE answers questions posed here (so everyone sees it).
+    if (proc.shareOwner && (/\?\s*$/.test(body) || /\bone\b|וואן/i.test(body))) {
+      if (msg) sharedAnsweredRef.current.add(msg.id);
+      void answerInRoom(code, body);
+    }
+  };
+  // Land in a shared room from a ?join=CODE link.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const code = new URLSearchParams(window.location.search).get("join");
+    if (!code) return;
+    let cancelled = false;
+    (async () => {
+      const su = await joinSharedUnit(code, myName);
+      if (cancelled || !su) return;
+      const snap = (su.unit ?? {}) as Partial<Process>;
+      const proc: Process = {
+        id: `shared-${su.code}`,
+        identityId: activeIdentityId,
+        emoji: su.emoji || snap.emoji || "📌",
+        title: su.title || snap.title || "Shared unit",
+        time: snap.time || "now",
+        unread: 0,
+        summary: snap.summary || "",
+        relation: snap.relation || (lang === "he" ? "משותף" : "Shared"),
+        progress: snap.progress || { done: 0, total: snap.steps?.length ?? 0 },
+        people: snap.people || [],
+        steps: snap.steps || [],
+        decisions: snap.decisions || [],
+        timeline: snap.timeline || [],
+        type: (su.type as string | undefined) || snap.type,
+        nextAction: snap.nextAction,
+        metrics: snap.metrics,
+        insights: snap.insights,
+        quickActions: snap.quickActions,
+        fields: snap.fields,
+        coverImage: snap.coverImage,
+        stepImages: snap.stepImages,
+        shareCode: su.code,
+        shareOwner: false,
+      };
+      sharedOpenedRef.current[su.code] = new Date().toISOString();
+      setUnits((list) => (list.some((u) => u.shareCode === su.code) ? list : [proc, ...list]));
+      openUnit(proc);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("join");
+      window.history.replaceState({}, "", url.toString());
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Poll the open room's thread + members every few seconds; owner's ONE replies.
+  useEffect(() => {
+    const code = activeLive?.shareCode;
+    if (!code) return;
+    if (!sharedOpenedRef.current[code]) sharedOpenedRef.current[code] = new Date().toISOString();
+    const owner = !!activeLive?.shareOwner;
+    let stop = false;
+    const tick = async () => {
+      const [msgs, mems] = await Promise.all([
+        getSharedMessages(code, null),
+        listSharedMembers(code),
+      ]);
+      if (stop) return;
+      if (msgs.length) mergeSharedMsg(code, msgs);
+      if (mems.length) setSharedMembers((m) => ({ ...m, [code]: mems.map((x) => x.name) }));
+      if (owner) {
+        const openedAt = sharedOpenedRef.current[code] ?? "";
+        for (const m of msgs) {
+          if (m.role !== "human" || m.author === myName) continue;
+          if (sharedAnsweredRef.current.has(m.id)) continue;
+          if (m.created_at <= openedAt) {
+            sharedAnsweredRef.current.add(m.id);
+            continue;
+          }
+          if (!(/\?\s*$/.test(m.text) || /\bone\b|וואן/i.test(m.text))) continue;
+          sharedAnsweredRef.current.add(m.id);
+          void answerInRoom(code, m.text);
+        }
+      }
+    };
+    void tick();
+    const iv = window.setInterval(tick, 4000);
+    return () => {
+      stop = true;
+      window.clearInterval(iv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLive?.shareCode, activeLive?.shareOwner]);
 
   // Replace-or-insert a unit (keyed by id).
   const upsert = (p: Process) =>
@@ -5629,6 +5828,96 @@ export default function AppHome() {
                   aria-label="Resize details"
                 />
                 <aside className="unit-aside" style={{ width: asideW }}>
+                  {activeLive && (
+                    <section className="shared-room">
+                      <div className="shared-room-head">
+                        <span className="sr-title">
+                          <i className="fi fi-rr-users" aria-hidden="true" />{" "}
+                          {lang === "he" ? "חדר משותף" : "Shared room"}
+                        </span>
+                        {activeLive.shareCode && (
+                          <span className="sr-count">
+                            {(sharedMembers[activeLive.shareCode] ?? [myName]).length}{" "}
+                            {lang === "he" ? "משתתפים" : "in room"}
+                          </span>
+                        )}
+                      </div>
+                      {!activeLive.shareCode ? (
+                        <>
+                          <p className="sr-hint">
+                            {lang === "he"
+                              ? "שתף את היחידה כדי שכמה אנשים יתכתבו כאן יחד, ו‑ONE איתם."
+                              : "Share this unit so a few people can talk here together — with ONE in the room."}
+                          </p>
+                          <button
+                            className="sr-share-btn"
+                            onClick={() => startSharedRoom(activeLive)}
+                            disabled={shareBusy}
+                          >
+                            <i className="fi fi-rr-share" aria-hidden="true" />{" "}
+                            {shareBusy
+                              ? lang === "he"
+                                ? "יוצר…"
+                                : "Creating…"
+                              : lang === "he"
+                                ? "שתף יחידה"
+                                : "Share unit"}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <ShareLink code={activeLive.shareCode} lang={lang} />
+                          <div className="sr-members">
+                            {(sharedMembers[activeLive.shareCode] ?? [myName]).map((n) => (
+                              <span key={n} className="sr-chip">
+                                {n}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="sr-thread">
+                            {(sharedMsgs[activeLive.shareCode] ?? []).length === 0 ? (
+                              <p className="sr-empty">
+                                {lang === "he"
+                                  ? "עדיין אין הודעות — פתחו שיחה כאן."
+                                  : "No messages yet — start the conversation."}
+                              </p>
+                            ) : (
+                              (sharedMsgs[activeLive.shareCode] ?? []).map((m) => (
+                                <div
+                                  key={m.id}
+                                  className={`sr-msg ${m.role === "one" ? "one" : m.author === myName ? "me" : "them"}`}
+                                >
+                                  <span className="sr-author">
+                                    {m.role === "one" ? "ONE" : m.author}
+                                  </span>
+                                  <span className="sr-text" dir="auto">
+                                    {m.text}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <div className="sr-compose">
+                            <input
+                              value={sharedDraft}
+                              onChange={(e) => setSharedDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") postToRoom(activeLive, sharedDraft);
+                              }}
+                              placeholder={lang === "he" ? "כתוב לחדר…" : "Message the room…"}
+                              dir="auto"
+                            />
+                            <button
+                              onClick={() => postToRoom(activeLive, sharedDraft)}
+                              aria-label={lang === "he" ? "שלח" : "Send"}
+                            >
+                              <i className="fi fi-rr-paper-plane" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </section>
+                  )}
                   <UnitDetail
                     p={activeLive}
                     businesses={businesses}

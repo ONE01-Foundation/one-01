@@ -113,6 +113,10 @@ export interface Process {
   coverImage?: string;
   /** Per-step AI-generated images, keyed by step index → stock image URL. */
   stepImages?: Record<number, string>;
+  /** When set, this unit is shared: a common code others join to correspond inside. */
+  shareCode?: string;
+  /** True if this ONE created the share (drives ONE's replies in the shared room). */
+  shareOwner?: boolean;
 }
 
 /**
