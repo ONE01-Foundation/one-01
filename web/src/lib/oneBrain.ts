@@ -41,6 +41,8 @@ export type ChatMsg = {
   booking?: { slots: string[]; topic: string; procId?: string };
   /** An illustrative image URL (e.g. a Wikipedia thumbnail) shown in the bubble. */
   image?: string;
+  /** A source ONE drew on when answering a regulated-domain question. */
+  cite?: { emoji: string; label: string; host: string };
   /** Action chips — enable a capability, upgrade, share a fact, or route into a process. */
   actions?: {
     label: string;

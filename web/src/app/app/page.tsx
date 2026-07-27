@@ -418,7 +418,7 @@ const PREMIUM_CAPS = ["research", "travel", "negotiate"];
 const CAP_INTENT: { key: string; re: RegExp }[] = [
   { key: "quiz", re: /\b(quiz|test)\s+me\b|\bteach me\b|תבחן אות|בחן אות|תלמד אות|למד אות|מבחן|תרגול/i },
   { key: "booking", re: /\bbook\b|schedule|appointment|reserve|קבע(?: לי)? תור|לקבוע תור|תזמן|להזמין תור/i },
-  { key: "forms", re: /fill (out )?(the )?form|application form|למלא (לי )?טופס|תמלא טופס|בקשה רשמית/i },
+  { key: "forms", re: /\bfill\b[^.?!]*\bform\b|\bform\b[^.?!]*\bfill\b|application form|form for\b|למלא[^.?!]*טופס|טופס[^.?!]*למלא|תמלא[^.?!]*טופס|בקשה רשמית/i },
   { key: "reminders", re: /remind me|set a reminder|תזכיר לי|קבע תזכורת|תזכורת/i },
   { key: "translate", re: /translate|תרגם|תתרגם|תרגום ל/i },
   { key: "travel", re: /plan (a )?trip|itinerary|תכנן(?: לי)? טיול|מסלול טיול|לתכנן חופשה/i },
@@ -466,6 +466,83 @@ const SOURCE_CATALOG: Source[] = [
   { key: "health", emoji: "🩺", en: "Ministry of Health", he: "משרד הבריאות", kind: "official", host: "health.gov.il" },
   { key: "wikipedia", emoji: "📚", en: "Wikipedia", he: "ויקיפדיה", kind: "reference", host: "wikipedia.org" },
 ];
+// Map a regulated-domain question to the official source ONE should answer from.
+const SOURCE_INTENT: { key: string; re: RegExp }[] = [
+  {
+    key: "licensing",
+    re: /\b(driv|licen[sc]e|theory test|road test|vehicle|car registration)\b|רישיון נהיגה|רשיון נהיגה|תאוריה|טסט|רכב|רישוי/i,
+  },
+  {
+    key: "nii",
+    re: /\b(national insurance|social security|child allowance|disability|unemployment|maternity)\b|ביטוח לאומי|קצבה|דמי לידה|אבטלה|נכות|הבטחת הכנסה/i,
+  },
+  {
+    key: "health",
+    re: /\b(vaccin|health fund|kupat|prescription|medical exemption|ministry of health)\b|קופת חולים|חיסון|מרשם|משרד הבריאות|ועדה רפואית/i,
+  },
+  {
+    key: "gov",
+    re: /\b(passport|id card|teudat|population registry|residency|visa|apostille)\b|דרכון|תעודת זהות|מרשם אוכלוסין|תושבות|אשרה|אפוסטיל|משרד הפנים/i,
+  },
+];
+function sourceForText(text: string): Source | null {
+  for (const s of SOURCE_INTENT)
+    if (s.re.test(text)) return SOURCE_CATALOG.find((c) => c.key === s.key) ?? null;
+  return null;
+}
+
+// ── Forms — templates ONE fills WITH you (you type your own details; ONE never
+//    invents PII). The filled form becomes a reviewable draft in the process.
+interface FormField {
+  key: string;
+  en: string;
+  he: string;
+}
+interface FormTemplate {
+  key: string;
+  en: string;
+  he: string;
+  re: RegExp;
+  fields: FormField[];
+}
+const CONTACT_FIELDS: FormField[] = [
+  { key: "fullName", en: "Full name", he: "שם מלא" },
+  { key: "id", en: "ID number", he: "תעודת זהות" },
+  { key: "address", en: "Address", he: "כתובת" },
+  { key: "phone", en: "Phone", he: "טלפון" },
+];
+const FORM_TEMPLATES: FormTemplate[] = [
+  {
+    key: "license",
+    en: "Driving licence renewal",
+    he: "חידוש רישיון נהיגה",
+    re: /driv|licen[sc]e|רישיון נהיגה|רשיון נהיגה/i,
+    fields: [...CONTACT_FIELDS, { key: "licenseNo", en: "Licence number", he: "מספר רישיון" }],
+  },
+  {
+    key: "passport",
+    en: "Passport application",
+    he: "בקשה לדרכון",
+    re: /passport|דרכון/i,
+    fields: [...CONTACT_FIELDS, { key: "birthDate", en: "Date of birth", he: "תאריך לידה" }],
+  },
+  {
+    key: "nii",
+    en: "National Insurance claim",
+    he: "תביעה לביטוח לאומי",
+    re: /national insurance|allowance|claim|ביטוח לאומי|קצבה|תביעה/i,
+    fields: [...CONTACT_FIELDS, { key: "claimType", en: "Claim type", he: "סוג התביעה" }],
+  },
+];
+function formForText(text: string): { en: string; he: string; fields: FormField[] } {
+  return (
+    FORM_TEMPLATES.find((f) => f.re.test(text)) ?? {
+      en: "Form",
+      he: "טופס",
+      fields: [...CONTACT_FIELDS, { key: "email", en: "Email", he: "אימייל" }],
+    }
+  );
+}
 
 // ── ONE's memory — the personal facts it holds, each with its own permission.
 //    This is selective disclosure: you decide per field whether ONE may use it
@@ -1591,6 +1668,14 @@ export default function AppHome() {
      *  and passing it updates the process (ticks a learning step, logs it). */
     procId?: string;
   } | null>(null);
+  // Live form the user is filling (the "Form filling" capability). You type your
+  // own values; ONE never invents them. Singular, like the quiz.
+  const [activeForm, setActiveForm] = useState<{
+    title: string;
+    fields: { key: string; label: string }[];
+    values: Record<string, string>;
+    procId?: string;
+  } | null>(null);
   // While ONE is working, a status line cycles Thinking → Connecting → Searching
   // → Working (like a coding agent), and the ONE face closes its eyes.
   const [statusIdx, setStatusIdx] = useState(0);
@@ -2515,6 +2600,104 @@ export default function AppHome() {
       setUnitChat([confirm]);
     }
   };
+  // ── Forms capability — ONE sets up the right form; YOU fill your own values
+  //    (never auto-filled with PII), and the completed form lands as a draft in
+  //    a process, ready to review + approve.
+  const runForm = (text: string, proc?: Process) => {
+    const he = lang === "he";
+    const tpl = formForText(text);
+    const title = he ? tpl.he : tpl.en;
+    setActiveForm({
+      title,
+      fields: tpl.fields.map((f) => ({ key: f.key, label: he ? f.he : f.en })),
+      values: {},
+      procId: proc?.id,
+    });
+    const msg: ChatMsg = {
+      role: "one",
+      text: he
+        ? `📝 הכנתי את הטופס «${title}». מלא את השדות למטה — אתה ממלא, אני לא ממציא פרטים.`
+        : `📝 I've set up the "${title}" form. Fill the fields below — you fill it in, I never invent your details.`,
+    };
+    if (proc) {
+      setUnitThinking(false);
+      setUnitChat((c) => [...c, msg]);
+    } else {
+      setThinking(false);
+      setChat((c) => [...c, msg]);
+    }
+  };
+  const submitForm = () => {
+    if (!activeForm) return;
+    const he = lang === "he";
+    const af = activeForm;
+    const body = af.fields
+      .map((f) => `${f.label}: ${(af.values[f.key] || "").trim() || "—"}`)
+      .join("\n");
+    const draft: UnitDraft = {
+      id: `draft_form_${Date.now()}`,
+      kind: "form",
+      to: he ? "הרשות הרלוונטית" : "the relevant authority",
+      subject: af.title,
+      body,
+      status: "draft",
+    };
+    const confirm: ChatMsg = {
+      role: "one",
+      text: he
+        ? `✅ הטופס «${af.title}» מוכן ונשמר כטיוטה בתהליך — תבדוק ותאשר.`
+        : `✅ The "${af.title}" form is ready and saved as a draft in the process — review and approve.`,
+    };
+    const existing = af.procId ? units.find((u) => u.id === af.procId) : null;
+    if (existing) {
+      setUnits((list) =>
+        list.map((u) =>
+          u.id === existing.id
+            ? {
+                ...u,
+                unread: 0,
+                drafts: [...(u.drafts ?? []), draft],
+                timeline: [
+                  { at: "now", text: he ? `מילאת את הטופס «${af.title}».` : `You filled the "${af.title}" form.` },
+                  ...u.timeline,
+                ],
+              }
+            : u,
+        ),
+      );
+      setUnitChat((c) => [
+        ...c,
+        { role: "user", text: he ? `מילאתי את «${af.title}»` : `Filled "${af.title}"` },
+        confirm,
+      ]);
+    } else {
+      const proc: Process = {
+        id: `form_${Date.now()}`,
+        identityId: activeIdentityId,
+        emoji: "🗂️",
+        title: af.title,
+        time: "now",
+        unread: 0,
+        summary: he ? `הטופס «${af.title}» מוכן.` : `"${af.title}" form ready.`,
+        relation: he ? "טופס" : "Form",
+        progress: { done: 1, total: 2 },
+        people: [],
+        steps: [
+          { label: he ? "למלא את הטופס" : "Fill the form", done: true },
+          { label: he ? "להגיש" : "Submit", done: false },
+        ],
+        decisions: [],
+        timeline: [{ at: "now", text: he ? `מילאת את הטופס «${af.title}».` : `You filled the "${af.title}" form.` }],
+        type: "form",
+        drafts: [draft],
+        chat: [confirm],
+      };
+      upsert(proc);
+      openUnit(proc);
+      setUnitChat([confirm]);
+    }
+    setActiveForm(null);
+  };
   // Run an action chip from a ONE message (enable a capability, or upgrade).
   const runChatAction = (a: {
     label: string;
@@ -2706,15 +2889,30 @@ export default function AppHome() {
       runReminder(text);
       return;
     }
+    // Forms capability: ONE sets up the form for you to fill (never auto-filled).
+    if (capKey === "forms" && !activeForm) {
+      runForm(text);
+      return;
+    }
 
     // Question vs. intent — a pure question gets a straight answer, not a new
     // process. (Skipped when a business is named, above, so ONE still consults
     // that business's ONE for "how much is X at <biz>?".)
     if (isPureQuestion(text)) {
+      // Regulated domain? Answer FROM the official source and cite it.
+      const src = sourceForText(text);
+      const srcHint = src
+        ? lang === "he"
+          ? `זו שאלה בתחום מוסדר. ענה על סמך המקור הרשמי "${src.he}" (${src.host}); אם פרט מסוים משתנה או לא ודאי, אמור לבדוק מול המקור.`
+          : `This is a regulated-domain question. Answer based on the official source "${src.en}" (${src.host}); if a detail varies or is uncertain, say to verify with the source.`
+        : undefined;
       try {
         const reply = await invokeAiChat(
           [
-            { role: "system", content: oneSystemPrompt(lang, memoryContext()) },
+            {
+              role: "system",
+              content: oneSystemPrompt(lang, [memoryContext(), srcHint].filter(Boolean).join(" ")),
+            },
             ...priorChat.slice(-8).map((m) => ({
               role: (m.role === "one" ? "assistant" : "user") as AiChatMessage["role"],
               content: m.text,
@@ -2724,7 +2922,16 @@ export default function AppHome() {
           { maxTokens: 240 },
         );
         setThinking(false);
-        setChat((c) => [...c, { role: "one", text: reply }]);
+        setChat((c) => [
+          ...c,
+          {
+            role: "one",
+            text: reply,
+            cite: src
+              ? { emoji: src.emoji, label: lang === "he" ? src.he : src.en, host: src.host }
+              : undefined,
+          },
+        ]);
       } catch {
         setThinking(false);
         setChat((c) => [
@@ -3375,6 +3582,11 @@ export default function AppHome() {
       void runQuiz(text, proc);
       return;
     }
+    // Forms inside a process — fill a form straight into THIS process's drafts.
+    if (caps.includes("forms") && !activeForm && capabilityForText(text) === "forms") {
+      runForm(text, proc);
+      return;
+    }
     const focus = units.find((u) => u.id === proc.id) ?? null;
     const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus });
 
@@ -3656,6 +3868,35 @@ export default function AppHome() {
   const pendingReminders = reminders.filter(
     (r) => r.identityId === activeIdentityId && !r.done,
   );
+  // The live form card (Forms capability) — rendered in whichever chat it belongs
+  // to. Fields start empty; the user types their own values (no PII auto-fill).
+  const formCard = activeForm ? (
+    <div className="chat-form">
+      <div className="chat-form-title">🗂️ {activeForm.title}</div>
+      {activeForm.fields.map((f) => (
+        <label className="chat-form-row" key={f.key}>
+          <span className="chat-form-label">{f.label}</span>
+          <input
+            className="chat-form-input"
+            value={activeForm.values[f.key] ?? ""}
+            onChange={(e) =>
+              setActiveForm((af) =>
+                af ? { ...af, values: { ...af.values, [f.key]: e.target.value } } : af,
+              )
+            }
+          />
+        </label>
+      ))}
+      <div className="chat-form-actions">
+        <button className="sheet-pill" onClick={submitForm}>
+          {lang === "he" ? "הכן טופס" : "Prepare form"}
+        </button>
+        <button className="chat-form-cancel" onClick={() => setActiveForm(null)}>
+          {lang === "he" ? "בטל" : "Cancel"}
+        </button>
+      </div>
+    </div>
+  ) : null;
   // Global feed sections — requests waiting on you and news across the network.
   const gRequests =
     lang === "he"
@@ -4098,6 +4339,7 @@ export default function AppHome() {
                         <span className="unit-status-text">{statusLabel}</span>
                       </div>
                     )}
+                    {activeForm && activeForm.procId === activeProcess?.id && formCard}
                     <div ref={unitEndRef} />
                   </div>
                   <div className="app-dock unit-dock">
@@ -5058,6 +5300,13 @@ export default function AppHome() {
                           )}
                           {m.text}
                         </div>
+                        {m.cite && (
+                          <div className="chat-cite" title={m.cite.host}>
+                            <span className="chat-cite-emoji" aria-hidden="true">{m.cite.emoji}</span>
+                            {lang === "he" ? "לפי" : "per"} {m.cite.label}
+                            <span className="chat-cite-host">{m.cite.host}</span>
+                          </div>
+                        )}
                         {m.quiz ? (
                           <div className="chat-chips quiz-chips">
                             {m.quiz.options.map((o, oi) => (
@@ -5120,6 +5369,7 @@ export default function AppHome() {
                         <span className="unit-status-text">{statusLabel}</span>
                       </div>
                     )}
+                    {activeForm && !activeForm.procId && formCard}
                     <div ref={chatEndRef} />
                   </div>
                   <div className="app-edge bottom" />
