@@ -3756,6 +3756,33 @@ footer {
 .app-nav-icon i {
   color: var(--p-text-2);
 }
+/* Temporary chat — a bare, semi-transparent glyph with no button chrome. It
+   brightens on hover, sits solid while a temp chat is open (as an ✕). */
+.app-nav-temp {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+  opacity: 0.5;
+}
+.app-nav-temp:hover {
+  opacity: 1;
+  transform: none;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+}
+.app-nav-temp i {
+  font-size: 18px;
+  color: var(--p-text-2);
+}
+.app-nav-temp.is-active {
+  opacity: 1;
+}
+.app-nav-temp.is-active i {
+  color: var(--p-text);
+  font-size: 20px;
+}
 
 /* ─── side drawer — profiles + your process list, off the ONE mark ───────── */
 /* MOBILE: an overlay that slides over the canvas, with a scrim. */
@@ -5243,6 +5270,19 @@ footer {
 }
 .temp-chat-tag i {
   font-size: 13px;
+}
+/* The anonymous opener shown before the first message in a temporary chat. */
+.temp-chat-anon {
+  align-self: center;
+  max-width: 34ch;
+  margin: 8vh 0 0;
+  text-align: center;
+  text-wrap: balance;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  color: var(--p-text-2);
 }
 .app-chat::-webkit-scrollbar {
   width: 6px;

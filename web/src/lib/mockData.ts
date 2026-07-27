@@ -53,6 +53,8 @@ export interface Process {
   fields?: Record<string, string>;
   /** The business this process is transacting with (opens its ONE profile). */
   businessId?: string;
+  /** Persisted unit-chat transcript — reopening the process restores it. */
+  chat?: { role: "user" | "one"; text: string; chips?: string[] }[];
 }
 
 // ── Business profiles — each has its own ONE that knows its hours, services and

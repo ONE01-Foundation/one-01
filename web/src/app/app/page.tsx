@@ -248,13 +248,6 @@ function ChevronDownIcon() {
 }
 /* Temporary chat — the dashed ring from the mobile app: a conversation that
    leaves no trace. */
-function DashedRingIcon() {
-  return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="8.4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeDasharray="2.4 3.4" />
-    </svg>
-  );
-}
 function PlusIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -488,6 +481,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
   en: {
     upgrade: "Upgrade",
     tempChat: "Temporary chat",
+    exitTemp: "Exit temporary chat",
+    tempTag: "Temporary chat · nothing is saved",
+    tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
     profiles: "Profiles",
     processes: "Processes",
@@ -582,6 +578,9 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
   he: {
     upgrade: "שדרוג",
     tempChat: "צ'אט זמני",
+    exitTemp: "צא מצ'אט זמני",
+    tempTag: "צ'אט זמני · שום דבר לא נשמר",
+    tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
     profiles: "פרופילים",
     processes: "תהליכים",
@@ -1157,7 +1156,14 @@ export default function AppHome() {
     const header = he
       ? `${greet} ${waiting.length} ${waiting.length === 1 ? "דבר מחכה" : "דברים מחכים"} לך.`
       : `${greet} ${waiting.length} ${waiting.length === 1 ? "thing needs you" : "things need you"}.`;
-    const items = waiting.slice(0, 4).map((p) => p.nextAction ?? p.summary);
+    // In English, surface the machine-written next action. In Hebrew that text is
+    // English (it's generated), so phrase the line in Hebrew around the process's
+    // own title instead of leaking an English sentence into a Hebrew broadcast.
+    const items = waiting.slice(0, 4).map((p) =>
+      he
+        ? `${p.title} — ${p.unread > 1 ? `${p.unread} עדכונים ממתינים` : "עדכון ממתין"}.`
+        : (p.nextAction ?? p.summary),
+    );
     return [header, ...items];
   }, [processes, identity.name, now, lang]);
 
@@ -1444,6 +1450,17 @@ export default function AppHome() {
     setTempChat(true);
     closeDrawerOnMobile();
   };
+  // The temp-chat control is a toggle — tapping it while a temp chat is open
+  // ends it and drops back to the resting home.
+  const toggleTempChat = () => {
+    if (tempChat) {
+      endChat();
+      setSpace("home");
+      requestAnimationFrame(() => scrollHome(0));
+    } else {
+      startTempChat();
+    }
+  };
 
   // New process — a fresh conversation with ONE. Unlike a temporary chat, ONE
   // keeps it: whatever you ask for becomes a new process. Drops you on the
@@ -1464,9 +1481,18 @@ export default function AppHome() {
     setActiveProcess(p);
     setFocusId(p.id);
     setUnitMenuOpen(false);
-    setUnitChat([
-      { role: "one", text: `Here's ${p.title}.${p.nextAction ? " " + p.nextAction : " Tell me what changed and I'll update it."}` },
-    ]);
+    // Restore the saved transcript if this process has one; otherwise greet.
+    const stored = units.find((u) => u.id === p.id)?.chat;
+    setUnitChat(
+      stored && stored.length > 0
+        ? stored
+        : [
+            {
+              role: "one",
+              text: `Here's ${p.title}.${p.nextAction ? " " + p.nextAction : " Tell me what changed and I'll update it."}`,
+            },
+          ],
+    );
     closeDrawerOnMobile();
   };
   const closeUnit = () => {
@@ -1671,6 +1697,16 @@ export default function AppHome() {
   useEffect(() => {
     unitEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [unitChat, unitThinking]);
+
+  // Persist the unit's transcript back into the process, so closing and
+  // reopening it (or a reload) restores the whole conversation.
+  useEffect(() => {
+    if (!activeProcess || unitChat.length === 0) return;
+    setUnits((list) =>
+      list.map((u) => (u.id === activeProcess.id ? { ...u, chat: unitChat } : u)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitChat, activeProcess?.id]);
 
   // Park the home scroll on the ONE surface (top) before first paint, so it
   // never flashes Updates on the way in.
@@ -1910,14 +1946,20 @@ export default function AppHome() {
             >
               <span>{t.upgrade}</span>
             </button>
-            {/* Temporary chat — icon only, the dashed ring from the app. */}
+            {/* Temporary chat — a clean incognito glyph, no chrome. Tapping it
+                while a temp chat is open turns it into an ✕ that exits. */}
             <button
-              className="app-nav-btn app-nav-icon"
-              onClick={startTempChat}
-              aria-label={t.tempChat}
-              title={t.tempChat}
+              className={`app-nav-btn app-nav-temp${tempChat ? " is-active" : ""}`}
+              onClick={toggleTempChat}
+              aria-label={tempChat ? t.exitTemp : t.tempChat}
+              title={tempChat ? t.exitTemp : t.tempChat}
+              aria-pressed={tempChat}
             >
-              <DashedRingIcon />
+              {tempChat ? (
+                <i className="fi fi-rr-cross-small" aria-hidden="true" />
+              ) : (
+                <i className="fi fi-rr-incognito" aria-hidden="true" />
+              )}
             </button>
           </div>
         </nav>
@@ -2561,10 +2603,14 @@ export default function AppHome() {
                 <>
                   <div className="app-chat">
                     {tempChat && (
-                      <div className="temp-chat-tag">
-                        <i className="fi fi-rr-incognito" aria-hidden="true" /> Temporary chat · not
-                        kept as a process
-                      </div>
+                      <>
+                        <div className="temp-chat-tag">
+                          <i className="fi fi-rr-incognito" aria-hidden="true" /> {t.tempTag}
+                        </div>
+                        {chat.length === 0 && (
+                          <div className="temp-chat-anon">{t.tempAnon}</div>
+                        )}
+                      </>
                     )}
                     {chat.map((m, i) => (
                       <Fragment key={i}>
