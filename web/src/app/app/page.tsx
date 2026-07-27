@@ -1207,6 +1207,18 @@ export default function AppHome() {
     persistMemory({ ...memory, [key]: { ...memEntry(key), perm: PERM_CYCLE[memEntry(key).perm] } });
   const cycleToOpen = (key: string) =>
     persistMemory({ ...memory, [key]: { ...memEntry(key), perm: "open" } });
+  // Build a one-line context of the facts the user marked "open" (and filled in),
+  // to hand ONE so it can personalise without asking. "ask"/"private" facts are
+  // NEVER included here — they stay on the device until explicitly shared.
+  const memoryContext = (): string | undefined => {
+    const open = MEMORY_CATALOG.filter(
+      (f) => memory[f.key]?.perm === "open" && memory[f.key]?.value?.trim(),
+    ).map((f) => `${f.en}: ${memory[f.key].value.trim()}`);
+    if (!open.length) return undefined;
+    return lang === "he"
+      ? `פרטים שהמשתמש שיתף איתך בחופשיות (השתמש בהם בטבעיות, בלי לבקש שוב): ${open.join("; ")}.`
+      : `Facts the user has shared openly (use them naturally, don't re-ask): ${open.join("; ")}.`;
+  };
   // Live quiz (the "Quiz teaching" capability). Null when no quiz is running.
   const [quiz, setQuiz] = useState<{
     questions: { q: string; options: string[]; answer: number; explain?: string }[];
@@ -2053,9 +2065,10 @@ export default function AppHome() {
     };
 
     try {
-      const extra = res.process
+      const processExtra = res.process
         ? `You have just opened a process for them: "${res.process.title}". Acknowledge it in one line and say you're on it.`
         : undefined;
+      const extra = [processExtra, memoryContext()].filter(Boolean).join(" ") || undefined;
       const messages: AiChatMessage[] = [
         { role: "system", content: oneSystemPrompt(lang, extra) },
         ...priorChat.slice(-8).map((m) => ({
@@ -2382,7 +2395,8 @@ export default function AppHome() {
     try {
       const done = focus ? focus.steps.filter((_, i) => isStepDone(focus, i)).length : 0;
       const total = focus ? focus.steps.length : 0;
-      const extra = `You are working on this specific process for them: "${activeProcess.title}" (${activeProcess.relation}${total ? `, ${done}/${total} steps done` : ""}). Keep the reply scoped to moving THIS process forward.`;
+      const scopeExtra = `You are working on this specific process for them: "${activeProcess.title}" (${activeProcess.relation}${total ? `, ${done}/${total} steps done` : ""}). Keep the reply scoped to moving THIS process forward.`;
+      const extra = [scopeExtra, memoryContext()].filter(Boolean).join(" ");
       const messages: AiChatMessage[] = [
         { role: "system", content: oneSystemPrompt(lang, extra) },
         ...priorChat.slice(-8).map((m) => ({
