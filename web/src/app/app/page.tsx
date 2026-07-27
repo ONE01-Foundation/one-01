@@ -21,6 +21,7 @@ import {
 import { interpret, type ChatMsg } from "@/lib/oneBrain";
 import { bizReply, openState, findBusiness } from "@/lib/bizBrain";
 import { invokeAiChat, oneSystemPrompt, type AiChatMessage } from "@/lib/aiChat";
+import { generateImage } from "@/lib/aiImage";
 import {
   ensureSession,
   saveUnits,
@@ -854,6 +855,7 @@ function UnitDetail({
   onDraftDiscard,
   onWorkStep,
   onAddConnection,
+  onCover,
 }: {
   p: Process;
   businesses: Business[];
@@ -869,6 +871,8 @@ function UnitDetail({
   onWorkStep: (p: Process, label: string) => void;
   /** "+ add connection" → ONE suggests relevant people/providers in the chat. */
   onAddConnection: (p: Process) => void;
+  /** Persist a generated cover image onto the unit (reusable stock). */
+  onCover?: (procId: string, url: string) => void;
 }) {
   const sources = unitSources(p);
   const he = lang === "he";
@@ -943,17 +947,32 @@ function UnitDetail({
 
   // Contextual cover — fetch a few Wikipedia images for this unit's topic and
   // cross-fade between whichever resolve. Silent + graceful: no band if none.
-  const [covers, setCovers] = useState<string[]>([]);
+  const [covers, setCovers] = useState<string[]>(p.coverImage ? [p.coverImage] : []);
   const [coverIdx, setCoverIdx] = useState(0);
   useEffect(() => {
     let alive = true;
+    // Already have a generated stock image? Use it, no work.
+    if (p.coverImage) {
+      setCovers([p.coverImage]);
+      setCoverIdx(0);
+      return;
+    }
     setCovers([]);
     setCoverIdx(0);
     (async () => {
-      // Named topics first (a "Krav Maga" / "Santorini" article photo); if the
-      // title is a generic action phrase Wikipedia can't match, fall back to a
-      // Wikimedia Commons search for the KIND of process, so there's always an
-      // on-topic cover.
+      // ONE draws the unit's cover: it asks the AI to GENERATE a clean, on-topic
+      // image (stored once as canonical "stock" and reused instantly next time).
+      // If image generation isn't available, fall back to a Wikipedia / Wikimedia
+      // photo so there's always a cover.
+      const topicKey = `unit:${(p.type ?? "").toLowerCase()}:${p.title.trim().toLowerCase()}`;
+      const genPrompt = `A clean, modern, minimal editorial cover image that visually represents the goal: "${p.title}". Calm, tasteful, magazine-quality. No text, no words, no letters, no logos, no watermark.`;
+      const gen = await generateImage(genPrompt, topicKey);
+      if (!alive) return;
+      if (gen) {
+        setCovers([gen]);
+        onCover?.(p.id, gen); // persist to the unit → becomes reusable stock
+        return;
+      }
       const wiki = (await Promise.all(unitImageTerms(p).map((tm) => wikiThumbnail(tm)))).filter(
         Boolean,
       ) as string[];
@@ -965,7 +984,10 @@ function UnitDetail({
     return () => {
       alive = false;
     };
-  }, [p.id, p.title, p.type]);
+    // onCover is a stable persist callback; keying on the unit's identity/cover
+    // is what should re-run generation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.id, p.title, p.type, p.coverImage]);
   useEffect(() => {
     if (covers.length < 2) return;
     const id = window.setInterval(() => setCoverIdx((i) => (i + 1) % covers.length), 5200);
@@ -5273,6 +5295,11 @@ export default function AppHome() {
                           ? "הצע לי אנשי קשר או ספקים רלוונטיים לתהליך הזה שאוכל להוסיף."
                           : "Suggest people or providers relevant to this process that I could add.",
                         proc,
+                      )
+                    }
+                    onCover={(procId, url) =>
+                      setUnits((list) =>
+                        list.map((u) => (u.id === procId ? { ...u, coverImage: url } : u)),
                       )
                     }
                   />

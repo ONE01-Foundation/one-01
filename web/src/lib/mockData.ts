@@ -109,6 +109,10 @@ export interface Process {
   chat?: { role: "user" | "one"; text: string; chips?: string[] }[];
   /** Outward drafts ONE has composed for this process — you review, edit, approve. */
   drafts?: UnitDraft[];
+  /** AI-generated cover image (stored as reusable stock), keyed to the topic. */
+  coverImage?: string;
+  /** Per-step AI-generated images, keyed by step index → stock image URL. */
+  stepImages?: Record<number, string>;
 }
 
 /**
