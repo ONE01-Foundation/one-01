@@ -449,6 +449,34 @@ const SOURCE_CATALOG: Source[] = [
   { key: "wikipedia", emoji: "📚", en: "Wikipedia", he: "ויקיפדיה", kind: "reference", host: "wikipedia.org" },
 ];
 
+// ── ONE's memory — the personal facts it holds, each with its own permission.
+//    This is selective disclosure: you decide per field whether ONE may use it
+//    freely, must ask first, or keep it private.
+interface MemoryFact {
+  key: string;
+  emoji: string;
+  en: string;
+  he: string;
+}
+const MEMORY_CATALOG: MemoryFact[] = [
+  { key: "name", emoji: "🪪", en: "Name", he: "שם" },
+  { key: "age", emoji: "🎂", en: "Age", he: "גיל" },
+  { key: "gender", emoji: "🧑", en: "Gender", he: "מין" },
+  { key: "address", emoji: "🏠", en: "Address", he: "כתובת" },
+  { key: "phone", emoji: "📱", en: "Phone", he: "טלפון" },
+  { key: "email", emoji: "✉️", en: "Email", he: "אימייל" },
+  { key: "height", emoji: "📏", en: "Height", he: "גובה" },
+  { key: "weight", emoji: "⚖️", en: "Weight", he: "משקל" },
+  { key: "idnum", emoji: "🆔", en: "ID number", he: "תעודת זהות" },
+];
+type MemPerm = "open" | "ask" | "private";
+const PERM_CYCLE: Record<MemPerm, MemPerm> = { open: "ask", ask: "private", private: "open" };
+const PERM_DOT: Record<MemPerm, string> = { open: "🟢", ask: "🟡", private: "🔴" };
+interface MemEntry {
+  value: string;
+  perm: MemPerm;
+}
+
 // Best-effort Wikipedia thumbnail for a topic — an allowed open-reference image
 // source. The REST summary API sends CORS headers, so this works from the
 // browser. Returns null on any miss so callers can silently skip the image.
@@ -701,6 +729,14 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     addSource: "Add a source",
     addSourceHint: "Adding channels is role-based — coming soon",
     capNeedRun: "Switch it on",
+    memTitle: "Memory",
+    memorySub: "What ONE knows — you set who each fact is shared with",
+    memAddValue: "Add",
+    permOpen: "Open",
+    permAsk: "Ask first",
+    permPrivate: "Private",
+    memPulled: "Pulled from your memory",
+    memShare: "Share for this",
     tempTag: "Temporary chat · nothing is saved",
     tempAnon: "Off the record. Ask me anything — I won't keep this.",
     newChat: "New chat",
@@ -814,6 +850,14 @@ const PRODUCT_UI: Record<UILang, Record<string, string>> = {
     addSource: "הוסף מקור",
     addSourceHint: "הוספת ערוצים היא לפי הרשאות — בקרוב",
     capNeedRun: "הפעל את זה",
+    memTitle: "זיכרון",
+    memorySub: "מה ONE יודע — אתה קובע עם מי כל פרט משותף",
+    memAddValue: "הוסף",
+    permOpen: "פתוח",
+    permAsk: "לשאול קודם",
+    permPrivate: "פרטי",
+    memPulled: "נשלף מהזיכרון שלך",
+    memShare: "שתף לצורך זה",
     tempTag: "צ'אט זמני · שום דבר לא נשמר",
     tempAnon: "בלי לשמור. שאל אותי כל דבר — זה לא יישאר.",
     newChat: "צ'אט חדש",
@@ -1137,6 +1181,32 @@ export default function AppHome() {
   };
   const toggleCap = (key: string) =>
     persistCaps(caps.includes(key) ? caps.filter((k) => k !== key) : [...caps, key]);
+  // ONE's memory — personal facts + a per-field permission (open / ask / private).
+  // Persisted locally; the user fills the values (ONE never invents them).
+  const [memory, setMemory] = useState<Record<string, MemEntry>>({});
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("one_memory");
+      if (raw) setMemory(JSON.parse(raw));
+    } catch {
+      /* first run / blocked storage */
+    }
+  }, []);
+  const persistMemory = (next: Record<string, MemEntry>) => {
+    setMemory(next);
+    try {
+      localStorage.setItem("one_memory", JSON.stringify(next));
+    } catch {
+      /* storage blocked */
+    }
+  };
+  const memEntry = (key: string): MemEntry => memory[key] ?? { value: "", perm: "ask" };
+  const setMemoryValue = (key: string, value: string) =>
+    persistMemory({ ...memory, [key]: { ...memEntry(key), value } });
+  const cycleMemoryPerm = (key: string) =>
+    persistMemory({ ...memory, [key]: { ...memEntry(key), perm: PERM_CYCLE[memEntry(key).perm] } });
+  const cycleToOpen = (key: string) =>
+    persistMemory({ ...memory, [key]: { ...memEntry(key), perm: "open" } });
   // Live quiz (the "Quiz teaching" capability). Null when no quiz is running.
   const [quiz, setQuiz] = useState<{
     questions: { q: string; options: string[]; answer: number; explain?: string }[];
@@ -1622,8 +1692,8 @@ export default function AppHome() {
     try {
       const he = lang === "he";
       const sys = he
-        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."]} — title=שם תהליך קצר וברור (2‑4 מילים) שמתאר את המטרה, emoji=אימוג\'י מתאים אחד, 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, 2 עד 3 מדדים חשובים, ו‑2 עד 3 פעולות מהירות קצרות. הכול בעברית. בלי טקסט נוסף ובלי code fences.'
-        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."]} — title=a short, clear process name (2-4 words) describing the goal, emoji=one fitting emoji, 4 to 6 concrete time-ordered steps, 2 to 3 key metrics, and 2 to 3 short quick-action labels. No prose, no code fences.';
+        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."],"needs":["address","phone"]} — title=שם תהליך קצר וברור (2‑4 מילים) שמתאר את המטרה, emoji=אימוג\'י מתאים אחד, 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, 2 עד 3 מדדים חשובים, 2 עד 3 פעולות מהירות קצרות, ו‑needs=אילו פרטים אישיים התהליך צריך מתוך: name,age,gender,address,phone,email,height,weight,idnum (רק מה שבאמת רלוונטי, יכול להיות ריק). הכול בעברית חוץ מ‑needs. בלי טקסט נוסף ובלי code fences.'
+        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."],"needs":["address","phone"]} — title=a short, clear process name (2-4 words) describing the goal, emoji=one fitting emoji, 4 to 6 concrete time-ordered steps, 2 to 3 key metrics, 2 to 3 short quick-action labels, and needs=which personal facts this process needs, from: name,age,gender,address,phone,email,height,weight,idnum (only what is genuinely relevant, can be empty). No prose, no code fences.';
       const raw = await invokeAiChat(
         [
           { role: "system", content: sys },
@@ -1692,6 +1762,39 @@ export default function AppHome() {
             ]
           : c,
       );
+      // Memory pull. ONE looks at the personal facts this process needs and that
+      // you've actually filled in: "open" facts it uses right away and tells you
+      // it did; "ask" facts it won't touch until you tap "Share for this".
+      // (Private facts are never mentioned.) Nothing leaves the device here —
+      // this is the selective-disclosure model, in miniature.
+      const needs: string[] = Array.isArray(parsed.needs)
+        ? parsed.needs.filter((k: unknown): k is string => typeof k === "string")
+        : [];
+      const wanted = needs
+        .map((k) => MEMORY_CATALOG.find((f) => f.key === k))
+        .filter((f): f is MemoryFact => !!f && !!memory[f.key]?.value?.trim());
+      const pulled = wanted.filter((f) => memory[f.key]?.perm === "open");
+      const toAsk = wanted.filter((f) => memory[f.key]?.perm === "ask");
+      if (pulled.length) {
+        const listing = pulled.map((f) => `${f.emoji} ${he ? f.he : f.en}`).join(he ? "، " : ", ");
+        setChat((c) => [...c, { role: "one", text: `🧠 ${t.memPulled}: ${listing}` }]);
+      }
+      if (toAsk.length) {
+        setChat((c) => [
+          ...c,
+          {
+            role: "one",
+            text: he
+              ? `לתהליך הזה כדאי גם: ${toAsk.map((f) => `${f.emoji} ${f.he}`).join("، ")}. לשתף?`
+              : `This one could also use: ${toAsk.map((f) => `${f.emoji} ${f.en}`).join(", ")}. Share them?`,
+            actions: toAsk.map((f) => ({
+              label: `${f.emoji} ${t.memShare}`,
+              kind: "shareMem" as const,
+              mem: f.key,
+            })),
+          },
+        ]);
+      }
     } catch {
       /* Any failure (offline, bad JSON) — keep the template plan. */
     }
@@ -1805,9 +1908,10 @@ export default function AppHome() {
   // Run an action chip from a ONE message (enable a capability, or upgrade).
   const runChatAction = (a: {
     label: string;
-    kind: "enableCap" | "upgrade";
+    kind: "enableCap" | "upgrade" | "shareMem";
     cap?: string;
     run?: string;
+    mem?: string;
   }) => {
     if (a.kind === "upgrade") {
       setOpenSheet("subscription");
@@ -1821,6 +1925,24 @@ export default function AppHome() {
         { role: "one", text: lang === "he" ? `✅ ״${name}״ פעילה עכשיו.` : `✅ “${name}” is on now.` },
       ]);
       if (a.cap === "quiz" && a.run) void runQuiz(a.run);
+      return;
+    }
+    // Share a "ask-first" memory fact for this process — flip it to open so ONE
+    // can use it now. The value stays local; only the permission changes.
+    if (a.kind === "shareMem" && a.mem) {
+      const fact = MEMORY_CATALOG.find((f) => f.key === a.mem);
+      cycleToOpen(a.mem);
+      const label = fact ? (lang === "he" ? fact.he : fact.en) : a.mem;
+      setChat((c) => [
+        ...c,
+        {
+          role: "one",
+          text:
+            lang === "he"
+              ? `✅ ${fact?.emoji ?? ""} ${label} — אשתמש בזה לתהליך הזה.`
+              : `✅ ${fact?.emoji ?? ""} ${label} — I'll use that for this one.`,
+        },
+      ]);
     }
   };
 
@@ -2951,6 +3073,43 @@ export default function AppHome() {
                         >
                           + {t.addCapability}
                         </button>
+                      </div>
+
+                      {/* Memory — personal facts as tiles; each has its own
+                          permission (open / ask / private) you cycle by tapping. */}
+                      <div className="sheet-section">
+                        <div className="prof-sec-head">
+                          <h4>{t.memory}</h4>
+                          <span className="prof-sec-sub">{t.memorySub}</span>
+                        </div>
+                        <div className="mem-grid">
+                          {MEMORY_CATALOG.map((f) => {
+                            const e = memEntry(f.key);
+                            const permLabel =
+                              e.perm === "open" ? t.permOpen : e.perm === "ask" ? t.permAsk : t.permPrivate;
+                            return (
+                              <div className="mem-tile" key={f.key}>
+                                <span className="mem-ico" aria-hidden="true">{f.emoji}</span>
+                                <span className="mem-body">
+                                  <span className="mem-label">{lang === "he" ? f.he : f.en}</span>
+                                  <input
+                                    className="mem-input"
+                                    value={e.value}
+                                    placeholder={t.memAddValue}
+                                    onChange={(ev) => setMemoryValue(f.key, ev.target.value)}
+                                  />
+                                </span>
+                                <button
+                                  className={`mem-perm ${e.perm}`}
+                                  onClick={() => cycleMemoryPerm(f.key)}
+                                  title={permLabel}
+                                >
+                                  {PERM_DOT[e.perm]} {permLabel}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       <div className="sheet-section">
