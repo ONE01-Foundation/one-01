@@ -5624,6 +5624,16 @@ footer {
   border: 1px solid var(--p-line);
   border-bottom-left-radius: 6px;
 }
+/* An illustrative image inside a chat bubble (e.g. a quiz topic from Wikipedia). */
+.chat-img {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
 .chat-msg.thinking {
   display: flex;
   gap: 5px;

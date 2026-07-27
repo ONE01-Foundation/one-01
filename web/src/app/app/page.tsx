@@ -404,6 +404,26 @@ const SOURCE_CATALOG: Source[] = [
   { key: "wikipedia", emoji: "📚", en: "Wikipedia", he: "ויקיפדיה", kind: "reference", host: "wikipedia.org" },
 ];
 
+// Best-effort Wikipedia thumbnail for a topic — an allowed open-reference image
+// source. The REST summary API sends CORS headers, so this works from the
+// browser. Returns null on any miss so callers can silently skip the image.
+async function wikiThumbnail(title: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      { headers: { accept: "application/json" } },
+    );
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      thumbnail?: { source?: string };
+      originalimage?: { source?: string };
+    };
+    return j.thumbnail?.source ?? j.originalimage?.source ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Hebrew for the details card — section headers, plus lookups that translate the
 // common machine-written metric labels / values / quick-actions so a Hebrew card
 // doesn't read half-English. Unknown terms fall back to their original text.
@@ -1629,8 +1649,8 @@ export default function AppHome() {
     const he = lang === "he";
     try {
       const sys = he
-        ? 'צור מבחן אמריקאי קצר על הנושא. החזר JSON תקין בלבד: {"questions":[{"q":"...","options":["","","",""],"answer":0,"explain":"..."}]} — 3 שאלות, 4 אפשרויות לכל אחת, answer=אינדקס התשובה הנכונה (0‑3), explain=משפט הסבר קצר. הכול בעברית. בלי code fences.'
-        : 'Create a short multiple-choice quiz on the topic. Return ONLY valid JSON: {"questions":[{"q":"...","options":["","","",""],"answer":0,"explain":"..."}]} — 3 questions, 4 options each, answer=index of the correct option (0-3), explain=a short explanation. No code fences.';
+        ? 'צור מבחן אמריקאי קצר על הנושא. החזר JSON תקין בלבד: {"topic":"...","questions":[{"q":"...","options":["","","",""],"answer":0,"explain":"..."}]} — topic=שם הנושא באנגלית בכמה מילים לחיפוש בוויקיפדיה, 3 שאלות, 4 אפשרויות לכל אחת, answer=אינדקס התשובה הנכונה (0‑3), explain=משפט הסבר קצר. השאלות בעברית. בלי code fences.'
+        : 'Create a short multiple-choice quiz on the topic. Return ONLY valid JSON: {"topic":"...","questions":[{"q":"...","options":["","","",""],"answer":0,"explain":"..."}]} — topic=the subject as a few-word English Wikipedia title, 3 questions, 4 options each, answer=index of the correct option (0-3), explain=a short explanation. No code fences.';
       const raw = await invokeAiChat(
         [
           { role: "system", content: sys },
@@ -1662,12 +1682,17 @@ export default function AppHome() {
       }
       setQuiz({ questions, idx: 0, score: 0 });
       const q0 = questions[0];
+      // Pull an illustrative image for the topic from Wikipedia (an allowed
+      // open-reference source). Best-effort — the quiz shows fine without it.
+      const topicTitle = typeof parsed?.topic === "string" && parsed.topic.trim() ? parsed.topic.trim() : topic;
+      const img = await wikiThumbnail(topicTitle);
       setChat((c) => [
         ...c,
         {
           role: "one",
           text: `${he ? "שאלה" : "Question"} 1/${questions.length}: ${q0.q}`,
           quiz: { options: q0.options, answer: q0.answer },
+          image: img ?? undefined,
         },
       ]);
     } catch {
@@ -3249,7 +3274,13 @@ export default function AppHome() {
                     )}
                     {chat.map((m, i) => (
                       <Fragment key={i}>
-                        <div className={`chat-msg ${m.role}`}>{m.text}</div>
+                        <div className={`chat-msg ${m.role}`}>
+                          {m.image && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img className="chat-img" src={m.image} alt="" loading="lazy" />
+                          )}
+                          {m.text}
+                        </div>
                         {m.quiz ? (
                           <div className="chat-chips quiz-chips">
                             {m.quiz.options.map((o, oi) => (

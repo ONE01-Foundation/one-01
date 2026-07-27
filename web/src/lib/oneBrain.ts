@@ -23,6 +23,8 @@ export type ChatMsg = {
   chips?: string[];
   /** A multiple-choice quiz question — tapping an option answers it. */
   quiz?: { options: string[]; answer: number };
+  /** An illustrative image URL (e.g. a Wikipedia thumbnail) shown in the bubble. */
+  image?: string;
 };
 
 export interface Outreach {
