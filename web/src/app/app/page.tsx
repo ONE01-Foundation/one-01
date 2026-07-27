@@ -1476,6 +1476,22 @@ export default function AppHome() {
             : u,
         ),
       );
+      // Reflect back what ONE understood, and invite a confirm / tweak — so a
+      // created process reads as "here's my plan, approve it" not a black box.
+      setChat((c) =>
+        c.length
+          ? [
+              ...c,
+              {
+                role: "one",
+                text: he
+                  ? `הכנתי תכנית ל"${proc.title}": ${steps.length} שלבים, מתחילים ב"${steps[0]}". רוצה לשנות משהו?`
+                  : `I've drafted a plan for "${proc.title}": ${steps.length} steps, starting with "${steps[0]}". Want to change anything?`,
+                chips: he ? ["מעולה, קדימה", "שנה משהו"] : ["Looks good", "Change something"],
+              },
+            ]
+          : c,
+      );
     } catch {
       /* Any failure (offline, bad JSON) — keep the template plan. */
     }
