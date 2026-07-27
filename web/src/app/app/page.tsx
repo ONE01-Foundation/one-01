@@ -1114,17 +1114,25 @@ export default function AppHome() {
   // you resolve something (confirm a booking, mark paid) and speaks in whichever
   // ONE you are right now (personal vs business).
   const broadcastLines = useMemo(() => {
+    const he = lang === "he";
+    // Time-aware greeting — ONE knows what part of the day it is.
+    const hour = now ? now.getHours() : 9;
+    const greetEn = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+    const greetHe = hour < 5 ? "לילה טוב" : hour < 12 ? "בוקר טוב" : hour < 18 ? "צהריים טובים" : "ערב טוב";
+    const greet = `${he ? greetHe : greetEn}, ${identity.name}.`;
     const waiting = processes.filter((p) => p.unread > 0);
     if (waiting.length === 0) {
       return [
-        `You're all caught up, ${identity.name}.`,
-        "Tell me a new goal and I'll start a process.",
+        greet,
+        he ? "אין דבר שדורש אותך כרגע — ספרו לי מטרה חדשה." : "Nothing needs you right now — tell me a new goal.",
       ];
     }
-    const header = `${waiting.length} ${waiting.length === 1 ? "thing needs" : "things need"} you, ${identity.name}.`;
+    const header = he
+      ? `${greet} ${waiting.length} ${waiting.length === 1 ? "דבר מחכה" : "דברים מחכים"} לך.`
+      : `${greet} ${waiting.length} ${waiting.length === 1 ? "thing needs you" : "things need you"}.`;
     const items = waiting.slice(0, 4).map((p) => p.nextAction ?? p.summary);
     return [header, ...items];
-  }, [processes, identity.name]);
+  }, [processes, identity.name, now, lang]);
 
   // The live process behind the open sheet, so edits show immediately.
   const activeLive = activeProcess ? units.find((u) => u.id === activeProcess.id) ?? activeProcess : null;
@@ -1840,9 +1848,21 @@ export default function AppHome() {
                   key={p.id}
                   className="drawer-row drawer-process"
                   onClick={() => openUnit(p)}
+                  title={`${p.title} · ${p.relation}`}
                 >
                   <span className="drawer-process-emoji">{p.emoji}</span>
-                  <span className="drawer-process-title">{p.title}</span>
+                  <span className="drawer-process-main">
+                    <span className="drawer-process-title">{p.title}</span>
+                    <span className="drawer-process-sub">
+                      {p.relation}
+                      {p.steps.length > 0 && (
+                        <>
+                          {" · "}
+                          {p.steps.filter((_, i) => isStepDone(p, i)).length}/{p.steps.length}
+                        </>
+                      )}
+                    </span>
+                  </span>
                   {p.unread > 0 && <span className="drawer-process-badge">{p.unread}</span>}
                 </button>
               ))}
