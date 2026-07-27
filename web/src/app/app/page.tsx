@@ -1133,6 +1133,28 @@ function worldOf(category: string): WorldKey {
   if (/(restaurant|cafe|food|bakery|cater|grocery|deli|coffee)/.test(c)) return "food";
   return "community";
 }
+// Each world is consumer-facing, business-facing, or both. A business profile
+// shouldn't be shown consumer worlds like Health — different hat, different net.
+type WorldScope = "consumer" | "business" | "both";
+const WORLD_SCOPE: Record<WorldKey, WorldScope> = {
+  health: "consumer",
+  learning: "consumer",
+  leisure: "consumer",
+  food: "consumer",
+  finance: "both",
+  home: "both",
+  community: "both",
+};
+// The lens each profile kind sees the app through — which Global worlds show,
+// and how "home" reads. One source of truth; the UI reads from it.
+const PROFILE_LENS: Record<
+  "personal" | "business" | "supplier",
+  { worldScopes: WorldScope[]; homeMode: "compose" | "inbox" }
+> = {
+  personal: { worldScopes: ["consumer", "both"], homeMode: "compose" },
+  business: { worldScopes: ["business", "both"], homeMode: "compose" },
+  supplier: { worldScopes: ["business", "both"], homeMode: "inbox" },
+};
 
 // When ONE's reply turns to scheduling, offer tappable quick-replies (days or
 // times) so the chat is interactive — pick instead of type. Bilingual heuristic.
@@ -1218,6 +1240,11 @@ export default function AppHome() {
   // popups. A segmented toggle flips Home ⇄ Global; the drawer opens Profile.
   const [space, setSpace] = useState<"home" | "global" | "profile" | "connections">("home");
   const [world, setWorld] = useState<"all" | WorldKey>("all");
+  // Switching profile resets the Global world tab — a consumer tab shouldn't
+  // linger when you flip to a business hat that can't see it.
+  useEffect(() => {
+    setWorld("all");
+  }, [activeIdentityId]);
   // Appearance + language. Persisted; dark defaults to the OS preference.
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [lang, setLang] = useState<UILang>("en");
@@ -3145,9 +3172,14 @@ export default function AppHome() {
     .slice(0, 8)
     .map((b, i) => `${b.emoji}  ${b.name} · ${feedActs[i % feedActs.length]}`);
   const feedLine = feedList.length ? feedList[feedIdx % feedList.length] : "";
-  // Global filtered by the selected world.
-  const worldBiz =
-    world === "all" ? businesses : businesses.filter((b) => worldOf(b.category) === world);
+  // The active profile's lens — which Global worlds this hat is allowed to see.
+  const lens = PROFILE_LENS[identity.kind ?? "personal"];
+  const allowedWorlds = WORLD_KEYS.filter((k) => lens.worldScopes.includes(WORLD_SCOPE[k]));
+  const worldAllowed = (b: Business) => allowedWorlds.includes(worldOf(b.category));
+  // Global filtered by profile lens first, then by the selected world tab.
+  const worldBiz = (world === "all" ? businesses : businesses.filter((b) => worldOf(b.category) === world)).filter(
+    worldAllowed,
+  );
   // Updates surface (scroll down) — processes, the ones needing you first.
   const updatesList = [...processes].sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0));
   // Global feed sections — requests waiting on you and news across the network.
@@ -3991,7 +4023,7 @@ export default function AppHome() {
                             >
                               {t.worldAll}
                             </button>
-                            {WORLD_KEYS.map((k) => (
+                            {allowedWorlds.map((k) => (
                               <button
                                 key={k}
                                 className={`world-chip${world === k ? " is-active" : ""}`}
