@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Orb } from "@/components/Orb";
 import { OneWord } from "@/components/Logo";
@@ -691,6 +691,23 @@ function worldOf(category: string): WorldKey {
   return "community";
 }
 
+// When ONE's reply turns to scheduling, offer tappable quick-replies (days or
+// times) so the chat is interactive — pick instead of type. Bilingual heuristic.
+function suggestChips(reply: string, lang: "en" | "he"): string[] | undefined {
+  const he = lang === "he";
+  const scheduling =
+    /(when|what time|which day|what day|schedule|appointment|book|slot|available|availab|prefer|remind|deadline|due|מתי|באיזו שעה|איזה יום|לתאם|תור|לקבוע|פנוי|מעדיף|תזכורת|דדליין|תאריך יעד)/i;
+  if (!scheduling.test(reply)) return undefined;
+  const timeSignal = /(what time|hour|morning|afternoon|evening|באיזו שעה|שעה|בוקר|צהריים|ערב)/i.test(reply);
+  const daySignal = /(which day|what day|date|day\b|איזה יום|תאריך|יום)/i.test(reply);
+  if (timeSignal && !daySignal) {
+    return he ? ["בוקר", "צהריים", "ערב"] : ["Morning", "Afternoon", "Evening"];
+  }
+  return he
+    ? ["היום", "מחר", "השבוע", "אבחר תאריך"]
+    : ["Today", "Tomorrow", "This week", "Pick a date"];
+}
+
 export default function AppHome() {
   const [plan, setPlan] = useState<PlanTier>("free");
   const [activeIdentityId, setActiveIdentityId] = useState(IDENTITIES[0].id);
@@ -1324,7 +1341,7 @@ export default function AppHome() {
       ];
       const reply = await invokeAiChat(messages, { maxTokens: 220 });
       setThinking(false);
-      setChat((c) => [...c, { role: "one", text: reply }]);
+      setChat((c) => [...c, { role: "one", text: reply, chips: suggestChips(reply, lang) }]);
       applyStructured();
     } catch {
       // Offline / unconfigured — fall back to the local brain's canned lines.
@@ -1455,9 +1472,9 @@ export default function AppHome() {
   };
 
   // Chat scoped to the open unit — every reply's changes land on the card beside.
-  const sendToUnit = async () => {
+  const sendToUnit = async (override?: string) => {
     if (!activeProcess) return;
-    const text = unitDraft.trim();
+    const text = (override ?? unitDraft).trim();
     if (!text) return;
     const priorChat = unitChat; // snapshot the transcript for the AI, pre-append
     setUnitChat((c) => [...c, { role: "user", text }]);
@@ -1494,7 +1511,7 @@ export default function AppHome() {
       ];
       const reply = await invokeAiChat(messages, { maxTokens: 200 });
       setUnitThinking(false);
-      setUnitChat((c) => [...c, { role: "one", text: reply }]);
+      setUnitChat((c) => [...c, { role: "one", text: reply, chips: suggestChips(reply, lang) }]);
       applyStructured();
     } catch {
       window.setTimeout(() => {
@@ -1855,9 +1872,18 @@ export default function AppHome() {
                   </div>
                   <div className="unit-chat-scroll">
                     {unitChat.map((m, i) => (
-                      <div key={i} className={`chat-msg ${m.role}`}>
-                        {m.text}
-                      </div>
+                      <Fragment key={i}>
+                        <div className={`chat-msg ${m.role}`}>{m.text}</div>
+                        {m.chips && m.chips.length > 0 && (
+                          <div className="chat-chips">
+                            {m.chips.map((c) => (
+                              <button key={c} className="chat-chip" onClick={() => sendToUnit(c)}>
+                                {c}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </Fragment>
                     ))}
                     {unitThinking && (
                       <div className="unit-status" aria-live="polite">
@@ -2232,9 +2258,18 @@ export default function AppHome() {
                       </div>
                     )}
                     {chat.map((m, i) => (
-                      <div key={i} className={`chat-msg ${m.role}`}>
-                        {m.text}
-                      </div>
+                      <Fragment key={i}>
+                        <div className={`chat-msg ${m.role}`}>{m.text}</div>
+                        {m.chips && m.chips.length > 0 && (
+                          <div className="chat-chips">
+                            {m.chips.map((c) => (
+                              <button key={c} className="chat-chip" onClick={() => send(c)}>
+                                {c}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </Fragment>
                     ))}
                     {thinking && (
                       <div className="unit-status" aria-live="polite">

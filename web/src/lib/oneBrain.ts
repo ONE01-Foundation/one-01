@@ -16,7 +16,12 @@
 
 import type { Process, Metric } from "./mockData";
 
-export type ChatMsg = { role: "user" | "one"; text: string };
+export type ChatMsg = {
+  role: "user" | "one";
+  text: string;
+  /** Optional quick-reply chips ONE offers — tap to answer (times, days, …). */
+  chips?: string[];
+};
 
 export interface Outreach {
   /** How long until the business's ONE "replies". */

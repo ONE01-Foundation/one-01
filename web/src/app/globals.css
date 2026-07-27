@@ -4444,6 +4444,34 @@ footer {
   animation: none;
   transform: scaleY(0.14);
 }
+
+/* Interactive quick-reply chips ONE offers in chat (times, days, choices). */
+.chat-chips {
+  align-self: flex-start;
+  max-width: 88%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -2px 0 6px;
+  animation: feedIn 300ms ease;
+}
+.chat-chip {
+  padding: 7px 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 999px;
+  background: var(--p-surface);
+  color: var(--p-text);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 120ms ease;
+}
+.chat-chip:hover {
+  border-color: color-mix(in srgb, var(--p-text) 30%, transparent);
+  background: color-mix(in srgb, var(--p-text) 5%, var(--p-surface));
+  transform: translateY(-1px);
+}
 /* The broadcast, right above the input. A fixed two-line box, BOTTOM-aligned so
    the line always sits just above the input; a second line grows upward and the
    input never moves. */
