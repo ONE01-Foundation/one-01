@@ -332,6 +332,65 @@ function AppInput({
   );
 }
 
+// Hebrew for the details card — section headers, plus lookups that translate the
+// common machine-written metric labels / values / quick-actions so a Hebrew card
+// doesn't read half-English. Unknown terms fall back to their original text.
+const UNIT_SECTION: Record<"en" | "he", Record<string, string>> = {
+  en: {
+    nextSteps: "Next steps",
+    connections: "Connections",
+    insights: "Insights",
+    decisions: "Decisions",
+    timeline: "Timeline",
+    sources: "Sources",
+  },
+  he: {
+    nextSteps: "השלבים הבאים",
+    connections: "קשרים",
+    insights: "תובנות",
+    decisions: "החלטות",
+    timeline: "ציר זמן",
+    sources: "מקורות",
+  },
+};
+const METRIC_LABEL_HE: Record<string, string> = {
+  when: "מתי",
+  status: "סטטוס",
+  provider: "נותן השירות",
+  service: "שירות",
+  documents: "מסמכים",
+  fee: "עלות",
+  cost: "עלות",
+  appointment: "תור",
+  deadline: "מועד אחרון",
+  contact: "איש קשר",
+  location: "מיקום",
+  budget: "תקציב",
+  date: "תאריך",
+  time: "שעה",
+  people: "אנשים",
+};
+const VALUE_HE: Record<string, string> = {
+  "in progress": "בתהליך",
+  confirmed: "מאושר",
+  paid: "שולם",
+  pending: "ממתין",
+  done: "הושלם",
+  booked: "נקבע",
+  "not started": "טרם התחיל",
+};
+const ACTION_HE: Record<string, string> = {
+  "book appointment": "קבע תור",
+  "upload a document": "העלה מסמך",
+  "add the fee": "הוסף עלות",
+  reschedule: "שנה מועד",
+  "message provider": "שלח הודעה",
+  "message client": "הודעה ללקוח",
+  "add to calendar": "הוסף ליומן",
+  "confirm booking": "אשר הזמנה",
+  "propose another time": "הצע זמן אחר",
+};
+
 function UnitDetail({
   p,
   businesses,
@@ -339,6 +398,7 @@ function UnitDetail({
   toggleStep,
   runQuickAction,
   openBiz,
+  lang,
 }: {
   p: Process;
   businesses: Business[];
@@ -346,8 +406,14 @@ function UnitDetail({
   toggleStep: (p: Process, i: number) => void;
   runQuickAction: (p: Process, label: string) => void;
   openBiz: (id: string) => void;
+  lang: "en" | "he";
 }) {
   const sources = unitSources(p);
+  const he = lang === "he";
+  const S = UNIT_SECTION[lang];
+  const locMetric = (s: string) => (he ? METRIC_LABEL_HE[s.trim().toLowerCase()] ?? s : s);
+  const locValue = (s: string) => (he ? VALUE_HE[s.trim().toLowerCase()] ?? s : s);
+  const locAction = (s: string) => (he ? ACTION_HE[s.trim().toLowerCase()] ?? s : s);
   return (
     <div className="unit-detail-body">
       {p.nextAction && <div className="unit-pulse unit-detail-pulse">{p.nextAction}</div>}
@@ -356,8 +422,8 @@ function UnitDetail({
         <div className="metric-grid">
           {p.metrics.map((m) => (
             <div className="metric" key={m.label}>
-              <div className="metric-value">{m.value}</div>
-              <div className="metric-label">{m.label}</div>
+              <div className="metric-value">{locValue(m.value)}</div>
+              <div className="metric-label">{locMetric(m.label)}</div>
             </div>
           ))}
         </div>
@@ -367,14 +433,14 @@ function UnitDetail({
         <div className="qa-row">
           {p.quickActions.map((a) => (
             <button key={a} className="qa-btn" onClick={() => runQuickAction(p, a)}>
-              {a}
+              {locAction(a)}
             </button>
           ))}
         </div>
       )}
 
       <div className="sheet-section">
-        <h4>Next steps</h4>
+        <h4>{S.nextSteps}</h4>
         {p.steps.map((s, i) => {
           const done = isStepDone(p, i);
           return (
@@ -392,7 +458,7 @@ function UnitDetail({
       </div>
 
       <div className="sheet-section">
-        <h4>Connections</h4>
+        <h4>{S.connections}</h4>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {(p.people.length ? p.people : [p.relation]).filter(Boolean).map((person) => {
             const b = businesses.find(
@@ -420,7 +486,7 @@ function UnitDetail({
 
       {p.insights && p.insights.length > 0 && (
         <div className="sheet-section">
-          <h4>Insights</h4>
+          <h4>{S.insights}</h4>
           <div className="insight-list">
             {p.insights.map((t, i) => (
               <div className="insight" key={i}>
@@ -433,7 +499,7 @@ function UnitDetail({
 
       {p.decisions.length > 0 && (
         <div className="sheet-section">
-          <h4>Decisions</h4>
+          <h4>{S.decisions}</h4>
           {p.decisions.map((d) => (
             <div className="sheet-row" key={d}>
               <span className="r-label" style={{ fontWeight: 500 }}>
@@ -445,7 +511,7 @@ function UnitDetail({
       )}
 
       <div className="sheet-section">
-        <h4>Timeline</h4>
+        <h4>{S.timeline}</h4>
         {p.timeline.map((ev, i) => (
           <div className="timeline-item" key={i}>
             <span className="timeline-dot" />
@@ -458,7 +524,7 @@ function UnitDetail({
 
       {sources.length > 0 && (
         <div className="sheet-section">
-          <h4>Sources</h4>
+          <h4>{S.sources}</h4>
           <div className="source-list">
             {sources.map((s) => (
               <div className="source-item" key={s.label}>
@@ -1366,8 +1432,8 @@ export default function AppHome() {
     try {
       const he = lang === "he";
       const sys = he
-        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"steps":["...","..."],"metrics":[{"label":"...","value":"..."}]} — 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, ו‑2 עד 3 מדדים חשובים. הכול בעברית. בלי טקסט נוסף ובלי code fences.'
-        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"steps":["...","..."],"metrics":[{"label":"...","value":"..."}]} — 4 to 6 concrete, time-ordered steps and 2 to 3 key metrics. No prose, no code fences.';
+        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."]} — 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, 2 עד 3 מדדים חשובים, ו‑2 עד 3 פעולות מהירות קצרות. הכול בעברית. בלי טקסט נוסף ובלי code fences.'
+        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."]} — 4 to 6 concrete, time-ordered steps, 2 to 3 key metrics, and 2 to 3 short quick-action labels. No prose, no code fences.';
       const raw = await invokeAiChat(
         [
           { role: "system", content: sys },
@@ -1394,6 +1460,9 @@ export default function AppHome() {
             )
             .slice(0, 4)
         : [];
+      const quickActions: string[] = Array.isArray(parsed.quickActions)
+        ? parsed.quickActions.filter((a: unknown) => typeof a === "string" && a.trim()).slice(0, 4)
+        : [];
       setUnits((list) =>
         list.map((u) =>
           u.id === proc.id
@@ -1402,6 +1471,7 @@ export default function AppHome() {
                 steps: steps.map((label) => ({ label, done: false })),
                 progress: { done: 0, total: steps.length },
                 metrics: metrics.length ? metrics : u.metrics,
+                quickActions: quickActions.length ? quickActions : u.quickActions,
               }
             : u,
         ),
@@ -1456,7 +1526,15 @@ export default function AppHome() {
         setFocusId(res.process.id);
       }
       if (res.broadcast) setLiveBroadcast(res.broadcast);
-      if (res.outreach && res.process && !outreachDoneRef.current.has(res.process.id)) {
+      // Only let a provider "get back to me" when the process is tied to a REAL
+      // connected business. Otherwise the reply is fabricated ("two venues got
+      // back to me…") and reads as fake — so we suppress it.
+      if (
+        res.outreach &&
+        res.process &&
+        res.process.businessId &&
+        !outreachDoneRef.current.has(res.process.id)
+      ) {
         const targetId = res.process.id;
         const o = res.outreach;
         outreachDoneRef.current.add(targetId);
@@ -2419,6 +2497,7 @@ export default function AppHome() {
                     toggleStep={toggleStep}
                     runQuickAction={runQuickAction}
                     openBiz={openBiz}
+                    lang={lang}
                   />
                 </aside>
               </div>
