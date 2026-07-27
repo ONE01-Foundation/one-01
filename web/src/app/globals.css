@@ -5958,6 +5958,84 @@ button.conn-card:hover {
     transform: translateY(0);
   }
 }
+/* ── Global Units library — searchable, forkable canonical units ──────────── */
+.gunit-search {
+  margin: 4px 0 10px;
+}
+.gunit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.gunit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  background: var(--p-surface);
+}
+.gunit-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+.gunit-emoji {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  background: var(--p-bg);
+  flex: 0 0 auto;
+}
+.gunit-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.gunit-name {
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--p-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gunit-meta {
+  font-size: 12px;
+  color: var(--p-text-3);
+}
+.gunit-pull {
+  flex: 0 0 auto;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--p-bg);
+  background: var(--p-face);
+  padding: 8px 16px;
+  border-radius: 999px;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+.gunit-pull:hover {
+  opacity: 0.9;
+}
+.gunit-pull:active {
+  transform: scale(0.96);
+}
+.gunit-empty {
+  font-size: 13px;
+  color: var(--p-text-3);
+  padding: 10px 2px 18px;
+}
 .global-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

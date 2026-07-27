@@ -23,6 +23,12 @@ import { bizReply, openState, findBusiness } from "@/lib/bizBrain";
 import { invokeAiChat, oneSystemPrompt, type AiChatMessage } from "@/lib/aiChat";
 import { generateImage } from "@/lib/aiImage";
 import {
+  publishGlobalUnit,
+  searchGlobalUnits,
+  forkGlobalUnit,
+  type GlobalUnit,
+} from "@/lib/globalUnits";
+import {
   ensureSession,
   saveUnits,
   loadUnits,
@@ -2088,6 +2094,52 @@ export default function AppHome() {
   // The business directory — seeded from BUSINESSES, replaced by the live
   // `providers` table in Supabase once it loads (falls back to the seed).
   const [businesses, setBusinesses] = useState<Business[]>(BUSINESSES);
+  // Global Units library — canonical, forkable units (the "TikTok sound /
+  // Wikipedia page" model). Pull one → a personalized copy lands in your
+  // processes and the canonical unit's aggregate `uses` ticks up.
+  const [gUnits, setGUnits] = useState<GlobalUnit[]>([]);
+  const [gUnitQ, setGUnitQ] = useState("");
+  useEffect(() => {
+    void searchGlobalUnits("").then(setGUnits).catch(() => {});
+  }, []);
+  const runGUnitSearch = (q: string) => {
+    setGUnitQ(q);
+    void searchGlobalUnits(q).then(setGUnits).catch(() => {});
+  };
+  const pullGlobalUnit = async (gu: GlobalUnit) => {
+    const src = (await forkGlobalUnit(gu.id)) ?? gu;
+    const proc: Process = {
+      id: `unit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      identityId: activeIdentityId,
+      emoji: src.emoji || "📌",
+      title: src.title,
+      time: "now",
+      unread: 1,
+      summary: src.next_action ?? src.title,
+      relation: "Private",
+      progress: { done: 0, total: (src.steps ?? []).length },
+      people: [],
+      steps: (src.steps ?? []).map((s) => ({ label: s.label, done: false })),
+      decisions: [],
+      timeline: [
+        {
+          at: "now",
+          text:
+            lang === "he"
+              ? `נמשך מהגלובל — ${src.uses} כבר השתמשו בזה.`
+              : `Pulled from Global — ${src.uses} already used it.`,
+        },
+      ],
+      type: src.type ?? undefined,
+      nextAction: src.next_action ?? undefined,
+      metrics: src.metrics ?? [],
+      insights: src.insights ?? [],
+      coverImage: src.cover_image ?? undefined,
+    };
+    upsert(proc);
+    setSpace("home");
+    openUnit(proc);
+  };
   // Incoming bookings addressed to the business you're currently viewing —
   // written by other parties' ONEs into the shared `bookings` table.
   const [incomingBookings, setIncomingBookings] = useState<CloudBooking[]>([]);
@@ -2857,6 +2909,14 @@ export default function AppHome() {
           : u,
       ),
     );
+    // The unit is now built "to the highest level" → publish it as the canonical
+    // Global entry for its topic, so anyone can pull a personalized fork.
+    void publishGlobalUnit({
+      ...proc,
+      steps: steps.length ? steps.map((label) => ({ label, done: false })) : proc.steps,
+      metrics: metrics.length ? metrics : proc.metrics,
+      nextAction: firstAction || proc.nextAction,
+    });
     postToProc(proc, { role: "one", text: lead });
     // ONE doesn't just name the first step — it offers to TAKE it, and the
     // "yes" chip actually puts ONE to work on it (routes through the same
@@ -5926,6 +5986,60 @@ export default function AppHome() {
                               <span className="gm-label">{lang === "he" ? "📋 תהליכים שלך" : "📋 Your processes"}</span>
                             </div>
                           </div>
+
+                          {/* ── Units library — canonical, forkable processes ──── */}
+                          <div className="global-sec">
+                            <h3 className="global-sec-title">
+                              {lang === "he" ? "📦 יחידות" : "📦 Units"}
+                            </h3>
+                            <span className="global-sec-sub">
+                              {lang === "he"
+                                ? "תהליכים מוכנים — משוך אחד וקבל גרסה אישית"
+                                : "Ready-made processes — pull one for a personalized copy"}
+                            </span>
+                          </div>
+                          <div className="gunit-search">
+                            <input
+                              className="app-input"
+                              style={{ boxShadow: "none", background: "var(--p-bg)", width: "100%" }}
+                              value={gUnitQ}
+                              dir="auto"
+                              placeholder={lang === "he" ? "חפש יחידה…" : "Search units…"}
+                              onChange={(e) => runGUnitSearch(e.target.value)}
+                            />
+                          </div>
+                          {gUnits.length > 0 ? (
+                            <div className="gunit-list">
+                              {gUnits.map((gu) => (
+                                <div className="gunit-row" key={gu.id}>
+                                  {gu.cover_image ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img className="gunit-thumb" src={gu.cover_image} alt="" loading="lazy" />
+                                  ) : (
+                                    <span className="gunit-emoji" aria-hidden="true">{gu.emoji}</span>
+                                  )}
+                                  <span className="gunit-body">
+                                    <span className="gunit-name">{gu.title}</span>
+                                    <span className="gunit-meta">
+                                      {(gu.steps ?? []).length}{" "}
+                                      {lang === "he" ? "שלבים" : "steps"} · {gu.uses}{" "}
+                                      {lang === "he" ? "השתמשו" : "used"}
+                                    </span>
+                                  </span>
+                                  <button className="gunit-pull" onClick={() => void pullGlobalUnit(gu)}>
+                                    {lang === "he" ? "משוך" : "Pull"}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="gunit-empty">
+                              {lang === "he"
+                                ? "עוד אין יחידות בגלובל — צור תהליך והוא יתפרסם כאן."
+                                : "No units in Global yet — build a process and it publishes here."}
+                            </div>
+                          )}
+
                           <div className="global-grid">
                             {worldBiz.map((b) => {
                               const os = now ? openState(b, now) : null;
