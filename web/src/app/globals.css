@@ -5159,6 +5159,77 @@ footer {
 .mem-perm.private {
   color: var(--p-text-3);
 }
+/* ── Drafts — the outward message ONE composed, editable, awaiting approval ── */
+.draft-sub {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--p-text-3);
+}
+.draft-card {
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--p-surface);
+}
+.draft-card.is-approved {
+  border-color: color-mix(in srgb, var(--p-ok) 55%, transparent);
+  background: color-mix(in srgb, var(--p-ok) 8%, var(--p-surface));
+}
+.draft-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.draft-kind {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.draft-to {
+  font-size: 12px;
+  color: var(--p-text-3);
+}
+.draft-badge {
+  margin-inline-start: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--p-ok);
+}
+.draft-subject {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.draft-body {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  background: var(--p-bg);
+  color: var(--p-text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+}
+.draft-body:focus {
+  border-color: var(--p-blue);
+}
+.draft-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.draft-actions .sheet-pill[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
 .global-title {
   margin: 0;
   font-size: 30px;

@@ -55,6 +55,29 @@ export interface Process {
   businessId?: string;
   /** Persisted unit-chat transcript — reopening the process restores it. */
   chat?: { role: "user" | "one"; text: string; chips?: string[] }[];
+  /** Outward drafts ONE has composed for this process — you review, edit, approve. */
+  drafts?: UnitDraft[];
+}
+
+/**
+ * A draft ONE has written to move a process forward — the actual outward message
+ * (an email to the office, a note to a provider, a form answer). This is the
+ * intention→reality bridge: ONE turns "renew my passport" into the real email,
+ * ready for you to edit and approve. Approving only marks it ready — the app
+ * never sends on the user's behalf; the user does that themselves.
+ */
+export interface UnitDraft {
+  id: string;
+  /** What kind of outward message this is — drives the icon and framing. */
+  kind: "email" | "message" | "form";
+  /** Who it's addressed to (a person, office, or business). */
+  to: string;
+  /** Subject line — emails only; blank for a message/form. */
+  subject?: string;
+  /** The body ONE wrote; the user can edit it freely before approving. */
+  body: string;
+  /** "draft" = ONE's proposal; "approved" = the user has okayed the wording. */
+  status: "draft" | "approved";
 }
 
 // ── Business profiles — each has its own ONE that knows its hours, services and

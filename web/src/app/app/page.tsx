@@ -13,6 +13,7 @@ import {
   type PlanTier,
   type Process,
   type Business,
+  type UnitDraft,
 } from "@/lib/mockData";
 import { interpret, type ChatMsg } from "@/lib/oneBrain";
 import { bizReply, openState, findBusiness } from "@/lib/bizBrain";
@@ -564,6 +565,9 @@ function UnitDetail({
   runQuickAction,
   openBiz,
   lang,
+  onDraftEdit,
+  onDraftApprove,
+  onDraftDiscard,
 }: {
   p: Process;
   businesses: Business[];
@@ -572,6 +576,9 @@ function UnitDetail({
   runQuickAction: (p: Process, label: string) => void;
   openBiz: (id: string) => void;
   lang: "en" | "he";
+  onDraftEdit: (procId: string, draftId: string, body: string) => void;
+  onDraftApprove: (procId: string, draftId: string) => void;
+  onDraftDiscard: (procId: string, draftId: string) => void;
 }) {
   const sources = unitSources(p);
   const he = lang === "he";
@@ -670,6 +677,60 @@ function UnitDetail({
               <span className="r-label" style={{ fontWeight: 500 }}>
                 {d}
               </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {p.drafts && p.drafts.length > 0 && (
+        <div className="sheet-section">
+          <h4>{he ? "טיוטות" : "Drafts"}</h4>
+          <p className="draft-sub">
+            {he
+              ? "ONE ניסח את זה בשמך. תבדוק, תערוך ואשר — השליחה בפועל נשארת אצלך."
+              : "ONE wrote these for you. Review, edit, approve — the actual send stays yours."}
+          </p>
+          {p.drafts.map((d) => (
+            <div className={`draft-card${d.status === "approved" ? " is-approved" : ""}`} key={d.id}>
+              <div className="draft-head">
+                <span className="draft-kind">
+                  {d.kind === "email" ? "✉️" : d.kind === "form" ? "🗂️" : "💬"}{" "}
+                  {he
+                    ? d.kind === "email"
+                      ? "מייל"
+                      : d.kind === "form"
+                        ? "טופס"
+                        : "הודעה"
+                    : d.kind}
+                </span>
+                {d.to && (
+                  <span className="draft-to">
+                    {he ? "אל" : "To"}: {d.to}
+                  </span>
+                )}
+                {d.status === "approved" && (
+                  <span className="draft-badge">✓ {he ? "אושר" : "Approved"}</span>
+                )}
+              </div>
+              {d.subject && <div className="draft-subject">{d.subject}</div>}
+              <textarea
+                className="draft-body"
+                value={d.body}
+                rows={5}
+                onChange={(e) => onDraftEdit(p.id, d.id, e.target.value)}
+              />
+              <div className="draft-actions">
+                <button
+                  className="sheet-pill"
+                  onClick={() => onDraftApprove(p.id, d.id)}
+                  disabled={d.status === "approved"}
+                >
+                  {d.status === "approved" ? (he ? "מאושר ✓" : "Approved ✓") : he ? "אשר" : "Approve"}
+                </button>
+                <button className="sheet-pill ghost" onClick={() => onDraftDiscard(p.id, d.id)}>
+                  {he ? "מחק" : "Discard"}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -2416,6 +2477,89 @@ export default function AppHome() {
     return when;
   };
 
+  // "Write the email / reply / message them / draft a note" — the cue that the
+  // user wants ONE to compose an actual outward message, not just chat about it.
+  const DRAFT_INTENT =
+    /\b(draft|compose|write (a|an|the)?|email|reply|respond|send (a |an )?(message|note|email|letter)|message them|tell them|reach out|follow up)\b|נסח|תנסח|כתוב|תכתוב|מייל|אימייל|לשלוח|תשלח|שלח לה|שלח לו|הודעה|תשובה|תגיב|פנייה|תפנה/i;
+
+  // Draft composer — ONE writes the real outward message for a process (an email
+  // to the office, a note to a provider), grounded in what it knows and only the
+  // facts you've shared openly. You edit and approve; nothing is sent for you —
+  // that stays your move. This is the intention→reality bridge made concrete.
+  const composeDraft = async (proc: Process, ask: string): Promise<boolean> => {
+    const he = lang === "he";
+    const sys = he
+      ? 'נסח מסמך פנייה יוצא בשם המשתמש. החזר JSON תקין בלבד: {"kind":"email|message|form","to":"...","subject":"...","body":"..."} — kind=סוג הפנייה, to=הנמען (משרד/עסק/אדם), subject=נושא (למייל בלבד, אחרת ריק), body=גוף ההודעה מנוסח, מנומס וקונקרטי, מוכן לשליחה, בגוף ראשון בשם המשתמש. עברית. בלי code fences.'
+      : 'Compose an outward message on the user\'s behalf. Return ONLY valid JSON: {"kind":"email|message|form","to":"...","subject":"...","body":"..."} — kind=the message type, to=the recipient (office/business/person), subject=subject line (email only, else blank), body=a polished, polite, concrete message ready to send, first person as the user. No code fences.';
+    try {
+      const ctx = [`Process: "${proc.title}" (${proc.relation}).`, memoryContext()]
+        .filter(Boolean)
+        .join(" ");
+      const raw = await invokeAiChat(
+        [
+          { role: "system", content: `${sys} ${ctx}` },
+          { role: "user", content: ask },
+        ],
+        { maxTokens: 340, temperature: 0.5 },
+      );
+      const body = raw.replace(/```json|```/g, "");
+      const s = body.indexOf("{");
+      const e = body.lastIndexOf("}");
+      if (s < 0 || e <= s) return false;
+      const parsed = JSON.parse(body.slice(s, e + 1));
+      if (typeof parsed?.body !== "string" || !parsed.body.trim()) return false;
+      const kind: UnitDraft["kind"] =
+        parsed.kind === "message" || parsed.kind === "form" ? parsed.kind : "email";
+      const draft: UnitDraft = {
+        id: `draft_${proc.id}_${Date.now()}`,
+        kind,
+        to: typeof parsed.to === "string" ? parsed.to.slice(0, 80) : "",
+        subject: typeof parsed.subject === "string" ? parsed.subject.slice(0, 120) : "",
+        body: parsed.body.trim(),
+        status: "draft",
+      };
+      setUnits((list) =>
+        list.map((u) => (u.id === proc.id ? { ...u, drafts: [...(u.drafts ?? []), draft] } : u)),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const setDraftBody = (procId: string, draftId: string, body: string) =>
+    setUnits((list) =>
+      list.map((u) =>
+        u.id === procId
+          ? {
+              ...u,
+              // Editing the wording un-approves it — you re-confirm the new text.
+              drafts: (u.drafts ?? []).map((d) =>
+                d.id === draftId ? { ...d, body, status: "draft" as const } : d,
+              ),
+            }
+          : u,
+      ),
+    );
+  const approveDraft = (procId: string, draftId: string) =>
+    setUnits((list) =>
+      list.map((u) =>
+        u.id === procId
+          ? {
+              ...u,
+              drafts: (u.drafts ?? []).map((d) =>
+                d.id === draftId ? { ...d, status: "approved" as const } : d,
+              ),
+            }
+          : u,
+      ),
+    );
+  const removeDraft = (procId: string, draftId: string) =>
+    setUnits((list) =>
+      list.map((u) =>
+        u.id === procId ? { ...u, drafts: (u.drafts ?? []).filter((d) => d.id !== draftId) } : u,
+      ),
+    );
+
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   // `target` lets a caller (e.g. home→process routing) send into a specific unit
   // without waiting for setActiveProcess to flush through React state.
@@ -2428,6 +2572,26 @@ export default function AppHome() {
     setUnitChat((c) => [...c, { role: "user", text }]);
     setUnitDraft("");
     setUnitThinking(true);
+    // "Write the email / message them" → ONE composes a real outward draft you
+    // can review in the Drafts section, instead of just replying about it.
+    if (DRAFT_INTENT.test(text.toLowerCase())) {
+      const ok = await composeDraft(proc, text);
+      setUnitThinking(false);
+      setUnitChat((c) => [
+        ...c,
+        {
+          role: "one",
+          text: ok
+            ? lang === "he"
+              ? "✍️ ניסחתי טיוטה — היא מחכה לך ב״טיוטות״ למטה. תבדוק, תערוך ואשר."
+              : "✍️ I've drafted it — it's waiting in Drafts below. Review, edit, and approve."
+            : lang === "he"
+              ? "לא הצלחתי לנסח כרגע. ננסה שוב?"
+              : "I couldn't draft that just now. Want me to try again?",
+        },
+      ]);
+      return;
+    }
     const focus = units.find((u) => u.id === proc.id) ?? null;
     const res = interpret(text, { identityId: activeIdentityId, now: Date.now(), processes, focus });
 
@@ -3076,6 +3240,9 @@ export default function AppHome() {
                     runQuickAction={runQuickAction}
                     openBiz={openBiz}
                     lang={lang}
+                    onDraftEdit={setDraftBody}
+                    onDraftApprove={approveDraft}
+                    onDraftDiscard={removeDraft}
                   />
                 </aside>
               </div>
