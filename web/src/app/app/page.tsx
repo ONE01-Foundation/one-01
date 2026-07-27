@@ -1127,6 +1127,12 @@ export default function AppHome() {
   // Appearance + language. Persisted; dark defaults to the OS preference.
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [lang, setLang] = useState<UILang>("en");
+  // ONE mirrors the language the user actually wrote in — not the app's UI
+  // setting. So every line ONE composes locally (greetings, plan confirmations,
+  // offline fallbacks) follows the message, and never replies in English to a
+  // Hebrew message. Falls back to the UI language when the text has no letters.
+  const msgLang = (text: string): UILang =>
+    /[֐-׿]/.test(text) ? "he" : /[A-Za-z]/.test(text) ? "en" : lang;
   useEffect(() => {
     try {
       const savedTheme = localStorage.getItem("one_theme");
@@ -1833,7 +1839,8 @@ export default function AppHome() {
   // tailored to what the user actually asked for, replacing the generic template.
   const enrichProcessPlan = async (proc: Process, intent: string) => {
     try {
-      const he = lang === "he";
+      // Mirror the language the user wrote the intent in, not the app setting.
+      const he = msgLang(intent) === "he";
       const sys = he
         ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."],"needs":["address","phone"]} — title=שם תהליך קצר וברור (2‑4 מילים) שמתאר את המטרה, emoji=אימוג\'י מתאים אחד, 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, 2 עד 3 מדדים חשובים, 2 עד 3 פעולות מהירות קצרות, ו‑needs=אילו פרטים אישיים התהליך צריך מתוך: name,age,gender,address,phone,email,height,weight,idnum (רק מה שבאמת רלוונטי, יכול להיות ריק). הכול בעברית חוץ מ‑needs. בלי טקסט נוסף ובלי code fences.'
         : 'Turn the intention into an action plan. Return ONLY valid JSON: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."],"needs":["address","phone"]} — title=a short, clear process name (2-4 words) describing the goal, emoji=one fitting emoji, 4 to 6 concrete time-ordered steps, 2 to 3 key metrics, 2 to 3 short quick-action labels, and needs=which personal facts this process needs, from: name,age,gender,address,phone,email,height,weight,idnum (only what is genuinely relevant, can be empty). No prose, no code fences.';
@@ -2246,10 +2253,24 @@ export default function AppHome() {
       // A brand-new process gets a tailored multi-stage plan a beat later.
       if (isNewProcess && res.process) void enrichProcessPlan(res.process, text);
     } catch {
-      // Offline / unconfigured — fall back to the local brain's canned lines.
+      // AI unreachable — degrade gracefully with an HONEST, message-mirrored
+      // line (never the local brain's fabricated "reaching out to N companies").
       window.setTimeout(() => {
         setThinking(false);
-        res.lines.forEach((line) => setChat((c) => [...c, { role: "one", text: line }]));
+        const he = msgLang(text) === "he";
+        setChat((c) => [
+          ...c,
+          {
+            role: "one",
+            text: res.process
+              ? he
+                ? `פתחתי את "${res.process.title}" ואני על זה. לא הצלחתי להתחבר כרגע — נסה שוב עוד רגע ואתן לך תשובה מלאה.`
+                : `I've opened "${res.process.title}" and I'm on it. I couldn't connect just now — try again in a moment for a full reply.`
+              : he
+                ? "רשמתי — אני על זה. לא הצלחתי להתחבר כרגע, נסה שוב עוד רגע."
+                : "Noted — I'm on it. I couldn't connect just now; try again in a moment.",
+          },
+        ]);
         applyStructured();
       }, 600);
     }
@@ -2315,7 +2336,10 @@ export default function AppHome() {
         : [
             {
               role: "one",
-              text: `Here's ${p.title}.${p.nextAction ? " " + p.nextAction : " Tell me what changed and I'll update it."}`,
+              text:
+                lang === "he"
+                  ? `הנה "${p.title}".${p.nextAction ? " " + p.nextAction : " ספר לי מה השתנה ואעדכן."}`
+                  : `Here's "${p.title}".${p.nextAction ? " " + p.nextAction : " Tell me what changed and I'll update it."}`,
             },
           ],
     );
@@ -2771,20 +2795,25 @@ export default function AppHome() {
     } catch {
       window.setTimeout(() => {
         setUnitThinking(false);
-        res.lines.forEach((line) => setUnitChat((c) => [...c, { role: "one", text: line }]));
+        // Act on anything concrete first (a named time still gets booked)…
         applyStructured();
         const booked = advanceUnitFromChat(proc.id, text);
-        if (booked)
-          setUnitChat((c) => [
-            ...c,
-            {
-              role: "one",
-              text:
-                lang === "he"
-                  ? `סגור — קבעתי ל${booked} ועדכנתי את התהליך.`
-                  : `Done — booked for ${booked}. I've moved the process forward.`,
-            },
-          ]);
+        const he = msgLang(text) === "he";
+        // …then a single honest, message-mirrored line — never the local brain's
+        // fabricated English "I'm reaching out to N companies".
+        setUnitChat((c) => [
+          ...c,
+          {
+            role: "one",
+            text: booked
+              ? he
+                ? `סגור — קבעתי ל${booked} ועדכנתי את התהליך.`
+                : `Done — booked for ${booked}. I've moved the process forward.`
+              : he
+                ? "רשמתי ועדכנתי את התהליך. לא הצלחתי להתחבר כרגע — נסה שוב עוד רגע."
+                : "Noted and updated the process. I couldn't connect just now — try again in a moment.",
+          },
+        ]);
       }, 600);
     }
   };
