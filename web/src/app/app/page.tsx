@@ -2021,14 +2021,20 @@ export default function AppHome() {
   const sendMagicLink = async () => {
     const email = authEmail.trim();
     if (!email) return;
-    setAuthMsg("Sending…");
+    setAuthMsg(lang === "he" ? "שולח…" : "Sending…");
     const r = await signInWithEmail(email);
-    setAuthMsg(r.ok ? `✓ Check ${email} for your sign-in link.` : r.error ?? "Couldn't send the link.");
+    setAuthMsg(
+      r.ok
+        ? lang === "he"
+          ? `✓ שלחתי קישור כניסה ל-${email}. בדוק את המייל.`
+          : `✓ Check ${email} for your sign-in link.`
+        : r.error ?? (lang === "he" ? "לא הצלחתי לשלוח את הקישור." : "Couldn't send the link."),
+    );
   };
   const continueWithGoogle = async () => {
-    setAuthMsg("Redirecting to Google…");
+    setAuthMsg(lang === "he" ? "מעביר לגוגל…" : "Redirecting to Google…");
     const r = await signInWithGoogle();
-    if (!r.ok) setAuthMsg(r.error ?? "Google sign-in isn't enabled yet.");
+    if (!r.ok) setAuthMsg(r.error ?? (lang === "he" ? "כניסה עם גוגל עדיין לא מופעלת." : "Google sign-in isn't enabled yet."));
   };
   const doSignOut = async () => {
     await signOut();
