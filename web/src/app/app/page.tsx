@@ -1623,6 +1623,64 @@ export default function AppHome() {
     setSpace("profile");
   };
 
+  // Pull a concrete "when" out of a message (a day and/or a real clock time),
+  // in English or Hebrew. Returns null when there's no bookable time — so ONE
+  // only acts when the user actually names one, not on every message.
+  const extractWhen = (text: string): string | null => {
+    const day =
+      text.match(
+        /\b(?:today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week)\b/i,
+      )?.[0] ||
+      text.match(
+        /מחר|היום|יום ראשון|יום שני|יום שלישי|יום רביעי|יום חמישי|יום שישי|יום שבת|ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת|השבוע הבא/,
+      )?.[0];
+    const time =
+      text.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/)?.[0] ||
+      text.match(/\b(?:[1-9]|1[0-2])\s?(?:am|pm)\b/i)?.[0] ||
+      text.match(/(?:בשעה|ב-?)\s?(?:[01]?\d|2[0-3])(?::[0-5]\d)?/)?.[0];
+    const when = [day, time].filter(Boolean).join(" ").trim();
+    return when || null;
+  };
+
+  // ONE doesn't just reply in a unit — when you name a time it BOOKS it: sets
+  // the "when", advances the next open step, moves the next-action forward, logs
+  // it, and announces. Returns the booked time (or null when nothing to book).
+  const advanceUnitFromChat = (focusId: string, text: string): string | null => {
+    const when = extractWhen(text);
+    if (!when) return null;
+    const he = lang === "he";
+    setUnits((list) =>
+      list.map((u) => {
+        if (u.id !== focusId) return u;
+        const firstOpen = u.steps.findIndex((s) => !s.done);
+        const steps = u.steps.map((s, i) => (i === firstOpen ? { ...s, done: true } : s));
+        const doneCount = steps.filter((s) => s.done).length;
+        const whenLabel = he ? "מתי" : "When";
+        const metrics = [
+          { label: whenLabel, value: when },
+          ...(u.metrics ?? []).filter((m) => !/^when$|^מתי$/i.test(m.label)),
+        ];
+        return {
+          ...u,
+          time: "now",
+          metrics,
+          steps,
+          progress: {
+            done: doneCount,
+            total: steps.length || u.progress?.total || doneCount,
+          },
+          nextAction: he ? `אזכיר לך יום לפני ${when}.` : `I'll remind you a day before ${when}.`,
+          timeline: [
+            { at: "now", text: he ? `נקבע ל${when}.` : `Set for ${when}.` },
+            ...u.timeline,
+          ],
+        };
+      }),
+    );
+    announce(`Set for ${when}.`, `נקבע ל${when}.`);
+    return when;
+  };
+
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   const sendToUnit = async (override?: string) => {
     if (!activeProcess) return;
@@ -1666,11 +1724,36 @@ export default function AppHome() {
       setUnitThinking(false);
       setUnitChat((c) => [...c, { role: "one", text: reply, chips: suggestChips(reply, lang) }]);
       applyStructured();
+      // Act, don't just talk: if the message named a time, book it into the unit.
+      const booked = advanceUnitFromChat(activeProcess.id, text);
+      if (booked)
+        setUnitChat((c) => [
+          ...c,
+          {
+            role: "one",
+            text:
+              lang === "he"
+                ? `סגור — קבעתי ל${booked} ועדכנתי את התהליך.`
+                : `Done — booked for ${booked}. I've moved the process forward.`,
+          },
+        ]);
     } catch {
       window.setTimeout(() => {
         setUnitThinking(false);
         res.lines.forEach((line) => setUnitChat((c) => [...c, { role: "one", text: line }]));
         applyStructured();
+        const booked = advanceUnitFromChat(activeProcess.id, text);
+        if (booked)
+          setUnitChat((c) => [
+            ...c,
+            {
+              role: "one",
+              text:
+                lang === "he"
+                  ? `סגור — קבעתי ל${booked} ועדכנתי את התהליך.`
+                  : `Done — booked for ${booked}. I've moved the process forward.`,
+            },
+          ]);
       }, 600);
     }
   };
