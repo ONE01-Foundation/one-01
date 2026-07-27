@@ -1868,10 +1868,23 @@ export default function AppHome() {
           ];
     }
     const waiting = processes.filter((p) => p.unread > 0);
+    // Pending reminders feed the pulse too — ONE says what's coming up.
+    const remCount = reminders.filter(
+      (r) => r.identityId === activeIdentityId && !r.done,
+    ).length;
+    const remLine =
+      remCount > 0
+        ? he
+          ? `⏰ ${remCount} ${remCount === 1 ? "תזכורת" : "תזכורות"} ממתינות.`
+          : `⏰ ${remCount} reminder${remCount > 1 ? "s" : ""} coming up.`
+        : null;
     if (waiting.length === 0) {
       return [
         greet,
-        he ? "אין דבר שדורש אותך כרגע — ספרו לי מטרה חדשה." : "Nothing needs you right now — tell me a new goal.",
+        remLine ??
+          (he
+            ? "אין דבר שדורש אותך כרגע — ספרו לי מטרה חדשה."
+            : "Nothing needs you right now — tell me a new goal."),
       ];
     }
     const header = he
@@ -1885,8 +1898,8 @@ export default function AppHome() {
         ? `${p.title} — ${p.unread > 1 ? `${p.unread} עדכונים ממתינים` : "עדכון ממתין"}.`
         : (p.nextAction ?? p.summary),
     );
-    return [header, ...items];
-  }, [processes, identity.name, identity.kind, requests, activeIdentityId, now, lang]);
+    return remLine ? [header, remLine, ...items] : [header, ...items];
+  }, [processes, identity.name, identity.kind, requests, reminders, activeIdentityId, now, lang]);
 
   // Announce a live event in the broadcast slot, in the app's language.
   const announce = (en: string, he: string) => setLiveBroadcast(lang === "he" ? he : en);
