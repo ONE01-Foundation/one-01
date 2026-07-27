@@ -568,6 +568,8 @@ function UnitDetail({
   onDraftEdit,
   onDraftApprove,
   onDraftDiscard,
+  onWorkStep,
+  onAddConnection,
 }: {
   p: Process;
   businesses: Business[];
@@ -579,6 +581,10 @@ function UnitDetail({
   onDraftEdit: (procId: string, draftId: string, body: string) => void;
   onDraftApprove: (procId: string, draftId: string) => void;
   onDraftDiscard: (procId: string, draftId: string) => void;
+  /** Tap a next-step → ONE works on it with you in the chat (not a checkbox). */
+  onWorkStep: (p: Process, label: string) => void;
+  /** "+ add connection" → ONE suggests relevant people/providers in the chat. */
+  onAddConnection: (p: Process) => void;
 }) {
   const sources = unitSources(p);
   const he = lang === "he";
@@ -586,9 +592,45 @@ function UnitDetail({
   const locMetric = (s: string) => (he ? METRIC_LABEL_HE[s.trim().toLowerCase()] ?? s : s);
   const locValue = (s: string) => (he ? VALUE_HE[s.trim().toLowerCase()] ?? s : s);
   const locAction = (s: string) => (he ? ACTION_HE[s.trim().toLowerCase()] ?? s : s);
+  // A tiny emoji that matches what the action DOES — so chips read at a glance.
+  const qaEmoji = (label: string): string => {
+    const l = label.toLowerCase();
+    if (/theor|תאורי|מבחן|quiz|למד|learn|study|תרגול|practice/.test(l)) return "📖";
+    if (/book|schedul|appointment|תור|לקבוע|reschedul|slot/.test(l)) return "📅";
+    if (/pay|תשלום|שלם|invoice|חשבונית|fee|אגרה/.test(l)) return "💳";
+    if (/messag|email|מייל|הודעה|reply|תגוב|send|שלח|פנ/.test(l)) return "✉️";
+    if (/call|phone|התקשר|טלפון/.test(l)) return "📞";
+    if (/doc|upload|form|טופס|מסמך|העלה|scan|סרוק/.test(l)) return "📄";
+    if (/remind|תזכור|תזכורת/.test(l)) return "⏰";
+    if (/lesson|driv|שיעור|נהיג/.test(l)) return "🚗";
+    if (/log|track|רשום|מעקב|weigh|משקל/.test(l)) return "📊";
+    return "⚡";
+  };
+  const sig = (s: string) =>
+    s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3);
+  // Quick actions whose work is already DONE (a matching step is ticked) drop
+  // off — e.g. once "theory" is passed, "practice theory" disappears.
+  const doneWords = new Set(p.steps.flatMap((s, i) => (isStepDone(p, i) ? sig(s.label) : [])));
+  const liveQuickActions = (p.quickActions ?? []).filter(
+    (a) => !sig(a).some((w) => doneWords.has(w)),
+  );
+  // The unit's own little broadcast — tips / news / what-to-know for THIS
+  // process — rotating above the metrics.
+  const brief = [p.nextAction, ...(p.insights ?? [])].filter(Boolean) as string[];
+  const [briefIdx, setBriefIdx] = useState(0);
+  useEffect(() => {
+    if (brief.length < 2) return;
+    const id = window.setInterval(() => setBriefIdx((i) => (i + 1) % brief.length), 4200);
+    return () => window.clearInterval(id);
+  }, [brief.length]);
   return (
     <div className="unit-detail-body">
-      {p.nextAction && <div className="unit-pulse unit-detail-pulse">{p.nextAction}</div>}
+      {brief.length > 0 && (
+        <div className="unit-broadcast" aria-live="polite">
+          <span className="unit-broadcast-dot" aria-hidden="true" />
+          <span className="unit-broadcast-text">{brief[briefIdx % brief.length]}</span>
+        </div>
+      )}
 
       {p.metrics && p.metrics.length > 0 && (
         <div className="metric-grid">
@@ -601,11 +643,11 @@ function UnitDetail({
         </div>
       )}
 
-      {p.quickActions && p.quickActions.length > 0 && (
+      {liveQuickActions.length > 0 && (
         <div className="qa-row">
-          {p.quickActions.map((a) => (
+          {liveQuickActions.map((a) => (
             <button key={a} className="qa-btn" onClick={() => runQuickAction(p, a)}>
-              {locAction(a)}
+              <span aria-hidden="true">{qaEmoji(a)}</span> {locAction(a)}
             </button>
           ))}
         </div>
@@ -616,21 +658,37 @@ function UnitDetail({
         {p.steps.map((s, i) => {
           const done = isStepDone(p, i);
           return (
-            <button
-              key={i}
-              className={`step-item${done ? " done" : ""}`}
-              style={{ width: "100%", border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
-              onClick={() => toggleStep(p, i)}
-            >
-              <span className={`step-check${done ? " done" : ""}`}>{done ? "✓" : ""}</span>
-              <span className="step-text">{s.label}</span>
-            </button>
+            // The row is not a checklist — tapping it puts ONE to work on that
+            // step with you in the chat. The circle on the left is the manual
+            // "mark done" toggle (kept for when you finished it yourself).
+            <div key={i} className={`step-item${done ? " done" : ""}`}>
+              <button
+                className={`step-check${done ? " done" : ""}`}
+                onClick={() => toggleStep(p, i)}
+                aria-label={done ? "Mark not done" : "Mark done"}
+              >
+                {done ? "✓" : ""}
+              </button>
+              <button
+                className="step-work"
+                onClick={() => onWorkStep(p, s.label)}
+                disabled={done}
+              >
+                <span className="step-text">{s.label}</span>
+                {!done && <span className="step-go" aria-hidden="true">→</span>}
+              </button>
+            </div>
           );
         })}
       </div>
 
       <div className="sheet-section">
-        <h4>{S.connections}</h4>
+        <div className="prof-sec-head">
+          <h4>{S.connections}</h4>
+          <button className="conn-add-btn" onClick={() => onAddConnection(p)}>
+            + {he ? "הוסף חיבור" : "Add connection"}
+          </button>
+        </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {(p.people.length ? p.people : [p.relation]).filter(Boolean).map((person) => {
             const b = businesses.find(
@@ -3433,6 +3491,22 @@ export default function AppHome() {
                     onDraftEdit={setDraftBody}
                     onDraftApprove={approveDraft}
                     onDraftDiscard={removeDraft}
+                    onWorkStep={(proc, label) =>
+                      sendToUnit(
+                        lang === "he"
+                          ? `בוא נתקדם עם: "${label}". מאיפה מתחילים?`
+                          : `Let's move "${label}" forward — where do we start?`,
+                        proc,
+                      )
+                    }
+                    onAddConnection={(proc) =>
+                      sendToUnit(
+                        lang === "he"
+                          ? "הצע לי אנשי קשר או ספקים רלוונטיים לתהליך הזה שאוכל להוסיף."
+                          : "Suggest people or providers relevant to this process that I could add.",
+                        proc,
+                      )
+                    }
                   />
                 </aside>
               </div>
