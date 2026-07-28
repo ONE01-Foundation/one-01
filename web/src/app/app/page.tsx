@@ -3447,7 +3447,16 @@ export default function AppHome() {
               },
               steps: steps.length ? steps.map((label) => ({ label, done: false })) : u.steps,
               progress: steps.length ? { done: 0, total: steps.length } : u.progress,
-              metrics: metrics.length ? metrics : u.metrics,
+              // MERGE metrics — never drop the ones already on the card; add the
+              // new tailored ones that aren't there yet (the row wraps to fit).
+              metrics: metrics.length
+                ? [
+                    ...(u.metrics ?? []),
+                    ...metrics.filter(
+                      (nm) => !(u.metrics ?? []).some((om) => om.label === nm.label),
+                    ),
+                  ].slice(0, 6)
+                : u.metrics,
               decisions: [he ? "סוכם כיוון מותאם אישית" : "Locked a tailored direction", ...u.decisions],
             }
           : u,
@@ -3462,6 +3471,41 @@ export default function AppHome() {
       nextAction: firstAction || proc.nextAction,
     });
     postToProc(proc, { role: "one", text: lead });
+    // Actually DO the first move instead of promising to "check": pull REAL,
+    // current info from the web (flights, prices, venues, availability) and put
+    // it on the table. The live web IS our data source when there's no vendor API.
+    if (aiWeb) {
+      setProcThinking(proc, true);
+      const q = [proc.title, topic, ...answers.map((a) => a.answer)]
+        .filter(Boolean)
+        .join(" · ")
+        .slice(0, 300);
+      const web = await searchWeb(q, he ? "he" : "en");
+      setProcThinking(proc, false);
+      if (web) {
+        let host = "";
+        if (web.citations[0]) {
+          try {
+            host = new URL(web.citations[0].url).hostname.replace(/^www\./, "");
+          } catch {
+            /* keep empty */
+          }
+        }
+        postToProc(proc, {
+          role: "one",
+          text: web.text,
+          cite: {
+            emoji: "🌐",
+            label: web.citations[0]
+              ? web.citations[0].title.slice(0, 44)
+              : he
+                ? "מהאינטרנט"
+                : "From the web",
+            host,
+          },
+        });
+      }
+    }
     // ONE doesn't just name the first step — it offers to TAKE it, and the
     // "yes" chip actually puts ONE to work on it (routes through the same
     // in-unit work flow as tapping a step).
