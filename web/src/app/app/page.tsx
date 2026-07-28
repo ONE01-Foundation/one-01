@@ -2065,7 +2065,8 @@ export default function AppHome() {
     const h = await startRealtime({
       instructions:
         "You are ONE — a warm, concise personal representative on a live voice call. " +
-        "Keep replies short and natural. Match the user's language: reply in Hebrew when they speak Hebrew and English when they speak English, and switch fluidly. Open with a brief spoken hello.",
+        "Keep replies short and natural. Match the user's language: reply in Hebrew when they speak Hebrew and English when they speak English, and switch fluidly. " +
+        "You are actively setting up and running the user's processes as you talk: when they state a goal, briefly confirm you're on it, then ask ONE short tailoring question at a time (budget, date, who's involved) — don't lecture or repeat back everything. Open with a brief spoken hello.",
       // Your spoken turn runs through the SAME pipeline as a typed message, so
       // ONE actually builds/fills a process while you talk (routed to the open
       // unit, or the home flow if none). ONE's own spoken words show as the live

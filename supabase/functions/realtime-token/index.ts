@@ -27,18 +27,33 @@ serve(async (req) => {
 
   const H = { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }
   try {
-    // Newer GA endpoint first, fall back to the older sessions endpoint.
+    // Newer GA endpoint first, fall back to the older sessions endpoint. In BOTH
+    // we enable input-audio transcription — otherwise the user's speech is never
+    // turned into text, and the app's pipeline (which builds/updates processes
+    // and asks the tailoring questions) never sees what was said.
     let r = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
       method: 'POST',
       headers: H,
-      body: JSON.stringify({ session: { type: 'realtime', model: 'gpt-realtime', instructions } }),
+      body: JSON.stringify({
+        session: {
+          type: 'realtime',
+          model: 'gpt-realtime',
+          instructions,
+          audio: { input: { transcription: { model: 'gpt-4o-mini-transcribe' } } },
+        },
+      }),
     })
     let d = await r.json()
     if (!r.ok) {
       r = await fetch('https://api.openai.com/v1/realtime/sessions', {
         method: 'POST',
         headers: H,
-        body: JSON.stringify({ model: 'gpt-4o-realtime-preview', voice: 'alloy', instructions }),
+        body: JSON.stringify({
+          model: 'gpt-4o-realtime-preview',
+          voice: 'alloy',
+          instructions,
+          input_audio_transcription: { model: 'whisper-1' },
+        }),
       })
       d = await r.json()
     }
