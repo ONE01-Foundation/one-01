@@ -330,7 +330,9 @@ export const BUSINESSES: Business[] = [
 ];
 
 export const IDENTITIES: Identity[] = [
-  { id: "ariel", name: "Ariel", role: "Personal", emoji: "👤", kind: "personal" },
+  // The "you" profile starts as a Guest until you sign in — then it adopts your
+  // account name (see the identity-name sync effect in the app).
+  { id: "ariel", name: "Guest", role: "Personal", emoji: "👤", kind: "personal" },
   { id: "one01", name: "ONE01", role: "Business", emoji: "🏢", kind: "business" },
   // A ready-made provider seat, so you can switch over and test a process from
   // the OTHER side (receiving/answering a request) without building one first.

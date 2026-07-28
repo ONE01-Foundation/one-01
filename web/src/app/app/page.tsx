@@ -2428,6 +2428,24 @@ export default function AppHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Keep the "you" profile's name honest: "Guest" (אורח) until you sign in, then
+  // your account name (from Google, or the local part of your email). Only the
+  // primary personal profile is auto-managed — extra profiles keep their names.
+  useEffect(() => {
+    const desired =
+      user?.name?.trim() ||
+      (user?.email ? user.email.split("@")[0] : "") ||
+      (lang === "he" ? "אורח" : "Guest");
+    setIdentities((list) => {
+      const idx = list.findIndex((i) => (i.kind ?? "personal") === "personal");
+      if (idx < 0 || list[idx].name === desired) return list;
+      const next = [...list];
+      next[idx] = { ...next[idx], name: desired };
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.name, user?.email, lang]);
+
   const sendMagicLink = async () => {
     const email = authEmail.trim();
     if (!email) return;
@@ -2770,7 +2788,10 @@ export default function AppHome() {
   //    you share it with, all in the unit's conversation, live on both sides.
   //    The participants come from your connections (the driving instructor, the
   //    coach…). No separate room — the unit's chat IS the group.
-  const myName = (identity?.name || "").trim() || (lang === "he" ? "אני" : "You");
+  const myName =
+    (identity?.name || "").trim() ||
+    user?.name?.trim() ||
+    (lang === "he" ? "אורח" : "Guest");
   const [sharedMembers, setSharedMembers] = useState<Record<string, string[]>>({});
   const [shareBusy, setShareBusy] = useState(false);
   // Per-code set of shared-message ids already reflected in the unit chat (so the
