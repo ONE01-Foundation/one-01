@@ -21,7 +21,7 @@ import {
 import { interpret, type ChatMsg } from "@/lib/oneBrain";
 import { bizReply, openState, findBusiness } from "@/lib/bizBrain";
 import { invokeAiChat, oneSystemPrompt, type AiChatMessage } from "@/lib/aiChat";
-import { generateImage } from "@/lib/aiImage";
+import { generateImage, freeStockImage, uploadUnitImage } from "@/lib/aiImage";
 import {
   publishGlobalUnit,
   searchGlobalUnits,
@@ -1059,6 +1059,14 @@ function UnitDetail({
         onCover?.(p.id, gen); // persist to the unit → becomes reusable stock
         return;
       }
+      // FREE covers (no cost): a Creative-Commons photo from Openverse first,
+      // then Wikipedia / Wikimedia. So units still get a cover with images off.
+      const free = await freeStockImage(unitCategoryQuery(p));
+      if (!alive) return;
+      if (free) {
+        setCovers([free]);
+        return;
+      }
       const wiki = (await Promise.all(unitImageTerms(p).map((tm) => wikiThumbnail(tm)))).filter(
         Boolean,
       ) as string[];
@@ -1079,6 +1087,23 @@ function UnitDetail({
     const id = window.setInterval(() => setCoverIdx((i) => (i + 1) % covers.length), 5200);
     return () => window.clearInterval(id);
   }, [covers.length]);
+  // Upload your OWN cover image (create it with your own tools; no generation
+  // cost) — it uploads to the public unit-images bucket and sticks to the unit.
+  const coverFileRef = useRef<HTMLInputElement | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const onPickCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setCoverUploading(true);
+    const url = await uploadUnitImage(file, `unit-${p.type ?? ""}-${p.title}`);
+    setCoverUploading(false);
+    if (url) {
+      setCovers([url]);
+      setCoverIdx(0);
+      onCover?.(p.id, url);
+    }
+  };
 
   // Mouse parallax — the metric row drifts toward the pointer, each metric with
   // its own depth, so the stats feel like they float over the cover.
@@ -1107,22 +1132,51 @@ function UnitDetail({
   };
   return (
     <div className="unit-detail-body" onMouseMove={onParallax} onMouseLeave={resetParallax}>
-      {covers.length > 0 && (
-        <div className="unit-cover" aria-hidden="true">
-          {covers.map((src, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={src}
-              className={`unit-cover-img${i === coverIdx ? " is-on" : ""}`}
-              src={src}
-              alt=""
-              loading="lazy"
-              style={{ transform: `translate(${mx * -10}px, ${my * -6}px) scale(1.08)` }}
-            />
-          ))}
-          <span className="unit-cover-fade" />
-        </div>
-      )}
+      <div className="unit-cover-wrap">
+        {covers.length > 0 ? (
+          <div className="unit-cover" aria-hidden="true">
+            {covers.map((src, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={src}
+                className={`unit-cover-img${i === coverIdx ? " is-on" : ""}`}
+                src={src}
+                alt=""
+                loading="lazy"
+                style={{ transform: `translate(${mx * -10}px, ${my * -6}px) scale(1.08)` }}
+              />
+            ))}
+            <span className="unit-cover-fade" />
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="unit-cover-add"
+            onClick={() => coverFileRef.current?.click()}
+          >
+            <i className={`fi ${coverUploading ? "fi-rr-spinner" : "fi-rr-picture"}`} aria-hidden="true" />
+            {coverUploading ? (he ? "מעלה…" : "Uploading…") : he ? "הוסף תמונה" : "Add image"}
+          </button>
+        )}
+        {covers.length > 0 && (
+          <button
+            type="button"
+            className="unit-cover-upload"
+            onClick={() => coverFileRef.current?.click()}
+            title={he ? "העלה תמונה משלך" : "Upload your own image"}
+            aria-label={he ? "העלה תמונה" : "Upload image"}
+          >
+            <i className={`fi ${coverUploading ? "fi-rr-spinner" : "fi-rr-camera"}`} aria-hidden="true" />
+          </button>
+        )}
+        <input
+          ref={coverFileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={onPickCover}
+        />
+      </div>
 
       {prog.total > 0 && (
         <div className="unit-progress">
@@ -1902,9 +1956,10 @@ export default function AppHome() {
   // Appearance + language. Persisted; dark defaults to the OS preference.
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [lang, setLang] = useState<UILang>("en");
-  // Cost switches — turn the paid AI extras off during testing so they don't
-  // burn credits. Default on; persisted. (Chat text always works.)
-  const [aiImages, setAiImages] = useState(true);
+  // Cost switches — turn the paid AI extras off so they don't burn credits.
+  // Generated images default OFF (they're the priciest; free Wikipedia covers +
+  // your own uploads fill in). Voice/web default on. All persisted.
+  const [aiImages, setAiImages] = useState(false);
   const [aiVoice, setAiVoice] = useState(true);
   const [aiWeb, setAiWeb] = useState(true);
   // ONE mirrors the language the user actually wrote in — not the app's UI
@@ -1920,7 +1975,7 @@ export default function AppHome() {
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
       else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) setTheme("dark");
       if (savedLang === "he" || savedLang === "en") setLang(savedLang);
-      if (localStorage.getItem("one_ai_images") === "0") setAiImages(false);
+      if (localStorage.getItem("one_ai_images") === "1") setAiImages(true);
       if (localStorage.getItem("one_ai_voice") === "0") setAiVoice(false);
       if (localStorage.getItem("one_ai_web") === "0") setAiWeb(false);
     } catch {

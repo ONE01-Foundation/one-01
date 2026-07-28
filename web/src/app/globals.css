@@ -7696,6 +7696,54 @@ button.conn-card:hover {
     color-mix(in srgb, var(--p-surface) 62%, transparent) 100%
   );
 }
+/* Cover wrapper — hosts the image (or an add-tile) + a small upload button. */
+.unit-cover-wrap {
+  position: relative;
+}
+.unit-cover-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: calc(100% + 8px);
+  height: 96px;
+  margin: -4px -4px 14px;
+  border: 1.5px dashed var(--p-line);
+  border-radius: 18px;
+  background: var(--p-bg);
+  color: var(--p-text-3);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.unit-cover-add:hover {
+  border-color: var(--p-face);
+  color: var(--p-text);
+}
+.unit-cover-upload {
+  position: absolute;
+  bottom: 22px;
+  inset-inline-end: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  color: var(--p-bg);
+  background: color-mix(in srgb, var(--p-face) 88%, transparent);
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.5);
+  transition: transform 120ms ease, background 140ms ease;
+}
+.unit-cover-upload:hover {
+  background: var(--p-face);
+}
+.unit-cover-upload:active {
+  transform: scale(0.92);
+}
 .conn-add-btn {
   border: 1px solid var(--p-line);
   background: transparent;
