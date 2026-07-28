@@ -28,6 +28,11 @@ import {
   forkGlobalUnit,
   type GlobalUnit,
 } from "@/lib/globalUnits";
+import {
+  CATALOG_UNITS,
+  UNIT_CATEGORIES,
+  type CatalogUnit,
+} from "@/lib/globalCatalog";
 import { transcribeAudio, startRealtime, type RealtimeHandle } from "@/lib/voice";
 import { searchWeb } from "@/lib/webSearch";
 import {
@@ -2374,6 +2379,15 @@ export default function AppHome() {
     upsert(proc);
     setSpace("home");
     openUnit(proc);
+  };
+  // Which unit category is being browsed in Global ("all" = everything).
+  const [unitCat, setUnitCat] = useState("all");
+  // Pull a canonical catalog unit — hand the intent to ONE, who builds the full
+  // personalized process (steps, metrics, intake) from it.
+  const pullCatalogUnit = (cu: CatalogUnit) => {
+    setGlobalOpen(false);
+    setSpace("home");
+    void send(lang === "he" ? `אני רוצה ${cu.he}` : `I want to ${cu.en}`);
   };
   // Incoming bookings addressed to the business you're currently viewing —
   // written by other parties' ONEs into the shared `bookings` table.
@@ -6628,18 +6642,19 @@ export default function AppHome() {
                             </div>
                           </div>
 
-                          {/* ── Units library — canonical, forkable processes ──── */}
+                          {/* ── Units — canonical processes, browsed like a store ── */}
                           <div className="global-sec">
                             <h3 className="global-sec-title">
                               {lang === "he" ? "📦 יחידות" : "📦 Units"}
                             </h3>
                             <span className="global-sec-sub">
                               {lang === "he"
-                                ? "תהליכים מוכנים — משוך אחד וקבל גרסה אישית"
-                                : "Ready-made processes — pull one for a personalized copy"}
+                                ? "תהליכים מוכנים — משוך אחד ו‑ONE בונה לך גרסה אישית"
+                                : "Ready-made processes — pull one and ONE builds your personalized copy"}
                             </span>
                           </div>
                           <div className="gunit-search">
+                            <i className="fi fi-rr-search gunit-search-ico" aria-hidden="true" />
                             <input
                               className="app-input"
                               style={{ boxShadow: "none", background: "var(--p-bg)", width: "100%" }}
@@ -6649,37 +6664,144 @@ export default function AppHome() {
                               onChange={(e) => runGUnitSearch(e.target.value)}
                             />
                           </div>
-                          {gUnits.length > 0 ? (
-                            <div className="gunit-list">
-                              {gUnits.map((gu) => (
-                                <div className="gunit-row" key={gu.id}>
-                                  {gu.cover_image ? (
+                          {(() => {
+                            const catalogTitles = new Set(
+                              CATALOG_UNITS.flatMap((c) => [c.he.toLowerCase(), c.en.toLowerCase()]),
+                            );
+                            type DUnit = {
+                              key: string;
+                              cat: string;
+                              emoji: string;
+                              title: string;
+                              steps: number;
+                              uses: number;
+                              cover?: string;
+                              db?: GlobalUnit;
+                              cu?: CatalogUnit;
+                            };
+                            const seedUnits: DUnit[] = CATALOG_UNITS.map((c) => ({
+                              key: c.key,
+                              cat: c.cat,
+                              emoji: c.emoji,
+                              title: lang === "he" ? c.he : c.en,
+                              steps: c.steps,
+                              uses: c.uses,
+                              cu: c,
+                            }));
+                            const dbUnits: DUnit[] = gUnits
+                              .filter((g) => !catalogTitles.has((g.title || "").toLowerCase()))
+                              .map((g) => ({
+                                key: `db_${g.id}`,
+                                cat: "community",
+                                emoji: g.emoji || "📦",
+                                title: g.title,
+                                steps: (g.steps ?? []).length,
+                                uses: g.uses,
+                                cover: g.cover_image || undefined,
+                                db: g,
+                              }));
+                            const all = [...seedUnits, ...dbUnits];
+                            const q = gUnitQ.trim().toLowerCase();
+                            const filtered = all.filter(
+                              (u) =>
+                                (unitCat === "all" || u.cat === unitCat) &&
+                                (!q || u.title.toLowerCase().includes(q)),
+                            );
+                            const popular = [...all].sort((a, b) => b.uses - a.uses).slice(0, 10);
+                            const pull = (u: DUnit) => {
+                              if (u.db) void pullGlobalUnit(u.db);
+                              else if (u.cu) pullCatalogUnit(u.cu);
+                            };
+                            const fmtUses = (n: number) =>
+                              n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
+                            const card = (u: DUnit) => (
+                              <div className="gunit-card" key={u.key}>
+                                <div className="guc-cover">
+                                  {u.cover ? (
                                     // eslint-disable-next-line @next/next/no-img-element
-                                    <img className="gunit-thumb" src={gu.cover_image} alt="" loading="lazy" />
+                                    <img src={u.cover} alt="" loading="lazy" />
                                   ) : (
-                                    <span className="gunit-emoji" aria-hidden="true">{gu.emoji}</span>
-                                  )}
-                                  <span className="gunit-body">
-                                    <span className="gunit-name">{gu.title}</span>
-                                    <span className="gunit-meta">
-                                      {(gu.steps ?? []).length}{" "}
-                                      {lang === "he" ? "שלבים" : "steps"} · {gu.uses}{" "}
-                                      {lang === "he" ? "השתמשו" : "used"}
+                                    <span className="guc-emoji" aria-hidden="true">
+                                      {u.emoji}
                                     </span>
-                                  </span>
-                                  <button className="gunit-pull" onClick={() => void pullGlobalUnit(gu)}>
-                                    {lang === "he" ? "משוך" : "Pull"}
-                                  </button>
+                                  )}
+                                  {u.cat === "community" && (
+                                    <span className="guc-tag">{lang === "he" ? "קהילה" : "Community"}</span>
+                                  )}
                                 </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="gunit-empty">
-                              {lang === "he"
-                                ? "עוד אין יחידות בגלובל — צור תהליך והוא יתפרסם כאן."
-                                : "No units in Global yet — build a process and it publishes here."}
-                            </div>
-                          )}
+                                <div className="guc-body">
+                                  <span className="guc-title" dir="auto">
+                                    {u.title}
+                                  </span>
+                                  <span className="guc-meta">
+                                    {u.steps} {lang === "he" ? "שלבים" : "steps"} · {fmtUses(u.uses)}{" "}
+                                    {lang === "he" ? "משכו" : "pulled"}
+                                  </span>
+                                </div>
+                                <button className="guc-pull" onClick={() => pull(u)}>
+                                  {lang === "he" ? "משוך" : "Pull"}
+                                </button>
+                              </div>
+                            );
+                            const catLabel =
+                              unitCat === "all"
+                                ? lang === "he"
+                                  ? "כל היחידות"
+                                  : "All units"
+                                : (() => {
+                                    const c = UNIT_CATEGORIES.find((x) => x.key === unitCat);
+                                    return c
+                                      ? lang === "he"
+                                        ? c.he
+                                        : c.en
+                                      : lang === "he"
+                                        ? "קהילה"
+                                        : "Community";
+                                  })();
+                            return (
+                              <>
+                                <div className="gcat-bar">
+                                  <button
+                                    className={`gcat${unitCat === "all" ? " is-on" : ""}`}
+                                    onClick={() => setUnitCat("all")}
+                                  >
+                                    <span className="gcat-emoji" aria-hidden="true">
+                                      ✨
+                                    </span>
+                                    <span className="gcat-label">{lang === "he" ? "הכל" : "All"}</span>
+                                  </button>
+                                  {UNIT_CATEGORIES.map((c) => (
+                                    <button
+                                      key={c.key}
+                                      className={`gcat${unitCat === c.key ? " is-on" : ""}`}
+                                      onClick={() => setUnitCat(c.key)}
+                                    >
+                                      <span className="gcat-emoji" aria-hidden="true">
+                                        {c.emoji}
+                                      </span>
+                                      <span className="gcat-label">{lang === "he" ? c.he : c.en}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                                {unitCat === "all" && !q && (
+                                  <>
+                                    <div className="guc-rowhead">
+                                      🔥 {lang === "he" ? "פופולרי עכשיו" : "Popular now"}
+                                    </div>
+                                    <div className="gunit-rail">{popular.map(card)}</div>
+                                  </>
+                                )}
+                                <div className="guc-rowhead">{catLabel}</div>
+                                {filtered.length > 0 ? (
+                                  <div className="gunit-cards">{filtered.map(card)}</div>
+                                ) : (
+                                  <div className="gunit-empty">
+                                    {lang === "he" ? "אין יחידות בקטגוריה הזו." : "No units in this category."}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
 
                           <div className="global-grid">
                             {worldBiz.map((b) => {
