@@ -4935,6 +4935,13 @@ footer {
 /* The broadcast, right above the input. A fixed two-line box, BOTTOM-aligned so
    the line always sits just above the input; a second line grows upward and the
    input never moves. */
+/* The living figure at the top of Home — greets you above the broadcast. */
+.home-hero-orb {
+  display: grid;
+  place-items: center;
+  margin-bottom: -12px;
+  animation: homeRise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
 .home-broadcast {
   min-height: 2.7em;
   max-width: 38ch;

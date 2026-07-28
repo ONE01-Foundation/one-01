@@ -2348,6 +2348,7 @@ export default function AppHome() {
   // ref so it never remounts the Orb (which would kill its blink).
   const unitPresenceRef = useRef<HTMLSpanElement>(null);
   const homePresenceRef = useRef<HTMLSpanElement>(null);
+  const homeHeroRef = useRef<HTMLSpanElement>(null);
   const pumpPresence = (ref: { current: HTMLSpanElement | null }) => {
     const el = ref.current;
     if (!el || typeof el.animate !== "function") return;
@@ -5523,6 +5524,7 @@ export default function AppHome() {
               }
             >
               <OneWord
+                eyeless
                 className={`app-brand-mark${
                   oneWorking && !chatFocused ? " is-working" : ""
                 }${chatFocused ? " chat-focused" : ""}`}
@@ -7079,6 +7081,19 @@ export default function AppHome() {
                             <span className="reply-signal-cta" aria-hidden="true">›</span>
                           </button>
                         )}
+                        {/* The living figure greets you — above the broadcast, so
+                            Home opens with a presence, not just a line of text.
+                            The eyes meet you (lean toward the input) as you type. */}
+                        <span ref={homeHeroRef} className="home-hero-orb chat-presence-pump">
+                          <Orb
+                            size={76}
+                            alive
+                            look={draft.trim() ? 0.2 : 0}
+                            faceColor="var(--p-face)"
+                            eyeColor="var(--p-bg)"
+                            className={draft.trim() ? "awake" : ""}
+                          />
+                        </span>
                         <div
                           key={liveBroadcast ?? "resting"}
                           className={`home-broadcast${liveBroadcast ? " is-live" : ""}${
@@ -7089,7 +7104,10 @@ export default function AppHome() {
                         </div>
                         <AppInput
                           value={draft}
-                          onChange={setDraft}
+                          onChange={(v) => {
+                            setDraft(v);
+                            pumpPresence(homeHeroRef);
+                          }}
                           onSend={() => send()}
                           onVoiceTap={startVoiceCall}
                       voiceOn={aiVoice}
