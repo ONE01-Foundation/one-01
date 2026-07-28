@@ -115,6 +115,8 @@ export interface Process {
   stepImages?: Record<number, string>;
   /** Epoch ms of the last real activity — drives live relative time ("5m", "2h"). */
   updatedAt?: number;
+  /** Epoch ms when every step was completed — marks the process as done. */
+  completedAt?: number;
   /** When set, this unit is shared: a common code others join to correspond inside. */
   shareCode?: string;
   /** True if this ONE created the share (drives ONE's replies in the shared room). */

@@ -1055,10 +1055,13 @@ function UnitDetail({
   // The unit's own little broadcast — tips / news / what-to-know for THIS
   // process — rotating above the metrics.
   const brief = [p.nextAction, ...(p.insights ?? [])].filter(Boolean) as string[];
-  // Progress toward done — the card's emotional core. Prefer the curated
-  // done/total when present, else count ticked steps live.
+  // Progress toward done — the card's emotional core. When the process has
+  // steps, the ring MUST track the live ticked count (so checking a step moves
+  // the ring) — the curated done/total is only a fallback for step-less units.
   const stepsDone = p.steps.filter((_, i) => isStepDone(p, i)).length;
-  const prog = p.progress ?? { done: stepsDone, total: p.steps.length };
+  const prog = p.steps.length
+    ? { done: stepsDone, total: p.steps.length }
+    : (p.progress ?? { done: 0, total: 0 });
   const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
   const [briefIdx, setBriefIdx] = useState(0);
   useEffect(() => {
@@ -1215,13 +1218,15 @@ function UnitDetail({
       </div>
 
       {prog.total > 0 && (
-        <div className="unit-progress">
+        <div className={`unit-progress${pct >= 100 ? " is-complete" : ""}`}>
           <div className="unit-progress-head">
-            <span className="unit-progress-pct">{pct}%</span>
+            <span className="unit-progress-pct">
+              {pct >= 100 ? <i className="fi fi-rr-check" aria-hidden="true" /> : `${pct}%`}
+            </span>
             <span className="unit-progress-sub">
               {he
-                ? `${prog.done} מתוך ${prog.total} שלבים${pct >= 100 ? " · הושלם" : ""}`
-                : `${prog.done} of ${prog.total} steps${pct >= 100 ? " · done" : ""}`}
+                ? `${prog.done} מתוך ${prog.total} שלבים${pct >= 100 ? " · הושלם 🎉" : ""}`
+                : `${prog.done} of ${prog.total} steps${pct >= 100 ? " · done 🎉" : ""}`}
             </span>
           </div>
           <div className="unit-progress-track">
@@ -3365,11 +3370,14 @@ export default function AppHome() {
       );
       // Reflect back what ONE understood, and invite a confirm / tweak — so a
       // created process reads as "here's my plan, approve it" not a black box.
+      // Use the CLEAN process name here, not the raw sentence the user typed —
+      // `proc.title` in this closure is still the pre-enrichment raw text.
+      const planTitle = cleanTitle ?? proc.title;
       postFollowUp({
         role: "one",
         text: he
-          ? `הכנתי תכנית ל"${proc.title}": ${steps.length} שלבים, מתחילים ב"${steps[0]}". רוצה לשנות משהו?`
-          : `I've drafted a plan for "${proc.title}": ${steps.length} steps, starting with "${steps[0]}". Want to change anything?`,
+          ? `הכנתי לך תכנית ל"${planTitle}": ${steps.length} שלבים, מתחילים ב"${steps[0]}". רוצה לשנות משהו?`
+          : `I've drafted a plan for "${planTitle}": ${steps.length} steps, starting with "${steps[0]}". Want to change anything?`,
         chips: he ? ["מעולה, קדימה", "שנה משהו"] : ["Looks good", "Change something"],
       });
       // Memory pull. ONE looks at the personal facts this process needs and that
@@ -5519,8 +5527,52 @@ export default function AppHome() {
     const key = `${p.id}:${i}`;
     return key in stepOverrides ? stepOverrides[key] : p.steps[i].done;
   };
-  const toggleStep = (p: Process, i: number) =>
-    setStepOverrides((s) => ({ ...s, [`${p.id}:${i}`]: !isStepDone(p, i) }));
+  const toggleStep = (p: Process, i: number) => {
+    const nowDone = !isStepDone(p, i);
+    setStepOverrides((s) => ({ ...s, [`${p.id}:${i}`]: nowDone }));
+    // Completion moment: ticking the LAST open step finishes the whole process.
+    // Count with the just-toggled step folded in, so we catch the exact crossing.
+    if (nowDone && p.steps.length && !p.completedAt) {
+      const doneAfter = p.steps.filter((_, idx) =>
+        idx === i ? true : isStepDone(p, idx),
+      ).length;
+      if (doneAfter >= p.steps.length) celebrateCompletion(p);
+    }
+  };
+
+  // What "done" feels like — the payoff of a whole process reaching 100%. ONE
+  // marks it complete, drops a warm closing line into the unit's own chat,
+  // stamps the timeline, and says it out loud on the home broadcast.
+  const celebrateCompletion = (p: Process) => {
+    // Match the process's own language (its title/content), not the app-UI
+    // language — a Hebrew process should get a Hebrew "done!", even in an EN app.
+    const he = /[֐-׿]/.test(p.title) || (lang === "he" && !/[A-Za-z]/.test(p.title));
+    const line = he
+      ? `סגרנו את זה 🎉 סיימת את כל השלבים של ${p.title}. גאה בך — כאן אם צריך עוד משהו.`
+      : `That's a wrap 🎉 every step of ${p.title} is done. Proud of you — I'm here if anything else comes up.`;
+    const msg: ChatMsg = { role: "one", party: "one", text: line };
+    const doneStamp = he ? "הושלם 🎉 כל השלבים בוצעו." : "Completed 🎉 all steps done.";
+    setUnits((list) =>
+      list.map((u) =>
+        u.id === p.id
+          ? {
+              ...u,
+              completedAt: Date.now(),
+              updatedAt: Date.now(),
+              time: "now",
+              nextAction: he ? "הושלם — כל הכבוד!" : "Completed — well done!",
+              chat: [...(u.chat ?? []), msg],
+              timeline: [{ at: "now", text: doneStamp }, ...(u.timeline ?? [])],
+            }
+          : u,
+      ),
+    );
+    if (activeUnitRef.current === p.id) setUnitChat((c) => [...c, msg]);
+    announce(
+      `Done: ${p.title} is complete.`,
+      `הושלם: ${p.title} סגור.`,
+    );
+  };
 
   // Global's live activity ticker — a rotating line built from the businesses so
   // the marketplace reads as busy and real-time.
@@ -6152,8 +6204,12 @@ export default function AppHome() {
                               ))}
                             </div>
                           ) : (
+                            // Reply chips answer the question they came with — once
+                            // ONE has moved on (a newer message exists), they're stale
+                            // and must disappear instead of lingering as "stuck" chips.
                             m.chips &&
-                            m.chips.length > 0 && (
+                            m.chips.length > 0 &&
+                            i === unitChat.length - 1 && (
                               <div className="chat-chips">
                                 {m.chips.map((c) => (
                                   <button key={c} className="chat-chip" onClick={() => sendToUnit(c)}>
@@ -7462,8 +7518,10 @@ export default function AppHome() {
                             ))}
                           </div>
                         ) : (
+                          // Stale reply chips vanish once ONE has moved past them.
                           m.chips &&
-                          m.chips.length > 0 && (
+                          m.chips.length > 0 &&
+                          i === chat.length - 1 && (
                             <div className="chat-chips">
                               {m.chips.map((c) => (
                                 <button key={c} className="chat-chip" onClick={() => send(c)}>

@@ -442,7 +442,11 @@ function build(domain: Domain, text: string, ctx: BrainContext): Process {
     timeline: [
       {
         at: "now",
-        text: ctx.lang === "he" ? "ביקשת מ‑ONE לקחת את זה על עצמו." : "You asked ONE to take this on.",
+        // Match the language the user actually WROTE in (not the app-UI language),
+        // so a Hebrew intention's timeline reads Hebrew like the rest of the unit.
+        text: /[֐-׿]/.test(text)
+          ? "ביקשת מ‑ONE לקחת את זה על עצמו."
+          : "You asked ONE to take this on.",
       },
     ],
     type: domain.id,

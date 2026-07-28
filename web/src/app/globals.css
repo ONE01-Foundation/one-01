@@ -7730,6 +7730,16 @@ button.conn-card:hover {
   background: linear-gradient(90deg, var(--p-blue, #4b7bff), var(--p-purple, #8b5cf6));
   transition: width 620ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+/* Completed process — the ring goes green, the % becomes a check. */
+.unit-progress.is-complete .unit-progress-pct {
+  color: #16a34a;
+  font-size: 26px;
+  display: inline-flex;
+  align-items: center;
+}
+.unit-progress.is-complete .unit-progress-fill {
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+}
 /* ── Contextual cover — cross-fading topic images behind the unit's pulse ──── */
 .unit-cover {
   position: relative;
