@@ -542,10 +542,13 @@ const CAP_INTENT: { key: string; re: RegExp }[] = [
   { key: "forms", re: /\bfill\b[^.?!]*\bform\b|\bform\b[^.?!]*\bfill\b|application form|form for\b|למלא[^.?!]*טופס|טופס[^.?!]*למלא|תמלא[^.?!]*טופס|בקשה רשמית/i },
   { key: "reminders", re: /remind me|set a reminder|תזכיר לי|קבע תזכורת|תזכורת/i },
   { key: "translate", re: /translate|תרגם|תתרגם|תרגום ל/i },
-  { key: "travel", re: /plan (a )?trip|itinerary|תכנן(?: לי)? טיול|מסלול טיול|לתכנן חופשה/i },
-  { key: "negotiate", re: /negotiate|haggle|get a better (price|deal)|תנהל מו"מ|להתמקח|לנהל משא ומתן/i },
   { key: "providers", re: /\b(find|get|get me|find me)\b(?: me)?(?: a| an| some)?(?: [\w'-]+){0,4} (providers?|suppliers?|vendors?|instructors?|teachers?|coach(?:es)?|tutors?|trainers?|contractors?|professionals?|experts?|compan(?:y|ies)|business(?:es)?|specialists?|agenc(?:y|ies)|freelancers?|pros?)\b|\bwho can\b|\brecommend( me)? (a|an|some)|\bneed (a|an|some)(?: [\w'-]+){0,4} (provider|supplier|instructor|teacher|coach|tutor|contractor|professional|expert|specialist)|תמצא(?: לי)? (ספק|מורה|מדריך|מאמן|בעל מקצוע|חברה|נותן שירות)|מצא(?: לי)? (ספק|מורה|מדריך|מאמן|בעל מקצוע)|תמליץ(?: לי)? על|מי יכול/i },
-  { key: "research", re: /research|compare|which is better|תשווה|השוואה בין|מה עדיף|תחקור/i },
+  // NOTE: travel / negotiate / research are intentionally NOT gated here. They
+  // were premium-capability stubs that only threw an "upgrade" wall and created
+  // nothing — a dead end for core asks like "plan a trip". Now those intentions
+  // flow to real process creation, and ONE works them with the (free) live-web
+  // capability inside the unit. They remain listed as premium concepts in the
+  // catalog, just no longer block the create flow.
 ];
 function capabilityForText(text: string): string | null {
   for (const c of CAP_INTENT) if (c.re.test(text)) return c.key;
