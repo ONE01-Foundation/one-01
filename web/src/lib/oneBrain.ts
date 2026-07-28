@@ -57,6 +57,9 @@ export type ChatMsg = {
   };
   /** An illustrative image URL (e.g. a Wikipedia thumbnail) shown in the bubble. */
   image?: string;
+  /** Structured result cards (flights, venues, options…) rendered as a clean list
+   *  under the bubble instead of a wall of text. `url` makes the card a link. */
+  cards?: { title: string; subtitle?: string; meta?: string; url?: string }[];
   /** Set when this message came from (or was synced to) a shared-unit thread —
    *  the id in shared_unit_messages. Marks it so the mirror won't re-post it. */
   sid?: string;

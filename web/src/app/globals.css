@@ -4846,6 +4846,66 @@ footer {
   line-height: 1;
 }
 /* Source citation under a regulated-domain answer. */
+/* Structured result cards under a ONE message (flights, venues, options). */
+.chat-cards {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+.chat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  background: var(--p-surface);
+  text-decoration: none;
+  transition: transform 120ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+a.chat-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--p-blue, #4b7bff) 45%, var(--p-line));
+  box-shadow: 0 10px 24px -18px rgba(0, 0, 0, 0.45);
+}
+.cc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cc-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--p-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cc-sub {
+  font-size: 12.5px;
+  color: var(--p-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cc-meta {
+  flex: none;
+  font-size: 13.5px;
+  font-weight: 750;
+  color: var(--p-text);
+  white-space: nowrap;
+}
+.cc-link {
+  flex: none;
+  font-size: 12px;
+  color: var(--p-text-3);
+}
 .chat-cite {
   align-self: flex-start;
   max-width: 88%;

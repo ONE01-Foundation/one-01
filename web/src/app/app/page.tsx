@@ -922,6 +922,42 @@ function ShareLink({ code, lang }: { code: string; lang: "en" | "he" }) {
   );
 }
 
+// Structured result cards under a ONE message (flights, venues, options) —
+// clean rows with a name, a detail, a figure, and a link, instead of raw text.
+function ChatCards({ cards }: { cards: NonNullable<ChatMsg["cards"]> }) {
+  return (
+    <div className="chat-cards">
+      {cards.map((c, i) => {
+        const inner = (
+          <>
+            <span className="cc-main">
+              <span className="cc-title" dir="auto">
+                {c.title}
+              </span>
+              {c.subtitle && (
+                <span className="cc-sub" dir="auto">
+                  {c.subtitle}
+                </span>
+              )}
+            </span>
+            {c.meta && <span className="cc-meta">{c.meta}</span>}
+            {c.url && <i className="fi fi-rr-arrow-up-right-from-square cc-link" aria-hidden="true" />}
+          </>
+        );
+        return c.url ? (
+          <a key={i} className="chat-card" href={c.url} target="_blank" rel="noopener noreferrer">
+            {inner}
+          </a>
+        ) : (
+          <div key={i} className="chat-card">
+            {inner}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function UnitDetail({
   p,
   businesses,
@@ -3259,8 +3295,8 @@ export default function AppHome() {
       // Mirror the language the user wrote the intent in, not the app setting.
       const he = msgLang(intent) === "he";
       const sys = he
-        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."],"needs":["address","phone"]} — title=שם תהליך קצר וברור (2‑4 מילים) שמתאר את המטרה, emoji=אימוג\'י מתאים אחד, 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, 2 עד 3 מדדים חשובים, 2 עד 3 פעולות מהירות קצרות, ו‑needs=אילו פרטים אישיים התהליך צריך מתוך: name,age,gender,address,phone,email,height,weight,idnum (רק מה שבאמת רלוונטי, יכול להיות ריק). הכול בעברית חוץ מ‑needs. בלי טקסט נוסף ובלי code fences.'
-        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"title":"...","emoji":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"quickActions":["...","..."],"needs":["address","phone"]} — title=a short, clear process name (2-4 words) describing the goal, emoji=one fitting emoji, 4 to 6 concrete time-ordered steps, 2 to 3 key metrics, 2 to 3 short quick-action labels, and needs=which personal facts this process needs, from: name,age,gender,address,phone,email,height,weight,idnum (only what is genuinely relevant, can be empty). No prose, no code fences.';
+        ? 'הפוך את הכוונה לתכנית פעולה. החזר אך ורק JSON תקין: {"title":"...","emoji":"...","nextAction":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"insights":["..."],"quickActions":["...","..."],"needs":["address","phone"]} — title=שם תהליך קצר וברור (2‑4 מילים) שמתאר את המטרה, emoji=אימוג\'י מתאים אחד, nextAction=משפט קצר אחד בהווה על הצעד הבא הקונקרטי, 4 עד 6 צעדים קונקרטיים לפי סדר הזמן, 2 עד 3 מדדים חשובים, insights=1‑2 טיפים קצרים ומועילים, 2 עד 3 פעולות מהירות קצרות, ו‑needs=אילו פרטים אישיים התהליך צריך מתוך: name,age,gender,address,phone,email,height,weight,idnum (רק מה שבאמת רלוונטי, יכול להיות ריק). הכול בעברית חוץ מ‑needs. בלי טקסט נוסף ובלי code fences.'
+        : 'Turn the intention into an action plan. Return ONLY valid JSON: {"title":"...","emoji":"...","nextAction":"...","steps":["...","..."],"metrics":[{"label":"...","value":"..."}],"insights":["..."],"quickActions":["...","..."],"needs":["address","phone"]} — title=a short, clear process name (2-4 words) describing the goal, emoji=one fitting emoji, nextAction=one short present-tense line for the concrete next step, 4 to 6 concrete time-ordered steps, 2 to 3 key metrics, insights=1‑2 short useful tips, 2 to 3 short quick-action labels, and needs=which personal facts this process needs, from: name,age,gender,address,phone,email,height,weight,idnum (only what is genuinely relevant, can be empty). No prose, no code fences.';
       const raw = await invokeAiChat(
         [
           { role: "system", content: sys },
@@ -3298,6 +3334,18 @@ export default function AppHome() {
           : null;
       const cleanEmoji =
         typeof parsed?.emoji === "string" && parsed.emoji.trim() ? parsed.emoji.trim().slice(0, 2) : null;
+      // The card's own broadcast — its next-action line + tips — must be in the
+      // user's language and reflect THIS process (not the English template
+      // default), so it never reads stuck/generic.
+      const cleanNext =
+        typeof parsed?.nextAction === "string" && parsed.nextAction.trim()
+          ? parsed.nextAction.trim().slice(0, 120)
+          : null;
+      const cleanInsights: string[] = Array.isArray(parsed?.insights)
+        ? parsed.insights
+            .filter((x: unknown) => typeof x === "string" && (x as string).trim())
+            .slice(0, 3)
+        : [];
       setUnits((list) =>
         list.map((u) =>
           u.id === proc.id
@@ -3305,6 +3353,8 @@ export default function AppHome() {
                 ...u,
                 title: cleanTitle ?? u.title,
                 emoji: cleanEmoji ?? u.emoji,
+                nextAction: cleanNext ?? u.nextAction,
+                insights: cleanInsights.length ? cleanInsights : u.insights,
                 steps: steps.map((label) => ({ label, done: false })),
                 progress: { done: 0, total: steps.length },
                 metrics: metrics.length ? metrics : u.metrics,
@@ -3386,6 +3436,44 @@ export default function AppHome() {
   // Close the interview: a dedicated AI call that turns the answers into a
   // tailored plan + a first-person "here's what we're doing, starting now" lead,
   // then writes it into the process. This is ONE taking the wheel.
+  // Turn a wall of web findings into clean, structured result cards (name ·
+  // detail · price · link). Returns [] if it can't structure — caller shows text.
+  const structureCards = async (
+    text: string,
+    he: boolean,
+  ): Promise<NonNullable<ChatMsg["cards"]>> => {
+    try {
+      const sys = he
+        ? 'הפוך את הממצאים לרשימת כרטיסיות תוצאה. החזר JSON תקין בלבד: {"cards":[{"title":"","subtitle":"","meta":"","url":""}]} — עד 6 כרטיסיות: title=שם האפשרות (חברת תעופה/מקום/ספק), subtitle=פרט קצר (תאריכים/סוג/אזור), meta=מחיר או נתון בולט אחד, url=קישור אם קיים. אם אין אפשרויות ברורות החזר {"cards":[]}. בלי code fences.'
+        : 'Turn the findings into result cards. Return ONLY valid JSON: {"cards":[{"title":"","subtitle":"","meta":"","url":""}]} — up to 6 cards: title=the option name (airline/venue/provider), subtitle=one short detail (dates/type/area), meta=a price or one key figure, url=link if present. If no clear options, return {"cards":[]}. No code fences.';
+      const raw = await invokeAiChat(
+        [
+          { role: "system", content: sys },
+          { role: "user", content: text.slice(0, 1800) },
+        ],
+        { maxTokens: 520, temperature: 0.2 },
+      );
+      const b = raw.replace(/```json|```/g, "");
+      const s = b.indexOf("{");
+      const e = b.lastIndexOf("}");
+      const parsed = s >= 0 && e > s ? JSON.parse(b.slice(s, e + 1)) : null;
+      if (!parsed || !Array.isArray(parsed.cards)) return [];
+      return parsed.cards
+        .filter(
+          (c: unknown): c is { title: string; subtitle?: string; meta?: string; url?: string } =>
+            !!c && typeof (c as { title?: unknown }).title === "string" && !!(c as { title: string }).title.trim(),
+        )
+        .map((c: { title: string; subtitle?: string; meta?: string; url?: string }) => ({
+          title: c.title.slice(0, 80),
+          subtitle: typeof c.subtitle === "string" && c.subtitle.trim() ? c.subtitle.slice(0, 120) : undefined,
+          meta: typeof c.meta === "string" && c.meta.trim() ? c.meta.slice(0, 40) : undefined,
+          url: typeof c.url === "string" && /^https?:\/\//.test(c.url) ? c.url : undefined,
+        }))
+        .slice(0, 6);
+    } catch {
+      return [];
+    }
+  };
   const finishIntake = async (
     proc: Process,
     topic: string,
@@ -3445,6 +3533,9 @@ export default function AppHome() {
                 ...(u.fields ?? {}),
                 ...Object.fromEntries(answers.map((a) => [a.field, a.answer])),
               },
+              // Refresh the card's broadcast so it reflects the tailored plan and
+              // its language — never left stuck on the English template line.
+              nextAction: firstAction || u.nextAction,
               steps: steps.length ? steps.map((label) => ({ label, done: false })) : u.steps,
               progress: steps.length ? { done: 0, total: steps.length } : u.progress,
               // MERGE metrics — never drop the ones already on the card; add the
@@ -3481,6 +3572,9 @@ export default function AppHome() {
         .join(" · ")
         .slice(0, 300);
       const web = await searchWeb(q, he ? "he" : "en");
+      // Turn the wall of text into clean result cards (airline · dates · price ·
+      // link). Falls back to the text if it doesn't structure cleanly.
+      const cards = web ? await structureCards(web.text, he) : [];
       setProcThinking(proc, false);
       if (web) {
         let host = "";
@@ -3493,7 +3587,8 @@ export default function AppHome() {
         }
         postToProc(proc, {
           role: "one",
-          text: web.text,
+          text: cards.length ? (he ? "הנה מה שמצאתי:" : "Here's what I found:") : web.text,
+          cards: cards.length ? cards : undefined,
           cite: {
             emoji: "🌐",
             label: web.citations[0]
@@ -4161,11 +4256,19 @@ export default function AppHome() {
     if (a.kind === "enableCap" && a.cap) {
       persistCaps(caps.includes(a.cap) ? caps : [...caps, a.cap]);
       const name = capName(a.cap, lang);
-      setChat((c) => [
-        ...c,
-        { role: "one", text: lang === "he" ? `✅ ״${name}״ פעילה עכשיו.` : `✅ “${name}” is on now.` },
-      ]);
-      if (a.cap === "quiz" && a.run) void runQuiz(a.run);
+      const okMsg: ChatMsg = {
+        role: "one",
+        text: lang === "he" ? `✅ ״${name}״ פעילה עכשיו.` : `✅ “${name}” is on now.`,
+      };
+      // Re-run the ask so ONE actually DOES it now that the capability is on —
+      // routed to the open unit if we're inside one, else the home chat.
+      if (activeProcess) {
+        setUnitChat((c) => [...c, okMsg]);
+        if (a.run) void sendToUnit(a.run, activeProcess);
+      } else {
+        setChat((c) => [...c, okMsg]);
+        if (a.run) void send(a.run);
+      }
       return;
     }
     // Share a "ask-first" memory fact for this process — flip it to open so ONE
@@ -5075,6 +5178,43 @@ export default function AppHome() {
       ]);
       return;
     }
+    // Capability gate INSIDE a unit: if the ask needs a capability that's off,
+    // surface it right here in the chat with a one-tap "switch it on" (or upgrade
+    // for a paid one) — so you never hit a dead end mid-process.
+    {
+      const capKey = capabilityForText(text);
+      if (capKey && !caps.includes(capKey)) {
+        setUnitThinking(false);
+        const name = capName(capKey, lang);
+        const emoji = CAPABILITY_CATALOG.find((c) => c.key === capKey)?.emoji ?? "";
+        if (PREMIUM_CAPS.includes(capKey) && plan === "free") {
+          setUnitChat((c) => [
+            ...c,
+            {
+              role: "one",
+              text:
+                lang === "he"
+                  ? `${emoji} ״${name}״ היא יכולת בתוכנית משודרגת. לשדרג כדי להפעיל?`
+                  : `${emoji} “${name}” is a Plus capability. Upgrade to switch it on?`,
+              actions: [{ label: t.upgrade, kind: "upgrade" }],
+            },
+          ]);
+        } else {
+          setUnitChat((c) => [
+            ...c,
+            {
+              role: "one",
+              text:
+                lang === "he"
+                  ? `${emoji} אני יכול לעשות את זה עם היכולת ״${name}״ — היא עדיין לא מופעלת.`
+                  : `${emoji} I can do that with the “${name}” capability — it isn't switched on yet.`,
+              actions: [{ label: `${emoji} ${t.capNeedRun}`, kind: "enableCap", cap: capKey, run: text }],
+            },
+          ]);
+        }
+        return;
+      }
+    }
     // Booking inside a process — ONE proposes real slots that book straight into
     // THIS process's timeline (the "into the process" half of the capability).
     if (caps.includes("booking") && capabilityForText(text) === "booking") {
@@ -5948,6 +6088,7 @@ export default function AppHome() {
                             <img className="chat-img" src={m.image} alt="" loading="lazy" />
                           )}
                           <div className={`chat-msg ${cls}`}>{m.text}</div>
+                          {m.cards && m.cards.length > 0 && <ChatCards cards={m.cards} />}
                           {/* Answer chips belong only to the CURRENT question —
                               the last message. Once you answer (and ONE moves on),
                               older chips disappear instead of lingering. */}
@@ -7256,6 +7397,7 @@ export default function AppHome() {
                           )}
                           {m.text}
                         </div>
+                        {m.cards && m.cards.length > 0 && <ChatCards cards={m.cards} />}
                         {m.cite && (
                           <div className="chat-cite" title={m.cite.host}>
                             <span className="chat-cite-emoji" aria-hidden="true">{m.cite.emoji}</span>
