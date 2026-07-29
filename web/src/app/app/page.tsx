@@ -758,6 +758,31 @@ const MEMORY_CATALOG: MemoryFact[] = [
   { key: "weight", emoji: "⚖️", en: "Weight", he: "משקל" },
   { key: "idnum", emoji: "🆔", en: "ID number", he: "תעודת זהות" },
 ];
+// Maps an intake field/question to a MEMORY_CATALOG key, so when ONE gathers a
+// personal detail mid-process (age, ID, phone…) it can offer to REMEMBER it in
+// the user's profile — with their approval — instead of losing it in one unit.
+// `needDigit` guards number-shaped facts so a vague answer isn't stored as an ID.
+const MEM_DETECTORS: { key: string; re: RegExp; needDigit?: boolean }[] = [
+  { key: "idnum", re: /\bid\b|id\s*(?:number|no)|ת["״]?\.?\s*ז|תעוד[הת]\s*זהות|identity\s*(?:number|card)|passport|דרכון/i, needDigit: true },
+  { key: "phone", re: /phone|mobile|cell|טלפון|נייד|מספר\s*טלפון/i, needDigit: true },
+  { key: "email", re: /e-?mail|מייל|אימייל|דוא["״]?ל/i },
+  { key: "age", re: /\bage\b|how\s*old|גיל|בן\s*כמה|בת\s*כמה/i, needDigit: true },
+  { key: "address", re: /address|כתובת|מען|home\s*address/i },
+  { key: "gender", re: /gender|מגדר|מין\b/i },
+  { key: "height", re: /height|גובה/i, needDigit: true },
+  { key: "weight", re: /weight|משקל/i, needDigit: true },
+  { key: "name", re: /full\s*name|your\s*name|שם\s*מלא|שמך|מה\s*שמך/i },
+];
+function detectMemKey(fieldAndQuestion: string, answer: string): string | null {
+  for (const d of MEM_DETECTORS) {
+    if (d.re.test(fieldAndQuestion)) {
+      if (d.needDigit && !/\d/.test(answer)) return null;
+      return d.key;
+    }
+  }
+  return null;
+}
+
 type MemPerm = "open" | "ask" | "private";
 const PERM_CYCLE: Record<MemPerm, MemPerm> = { open: "ask", ask: "private", private: "open" };
 const PERM_DOT: Record<MemPerm, string> = { open: "🟢", ask: "🟡", private: "🔴" };
@@ -1027,6 +1052,109 @@ function ChatCards({ cards }: { cards: NonNullable<ChatMsg["cards"]> }) {
         );
       })}
     </div>
+  );
+}
+
+/** A compiled insight rendered inline in the thread — a captured fact, a locked
+ *  decision, a reached milestone. The "text → widget" moment made visible. */
+function InsightChip({ insight }: { insight: NonNullable<ChatMsg["insight"]> }) {
+  return (
+    <div className={`insight-chip ins-${insight.kind}`}>
+      <span className="insight-icon" aria-hidden="true">
+        {insight.icon}
+      </span>
+      <span className="insight-body">
+        <span className="insight-label" dir="auto">
+          {insight.label}
+        </span>
+        {insight.value && (
+          <span className="insight-value" dir="auto">
+            {insight.value}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * LiveOrb — the home figure made alive. Its eyes follow the mouse across the
+ * canvas, and when you're still for a moment it looks around on its own (a hint
+ * of autonomy). Clickable — taps open ONE's profile. Self-contained so the
+ * per-frame eye motion re-renders only the orb, never the whole home.
+ */
+function LiveOrb({
+  size,
+  faceColor,
+  eyeColor,
+  biasLook = 0,
+  className,
+  onClick,
+  ariaLabel,
+}: {
+  size: number;
+  faceColor: string;
+  eyeColor: string;
+  /** Extra downward gaze (e.g. a nudge toward the input while typing). */
+  biasLook?: number;
+  className?: string;
+  onClick?: () => void;
+  ariaLabel?: string;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [g, setG] = useState(0);
+  const [l, setL] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const target = { g: 0, l: 0 };
+    let lastMove = performance.now();
+    const onMove = (e: PointerEvent) => {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const dx = e.clientX - (r.left + r.width / 2);
+      const dy = e.clientY - (r.top + r.height / 2);
+      target.g = Math.max(-1, Math.min(1, dx / 280));
+      target.l = Math.max(-0.6, Math.min(1, dy / 240));
+      lastMove = performance.now();
+    };
+    // Idle autonomy — after ~2.4s without a move, ONE glances around gently.
+    const wander = window.setInterval(() => {
+      if (performance.now() - lastMove > 2400) {
+        target.g = (Math.random() * 2 - 1) * 0.55;
+        target.l = (Math.random() * 2 - 1) * 0.3;
+      }
+    }, 2600);
+    const tick = () => {
+      setG((v) => v + (target.g - v) * 0.1);
+      setL((v) => v + (target.l - v) * 0.1);
+      raf = requestAnimationFrame(tick);
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    raf = requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      cancelAnimationFrame(raf);
+      window.clearInterval(wander);
+    };
+  }, []);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`live-orb-btn${className ? ` ${className}` : ""}`}
+      onClick={onClick}
+      aria-label={ariaLabel}
+    >
+      <Orb
+        size={size}
+        alive
+        gaze={g}
+        look={l + biasLook}
+        faceColor={faceColor}
+        eyeColor={eyeColor}
+      />
+    </button>
   );
 }
 
@@ -2887,60 +3015,114 @@ export default function AppHome() {
   // ONE you are right now (personal vs business).
   const broadcastLines = useMemo(() => {
     const he = lang === "he";
-    // Time-aware greeting — ONE knows what part of the day it is.
+    // ONE talking to you — a STREAM of short pulses, one thought at a time, not a
+    // system banner. The first two pulses are the "opening" (greeting, then a
+    // date/time moment); they show once and never loop back (see the cycle,
+    // which wraps to index 2). Everything after is the live substance — what ONE
+    // is carrying, what needs you — each its own pulse.
     const hour = now ? now.getHours() : 9;
-    const greetEn = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-    const greetHe = hour < 5 ? "לילה טוב" : hour < 12 ? "בוקר טוב" : hour < 18 ? "צהריים טובים" : "ערב טוב";
-    const greet = `${he ? greetHe : greetEn}, ${identity.name}.`;
-    // Supplier lens: ONE leads with the inbox, not "start a process".
+    const greetEn = hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+    const greetHe = hour < 5 ? "עדיין ער" : hour < 12 ? "בוקר טוב" : hour < 18 ? "צהריים טובים" : "ערב טוב";
+    const rawName = (identity.name ?? "").trim();
+    const isPlaceholder =
+      !rawName || rawName === "אורח" || rawName === "Guest" || rawName === "ONE";
+    const head = he ? greetHe : greetEn;
+    // Pulse 1 — the greeting, alone (no name for the placeholder profile).
+    const greeting = isPlaceholder ? `${head}.` : `${head}, ${rawName}.`;
+    const dateStr = now
+      ? now.toLocaleDateString(he ? "he-IL" : "en-US", { weekday: "long", day: "numeric", month: "long" })
+      : "";
+    const timeStr = now
+      ? now.toLocaleTimeString(he ? "he-IL" : "en-US", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    // Pulse 2 — a "moment": the clock/calendar, its own line, phrased by the hour.
+    const moment =
+      hour < 5
+        ? he ? `כבר ${timeStr}, ואני ער איתך.` : `It's ${timeStr}, and I'm up with you.`
+        : hour < 10
+          ? he ? `היום ${dateStr}.` : `Today is ${dateStr}.`
+          : hour >= 17 && hour < 20
+            ? he ? `השמש שוקעת — ${timeStr}.` : `Sun's going down — ${timeStr}.`
+            : he ? `${dateStr}.` : `${dateStr}.`;
+    const pulses: string[] = [greeting, moment];
+
+    // Supplier lens — ONE leads with the inbox.
     if ((identity.kind ?? "personal") === "supplier") {
       const newCount = requests.filter(
         (r) => r.toProfileId === activeIdentityId && r.status === "new",
       ).length;
-      return newCount > 0
-        ? [
-            he
-              ? `${greet} ${newCount} ${newCount === 1 ? "פנייה חדשה מחכה" : "פניות חדשות מחכות"} לך.`
-              : `${greet} ${newCount} new request${newCount > 1 ? "s" : ""} waiting on you.`,
-            he ? "פתח את תיבת הפניות כדי לענות." : "Open your inbox to answer.",
-          ]
-        : [
-            greet,
-            he ? "אין פניות חדשות כרגע." : "No new requests right now.",
-          ];
+      if (newCount > 0) {
+        pulses.push(
+          he
+            ? `${newCount} ${newCount === 1 ? "פנייה חדשה מחכה" : "פניות חדשות מחכות"} לך.`
+            : `${newCount} new request${newCount > 1 ? "s" : ""} waiting on you.`,
+        );
+        pulses.push(he ? "פתח את תיבת הפניות ואענה איתך." : "Open your inbox and I'll answer with you.");
+      } else {
+        pulses.push(he ? "אין פניות חדשות — הכל תחת שליטה." : "No new requests — all under control.");
+      }
+      return pulses;
     }
-    const waiting = processes.filter((p) => p.unread > 0);
-    // Pending reminders feed the pulse too — ONE says what's coming up.
+
+    // Reminders → their own pulse.
     const remCount = reminders.filter(
       (r) => r.identityId === activeIdentityId && !r.done,
     ).length;
-    const remLine =
-      remCount > 0
-        ? he
-          ? `⏰ ${remCount} ${remCount === 1 ? "תזכורת" : "תזכורות"} ממתינות.`
-          : `⏰ ${remCount} reminder${remCount > 1 ? "s" : ""} coming up.`
-        : null;
-    if (waiting.length === 0) {
-      return [
-        greet,
-        remLine ??
-          (he
-            ? "אין דבר שדורש אותך כרגע — ספרו לי מטרה חדשה."
-            : "Nothing needs you right now — tell me a new goal."),
-      ];
+    if (remCount > 0) {
+      pulses.push(
+        he
+          ? `⏰ ${remCount} ${remCount === 1 ? "תזכורת ממתינה" : "תזכורות ממתינות"}.`
+          : `⏰ ${remCount} reminder${remCount > 1 ? "s" : ""} coming up.`,
+      );
     }
-    const header = he
-      ? `${greet} ${waiting.length} ${waiting.length === 1 ? "דבר מחכה" : "דברים מחכים"} לך.`
-      : `${greet} ${waiting.length} ${waiting.length === 1 ? "thing needs you" : "things need you"}.`;
-    // In English, surface the machine-written next action. In Hebrew that text is
-    // English (it's generated), so phrase the line in Hebrew around the process's
-    // own title instead of leaking an English sentence into a Hebrew broadcast.
-    const items = waiting.slice(0, 4).map((p) =>
-      he
-        ? `${p.title} — ${p.unread > 1 ? `${p.unread} עדכונים ממתינים` : "עדכון ממתין"}.`
-        : (p.nextAction ?? p.summary),
-    );
-    return remLine ? [header, remLine, ...items] : [header, ...items];
+
+    // Processes → a headline pulse, then one pulse per process that needs you.
+    const waiting = processes.filter((p) => p.unread > 0);
+    if (waiting.length) {
+      pulses.push(
+        he
+          ? `${waiting.length} ${waiting.length === 1 ? "תהליך מבקש אותך" : "תהליכים מבקשים אותך"} עכשיו.`
+          : `${waiting.length} ${waiting.length === 1 ? "process needs you" : "processes need you"} now.`,
+      );
+      waiting.slice(0, 4).forEach((p) =>
+        pulses.push(
+          he
+            ? `${p.emoji} ${p.title} — ${p.unread > 1 ? `${p.unread} עדכונים ממתינים` : "עדכון ממתין"}.`
+            : `${p.emoji} ${p.title} — ${p.nextAction ?? p.summary}`,
+        ),
+      );
+    } else if (processes.length) {
+      // Nothing urgent — ONE says what it's quietly carrying for you.
+      const lead = processes[0];
+      pulses.push(
+        he ? `אני ממשיך לקדם את «${lead.title}».` : `I'm moving "${lead.title}" forward.`,
+      );
+      pulses.push(
+        he ? "שום דבר לא דורש אותך כרגע — אני על זה." : "Nothing needs you right now — I'm on it.",
+      );
+    } else {
+      pulses.push(
+        he ? "ספר לי מטרה — ואני לוקח את זה מכאן." : "Tell me a goal — I'll take it from there.",
+      );
+      pulses.push(
+        he ? "אני כאן כדי להפוך כוונה למציאות." : "I'm here to turn intention into done.",
+      );
+    }
+    // A general, unhurried nudge ONE sometimes rests on — the calm "what's next"
+    // beat, always the LAST pulse (the cycle lingers on it).
+    const nudges = he
+      ? [
+          "מה עוד תרצה שאקח על עצמי?",
+          "כל כוונה שתביא — אני הופך אותה למהלך.",
+          "אני כאן. פשוט תגיד מה הלאה.",
+        ]
+      : [
+          "What else can I take off your plate?",
+          "Bring me any intention — I'll make it real.",
+          "I'm here. Just say what's next.",
+        ];
+    pulses.push(nudges[hour % nudges.length]);
+    return pulses;
   }, [processes, identity.name, identity.kind, requests, reminders, activeIdentityId, now, lang]);
 
   // Announce a live event in the broadcast slot, in the app's language.
@@ -3554,6 +3736,49 @@ export default function AppHome() {
       return [];
     }
   };
+  // After an interview, surface any personal facts ONE picked up (age, ID, phone…)
+  // and offer to REMEMBER them in the profile — the tap on a chip IS the approval.
+  // Nothing is stored silently; and a saved fact defaults to 🟡 "ask" permission,
+  // so ONE still asks before ever sharing it (selective disclosure).
+  const offerMemorySaves = (
+    proc: Process,
+    answers: { field: string; question: string; answer: string }[],
+  ) => {
+    const he = msgLang(`${proc.title} ${proc.fields ? Object.values(proc.fields).join(" ") : ""}`) === "he";
+    const seen = new Set<string>();
+    const found: { key: string; value: string }[] = [];
+    for (const a of answers) {
+      const value = a.answer.trim();
+      if (!value) continue;
+      const key = detectMemKey(`${a.field} ${a.question}`, value);
+      if (!key || seen.has(key)) continue;
+      // Skip if the profile already holds this exact value — nothing new to save.
+      if ((memory[key]?.value ?? "").trim() === value) continue;
+      seen.add(key);
+      found.push({ key, value });
+    }
+    if (!found.length) return;
+    const actions = found.map(({ key, value }) => {
+      const fact = MEMORY_CATALOG.find((f) => f.key === key);
+      const label = fact ? (he ? fact.he : fact.en) : key;
+      // Keep the value readable but don't splash a full ID across the chip.
+      const shown = value.length > 14 ? `${value.slice(0, 12)}…` : value;
+      return {
+        label: `${fact?.emoji ?? "💾"} ${label}: ${shown}`,
+        kind: "saveMem" as const,
+        mem: key,
+        value,
+      };
+    });
+    postToProc(proc, {
+      role: "one",
+      text: he
+        ? "אגב — אספתי כמה פרטים אישיים תוך כדי. רוצה שאזכור אותם בפרופיל שלך כדי שלא אשאל שוב? הם נשמרים אצלך בלבד, ואבקש אישור לפני שאשתף אותם."
+        : "By the way — I picked up a few personal details along the way. Want me to remember them in your profile so I won't ask again? They stay only with you, and I'll ask before sharing them.",
+      actions,
+    });
+  };
+
   const finishIntake = async (
     proc: Process,
     topic: string,
@@ -3641,6 +3866,20 @@ export default function AppHome() {
       metrics: metrics.length ? metrics : proc.metrics,
       nextAction: firstAction || proc.nextAction,
     });
+    // Mark the compile moment: the interview just became a real plan.
+    {
+      const planSteps = steps.length || proc.steps.length;
+      postToProc(proc, {
+        role: "one",
+        text: "",
+        insight: {
+          kind: "milestone",
+          icon: "✨",
+          label: he ? "התוכנית מוכנה" : "Plan ready",
+          value: planSteps ? `${planSteps} ${he ? "שלבים" : "steps"}` : undefined,
+        },
+      });
+    }
     postToProc(proc, { role: "one", text: lead });
     // Actually DO the first move instead of promising to "check": pull REAL,
     // current info from the web (flights, prices, venues, availability) and put
@@ -3699,6 +3938,8 @@ export default function AppHome() {
             : "Ready to start?"),
       chips: [goChip, he ? "שנה משהו בתכנית" : "Adjust the plan"],
     });
+    // Last: ask whether to remember any personal facts gathered in the interview.
+    offerMemorySaves(proc, answers);
   };
   const askIntake = async (
     proc: Process,
@@ -3806,6 +4047,13 @@ export default function AppHome() {
         };
       }),
     );
+    // Compile the answer into a widget, inline — your text just became a saved,
+    // structured fact of the goal (the "text → widget" moment).
+    echo({
+      role: "one",
+      text: "",
+      insight: { kind: "fact", icon: "📌", label: cur.field, value: answerText },
+    });
     const answers = [
       ...cur.answers,
       { field: cur.field, question: cur.question, answer: answerText },
@@ -4311,10 +4559,11 @@ export default function AppHome() {
   // Run an action chip from a ONE message (enable a capability, or upgrade).
   const runChatAction = (a: {
     label: string;
-    kind: "enableCap" | "upgrade" | "shareMem" | "routeProcess" | "routeProfile";
+    kind: "enableCap" | "upgrade" | "shareMem" | "saveMem" | "routeProcess" | "routeProfile";
     cap?: string;
     run?: string;
     mem?: string;
+    value?: string;
     proc?: string;
   }) => {
     if (a.kind === "upgrade") {
@@ -4375,11 +4624,37 @@ export default function AppHome() {
         },
       ]);
     }
+    // Remember a personal fact ONE gathered — the user tapped the chip, so this
+    // IS their approval. Stored with 🟡 "ask" permission by default (unless they
+    // already loosened it): ONE keeps it, but still asks before sharing it.
+    if (a.kind === "saveMem" && a.mem) {
+      const fact = MEMORY_CATALOG.find((f) => f.key === a.mem);
+      const value = (a.value ?? "").trim();
+      if (value) {
+        persistMemory({
+          ...memory,
+          [a.mem]: { value, perm: memory[a.mem]?.perm ?? "ask" },
+        });
+      }
+      const label = fact ? (lang === "he" ? fact.he : fact.en) : a.mem;
+      const okMsg: ChatMsg = {
+        role: "one",
+        text:
+          lang === "he"
+            ? `✅ ${fact?.emoji ?? ""} שמרתי «${label}» בפרופיל שלך. 🟡 אבקש אישור לפני שאשתף — אפשר לשנות בזיכרון.`
+            : `✅ ${fact?.emoji ?? ""} Saved “${label}” to your profile. 🟡 I'll ask before sharing it — change it anytime in Memory.`,
+      };
+      if (activeProcess) setUnitChat((c) => [...c, okMsg]);
+      else setChat((c) => [...c, okMsg]);
+    }
   };
 
   const send = async (override?: string) => {
     const text = (override ?? draft).trim();
     if (!text) return;
+    // Talking from the Global-docked input returns to the ONE canvas so the
+    // reply isn't hidden behind the Global feed.
+    if (globalOpen) setGlobalOpen(false);
     const priorChat = chat; // snapshot the transcript for the AI, pre-append
     setChat((c) => [...c, { role: "user", text }]);
     setDraft("");
@@ -4568,7 +4843,7 @@ export default function AppHome() {
               role: "system",
               content: oneSystemPrompt(lang, [memoryContext(), srcHint].filter(Boolean).join(" ")),
             },
-            ...priorChat.slice(-8).map((m) => ({
+            ...priorChat.filter((m) => m.text).slice(-8).map((m) => ({
               role: (m.role === "one" ? "assistant" : "user") as AiChatMessage["role"],
               content: m.text,
             })),
@@ -4646,7 +4921,7 @@ export default function AppHome() {
       const extra = [processExtra, memoryContext()].filter(Boolean).join(" ") || undefined;
       const messages: AiChatMessage[] = [
         { role: "system", content: oneSystemPrompt(lang, extra) },
-        ...priorChat.slice(-8).map((m) => ({
+        ...priorChat.filter((m) => m.text).slice(-8).map((m) => ({
           role: (m.role === "one" ? "assistant" : "user") as AiChatMessage["role"],
           content: m.text,
         })),
@@ -5368,7 +5643,7 @@ export default function AppHome() {
       const extra = [scopeExtra, factsExtra, memoryContext()].filter(Boolean).join(" ");
       const messages: AiChatMessage[] = [
         { role: "system", content: oneSystemPrompt(lang, extra) },
-        ...priorChat.slice(-8).map((m) => ({
+        ...priorChat.filter((m) => m.text).slice(-8).map((m) => ({
           role: (m.role === "one" ? "assistant" : "user") as AiChatMessage["role"],
           content: m.text,
         })),
@@ -5505,22 +5780,27 @@ export default function AppHome() {
     };
   }, [globalOpen, space, activeProcess, chat.length]);
 
-  // …and scrolling DOWN at the very top of the open panel (or dragging it down)
-  // lowers Global back out of view — the natural reverse of the reveal.
+  // …and once you're back at the very top of the Global feed, keep scrolling UP
+  // (or drag the feed down) to push Global back up and out — the natural reverse
+  // of the scroll-up that revealed it. Down-scroll always reads the feed, so the
+  // dismiss gesture is an over-scroll at the top, matching a top sheet. Listens
+  // on window so it fires even with the cursor over the floating orb / input.
   useEffect(() => {
     if (!globalOpen) return;
-    const panel = pgPanelRef.current;
-    if (!panel) return;
     let acc = 0;
     let timer = 0;
+    const atTop = () => {
+      const p = pgPanelRef.current;
+      return !p || p.scrollTop <= 0;
+    };
     const onWheel = (e: WheelEvent) => {
-      if (panel.scrollTop > 0) {
+      if (!atTop()) {
         acc = 0;
         return;
       }
-      if (e.deltaY > 0) {
-        acc += e.deltaY;
-        if (acc > 60) {
+      if (e.deltaY < 0) {
+        acc += -e.deltaY;
+        if (acc > 44) {
           acc = 0;
           setGlobalOpen(false);
         }
@@ -5528,23 +5808,23 @@ export default function AppHome() {
         acc = 0;
       }
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => (acc = 0), 260);
+      timer = window.setTimeout(() => (acc = 0), 240);
     };
     let startY = 0;
     const onTouchStart = (e: TouchEvent) => {
       startY = e.touches[0]?.clientY ?? 0;
     };
     const onTouchMove = (e: TouchEvent) => {
-      if (panel.scrollTop > 0) return;
-      if ((e.touches[0]?.clientY ?? 0) - startY > 70) setGlobalOpen(false);
+      if (!atTop()) return;
+      if ((e.touches[0]?.clientY ?? 0) - startY > 60) setGlobalOpen(false);
     };
-    panel.addEventListener("wheel", onWheel, { passive: true });
-    panel.addEventListener("touchstart", onTouchStart, { passive: true });
-    panel.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
     return () => {
-      panel.removeEventListener("wheel", onWheel);
-      panel.removeEventListener("touchstart", onTouchStart);
-      panel.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
       window.clearTimeout(timer);
     };
   }, [globalOpen]);
@@ -5560,6 +5840,10 @@ export default function AppHome() {
       const vh = page.clientHeight || 1;
       const hs = Math.min(1, Math.max(0, page.scrollTop / (vh * 0.8)));
       page.style.setProperty("--hs", hs.toFixed(3));
+      // A binary "in the list" flag so the chevron flips at once (not tracking
+      // the scroll frame-by-frame). Hysteresis avoids flicker at the threshold.
+      if (page.scrollTop > vh * 0.35) page.classList.add("at-list");
+      else if (page.scrollTop < vh * 0.2) page.classList.remove("at-list");
     };
     apply();
     page.addEventListener("scroll", apply, { passive: true });
@@ -5591,20 +5875,43 @@ export default function AppHome() {
     setBfade(false);
     const n = broadcastLines.length;
     if (n < 2) return; // nothing to sweep — hold the single line
-    let idx = 0;
     let timer: ReturnType<typeof setTimeout>;
+    const contentStart = Math.min(2, n - 1); // first live-content pulse
+    const restIdx = n - 1; // the closing nudge — ONE lingers here
+    // A fresh shuffle of the content pulses so each pass comes in a different
+    // order (never the same nagging loop). The opening pulses (0,1) are shown
+    // once up front and never re-enter the rotation.
+    const shuffledContent = () => {
+      const arr: number[] = [];
+      for (let k = contentStart; k < n; k++) arr.push(k);
+      for (let k = arr.length - 1; k > 0; k--) {
+        const j = Math.floor(Math.random() * (k + 1));
+        [arr[k], arr[j]] = [arr[j], arr[k]];
+      }
+      return arr;
+    };
+    let seq = Array.from(new Set([0, 1, ...shuffledContent()])).filter((i) => i < n);
+    let ptr = 0;
+    setBi(seq[0]);
     const advance = () => {
       setBfade(true);
       timer = setTimeout(() => {
-        idx = (idx + 1) % n;
-        setBi(idx);
+        ptr += 1;
+        if (ptr >= seq.length) {
+          seq = shuffledContent(); // loop: content only, re-shuffled
+          ptr = 0;
+        }
+        setBi(seq[ptr]);
         setBfade(false);
         schedule();
       }, 300);
     };
     const schedule = () => {
-      // Settled on the opening line → a long, calm pause; mid-sweep → brisk.
-      timer = setTimeout(advance, idx === 0 ? 13000 : 4400);
+      const cur = seq[ptr];
+      // Calm, longer dwell on the opening pulses and on the general nudge; a
+      // brisker sweep through the live substance.
+      const rest = cur <= 1 || cur === restIdx;
+      timer = setTimeout(advance, rest ? 7000 : 4400);
     };
     schedule();
     return () => clearTimeout(timer);
@@ -5827,7 +6134,7 @@ export default function AppHome() {
           screen and grows into place. Same as the landing hero. */}
       {/* Full-bleed canvas — no window chrome, no back-to-site. The product is
           its own place; the ONE orb in the sidebar is the brand anchor. */}
-      <div className="app-shell">
+      <div className={`app-shell${globalOpen ? " global-open" : ""}`}>
         {/* Edge-hover zone — sweep the mouse to the inline-start edge and the
             drawer slides out on its own (desktop only). */}
         <div
@@ -5872,21 +6179,91 @@ export default function AppHome() {
             >
               <span>{t.upgrade}</span>
             </button>
-            {/* Temporary chat — a clean incognito glyph, no chrome. Tapping it
-                while a temp chat is open turns it into an ✕ that exits. */}
-            <button
-              className={`app-nav-btn app-nav-temp${tempChat ? " is-active" : ""}`}
-              onClick={toggleTempChat}
-              aria-label={tempChat ? t.exitTemp : t.tempChat}
-              title={tempChat ? t.exitTemp : t.tempChat}
-              aria-pressed={tempChat}
+            {/* Profile avatar — hover (or tap) reveals the profiles menu: switch
+                identity, go Anonymous (incognito — nothing saved), or add one. */}
+            <div
+              className="app-nav-profile"
+              onMouseEnter={() => setProfilesOpen(true)}
+              onMouseLeave={() => setProfilesOpen(false)}
             >
-              {tempChat ? (
-                <i className="fi fi-rr-cross-small" aria-hidden="true" />
-              ) : (
-                <i className="fi fi-rr-incognito" aria-hidden="true" />
+              <button
+                className={`app-nav-avatar${tempChat ? " is-anon" : ""}`}
+                onClick={() => setProfilesOpen((v) => !v)}
+                aria-label={t.profiles}
+                aria-expanded={profilesOpen}
+              >
+                {tempChat ? (
+                  <i className="fi fi-rr-incognito" aria-hidden="true" />
+                ) : (
+                  <span className="app-nav-avatar-emoji">{identity.emoji}</span>
+                )}
+              </button>
+              {profilesOpen && (
+                <div className="nav-profiles-menu" role="menu">
+                  <button className="nav-profile-row is-active" onClick={openProfile}>
+                    <span className="nav-profile-emoji">{identity.emoji}</span>
+                    <span className="nav-profile-text">
+                      <span className="nav-profile-name">{identity.name}</span>
+                      <span className="nav-profile-role">{identity.role}</span>
+                    </span>
+                    <i className="fi fi-rr-pencil nav-profile-edit" aria-hidden="true" />
+                  </button>
+                  {identities
+                    .filter((id) => id.id !== activeIdentityId)
+                    .map((id) => (
+                      <button
+                        key={id.id}
+                        className="nav-profile-row"
+                        onClick={() => {
+                          setActiveIdentityId(id.id);
+                          setProfilesOpen(false);
+                        }}
+                      >
+                        <span className="nav-profile-emoji">{id.emoji}</span>
+                        <span className="nav-profile-text">
+                          <span className="nav-profile-name">{id.name}</span>
+                          <span className="nav-profile-role">{id.role}</span>
+                        </span>
+                      </button>
+                    ))}
+                  <button
+                    className={`nav-profile-row nav-profile-anon${tempChat ? " is-on" : ""}`}
+                    onClick={() => {
+                      toggleTempChat();
+                      setProfilesOpen(false);
+                    }}
+                  >
+                    <span className="nav-profile-emoji">
+                      <i className="fi fi-rr-incognito" aria-hidden="true" />
+                    </span>
+                    <span className="nav-profile-text">
+                      <span className="nav-profile-name">
+                        {lang === "he" ? "אנונימי" : "Anonymous"}
+                      </span>
+                      <span className="nav-profile-role">
+                        {tempChat
+                          ? lang === "he"
+                            ? "פעיל — כלום לא נשמר"
+                            : "On — nothing saved"
+                          : lang === "he"
+                            ? "גלישה בלי לשמור"
+                            : "Browse without saving"}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    className="nav-profile-row nav-profile-new"
+                    onClick={() => {
+                      setOpenSheet("newProfile");
+                      setProfilesOpen(false);
+                    }}
+                  >
+                    <i className="fi fi-rr-plus" aria-hidden="true" />
+                    {t.newProfile}
+                  </button>
+                </div>
               )}
-            </button>
+            </div>
           </div>
         </nav>
 
@@ -5902,139 +6279,8 @@ export default function AppHome() {
           aria-hidden={!drawerOpen}
         >
           <div className="drawer-scroll">
-            <div
-              className={`drawer-section drawer-profiles${profilesOpen ? " is-open" : ""}`}
-              onMouseLeave={() => setProfilesOpen(false)}
-            >
-              <div className="drawer-label">{t.profiles}</div>
-              {/* Active profile — click to reveal the others (they also reveal
-                  on hover, like a little drawer). */}
-              <div className="drawer-profile-wrap">
-                <button
-                  className="drawer-profile active"
-                  onClick={() => setProfilesOpen((v) => !v)}
-                  aria-expanded={profilesOpen}
-                >
-                  <span className="drawer-profile-emoji">{identity.emoji}</span>
-                  <span className="drawer-profile-text">
-                    <span className="drawer-profile-name">{identity.name}</span>
-                    <span className="drawer-profile-role">{identity.role}</span>
-                  </span>
-                  <i className="fi fi-rr-angle-small-down drawer-profile-caret" aria-hidden="true" />
-                </button>
-                {/* Reveals on hover — jumps straight to the profile canvas. */}
-                <button
-                  className="drawer-profile-edit"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openProfile();
-                  }}
-                  aria-label={t.editProfile}
-                  title={t.editProfile}
-                >
-                  <i className="fi fi-rr-pencil" aria-hidden="true" />
-                </button>
-              </div>
-              <div className="drawer-profiles-more">
-                <div className="drawer-profiles-more-inner">
-                  {identities.filter((id) => id.id !== activeIdentityId).map((id) => (
-                    <button
-                      key={id.id}
-                      className="drawer-profile"
-                      onClick={() => {
-                        setActiveIdentityId(id.id);
-                        setProfilesOpen(false);
-                      }}
-                    >
-                      <span className="drawer-profile-emoji">{id.emoji}</span>
-                      <span className="drawer-profile-text">
-                        <span className="drawer-profile-name">{id.name}</span>
-                        <span className="drawer-profile-role">{id.role}</span>
-                      </span>
-                    </button>
-                  ))}
-                  <button
-                    className="drawer-row drawer-row-new"
-                    onClick={() => setOpenSheet("newProfile")}
-                  >
-                    <i className="fi fi-rr-plus drawer-row-ico" aria-hidden="true" />
-                    {t.newProfile}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="drawer-section">
-              <div className="drawer-label">{t.processes}</div>
-              {/* Stable order — never reshuffle just because you opened one (which
-                  clears its unread). New units are prepended, so recent stays on top. */}
-              {processes.map((p) => {
-                const when = p.updatedAt ? relTime(p.updatedAt) : "";
-                return (
-                  <div
-                    key={p.id}
-                    className={`drawer-process${p.unread > 0 ? " has-update" : ""}`}
-                    title={`${p.title} · ${p.relation}`}
-                  >
-                    <button className="drawer-process-open" onClick={() => openUnit(p)}>
-                      <span className="drawer-process-emoji">{p.emoji}</span>
-                      <span className="drawer-process-main">
-                        <span className="drawer-process-title">{p.title}</span>
-                        <span className="drawer-process-sub">
-                          {p.relation}
-                          {p.steps.length > 0 && (
-                            <>
-                              {" · "}
-                              {p.steps.filter((_, i) => isStepDone(p, i)).length}/{p.steps.length}
-                            </>
-                          )}
-                          {when && (
-                            <>
-                              {" · "}
-                              {when}
-                            </>
-                          )}
-                        </span>
-                      </span>
-                    </button>
-                    {p.unread > 0 && <span className="drawer-process-badge">{p.unread}</span>}
-                    <button
-                      className="drawer-process-menu"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openUnitOptions(p);
-                      }}
-                      aria-label={t.options}
-                      title={t.options}
-                    >
-                      <i className="fi fi-rr-menu-dots-vertical" aria-hidden="true" />
-                    </button>
-                  </div>
-                );
-              })}
-              {processes.length === 0 && (
-                <div className="drawer-empty">
-                  <span>{t.nothingHere}</span>
-                  <button className="drawer-gen" onClick={generateExamples} disabled={generating}>
-                    <span aria-hidden="true">✨</span> {generating ? t.generating : t.genExamples}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* New chat sits at the end of the list — above the footer's
-                separator line. */}
-            <button
-              className="drawer-new"
-              onClick={startNewProcess}
-              title={t.newProcess}
-              aria-label={t.newProcess}
-            >
-              <span className="drawer-new-ico">
-                <i className="fi fi-rr-plus" aria-hidden="true" />
-              </span>
-              <span className="drawer-new-label">{t.newProcess}</span>
-            </button>
+            {/* Profiles moved to the top-bar avatar; processes live as cards on
+                the home canvas. This menu is now just the footer nav below. */}
           </div>
 
           <div className="drawer-foot">
@@ -6229,7 +6475,8 @@ export default function AppHome() {
                             // eslint-disable-next-line @next/next/no-img-element
                             <img className="chat-img" src={m.image} alt="" loading="lazy" />
                           )}
-                          <div className={`chat-msg ${cls}`}>{m.text}</div>
+                          {m.insight && <InsightChip insight={m.insight} />}
+                          {m.text && <div className={`chat-msg ${cls}`}>{m.text}</div>}
                           {m.cards && m.cards.length > 0 && <ChatCards cards={m.cards} />}
                           {/* Answer chips belong only to the CURRENT question —
                               the last message. Once you answer (and ONE moves on),
@@ -6290,6 +6537,20 @@ export default function AppHome() {
                                     {p.blurb && <span className="prov-blurb">{p.blurb}</span>}
                                   </span>
                                   <span className="prov-add" aria-hidden="true">＋</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : m.actions && m.actions.length > 0 ? (
+                            // Action chips (save-to-memory, share a fact, enable a
+                            // capability…) — persistent, unlike answer chips.
+                            <div className="chat-chips">
+                              {m.actions.map((a, ai) => (
+                                <button
+                                  key={ai}
+                                  className="chat-chip chip-cta"
+                                  onClick={() => runChatAction(a)}
+                                >
+                                  {a.label}
                                 </button>
                               ))}
                             </div>
@@ -7356,6 +7617,11 @@ export default function AppHome() {
                         </div>
                       </div>
                     </div>
+                    {/* Fades so the process cards dissolve into the canvas behind
+                        the header (top) and the input + chevron (bottom) — no hard
+                        overlap as they scroll under. (Mirror of web_menu_bg.svg.) */}
+                    <div className="home-fade home-fade-top" aria-hidden="true" />
+                    <div className="home-fade home-fade-bottom" aria-hidden="true" />
                     <div className="app-page" ref={homePageRef}>
                     {/* ONE surface — rest (top). Scroll down = Updates. */}
                     <section className="home-main">
@@ -7416,13 +7682,14 @@ export default function AppHome() {
                             Home opens with a presence, not just a line of text.
                             The eyes meet you (lean toward the input) as you type. */}
                         <span ref={homeHeroRef} className="home-hero-orb chat-presence-pump">
-                          <Orb
+                          <LiveOrb
                             size={76}
-                            alive
-                            look={draft.trim() ? 0.2 : 0}
+                            biasLook={draft.trim() ? 0.2 : 0}
                             faceColor="var(--p-face)"
                             eyeColor="var(--p-bg)"
                             className={draft.trim() ? "awake" : ""}
+                            onClick={openProfile}
+                            ariaLabel={lang === "he" ? "הפרופיל של ONE" : "ONE's profile"}
                           />
                         </span>
                         {/* Broadcast at rest cross-fades into the compact profile
@@ -7437,14 +7704,23 @@ export default function AppHome() {
                             {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
                           </div>
                           <div className="home-name" aria-hidden="true">
-                            {identity?.name || (lang === "he" ? "אורח" : "Guest")}
+                            {(() => {
+                              const n = (identity?.name ?? "").trim();
+                              // Never surface the placeholder — this is ONE, not "Guest".
+                              return n && n !== "אורח" && n !== "Guest" && n !== "ONE" ? n : "ONE";
+                            })()}
                           </div>
                         </div>
                       </div>
                       <button
                         type="button"
                         className="home-chev down"
-                        onClick={() => scrollHome(1)}
+                        onClick={() => {
+                          // Scrolled into the list → this now points up and takes
+                          // you back to ONE; at rest → pulls the processes up.
+                          const p = homePageRef.current;
+                          scrollHome(p && p.scrollTop > p.clientHeight * 0.4 ? 0 : 1);
+                        }}
                         aria-label={t.updates}
                       >
                         <ChevronDownIcon />
@@ -7492,20 +7768,71 @@ export default function AppHome() {
                           </div>
                         )}
                         <div className="global-sec-head">
-                          <h3 className="global-sec-title">{t.updates}</h3>
-                          <span className="global-sec-sub">{t.updatesSub}</span>
+                          <h3 className="global-sec-title">
+                            {lang === "he" ? "התהליכים שלי" : "My processes"}
+                          </h3>
+                          <span className="global-sec-sub">
+                            {lang === "he"
+                              ? "כל מה שאני מנהל בשבילך"
+                              : "Everything I'm running for you"}
+                          </span>
                         </div>
-                        <div className="glist">
-                          {updatesList.map((p) => (
-                            <button key={p.id} className="grow" onClick={() => openUnit(p)}>
-                              <span className="grow-emoji">{p.emoji}</span>
-                              <span className="grow-main">
-                                <span className="grow-who">{p.title}</span>
-                                <span className="grow-text">{p.nextAction ?? p.summary}</span>
-                              </span>
-                              {p.unread > 0 && <span className="grow-badge">{p.unread}</span>}
-                            </button>
-                          ))}
+                        <div className="proc-cards">
+                          {updatesList.map((p) => {
+                            const total = p.steps.length;
+                            const done = total
+                              ? p.steps.filter((_, i) => isStepDone(p, i)).length
+                              : (p.progress?.done ?? 0);
+                            const totalN = total || (p.progress?.total ?? 0);
+                            const pct = totalN ? Math.round((done / totalN) * 100) : 0;
+                            const complete = !!p.completedAt || (totalN > 0 && done >= totalN);
+                            return (
+                              <button
+                                key={p.id}
+                                className={`proc-card${complete ? " is-done" : ""}`}
+                                onClick={() => openUnit(p)}
+                              >
+                                <div className="proc-card-top">
+                                  <span className="proc-card-emoji" aria-hidden="true">
+                                    {p.emoji}
+                                  </span>
+                                  <span className="proc-card-headtext">
+                                    <span className="proc-card-title">{p.title}</span>
+                                    {p.relation && (
+                                      <span className="proc-card-rel">{p.relation}</span>
+                                    )}
+                                  </span>
+                                  {p.unread > 0 ? (
+                                    <span className="proc-card-badge">{p.unread}</span>
+                                  ) : (
+                                    <span className="proc-card-time">{p.time}</span>
+                                  )}
+                                </div>
+                                {(p.nextAction || p.summary) && (
+                                  <div className="proc-card-next">
+                                    {p.nextAction ?? p.summary}
+                                  </div>
+                                )}
+                                {totalN > 0 && (
+                                  <div className="proc-card-foot">
+                                    <span className="proc-card-bar">
+                                      <span
+                                        className="proc-card-fill"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </span>
+                                    <span className="proc-card-prog">
+                                      {complete
+                                        ? lang === "he"
+                                          ? "הושלם ✓"
+                                          : "Done ✓"
+                                        : `${done}/${totalN}`}
+                                    </span>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                           {updatesList.length === 0 && (
                             <div className="world-empty">{t.updatesEmpty}</div>
                           )}
@@ -7548,13 +7875,17 @@ export default function AppHome() {
                     )}
                     {chat.map((m, i) => (
                       <Fragment key={i}>
-                        <div className={`chat-msg ${m.role}`}>
-                          {m.image && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img className="chat-img" src={m.image} alt="" loading="lazy" />
-                          )}
-                          {m.text}
-                        </div>
+                        {m.insight ? (
+                          <InsightChip insight={m.insight} />
+                        ) : (
+                          <div className={`chat-msg ${m.role}`}>
+                            {m.image && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img className="chat-img" src={m.image} alt="" loading="lazy" />
+                            )}
+                            {m.text}
+                          </div>
+                        )}
                         {m.cards && m.cards.length > 0 && <ChatCards cards={m.cards} />}
                         {m.cite && (
                           <div className="chat-cite" title={m.cite.host}>

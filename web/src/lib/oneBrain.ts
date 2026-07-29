@@ -18,6 +18,7 @@ import type { Process, Metric } from "./mockData";
 
 export type ChatMsg = {
   role: "user" | "one";
+  /** The line's text. A widget-only message (e.g. an `insight`) carries "". */
   text: string;
   /**
    * Who is speaking, for a multi-party process thread: "you" (the user), "one"
@@ -65,14 +66,28 @@ export type ChatMsg = {
   sid?: string;
   /** A source ONE drew on when answering a regulated-domain question. */
   cite?: { emoji: string; label: string; host: string };
-  /** Action chips — enable a capability, upgrade, share a fact, or route into a process. */
+  /**
+   * A compiled INSIGHT — the moment a bit of the conversation becomes structured
+   * knowledge. Rendered inline as a compact widget (not a chat bubble), so the
+   * thread visibly compiles as you talk: a captured fact, a locked decision, a
+   * reached milestone. This is "an insight turns from text into a widget".
+   */
+  insight?: {
+    kind: "fact" | "decision" | "milestone";
+    icon: string;
+    label: string;
+    value?: string;
+  };
+  /** Action chips — enable a capability, upgrade, share/save a fact, or route into a process. */
   actions?: {
     label: string;
-    kind: "enableCap" | "upgrade" | "shareMem" | "routeProcess" | "routeProfile";
+    kind: "enableCap" | "upgrade" | "shareMem" | "saveMem" | "routeProcess" | "routeProfile";
     cap?: string;
     run?: string;
-    /** For kind==="shareMem": the MEMORY_CATALOG key this chip grants for the process. */
+    /** For kind==="shareMem"/"saveMem": the MEMORY_CATALOG key this chip acts on. */
     mem?: string;
+    /** For kind==="saveMem": the value to store in the profile once the user approves. */
+    value?: string;
     /** For routeProcess: the process id to open. For routeProfile: the identity id to switch to. */
     proc?: string;
   }[];
