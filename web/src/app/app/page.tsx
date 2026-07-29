@@ -547,6 +547,83 @@ function capabilityForText(text: string): string | null {
   return null;
 }
 
+// The facts each kind of goal needs — ONE works this checklist instead of
+// improvising one question at a time. It pre-fills what you already said, asks
+// only for what's still missing, and finishes once the essentials are known.
+// Keyed by the domain id on the process (see oneBrain domains); a generic list
+// covers anything unlisted.
+const GOAL_NEEDS: Record<string, { en: string; he: string }[]> = {
+  travel: [
+    { en: "destination", he: "יעד" },
+    { en: "dates or timeframe", he: "תאריכים או מועד" },
+    { en: "departure city", he: "עיר יציאה" },
+    { en: "how many travelers", he: "כמה נוסעים" },
+    { en: "budget", he: "תקציב" },
+    { en: "trip style / interests", he: "סגנון הטיול / תחומי עניין" },
+  ],
+  move: [
+    { en: "moving from (area)", he: "מאיפה עוברים (אזור)" },
+    { en: "moving to", he: "לאן עוברים" },
+    { en: "target date", he: "תאריך יעד" },
+    { en: "home size / rooms", he: "גודל הבית / חדרים" },
+    { en: "budget", he: "תקציב" },
+    { en: "packing or movers help", he: "עזרה באריזה או הובלה" },
+  ],
+  event: [
+    { en: "type of event", he: "סוג האירוע" },
+    { en: "date", he: "תאריך" },
+    { en: "number of guests", he: "כמות אורחים" },
+    { en: "budget", he: "תקציב" },
+    { en: "location / venue", he: "מיקום / מקום" },
+    { en: "style or theme", he: "סגנון או נושא" },
+  ],
+  learning: [
+    { en: "current level", he: "רמה נוכחית" },
+    { en: "target / goal", he: "יעד / מטרה" },
+    { en: "time available per week", he: "זמן פנוי בשבוע" },
+    { en: "budget", he: "תקציב" },
+    { en: "format (online / in-person)", he: "פורמט (אונליין / פרונטלי)" },
+  ],
+  fitness: [
+    { en: "current status", he: "מצב נוכחי" },
+    { en: "goal", he: "מטרה" },
+    { en: "timeframe", he: "מסגרת זמן" },
+    { en: "days per week available", he: "ימים בשבוע פנויים" },
+    { en: "constraints or injuries", he: "מגבלות או פציעות" },
+  ],
+  finance: [
+    { en: "goal amount", he: "סכום יעד" },
+    { en: "timeframe", he: "מסגרת זמן" },
+    { en: "current situation", he: "מצב נוכחי" },
+    { en: "monthly capacity", he: "יכולת חודשית" },
+  ],
+  gov: [
+    { en: "which document / service", he: "איזה מסמך / שירות" },
+    { en: "your status / eligibility", he: "מצב / זכאות" },
+    { en: "deadline", he: "מועד אחרון" },
+    { en: "documents you already have", he: "מסמכים שכבר יש" },
+  ],
+  business: [
+    { en: "what you're offering", he: "מה מציעים" },
+    { en: "target customer", he: "לקוח יעד" },
+    { en: "timeframe", he: "מסגרת זמן" },
+    { en: "budget", he: "תקציב" },
+  ],
+  appointment: [
+    { en: "with whom / what service", he: "עם מי / איזה שירות" },
+    { en: "preferred date & time", he: "תאריך ושעה מועדפים" },
+    { en: "location", he: "מיקום" },
+  ],
+};
+const GENERIC_GOAL_NEEDS = [
+  { en: "what a good result looks like", he: "איך נראית תוצאה טובה" },
+  { en: "timeframe or deadline", he: "מסגרת זמן או מועד" },
+  { en: "budget or key constraints", he: "תקציב או מגבלות עיקריות" },
+];
+function goalNeeds(type?: string): { en: string; he: string }[] {
+  return (type && GOAL_NEEDS[type]) || GENERIC_GOAL_NEEDS;
+}
+
 // Question vs. intent. A "pure question" asks for information ("how long does a
 // passport take?") — it should get a straight answer, not spawn a process. We
 // treat it as a question when it opens with an interrogative or ends with "?",
@@ -3638,9 +3715,16 @@ export default function AppHome() {
     setProcThinking(proc, true);
     try {
       const prior = answers.map((a) => `- ${a.question} → ${a.answer}`).join("\n");
+      // The checklist of facts this kind of goal needs — ONE asks only for
+      // what's still missing (not already in the request or a prior answer),
+      // folds multi-answers in, and finishes once the essentials are known.
+      const checklist = goalNeeds(proc.type).map((n) => (he ? n.he : n.en)).join(", ");
+      const knownFields = Object.entries(proc.fields ?? {})
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("; ");
       const sys = he
-        ? `אתה ONE — הנציג והמומחה האישי של המשתמש למטרה "${proc.title}". אתה מראיין אותו בקצרה כדי לבנות תכנית מותאמת. שאל את השאלה הבאה הכי מועילה (אחת בלבד). החזר JSON תקין בלבד: {"question":"","options":["","",""],"field":"","done":false} — question=שאלה אחת קצרה, options=3‑4 בחירות קונקרטיות קצרות (המשתמש יכול גם לכתוב), field=מילה שמתארת מה נאסף, done=true רק אם כבר יש לך מספיק לתכנית טובה. הכל בעברית חוץ מ‑field. בלי code fences.`
-        : `You are ONE — the user's personal representative and expert for the goal "${proc.title}". You briefly interview them to build a tailored plan. Ask the single most useful next question. Return ONLY valid JSON: {"question":"","options":["","",""],"field":"","done":false} — question=one short question, options=3‑4 concrete short choices (the user may also type), field=a word for what it captures, done=true only if you already have enough for a good plan. No code fences.`;
+        ? `אתה ONE — הנציג והמומחה האישי של המשתמש למטרה "${proc.title}". אתה מראיין אותו בקצרה כדי לבנות תכנית מותאמת. רשימת המידע שצריך למטרה כזו: ${checklist}. מה שהמשתמש כבר אמר בבקשה: "${topic}". פרטים שכבר ידועים: ${knownFields || "(אין עדיין)"}. שאל אך ורק על פריט שעדיין חסר — לעולם אל תשאל על משהו שהמשתמש כבר ציין בבקשה או בתשובות. אם תשובה אחת ענתה על כמה פריטים, דלג עליהם. שאלה אחת בלבד. החזר JSON תקין בלבד: {"question":"","options":["","",""],"field":"","done":false} — question=שאלה קצרה, options=3‑4 בחירות קונקרטיות (המשתמש יכול גם לכתוב), field=מילה באנגלית שמתארת את הפריט, done=true כשכל הפריטים החיוניים ידועים. הכל בעברית חוץ מ‑field. בלי code fences.`
+        : `You are ONE — the user's personal representative and expert for the goal "${proc.title}". You briefly interview them to build a tailored plan. The checklist this kind of goal needs: ${checklist}. What the user already said in their request: "${topic}". Already known: ${knownFields || "(none yet)"}. Ask ONLY for a still-missing item — never ask about anything the user already stated in the request or a prior answer. If one answer covered several items, skip them. One question only. Return ONLY valid JSON: {"question":"","options":["","",""],"field":"","done":false} — question=short question, options=3‑4 concrete choices (user may also type), field=an English word for the item, done=true once all essential items are known. No code fences.`;
       const raw = await invokeAiChat(
         [
           { role: "system", content: sys },
