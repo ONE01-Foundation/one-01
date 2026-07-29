@@ -248,14 +248,6 @@ function SendIcon() {
  * it updates the moment the chat changes the unit. Reads its Process fresh each
  * render, so upserts show immediately.
  */
-/* Drawer toggle — a chevron; points toward opening, flips 180° when open. */
-function ArrowIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 /* Home scroll affordances — up reveals Global, down reveals Updates. */
 function ChevronUpIcon() {
   return (
@@ -5473,6 +5465,23 @@ export default function AppHome() {
     };
   }, [globalOpen]);
 
+  // Home is one canvas: as you scroll, the hero compresses to a top header and
+  // the input dock slides to the bottom, opening a middle where your processes
+  // scroll in — driven by a 0→1 progress written straight to a CSS var (no
+  // re-render). 0 at rest, 1 once you've scrolled ~half a screen.
+  useEffect(() => {
+    const page = homePageRef.current;
+    if (!page) return;
+    const apply = () => {
+      const vh = page.clientHeight || 1;
+      const hs = Math.min(1, Math.max(0, page.scrollTop / (vh * 0.8)));
+      page.style.setProperty("--hs", hs.toFixed(3));
+    };
+    apply();
+    page.addEventListener("scroll", apply, { passive: true });
+    return () => page.removeEventListener("scroll", apply);
+  }, [space, activeProcess, chat.length, globalOpen]);
+
   // Esc backs out of whatever's open — an overlay, then the unit, then the
   // drawer. The workspace should never trap you.
   useEffect(() => {
@@ -5748,9 +5757,11 @@ export default function AppHome() {
           <div className="app-nav-left">
             <button
               className="app-brand-btn"
+              // The options menu now lives OFF THE LOGO: hovering the mark reveals
+              // it (unpinned, so it auto-closes when you move away); a click pins
+              // it open — or, from a unit/chat, backs you out to home.
+              onMouseEnter={() => !drawerOpen && setDrawerOpen(true)}
               onClick={() => {
-                // From a unit, chat, or any non-home space, the mark backs you
-                // out to home; on the home surface it opens/closes the drawer.
                 if (activeProcess || chat.length > 0 || tempChat || space !== "home") goHome();
                 else toggleDrawer();
               }}
@@ -5768,14 +5779,6 @@ export default function AppHome() {
                   oneWorking && !chatFocused ? " is-working" : ""
                 }${chatFocused ? " chat-focused" : ""}`}
               />
-            </button>
-            <button
-              className={`app-drawer-toggle${drawerOpen ? " is-open" : ""}`}
-              onClick={toggleDrawer}
-              aria-expanded={drawerOpen}
-              aria-label={drawerOpen ? "Collapse menu" : "Open menu"}
-            >
-              <ArrowIcon />
             </button>
           </div>
           <div className="app-nav-right">
@@ -7338,27 +7341,21 @@ export default function AppHome() {
                             className={draft.trim() ? "awake" : ""}
                           />
                         </span>
-                        <div
-                          key={liveBroadcast ?? "resting"}
-                          className={`home-broadcast${liveBroadcast ? " is-live" : ""}${
-                            !liveBroadcast && bfade ? " is-fading" : ""
-                          }`}
-                        >
-                          {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
+                        {/* Broadcast at rest cross-fades into the compact profile
+                            name as you scroll and the hero shrinks to a header. */}
+                        <div className="home-cap">
+                          <div
+                            key={liveBroadcast ?? "resting"}
+                            className={`home-broadcast${liveBroadcast ? " is-live" : ""}${
+                              !liveBroadcast && bfade ? " is-fading" : ""
+                            }`}
+                          >
+                            {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
+                          </div>
+                          <div className="home-name" aria-hidden="true">
+                            {identity?.name || (lang === "he" ? "אורח" : "Guest")}
+                          </div>
                         </div>
-                        <AppInput
-                          value={draft}
-                          onChange={(v) => {
-                            setDraft(v);
-                            pumpPresence(homeHeroRef);
-                          }}
-                          onSend={() => send()}
-                          onVoiceTap={startVoiceCall}
-                      voiceOn={aiVoice}
-                          placeholder={t.talkToOne}
-                          caret
-                          lang={lang}
-                        />
                       </div>
                       <button
                         type="button"
@@ -7431,6 +7428,24 @@ export default function AppHome() {
                         </div>
                       </div>
                     </section>
+                    {/* Input dock — floats over the canvas: centred with the hero
+                        at rest, slides to the bottom as you scroll into the
+                        process list (driven by --hs). */}
+                    <div className="home-dock">
+                      <AppInput
+                        value={draft}
+                        onChange={(v) => {
+                          setDraft(v);
+                          pumpPresence(homeHeroRef);
+                        }}
+                        onSend={() => send()}
+                        onVoiceTap={startVoiceCall}
+                        voiceOn={aiVoice}
+                        placeholder={t.talkToOne}
+                        caret
+                        lang={lang}
+                      />
+                    </div>
                   </div>
                   </>
                 )
