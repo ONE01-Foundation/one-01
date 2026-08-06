@@ -249,13 +249,6 @@ function SendIcon() {
  * render, so upserts show immediately.
  */
 /* Home scroll affordances — up reveals Global, down reveals Updates. */
-function ChevronUpIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 15l6-6 6 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 function ChevronDownIcon() {
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -310,6 +303,8 @@ function AppInput({
   lang = "en",
   onVoiceTap,
   voiceOn = true,
+  onImage,
+  leading,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -319,6 +314,12 @@ function AppInput({
   onVoiceTap?: () => void;
   /** When false, the mic (record + call) is disabled — cost switch. */
   voiceOn?: boolean;
+  /** The "+" button → attach an image. When set, tapping + opens a picker and
+   *  hands back the picked image as a data URL. Unset → + is hidden. */
+  onImage?: (dataUrl: string) => void;
+  /** Optional control pinned at the leading edge INSIDE the bar (e.g. the home
+   *  profile picker, model-selector style). */
+  leading?: React.ReactNode;
   /** Home: no placeholder copy at all — just a resting caret, so ONE looks
    *  ready to be spoken to rather than instructing you. (Same as the hero.) */
   caret?: boolean;
@@ -333,8 +334,21 @@ function AppInput({
   const micRef = useRef<MediaStream | null>(null);
   const holdingRef = useRef(false);
   const holdTimer = useRef<number | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const hasText = value.trim().length > 0;
   const he = lang === "he";
+
+  const pickImage = () => fileRef.current?.click();
+  const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file || !onImage) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") onImage(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // HOLD the voice button → record; on release → Whisper transcribes into the
   // input. TAP it → open a live spoken conversation with ONE (Realtime). Both
@@ -402,9 +416,27 @@ function AppInput({
 
   return (
     <div className="app-bar">
-      <button className="app-bar-plus" aria-label="Add" type="button">
-        <PlusIcon />
-      </button>
+      {leading}
+      {onImage && (
+        <>
+          <button
+            className="app-bar-plus"
+            aria-label={he ? "צרף תמונה" : "Attach an image"}
+            title={he ? "צרף תמונה" : "Attach an image"}
+            type="button"
+            onClick={pickImage}
+          >
+            <PlusIcon />
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={onFilePicked}
+          />
+        </>
+      )}
       <span className="app-bar-wrap" dir={he ? "rtl" : "ltr"}>
         {caret && !value && !focused && <span className="app-bar-caret" aria-hidden="true" />}
         <input
@@ -2321,6 +2353,9 @@ export default function AppHome() {
   }, [drawerOpen, drawerPinned]);
   // Profiles collapse to the active one; the rest reveal on hover or click.
   const [profilesOpen, setProfilesOpen] = useState(false);
+  // The ⋮ menu inside the profile header (settings / terms / updates), which
+  // replaced the old top-bar logo menu.
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   // A temporary chat: a fresh conversation that isn't kept as a process.
   const [tempChat, setTempChat] = useState(false);
   const [unitChat, setUnitChat] = useState<ChatMsg[]>([]);
@@ -5735,50 +5770,8 @@ export default function AppHome() {
     if (page) page.scrollTop = 0;
   }, [activeProcess, chat.length, tempChat, space]);
 
-  // Global rises as an overlay when you scroll UP at the very top of the home —
-  // an accumulator on the wheel (and a touch-drag downward) crosses a threshold,
-  // mirroring the landing hero's Global reveal. Only armed on the resting home.
-  useEffect(() => {
-    const page = homePageRef.current;
-    if (!page) return;
-    if (globalOpen || space !== "home" || activeProcess || chat.length > 0) return;
-    let acc = 0;
-    let timer = 0;
-    const onWheel = (e: WheelEvent) => {
-      if (page.scrollTop > 2) {
-        acc = 0;
-        return;
-      }
-      if (e.deltaY < 0) {
-        acc += -e.deltaY;
-        if (acc > 130) {
-          acc = 0;
-          setGlobalOpen(true);
-        }
-      } else {
-        acc = 0;
-      }
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => (acc = 0), 260);
-    };
-    let startY = 0;
-    const onTouchStart = (e: TouchEvent) => {
-      startY = e.touches[0]?.clientY ?? 0;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      if (page.scrollTop > 2) return;
-      if ((e.touches[0]?.clientY ?? 0) - startY > 90) setGlobalOpen(true);
-    };
-    page.addEventListener("wheel", onWheel, { passive: true });
-    page.addEventListener("touchstart", onTouchStart, { passive: true });
-    page.addEventListener("touchmove", onTouchMove, { passive: true });
-    return () => {
-      page.removeEventListener("wheel", onWheel);
-      page.removeEventListener("touchstart", onTouchStart);
-      page.removeEventListener("touchmove", onTouchMove);
-      window.clearTimeout(timer);
-    };
-  }, [globalOpen, space, activeProcess, chat.length]);
+  // (Removed) Global no longer opens by scrolling up at the top of the home —
+  // that gesture was disabled by request; Global opens explicitly instead.
 
   // …and once you're back at the very top of the Global feed, keep scrolling UP
   // (or drag the feed down) to push Global back up and out — the natural reverse
@@ -6135,136 +6128,17 @@ export default function AppHome() {
       {/* Full-bleed canvas — no window chrome, no back-to-site. The product is
           its own place; the ONE orb in the sidebar is the brand anchor. */}
       <div className={`app-shell${globalOpen ? " global-open" : ""}`}>
-        {/* Edge-hover zone — sweep the mouse to the inline-start edge and the
-            drawer slides out on its own (desktop only). */}
-        <div
-          className="app-edge-hover"
-          onMouseEnter={() => !drawerOpen && setDrawerOpen(true)}
-          aria-hidden="true"
-        />
-        {/* TOP BAR — the ONE mark (face in the "O", click = home) with the panel
-            arrow beside it; the right side is Upgrade and a temporary chat. */}
+        {/* Edge-hover drawer removed — it popped a menu whenever the mouse
+            grazed the screen edge. Settings etc. now live in the profile ⋮. */}
+        {/* TOP BAR — intentionally bare (the ONE mark was removed). */}
         <nav className="app-nav">
-          <div className="app-nav-left">
-            <button
-              className="app-brand-btn"
-              // The options menu now lives OFF THE LOGO: hovering the mark reveals
-              // it (unpinned, so it auto-closes when you move away); a click pins
-              // it open — or, from a unit/chat, backs you out to home.
-              onMouseEnter={() => !drawerOpen && setDrawerOpen(true)}
-              onClick={() => {
-                if (activeProcess || chat.length > 0 || tempChat || space !== "home") goHome();
-                else toggleDrawer();
-              }}
-              aria-label={
-                activeProcess || chat.length > 0 || tempChat || space !== "home"
-                  ? "ONE — home"
-                  : drawerOpen
-                    ? "Collapse menu"
-                    : "Open menu"
-              }
-            >
-              <OneWord
-                eyeless
-                className={`app-brand-mark${
-                  oneWorking && !chatFocused ? " is-working" : ""
-                }${chatFocused ? " chat-focused" : ""}`}
-              />
-            </button>
-          </div>
-          <div className="app-nav-right">
-            <button
-              className="app-nav-btn app-nav-upgrade"
-              onClick={() => setOpenSheet("subscription")}
-            >
-              <span>{t.upgrade}</span>
-            </button>
-            {/* Profile avatar — hover (or tap) reveals the profiles menu: switch
-                identity, go Anonymous (incognito — nothing saved), or add one. */}
-            <div
-              className="app-nav-profile"
-              onMouseEnter={() => setProfilesOpen(true)}
-              onMouseLeave={() => setProfilesOpen(false)}
-            >
-              <button
-                className={`app-nav-avatar${tempChat ? " is-anon" : ""}`}
-                onClick={() => setProfilesOpen((v) => !v)}
-                aria-label={t.profiles}
-                aria-expanded={profilesOpen}
-              >
-                {tempChat ? (
-                  <i className="fi fi-rr-incognito" aria-hidden="true" />
-                ) : (
-                  <span className="app-nav-avatar-emoji">{identity.emoji}</span>
-                )}
-              </button>
-              {profilesOpen && (
-                <div className="nav-profiles-menu" role="menu">
-                  <button className="nav-profile-row is-active" onClick={openProfile}>
-                    <span className="nav-profile-emoji">{identity.emoji}</span>
-                    <span className="nav-profile-text">
-                      <span className="nav-profile-name">{identity.name}</span>
-                      <span className="nav-profile-role">{identity.role}</span>
-                    </span>
-                    <i className="fi fi-rr-pencil nav-profile-edit" aria-hidden="true" />
-                  </button>
-                  {identities
-                    .filter((id) => id.id !== activeIdentityId)
-                    .map((id) => (
-                      <button
-                        key={id.id}
-                        className="nav-profile-row"
-                        onClick={() => {
-                          setActiveIdentityId(id.id);
-                          setProfilesOpen(false);
-                        }}
-                      >
-                        <span className="nav-profile-emoji">{id.emoji}</span>
-                        <span className="nav-profile-text">
-                          <span className="nav-profile-name">{id.name}</span>
-                          <span className="nav-profile-role">{id.role}</span>
-                        </span>
-                      </button>
-                    ))}
-                  <button
-                    className={`nav-profile-row nav-profile-anon${tempChat ? " is-on" : ""}`}
-                    onClick={() => {
-                      toggleTempChat();
-                      setProfilesOpen(false);
-                    }}
-                  >
-                    <span className="nav-profile-emoji">
-                      <i className="fi fi-rr-incognito" aria-hidden="true" />
-                    </span>
-                    <span className="nav-profile-text">
-                      <span className="nav-profile-name">
-                        {lang === "he" ? "אנונימי" : "Anonymous"}
-                      </span>
-                      <span className="nav-profile-role">
-                        {tempChat
-                          ? lang === "he"
-                            ? "פעיל — כלום לא נשמר"
-                            : "On — nothing saved"
-                          : lang === "he"
-                            ? "גלישה בלי לשמור"
-                            : "Browse without saving"}
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    className="nav-profile-row nav-profile-new"
-                    onClick={() => {
-                      setOpenSheet("newProfile");
-                      setProfilesOpen(false);
-                    }}
-                  >
-                    <i className="fi fi-rr-plus" aria-hidden="true" />
-                    {t.newProfile}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Top bar is intentionally bare now — the ONE mark was removed; the
+              menu it used to open lives inside the profile (⋮ next to the X), and
+              the figure (orb) is the way into the profile. */}
+          <div className="app-nav-left" />
+          {/* Nav actions removed: sign-in / upgrade moved to a row below the home
+              input, and the profile switch moved onto the ONE figure (hover the
+              orb). Keeps the top bar to just the ONE mark. */}
         </nav>
 
         {/* SIDE DRAWER — profiles + your process list, profile/settings at the
@@ -6613,6 +6487,19 @@ export default function AppHome() {
                       voiceOn={aiVoice}
                       placeholder={t.tellChanged}
                       lang={lang}
+                      onImage={(url) =>
+                        setUnitChat((c) => [
+                          ...c,
+                          { role: "user", text: "", image: url },
+                          {
+                            role: "one",
+                            text:
+                              lang === "he"
+                                ? "קיבלתי את התמונה 📎 מה תרצה שאעשה איתה?"
+                                : "Got your image 📎 — what should I do with it?",
+                          },
+                        ])
+                      }
                     />
                   </div>
                 </div>
@@ -6683,9 +6570,75 @@ export default function AppHome() {
                   //    your identities, plan and connections.
                   <div className="canvas profile-canvas">
                     <div className="canvas-inner">
-                      <button className="canvas-back" onClick={goHome}>
-                        <span className="canvas-back-ico" aria-hidden="true">‹</span> {t.backHome}
-                      </button>
+                      <div className="profile-topbar">
+                        <button
+                          className="sheet-round-btn"
+                          onClick={goHome}
+                          aria-label={lang === "he" ? "סגור" : "Close"}
+                        >
+                          ✕
+                        </button>
+                        <div className="profile-menu-wrap">
+                          <button
+                            className="sheet-round-btn"
+                            onClick={() => setProfileMenuOpen((v) => !v)}
+                            aria-label={lang === "he" ? "תפריט" : "Menu"}
+                            aria-expanded={profileMenuOpen}
+                          >
+                            <span className="dots3" aria-hidden="true">⋮</span>
+                          </button>
+                          {profileMenuOpen && (
+                            <>
+                              <div
+                                className="profile-menu-scrim"
+                                onClick={() => setProfileMenuOpen(false)}
+                              />
+                              <div className="profile-menu" role="menu">
+                                <button
+                                  className="profile-menu-row"
+                                  onClick={() => {
+                                    setProfileMenuOpen(false);
+                                    setOpenSheet("settings");
+                                  }}
+                                >
+                                  <i className="fi fi-rr-settings" aria-hidden="true" />
+                                  {t.settings}
+                                </button>
+                                <a
+                                  className="profile-menu-row"
+                                  href="/legal"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => setProfileMenuOpen(false)}
+                                >
+                                  <i className="fi fi-rr-document" aria-hidden="true" />
+                                  {lang === "he" ? "תנאי שימוש ופרטיות" : "Terms & privacy"}
+                                </a>
+                                <a
+                                  className="profile-menu-row"
+                                  href="/about"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => setProfileMenuOpen(false)}
+                                >
+                                  <i className="fi fi-rr-megaphone" aria-hidden="true" />
+                                  {lang === "he" ? "עדכונים ומה חדש" : "Updates & what's new"}
+                                </a>
+                                <a
+                                  className="profile-menu-row"
+                                  href="/support"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => setProfileMenuOpen(false)}
+                                >
+                                  <i className="fi fi-rr-interrogation" aria-hidden="true" />
+                                  {lang === "he" ? "עזרה ותמיכה" : "Help & support"}
+                                </a>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
                       <div className="profile-hero">
                         <Orb size={76} />
                         <div className="profile-title">
@@ -7625,14 +7578,6 @@ export default function AppHome() {
                     <div className="app-page" ref={homePageRef}>
                     {/* ONE surface — rest (top). Scroll down = Updates. */}
                     <section className="home-main">
-                      <button
-                        type="button"
-                        className="home-chev up"
-                        onClick={() => setGlobalOpen(true)}
-                        aria-label={t.global}
-                      >
-                        <ChevronUpIcon />
-                      </button>
                       <div className="home-center">
                         {lens.homeMode === "inbox" && inboxTotal > 0 && (
                           <button className="reply-signal inbox-lead" onClick={openInbox}>
@@ -7681,36 +7626,6 @@ export default function AppHome() {
                         {/* The living figure greets you — above the broadcast, so
                             Home opens with a presence, not just a line of text.
                             The eyes meet you (lean toward the input) as you type. */}
-                        <span ref={homeHeroRef} className="home-hero-orb chat-presence-pump">
-                          <LiveOrb
-                            size={76}
-                            biasLook={draft.trim() ? 0.2 : 0}
-                            faceColor="var(--p-face)"
-                            eyeColor="var(--p-bg)"
-                            className={draft.trim() ? "awake" : ""}
-                            onClick={openProfile}
-                            ariaLabel={lang === "he" ? "הפרופיל של ONE" : "ONE's profile"}
-                          />
-                        </span>
-                        {/* Broadcast at rest cross-fades into the compact profile
-                            name as you scroll and the hero shrinks to a header. */}
-                        <div className="home-cap">
-                          <div
-                            key={liveBroadcast ?? "resting"}
-                            className={`home-broadcast${liveBroadcast ? " is-live" : ""}${
-                              !liveBroadcast && bfade ? " is-fading" : ""
-                            }`}
-                          >
-                            {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
-                          </div>
-                          <div className="home-name" aria-hidden="true">
-                            {(() => {
-                              const n = (identity?.name ?? "").trim();
-                              // Never surface the placeholder — this is ONE, not "Guest".
-                              return n && n !== "אורח" && n !== "Guest" && n !== "ONE" ? n : "ONE";
-                            })()}
-                          </div>
-                        </div>
                       </div>
                       <button
                         type="button"
@@ -7843,7 +7758,131 @@ export default function AppHome() {
                         at rest, slides to the bottom as you scroll into the
                         process list (driven by --hs). */}
                     <div className="home-dock">
+                        <span ref={homeHeroRef} className="home-hero-orb chat-presence-pump">
+                          <LiveOrb
+                            size={76}
+                            biasLook={draft.trim() ? 0.2 : 0}
+                            faceColor="var(--p-face)"
+                            eyeColor="var(--p-bg)"
+                            className={draft.trim() ? "awake" : ""}
+                            onClick={openProfile}
+                            ariaLabel={lang === "he" ? "הפרופיל של ONE" : "ONE's profile"}
+                          />
+                        </span>
+                        {/* Broadcast at rest cross-fades into the compact profile
+                            name as you scroll and the hero shrinks to a header. */}
+                        <div className="home-cap">
+                          <div
+                            key={liveBroadcast ?? "resting"}
+                            className={`home-broadcast${liveBroadcast ? " is-live" : ""}${
+                              !liveBroadcast && bfade ? " is-fading" : ""
+                            }`}
+                          >
+                            {liveBroadcast ?? broadcastLines[bi % broadcastLines.length]}
+                          </div>
+                          <div className="home-name" aria-hidden="true">
+                            {(() => {
+                              const n = (identity?.name ?? "").trim();
+                              // Never surface the placeholder — this is ONE, not "Guest".
+                              return n && n !== "אורח" && n !== "Guest" && n !== "ONE" ? n : "ONE";
+                            })()}
+                          </div>
+                        </div>
                       <AppInput
+                        leading={
+                          <div className="app-bar-profile">
+                            <button
+                              type="button"
+                              className={`app-bar-profile-btn${tempChat ? " is-anon" : ""}`}
+                              onClick={() => setProfilesOpen((v) => !v)}
+                              aria-expanded={profilesOpen}
+                              aria-label={t.profiles}
+                            >
+                              <span className="app-bar-profile-emoji">
+                                {tempChat ? (
+                                  <i className="fi fi-rr-incognito" aria-hidden="true" />
+                                ) : (
+                                  identity.emoji
+                                )}
+                              </span>
+                              <span className="app-bar-profile-name">
+                                {tempChat ? (lang === "he" ? "אנונימי" : "Anonymous") : identity.name}
+                              </span>
+                              <span className="app-bar-profile-caret" aria-hidden="true">⌄</span>
+                            </button>
+                            {profilesOpen && (
+                              <>
+                                <div
+                                  className="input-menu-scrim"
+                                  onClick={() => setProfilesOpen(false)}
+                                />
+                                <div className="nav-profiles-menu input-profiles-menu" role="menu">
+                                  <button className="nav-profile-row is-active" onClick={openProfile}>
+                                    <span className="nav-profile-emoji">{identity.emoji}</span>
+                                    <span className="nav-profile-text">
+                                      <span className="nav-profile-name">{identity.name}</span>
+                                      <span className="nav-profile-role">{identity.role}</span>
+                                    </span>
+                                    <i className="fi fi-rr-pencil nav-profile-edit" aria-hidden="true" />
+                                  </button>
+                                  {identities
+                                    .filter((id) => id.id !== activeIdentityId)
+                                    .map((id) => (
+                                      <button
+                                        key={id.id}
+                                        className="nav-profile-row"
+                                        onClick={() => {
+                                          setActiveIdentityId(id.id);
+                                          setProfilesOpen(false);
+                                        }}
+                                      >
+                                        <span className="nav-profile-emoji">{id.emoji}</span>
+                                        <span className="nav-profile-text">
+                                          <span className="nav-profile-name">{id.name}</span>
+                                          <span className="nav-profile-role">{id.role}</span>
+                                        </span>
+                                      </button>
+                                    ))}
+                                  <button
+                                    className={`nav-profile-row nav-profile-anon${tempChat ? " is-on" : ""}`}
+                                    onClick={() => {
+                                      toggleTempChat();
+                                      setProfilesOpen(false);
+                                    }}
+                                  >
+                                    <span className="nav-profile-emoji">
+                                      <i className="fi fi-rr-incognito" aria-hidden="true" />
+                                    </span>
+                                    <span className="nav-profile-text">
+                                      <span className="nav-profile-name">
+                                        {lang === "he" ? "אנונימי" : "Anonymous"}
+                                      </span>
+                                      <span className="nav-profile-role">
+                                        {tempChat
+                                          ? lang === "he"
+                                            ? "פעיל — כלום לא נשמר"
+                                            : "On — nothing saved"
+                                          : lang === "he"
+                                            ? "גלישה בלי לשמור"
+                                            : "Browse without saving"}
+                                      </span>
+                                    </span>
+                                  </button>
+                                  <button
+                                    className="nav-profile-row nav-profile-new"
+                                    onClick={() => {
+                                      setOpenSheet("newProfile");
+                                      setProfilesOpen(false);
+                                    }}
+                                  >
+                                    <i className="fi fi-rr-plus" aria-hidden="true" />
+                                    {t.newProfile}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        }
                         value={draft}
                         onChange={(v) => {
                           setDraft(v);
@@ -7855,7 +7894,43 @@ export default function AppHome() {
                         placeholder={t.talkToOne}
                         caret
                         lang={lang}
+                        onImage={(url) =>
+                          setChat((c) => [
+                            ...c,
+                            { role: "user", text: "", image: url },
+                            {
+                              role: "one",
+                              text:
+                                lang === "he"
+                                  ? "קיבלתי את התמונה 📎 מה תרצה שאעשה איתה?"
+                                  : "Got your image 📎 — what should I do with it?",
+                            },
+                          ])
+                        }
                       />
+                      {/* Below the input, gateway-style: sign in (logged out) or
+                          upgrade (free plan) — replaces the old top-bar buttons. */}
+                      {!user ? (
+                        <p className="home-signin">
+                          {lang === "he" ? "עדיין בלי חשבון?" : "No account yet?"}
+                          {" · "}
+                          <button type="button" className="home-signin-link" onClick={openProfile}>
+                            {lang === "he" ? "התחברות" : "Sign in"}
+                          </button>
+                        </p>
+                      ) : plan === "free" ? (
+                        <p className="home-signin">
+                          {lang === "he" ? "רוצה יותר יכולות?" : "Want more?"}
+                          {" · "}
+                          <button
+                            type="button"
+                            className="home-signin-link"
+                            onClick={() => setOpenSheet("subscription")}
+                          >
+                            {t.upgrade}
+                          </button>
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   </>
@@ -8007,6 +8082,19 @@ export default function AppHome() {
                       voiceOn={aiVoice}
                       placeholder={t.talkToOne}
                       lang={lang}
+                      onImage={(url) =>
+                        setChat((c) => [
+                          ...c,
+                          { role: "user", text: "", image: url },
+                          {
+                            role: "one",
+                            text:
+                              lang === "he"
+                                ? "קיבלתי את התמונה 📎 מה תרצה שאעשה איתה?"
+                                : "Got your image 📎 — what should I do with it?",
+                          },
+                        ])
+                      }
                     />
                   </div>
                 </>

@@ -231,10 +231,10 @@ function toAuthUser(u: { id: string; email?: string | null; user_metadata?: Reco
   };
 }
 
-/** The redirect target auth flows return to (this same /app page). */
-function authRedirect(): string | undefined {
+/** The redirect target auth flows return to (defaults to the /app page). */
+function authRedirect(path = "/app"): string | undefined {
   if (typeof window === "undefined") return undefined;
-  return `${window.location.origin}/app`;
+  return `${window.location.origin}${path}`;
 }
 
 /** Send a passwordless magic link to `email`. */
@@ -248,13 +248,19 @@ export async function signInWithEmail(email: string): Promise<{ ok: boolean; err
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
-/** Start the Google OAuth flow (redirects the browser to Google). */
-export async function signInWithGoogle(): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Start the Google OAuth flow (redirects the browser to Google). Pass a
+ * `redirectPath` to return somewhere other than /app (e.g. "/admin"); that path
+ * must be allow-listed in Supabase → Auth → URL Configuration → Redirect URLs.
+ */
+export async function signInWithGoogle(
+  redirectPath = "/app",
+): Promise<{ ok: boolean; error?: string }> {
   const sb = getSupabase();
   if (!sb) return { ok: false, error: "Supabase not configured." };
   const { error } = await sb.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: authRedirect() },
+    options: { redirectTo: authRedirect(redirectPath) },
   });
   return error ? { ok: false, error: error.message } : { ok: true };
 }
@@ -280,6 +286,42 @@ export function onAuthChange(cb: (user: AuthUser | null) => void): () => void {
     cb(toAuthUser(session?.user ?? null));
   });
   return () => data.subscription.unsubscribe();
+}
+
+/* ─────────────────────────── Admin ─────────────────────────── */
+
+/** A raw row from the shared `providers` table (every business/supplier seat). */
+export interface ProviderRow {
+  id: string;
+  name: string;
+  type: string;
+  location: string;
+  rating: number;
+  availabilityText?: string;
+  metadata: Record<string, unknown> | null;
+}
+
+/** Every provider row (admin view — the full directory, not just app-created). */
+export async function fetchAllProviders(): Promise<ProviderRow[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb.from("providers").select("*");
+  if (error || !data) return [];
+  return data as ProviderRow[];
+}
+
+/**
+ * Backend-wide counts (users, processes, …). Backed by an admin-gated
+ * SECURITY DEFINER RPC (`admin_stats`) that only returns data to the admin
+ * email. Returns null if the RPC isn't deployed yet or the caller isn't admin,
+ * so the dashboard degrades gracefully.
+ */
+export async function adminStats(): Promise<Record<string, number> | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data, error } = await sb.rpc("admin_stats");
+  if (error || !data || typeof data !== "object") return null;
+  return data as Record<string, number>;
 }
 
 

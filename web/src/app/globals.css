@@ -4286,12 +4286,16 @@ footer {
   bottom: 0;
   z-index: 6;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  /* Floats ABOVE the bottom edge so the scroll chevron sits beneath it, and so
-     it never crowds the broadcast on a resized window. Rides from a comfortable
-     rest spot down into place as you scroll (--hs→1). */
+  /* The whole gateway group lives here now — figure, broadcast, input, sign-in —
+     as one centred stack, so nothing rides into anything else. */
+  gap: 14px;
   padding: 0 24px 64px;
-  transform: translateY(calc(-38vh * (1 - var(--hs, 0))));
+  /* Rides from a comfortable rest spot (well above centre) down into place as
+     you scroll (--hs→1). */
+  transform: translateY(calc(-42vh * (1 - var(--hs, 0))));
   transition: transform 140ms linear;
   pointer-events: none;
 }
@@ -4638,6 +4642,44 @@ footer {
 }
 .product-root[dir="rtl"] .canvas-back-ico {
   transform: scaleX(-1);
+}
+/* Profile (and the other secondary canvas screens) read as a framed sheet-card
+   on the canvas — same gradient frame family as the Global + popup sheets. */
+.profile-canvas {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.profile-canvas .canvas-inner {
+  margin: 26px auto 48px;
+  width: min(600px, calc(100% - 36px));
+  max-width: none;
+  padding: 24px 24px 34px;
+  border-radius: 30px;
+  /* Off-white surface so the white rows/cards inside still pop, wrapped in the
+     subtle gradient frame. */
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--p-bg), var(--p-bg)) padding-box,
+    linear-gradient(to bottom, rgba(82, 82, 82, 0.35), rgba(245, 244, 240, 0) 75%) border-box;
+  box-shadow: 0 34px 90px -44px rgba(0, 0, 0, 0.42);
+  /* Gentle rise-in so the framed card feels like it settles onto the canvas. */
+  animation: profileCardIn 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes profileCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profile-canvas .canvas-inner {
+    animation: none;
+  }
 }
 .profile-hero {
   display: flex;
@@ -5049,10 +5091,15 @@ a.chat-card:hover {
    input never moves. */
 /* The living figure at the top of Home — greets you above the broadcast. */
 .home-hero-orb {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  /* Full-width in the dock stack now, so explicitly centre the figure (else in
+     RTL it falls to the flex-start edge). */
+  justify-content: center;
   margin-bottom: -12px;
   animation: homeRise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  /* Positioning context for the profiles menu that drops from the figure. */
+  position: relative;
 }
 /* The figure is a button (tap → ONE's profile) but reads as a bare orb. */
 .live-orb-btn {
@@ -5140,7 +5187,9 @@ a.chat-card:hover {
   animation: heroCue 2.8s ease-in-out infinite;
 }
 .home-chev.down {
-  bottom: 16px;
+  /* Sits high — just below the raised gateway group — as the single "pull the
+     processes up" cue. */
+  bottom: 40vh;
   opacity: 0.6;
   /* Flips at once when you cross into the list (class toggled in JS), rather
      than tracking the scroll frame-by-frame: down-arrow (pull processes up) →
@@ -5459,7 +5508,8 @@ a.chat-card:hover {
 .pg-sheet-scrim {
   position: absolute;
   inset: 0;
-  background: rgba(10, 10, 10, 0.4);
+  /* Light dim — the canvas stays faintly visible behind the framed sheet. */
+  background: rgba(10, 10, 10, 0.14);
   opacity: 0;
   transition: opacity 320ms ease;
 }
@@ -5468,17 +5518,25 @@ a.chat-card:hover {
 }
 .pg-sheet-panel {
   position: absolute;
-  /* A bottom sheet: it stops below the top bar so the logo, profile avatar and
-     Upgrade stay visible above it — not a full-screen takeover. */
-  inset: 56px 0 0 0;
-  background: var(--p-bg);
+  /* A CENTERED framed sheet on the canvas — not full-width — that stops below
+     the top bar so the logo, profile avatar and Upgrade stay visible. */
+  top: 56px;
+  bottom: 0;
+  left: 50%;
+  width: min(1000px, calc(100% - 44px));
   color: var(--p-text);
   overflow-y: auto;
   scrollbar-width: none;
-  border-radius: 22px 22px 0 0;
-  box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.2);
+  border-radius: 28px 28px 0 0;
+  /* Subtle gradient frame (per the frame SVG): a faint edge, darker up top,
+     fading to nothing lower down. */
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--p-bg), var(--p-bg)) padding-box,
+    linear-gradient(to bottom, rgba(82, 82, 82, 0.35), rgba(245, 244, 240, 0) 70%) border-box;
+  box-shadow: 0 -18px 60px rgba(0, 0, 0, 0.14);
   /* Rises UP from the bottom, like a sheet. */
-  transform: translateY(100%);
+  transform: translate(-50%, 100%);
   transition: transform 460ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .pg-sheet-panel::-webkit-scrollbar {
@@ -5579,7 +5637,7 @@ a.chat-card:hover {
   color: var(--p-text-3);
 }
 .pg-sheet.open .pg-sheet-panel {
-  transform: none;
+  transform: translate(-50%, 0);
 }
 .pg-sheet-grab {
   position: absolute;
@@ -7662,12 +7720,18 @@ button.conn-card:hover {
   -webkit-backdrop-filter: blur(7px);
 }
 .product-root .sheet-popup {
-  background: var(--p-surface);
-  border: 1px solid var(--p-line);
+  /* Framed canvas sheet — same gradient border as the Global sheet, so Profile,
+     Subscriptions and Settings all read as one family. */
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--p-surface), var(--p-surface)) padding-box,
+    linear-gradient(to bottom, rgba(82, 82, 82, 0.35), rgba(245, 244, 240, 0) 75%) border-box;
 }
 @media (min-width: 520px) {
   .product-root .sheet-popup {
-    box-shadow: 0 30px 80px -42px rgba(0, 0, 0, 0.55);
+    width: 560px;
+    border-radius: 30px;
+    box-shadow: 0 40px 110px -46px rgba(0, 0, 0, 0.5);
   }
 }
 .sheet-grab {
@@ -9460,4 +9524,566 @@ a.get-opt:hover {
 }
 .gsheet-cta {
   margin-top: 34px;
+}
+
+/* ══════════════════════════ ADMIN CONSOLE (/admin) ══════════════════════════
+   A private ops dashboard, gated to the owner's Google account. Wrapped in
+   .product-root so it inherits the --p-* palette; forced light for legibility. */
+.admin-root {
+  color-scheme: light;
+  min-height: 100vh;
+  background: var(--p-bg, #f5f4f0);
+  color: var(--p-text, #0a0a0a);
+  font-family: var(--sans, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── gates (sign in / denied / loading) ── */
+.admin-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.admin-gate-card {
+  width: min(400px, 100%);
+  background: var(--p-surface, #fff);
+  border: 1px solid var(--p-line, rgba(10, 10, 10, 0.08));
+  border-radius: 24px;
+  padding: 34px 28px;
+  text-align: center;
+  box-shadow: 0 30px 80px -46px rgba(0, 0, 0, 0.4);
+}
+.admin-gate-card h1 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 14px 0 6px;
+}
+.admin-gate-card p {
+  color: var(--p-text-2, #5b5b5b);
+  font-size: 14.5px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.admin-mark {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  background: var(--p-face, #0a0a0a);
+  color: var(--p-bg, #f5f4f0);
+}
+.admin-mark.sm {
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+}
+.admin-mark.denied {
+  background: #dc2626;
+  color: #fff;
+}
+.admin-gbtn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--p-line, rgba(10, 10, 10, 0.12));
+  background: var(--p-surface, #fff);
+  color: var(--p-text, #0a0a0a);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease, transform 80ms ease;
+}
+.admin-gbtn:hover {
+  background: color-mix(in srgb, var(--p-text) 4%, var(--p-surface));
+}
+.admin-gbtn:active {
+  transform: scale(0.99);
+}
+.admin-gbtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.admin-gbtn.ghost {
+  background: transparent;
+}
+.admin-gate-err {
+  margin-top: 12px;
+  color: #dc2626;
+  font-size: 13px;
+}
+.admin-gate-hint {
+  margin-top: 16px;
+  color: var(--p-text-3, #9a9a9a);
+  font-size: 12px;
+}
+.admin-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--p-line, rgba(10, 10, 10, 0.12));
+  border-top-color: var(--p-blue, #3b82f6);
+  animation: adminSpin 720ms linear infinite;
+}
+@keyframes adminSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── dashboard shell ── */
+.admin-shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 26px 22px 60px;
+}
+.admin-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.admin-brand-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+.admin-brand-sub {
+  font-size: 12.5px;
+  color: var(--p-text-3, #9a9a9a);
+  margin-top: 2px;
+}
+.admin-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.admin-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: var(--p-blue, #3b82f6);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+.admin-user-mail {
+  font-size: 13px;
+  color: var(--p-text-2, #5b5b5b);
+}
+.admin-btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--p-line, rgba(10, 10, 10, 0.1));
+  background: var(--p-surface, #fff);
+  color: var(--p-text, #0a0a0a);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 140ms ease;
+}
+.admin-btn:hover {
+  background: color-mix(in srgb, var(--p-text) 5%, var(--p-surface));
+}
+.admin-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.admin-btn.ghost {
+  background: transparent;
+  color: var(--p-text-2, #5b5b5b);
+}
+
+/* ── KPI cards ── */
+.admin-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.admin-kpi {
+  background: var(--p-surface, #fff);
+  border: 1px solid var(--p-line, rgba(10, 10, 10, 0.08));
+  border-radius: 18px;
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+}
+.admin-kpi::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent, var(--p-blue));
+}
+.admin-kpi-label {
+  font-size: 12.5px;
+  color: var(--p-text-2, #5b5b5b);
+  font-weight: 600;
+}
+.admin-kpi-value {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.admin-kpi-sub {
+  font-size: 12px;
+  color: var(--p-text-3, #9a9a9a);
+  margin-top: 4px;
+  min-height: 15px;
+}
+
+/* ── panels + tables ── */
+.admin-panel {
+  background: var(--p-surface, #fff);
+  border: 1px solid var(--p-line, rgba(10, 10, 10, 0.08));
+  border-radius: 20px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.admin-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.admin-panel-head h2 {
+  font-size: 15px;
+  font-weight: 700;
+}
+.admin-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--p-text-2, #5b5b5b);
+  background: color-mix(in srgb, var(--p-text) 7%, transparent);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.admin-empty {
+  color: var(--p-text-3, #9a9a9a);
+  font-size: 13.5px;
+  padding: 14px 2px;
+}
+.admin-tablewrap {
+  overflow-x: auto;
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+.admin-table th {
+  text-align: start;
+  font-weight: 600;
+  color: var(--p-text-3, #9a9a9a);
+  font-size: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--p-line, rgba(10, 10, 10, 0.08));
+}
+.admin-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--p-line) 60%, transparent);
+}
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.admin-table tbody tr:hover {
+  background: color-mix(in srgb, var(--p-text) 3%, transparent);
+}
+.admin-biz {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.admin-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--p-text-2, #5b5b5b);
+}
+.admin-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.admin-badge.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+.admin-badge.confirmed {
+  background: #d1fae5;
+  color: #065f46;
+}
+.admin-badge.declined {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ── system panel ── */
+.admin-sys-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--p-line) 60%, transparent);
+  font-size: 13.5px;
+}
+.admin-sys-row:last-child {
+  border-bottom: none;
+}
+.admin-sys-k {
+  color: var(--p-text-2, #5b5b5b);
+}
+.admin-sys-v {
+  font-weight: 600;
+}
+.admin-sys-v.ok {
+  color: var(--p-ok, #10b981);
+}
+.admin-note {
+  margin-top: 12px;
+  background: color-mix(in srgb, var(--p-blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--p-blue) 22%, transparent);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--p-text-2, #5b5b5b);
+}
+.admin-foot {
+  text-align: center;
+  color: var(--p-text-3, #9a9a9a);
+  font-size: 12px;
+  margin-top: 24px;
+}
+
+/* ── profiles menu when dropped from the home figure (orb hover) ── */
+.home-orb-menu {
+  /* Opens UPWARD from the figure, into the empty space above it — so it never
+     touches the broadcast, the input, or cuts the orb. */
+  bottom: calc(100% + 14px);
+  top: auto;
+  inset-inline-end: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: homeOrbMenuUp 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Invisible bridge below the menu (menu → orb) so moving the mouse up into it
+   doesn't drop the hover. */
+.home-orb-menu::before {
+  content: "";
+  position: absolute;
+  top: auto;
+  bottom: -18px;
+  left: 0;
+  right: 0;
+  height: 18px;
+}
+@keyframes homeOrbMenuUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+@keyframes homeOrbMenuIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+/* ── gateway-style sign-in / upgrade row under the home input ── */
+.home-signin {
+  margin-top: 0;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--p-text-3);
+}
+.home-signin-link {
+  font: inherit;
+  font-weight: 700;
+  color: var(--p-text);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.home-signin-link:hover {
+  text-decoration: underline;
+}
+
+/* ── profile header: round X + ⋮ (the logo's old menu now lives here) ── */
+.profile-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sheet-round-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: var(--p-surface, #fff);
+  color: var(--p-text, #0a0a0a);
+  font-size: 15px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: background 140ms ease, transform 80ms ease;
+}
+.sheet-round-btn:hover {
+  background: color-mix(in srgb, var(--p-text) 5%, var(--p-surface));
+}
+.sheet-round-btn:active {
+  transform: scale(0.94);
+}
+.dots3 {
+  font-size: 20px;
+  line-height: 1;
+}
+.profile-menu-wrap {
+  position: relative;
+}
+.profile-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.profile-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 41;
+  width: 234px;
+  padding: 6px;
+  border-radius: 16px;
+  background: var(--p-surface, #fff);
+  border: 1px solid var(--p-line);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: navMenuIn 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.profile-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--p-text);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.profile-menu-row:hover {
+  background: color-mix(in srgb, var(--p-text) 6%, transparent);
+}
+.profile-menu-row i {
+  font-size: 15px;
+  color: var(--p-text-2);
+}
+
+/* ── profile picker INSIDE the input bar (model-selector style) ── */
+.app-bar-profile {
+  position: relative;
+  flex-shrink: 0;
+  align-self: center;
+}
+.app-bar-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+  color: var(--p-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms ease;
+}
+.app-bar-profile-btn:hover {
+  background: color-mix(in srgb, var(--p-text) 9%, transparent);
+}
+.app-bar-profile-emoji {
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+}
+.app-bar-profile-btn.is-anon .app-bar-profile-emoji {
+  color: var(--p-text-2);
+}
+.app-bar-profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+}
+.app-bar-profile-caret {
+  font-size: 13px;
+  color: var(--p-text-3);
+  margin-top: -2px;
+}
+.input-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+/* Drops DOWN from the chip, aligned to its leading edge. */
+.input-profiles-menu {
+  top: calc(100% + 10px);
+  bottom: auto;
+  inset-inline-start: auto;
+  inset-inline-end: auto;
+  left: 0;
+  right: auto;
+  z-index: 71;
+}
+.product-root[dir="rtl"] .input-profiles-menu {
+  direction: rtl;
 }
