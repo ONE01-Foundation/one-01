@@ -306,6 +306,7 @@ function AppInput({
   onImage,
   leading,
   autoFocus = false,
+  inputRef,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -314,6 +315,9 @@ function AppInput({
   /** Focus the field on mount — used by the live keyboard so the on-screen
    *  keyboard pops open on mobile the moment it's revealed. */
   autoFocus?: boolean;
+  /** Expose the underlying <input> so callers can focus it synchronously inside
+   *  a user gesture (the only reliable way to open the mobile keyboard). */
+  inputRef?: React.RefObject<HTMLInputElement | null>;
   /** Quick tap on the (empty) voice button → start a live voice call. */
   onVoiceTap?: () => void;
   /** When false, the mic (record + call) is disabled — cost switch. */
@@ -444,6 +448,7 @@ function AppInput({
       <span className="app-bar-wrap" dir={he ? "rtl" : "ltr"}>
         {caret && !value && !focused && <span className="app-bar-caret" aria-hidden="true" />}
         <input
+          ref={inputRef}
           className="app-bar-input"
           // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus={autoFocus}
@@ -2272,9 +2277,11 @@ export default function AppHome() {
   const orbAnchorRef = useRef<{ x: number; y: number } | null>(null); // home it floats around
   const orbUserPlacedRef = useRef(false); // user chose a spot → don't auto-move
   const orbNextWanderRef = useRef(0);
-  // While ONE is writing, the figure condenses to a dot; when done it grows back
-  // and (unless the user placed it) drifts aside.
-  const [liveWriting, setLiveWriting] = useState(false);
+  // The live keyboard focuses this synchronously inside the drag gesture — the
+  // only reliable way to pop the on-screen keyboard on mobile.
+  const liveInputRef = useRef<HTMLInputElement>(null);
+  // Terminal-style typing of ONE's greeting: number of chars revealed so far.
+  const [liveTyped, setLiveTyped] = useState(0);
   // Shared-figure transition: tapping the live figure flies THE SAME figure up
   // and grows it into the profile hero — one continuous figure, never two. The
   // box rests at the target (tx,ty,size); a transform offsets+shrinks it to the
@@ -5646,37 +5653,36 @@ export default function AppHome() {
     const dx = e.clientX - ringStartXRef.current;
     const dy = e.clientY - ringStartYRef.current;
     // First real movement promotes the press to a joystick drag (never records).
-    if (ringModeRef.current === "idle" && Math.abs(dx) + Math.abs(dy) > 6) {
-      ringModeRef.current = "drag";
+    if (ringModeRef.current === "idle") {
+      if (Math.abs(dx) + Math.abs(dy) <= 6) return; // still a possible tap
       setRingDragging(true);
     }
-    if (ringModeRef.current !== "drag") return;
     const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
     if (ringElRef.current) {
       // Grows as you grab it (joystick), and follows the finger.
       ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px) scale(1.5)`;
     }
-    // Pushed up past the threshold → open the keyboard.
-    if (-dy > 64) {
-      ringModeRef.current = "kbd";
-      setRingDragging(false);
-      if (ringElRef.current) ringElRef.current.style.transform = "";
-      setLiveKeyboard(true);
-    }
+    // Live threshold: pushed up enough → keyboard on release; else joystick.
+    ringModeRef.current = -dy > 64 ? "kbd" : "drag";
   };
   const ringUp = () => {
-    const wasTap = ringModeRef.current === "idle";
+    const mode = ringModeRef.current;
     if (ringElRef.current) ringElRef.current.style.transform = "";
     ringModeRef.current = "idle";
     setRingDragging(false);
-    // Tap → toggle the call. Drag/keyboard release does nothing else.
-    if (wasTap) {
+    if (mode === "idle") {
+      // Tap → toggle the voice call.
       if (listening) stopListening(false);
       else startListening();
+    } else if (mode === "kbd") {
+      // Focus synchronously in this pointerup (the always-mounted input already
+      // exists) so the on-screen keyboard actually opens on mobile.
+      liveInputRef.current?.focus({ preventScroll: true });
+      setLiveKeyboard(true);
     }
   };
-  // Snap points the figure can rest at: four corners + top-center + bottom-center
-  // (up by the ring), clear-ish of the feed text and dock.
+  // Snap points the figure can rest at: four corners, the three centers of the
+  // top / middle / bottom rows, and the left/right mid-edges — nine in all.
   const orbSnapPoints = () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -5684,6 +5690,9 @@ export default function AppHome() {
       { x: 66, y: 150 }, // top-left
       { x: w / 2, y: 132 }, // top-center
       { x: w - 66, y: 150 }, // top-right
+      { x: 66, y: h / 2 }, // mid-left
+      { x: w / 2, y: h / 2 }, // center
+      { x: w - 66, y: h / 2 }, // mid-right
       { x: 66, y: h - 210 }, // bottom-left
       { x: w / 2, y: h - 168 }, // bottom-center (by the ring)
       { x: w - 66, y: h - 210 }, // bottom-right
@@ -5816,22 +5825,27 @@ export default function AppHome() {
     orbNextWanderRef.current = 0; // recompute a fresh in-place offset next frame
   };
 
-  // Writing lifecycle: ONE condenses to a dot while composing (and for a short
-  // "finishing" beat), then grows back and — unless the user placed it — drifts
-  // aside so it's out of the way. Runs on mount (intro) and each ONE turn.
+  // ONE's greeting types out like a terminal — one character at a time behind a
+  // blinking caret. When it finishes, the figure drifts aside (unless placed).
   useEffect(() => {
-    if (homeMode !== "live" || space !== "home") return;
-    setLiveWriting(true);
-    if (thinking) return; // hold the dot for the whole composing stretch
-    const done = window.setTimeout(() => {
-      setLiveWriting(false);
-      if (!orbUserPlacedRef.current && typeof window !== "undefined") {
-        // Rest aside — a calm spot off to the side, clear of text and the ring.
-        setOrbAnchor({ x: window.innerWidth - 70, y: window.innerHeight * 0.42 });
+    if (homeMode !== "live" || space !== "home" || chat.length > 0) return;
+    const full = broadcastLines.slice(0, 3).join("\n");
+    setLiveTyped(0);
+    if (!full) return;
+    let i = 0;
+    const id = window.setInterval(() => {
+      i += 1;
+      setLiveTyped(i);
+      if (i >= full.length) {
+        window.clearInterval(id);
+        if (!orbUserPlacedRef.current && typeof window !== "undefined") {
+          setOrbAnchor({ x: window.innerWidth - 70, y: window.innerHeight * 0.42 });
+        }
       }
-    }, 1400);
-    return () => window.clearTimeout(done);
-  }, [homeMode, space, thinking]);
+    }, 34);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeMode, space, chat.length, broadcastLines[0]]);
 
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   // `target` lets a caller (e.g. home→process routing) send into a specific unit
@@ -6885,11 +6899,25 @@ export default function AppHome() {
                       figure → profile → ⋮. Keeps the space clean. */}
                   <div className="live-feed" ref={liveFeedRef}>
                     {chat.length === 0 &&
-                      broadcastLines.slice(0, 3).map((line, i) => (
-                        <div key={`seed-${i}`} className="live-msg one">
-                          {line}
-                        </div>
-                      ))}
+                      (() => {
+                        // Terminal-style: reveal the greeting char-by-char behind
+                        // a blinking caret that sits at the end of the last line.
+                        const full = broadcastLines.slice(0, 3).join("\n");
+                        const shown = full.slice(0, liveTyped);
+                        const done = liveTyped >= full.length;
+                        const lines = shown.length ? shown.split("\n") : [""];
+                        return lines.map((ln, i) => (
+                          <div key={`seed-${i}`} className="live-msg one">
+                            {ln}
+                            {i === lines.length - 1 && (
+                              <span
+                                className={`term-caret${done ? " is-idle" : ""}`}
+                                aria-hidden="true"
+                              />
+                            )}
+                          </div>
+                        ));
+                      })()}
                     {chat.map((m, i) =>
                       m.text ? (
                         <div key={i} className={`live-msg ${m.role}`}>
@@ -6900,7 +6928,7 @@ export default function AppHome() {
                     {thinking && <div className="live-msg one live-typing">···</div>}
                   </div>
                   <div
-                    className={`live-orb-float${liveWriting ? " is-writing" : ""}`}
+                    className="live-orb-float"
                     ref={orbElRef}
                     // Position is owned by the drift loop (direct DOM writes);
                     // React only controls opacity (hidden while its twin flies up).
@@ -6912,7 +6940,6 @@ export default function AppHome() {
                   >
                     <LiveOrb
                       size={72}
-                      writing={liveWriting}
                       className={`${listening ? "is-listening" : ""}${thinking ? " is-thinking" : ""}`}
                       faceColor="var(--p-face)"
                       eyeColor="var(--p-bg)"
@@ -6920,30 +6947,35 @@ export default function AppHome() {
                     />
                   </div>
                   <div className="live-dock">
-                    {liveKeyboard ? (
-                      <div className="live-kbd">
-                        <AppInput
-                          value={draft}
-                          onChange={setDraft}
-                          onSend={() => {
-                            send();
-                            setLiveKeyboard(false);
-                          }}
-                          onVoiceTap={startVoiceCall}
-                          voiceOn={aiVoice}
-                          placeholder={t.talkToOne}
-                          lang={lang}
-                          autoFocus
-                        />
-                        <button
-                          className="live-kbd-close"
-                          onClick={() => setLiveKeyboard(false)}
-                          aria-label={lang === "he" ? "סגור מקלדת" : "Close keyboard"}
-                        >
-                          ⌄
-                        </button>
-                      </div>
-                    ) : (
+                    {/* Keyboard row — ALWAYS mounted (tucked when hidden) so the
+                        ring gesture can focus it synchronously; that's the only
+                        reliable way to pop the on-screen keyboard on mobile. */}
+                    <div className={`live-kbd${liveKeyboard ? "" : " is-tucked"}`}>
+                      <AppInput
+                        value={draft}
+                        onChange={setDraft}
+                        onSend={() => {
+                          send();
+                          setLiveKeyboard(false);
+                        }}
+                        onVoiceTap={startVoiceCall}
+                        voiceOn={aiVoice}
+                        placeholder={t.talkToOne}
+                        lang={lang}
+                        inputRef={liveInputRef}
+                      />
+                      <button
+                        className="live-kbd-close"
+                        onClick={() => {
+                          setLiveKeyboard(false);
+                          liveInputRef.current?.blur();
+                        }}
+                        aria-label={lang === "he" ? "סגור מקלדת" : "Close keyboard"}
+                      >
+                        ⌄
+                      </button>
+                    </div>
+                    {!liveKeyboard && (
                       <>
                         {/* In a call → the live transcript sits above the ring.
                             Holding (joystick) → an arrow: push up to type. */}
@@ -6978,35 +7010,36 @@ export default function AppHome() {
                                 : "Tap to talk"
                           }
                         />
-                        {/* Sign-in / upgrade — the row that used to sit under the input. */}
-                        {!user ? (
-                          <p className="home-signin">
-                            {lang === "he" ? "עדיין בלי חשבון?" : "No account yet?"}
-                            {" · "}
-                            <button
-                              type="button"
-                              className="home-signin-link"
-                              onClick={openProfile}
-                            >
-                              {lang === "he" ? "התחברות" : "Sign in"}
-                            </button>
-                          </p>
-                        ) : plan === "free" ? (
-                          <p className="home-signin">
-                            {lang === "he" ? "רוצה יותר יכולות?" : "Want more?"}
-                            {" · "}
-                            <button
-                              type="button"
-                              className="home-signin-link"
-                              onClick={() => setOpenSheet("subscription")}
-                            >
-                              {t.upgrade}
-                            </button>
-                          </p>
-                        ) : null}
                       </>
                     )}
                   </div>
+                  {/* Sign-in / upgrade — pinned low like a footer, well below the ring. */}
+                  {!liveKeyboard &&
+                    (!user ? (
+                      <p className="live-footer">
+                        {lang === "he" ? "עדיין בלי חשבון?" : "No account yet?"}
+                        {" · "}
+                        <button
+                          type="button"
+                          className="home-signin-link"
+                          onClick={openProfile}
+                        >
+                          {lang === "he" ? "התחברות" : "Sign in"}
+                        </button>
+                      </p>
+                    ) : plan === "free" ? (
+                      <p className="live-footer">
+                        {lang === "he" ? "רוצה יותר יכולות?" : "Want more?"}
+                        {" · "}
+                        <button
+                          type="button"
+                          className="home-signin-link"
+                          onClick={() => setOpenSheet("subscription")}
+                        >
+                          {t.upgrade}
+                        </button>
+                      </p>
+                    ) : null)}
                 </div>
               )}
               {/* The SAME figure, flying from the live canvas up into the profile
