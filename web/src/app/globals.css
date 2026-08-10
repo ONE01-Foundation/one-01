@@ -10135,6 +10135,14 @@ a.get-opt:hover {
   flex-direction: column;
   gap: 12px;
 }
+/* On desktop the conversation stays inside the site's centred frame, not edge
+   to edge — the column matches the input width and sits in the middle. */
+@media (min-width: 760px) {
+  .live-feed {
+    padding-left: max(22px, calc((100% - 640px) / 2));
+    padding-right: max(22px, calc((100% - 640px) / 2));
+  }
+}
 .live-feed::-webkit-scrollbar {
   display: none;
 }
@@ -10175,33 +10183,27 @@ a.get-opt:hover {
   position: absolute;
   left: 50%;
   top: 42%;
-  /* Position (left/top) is owned by the drift loop; transform just centres. */
-  transform: translate(-50%, -50%);
+  /* Position (left/top) is owned by the drift loop; transform scales the figure
+     down to a dot while it acts as the typing caret, then grows back. */
+  transform: translate(-50%, -50%) scale(var(--live-scale, 1));
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
   z-index: 2;
   cursor: grab;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
 }
-/* Terminal-style caret that trails ONE's greeting as it types out. */
-.term-caret {
-  display: inline-block;
-  width: 0.5em;
-  height: 1.05em;
-  margin-inline-start: 3px;
-  vertical-align: -0.15em;
-  background: var(--p-text);
-  animation: termBlink 1s steps(1, end) infinite;
+/* While ONE types its greeting, the figure IS the terminal caret — a small dot
+   (Orb `blank` hides the eyes) that rides the end of the text. */
+.live-orb-float.is-caret {
+  --live-scale: 0.3;
 }
-@keyframes termBlink {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  50.01%,
-  100% {
-    opacity: 0;
-  }
+/* Zero-width marker placed at the text end; the figure-caret snaps to it. */
+.term-caret-anchor {
+  display: inline-block;
+  width: 0;
+  height: 1.1em;
+  vertical-align: -0.2em;
 }
 .live-orb-float:active {
   cursor: grabbing;

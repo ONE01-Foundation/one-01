@@ -2281,7 +2281,12 @@ export default function AppHome() {
   // only reliable way to pop the on-screen keyboard on mobile.
   const liveInputRef = useRef<HTMLInputElement>(null);
   // Terminal-style typing of ONE's greeting: number of chars revealed so far.
+  // While typing, the FIGURE itself is the caret — it shrinks to a dot and rides
+  // the end of the text (caretAnchorRef marks that spot); then it grows + drifts.
   const [liveTyped, setLiveTyped] = useState(0);
+  const [liveCaret, setLiveCaret] = useState(false);
+  const liveTypingRef = useRef(false);
+  const caretAnchorRef = useRef<HTMLSpanElement>(null);
   // Shared-figure transition: tapping the live figure flies THE SAME figure up
   // and grows it into the profile hero — one continuous figure, never two. The
   // box rests at the target (tx,ty,size); a transform offsets+shrinks it to the
@@ -5795,6 +5800,17 @@ export default function AppHome() {
     const rand = (a: number, b: number) => a + Math.random() * (b - a);
     const tick = (t: number) => {
       const dragging = orbDragRef.current?.moved;
+      // While typing, the figure IS the caret: ride the end of the text exactly.
+      if (liveTypingRef.current && caretAnchorRef.current && !dragging) {
+        const r = caretAnchorRef.current.getBoundingClientRect();
+        const pos = orbMotionRef.current!;
+        pos.x = r.left;
+        pos.y = r.top + r.height / 2;
+        el.style.left = `${pos.x}px`;
+        el.style.top = `${pos.y}px`;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       if (!dragging) {
         const pos = orbMotionRef.current!;
         const anchor = orbAnchorRef.current!;
@@ -5825,25 +5841,33 @@ export default function AppHome() {
     orbNextWanderRef.current = 0; // recompute a fresh in-place offset next frame
   };
 
-  // ONE's greeting types out like a terminal — one character at a time behind a
-  // blinking caret. When it finishes, the figure drifts aside (unless placed).
+  // ONE's greeting types out like a terminal — one char at a time. The figure IS
+  // the caret (a dot riding the text end). When it finishes, the figure grows
+  // back and drifts aside (unless the user placed it).
   useEffect(() => {
     if (homeMode !== "live" || space !== "home" || chat.length > 0) return;
     const full = broadcastLines.slice(0, 3).join("\n");
     setLiveTyped(0);
     if (!full) return;
+    setLiveCaret(true);
+    liveTypingRef.current = true;
     let i = 0;
     const id = window.setInterval(() => {
       i += 1;
       setLiveTyped(i);
       if (i >= full.length) {
         window.clearInterval(id);
+        liveTypingRef.current = false;
+        setLiveCaret(false);
         if (!orbUserPlacedRef.current && typeof window !== "undefined") {
           setOrbAnchor({ x: window.innerWidth - 70, y: window.innerHeight * 0.42 });
         }
       }
     }, 34);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      liveTypingRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homeMode, space, chat.length, broadcastLines[0]]);
 
@@ -6909,9 +6933,12 @@ export default function AppHome() {
                         return lines.map((ln, i) => (
                           <div key={`seed-${i}`} className="live-msg one">
                             {ln}
-                            {i === lines.length - 1 && (
+                            {/* Invisible anchor at the text end — the FIGURE (as a
+                                dot) rides this spot while typing, like a caret. */}
+                            {i === lines.length - 1 && !done && (
                               <span
-                                className={`term-caret${done ? " is-idle" : ""}`}
+                                ref={caretAnchorRef}
+                                className="term-caret-anchor"
                                 aria-hidden="true"
                               />
                             )}
@@ -6928,7 +6955,7 @@ export default function AppHome() {
                     {thinking && <div className="live-msg one live-typing">···</div>}
                   </div>
                   <div
-                    className="live-orb-float"
+                    className={`live-orb-float${liveCaret ? " is-caret" : ""}`}
                     ref={orbElRef}
                     // Position is owned by the drift loop (direct DOM writes);
                     // React only controls opacity (hidden while its twin flies up).
@@ -6940,6 +6967,7 @@ export default function AppHome() {
                   >
                     <LiveOrb
                       size={72}
+                      writing={liveCaret}
                       className={`${listening ? "is-listening" : ""}${thinking ? " is-thinking" : ""}`}
                       faceColor="var(--p-face)"
                       eyeColor="var(--p-bg)"
