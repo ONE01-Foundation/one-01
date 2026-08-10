@@ -2248,17 +2248,25 @@ export default function AppHome() {
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [liveKeyboard, setLiveKeyboard] = useState(false);
-  // Where the figure has been dragged to (WhatsApp-style); null = default spot.
-  const [orbPos, setOrbPos] = useState<{ x: number; y: number } | null>(null);
+  // True while the ring is being held as a joystick (shows the "push up to type"
+  // hint). A plain tap never sets this — tap toggles the voice call instead.
+  const [ringDragging, setRingDragging] = useState(false);
   const recogRef = useRef<{ stop: () => void; start: () => void } | null>(null);
   const finalTxtRef = useRef("");
   const ringStartYRef = useRef(0);
   const ringStartXRef = useRef(0);
-  const ringModeRef = useRef<"idle" | "voice" | "drag">("idle");
+  const ringModeRef = useRef<"idle" | "drag" | "kbd">("idle");
   const ringElRef = useRef<HTMLButtonElement>(null);
   const orbElRef = useRef<HTMLDivElement>(null);
   const orbDragRef = useRef<{ sx: number; sy: number; moved: boolean } | null>(null);
   const liveFeedRef = useRef<HTMLDivElement>(null);
+  // The figure is alive: it drifts on its own toward a wander target. Dragging
+  // takes over; on release it snaps to (parks in) the nearest corner. All driven
+  // by refs + a rAF loop so it never triggers React re-renders.
+  const orbMotionRef = useRef<{ x: number; y: number } | null>(null);
+  const orbTargetRef = useRef<{ x: number; y: number } | null>(null);
+  const orbParkedRef = useRef(false);
+  const orbNextWanderRef = useRef(0);
   // Shared-figure transition: tapping the live figure flies THE SAME figure up
   // and grows it into the profile hero — one continuous figure, never two. The
   // box rests at the target (tx,ty,size); a transform offsets+shrinks it to the
@@ -5614,41 +5622,65 @@ export default function AppHome() {
     finalTxtRef.current = "";
     if (!cancel && txt) void send(txt);
   };
+  // A TAP on the ring toggles the voice "call" (start/stop recording). A HOLD is
+  // purely a joystick — drag it around; push up past the threshold to type.
   const ringDown = (e: React.PointerEvent) => {
     ringStartYRef.current = e.clientY;
     ringStartXRef.current = e.clientX;
-    ringModeRef.current = "voice";
+    ringModeRef.current = "idle"; // undecided until it moves enough to be a drag
     try {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     } catch {
       /* pointer capture unsupported */
     }
-    startListening();
   };
   const ringMove = (e: React.PointerEvent) => {
-    if (ringModeRef.current === "idle") return;
     const dx = e.clientX - ringStartXRef.current;
     const dy = e.clientY - ringStartYRef.current;
+    // First real movement promotes the press to a joystick drag (never records).
+    if (ringModeRef.current === "idle" && Math.abs(dx) + Math.abs(dy) > 6) {
+      ringModeRef.current = "drag";
+      setRingDragging(true);
+    }
+    if (ringModeRef.current !== "drag") return;
     const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
-    // Held → the ring itself becomes a joystick that follows the finger.
     if (ringElRef.current) {
       ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px)`;
     }
-    // Pushed up past the threshold → open the keyboard instead of talking.
-    if (ringModeRef.current === "voice" && -dy > 64) {
-      ringModeRef.current = "drag";
-      stopListening(true);
+    // Pushed up past the threshold → open the keyboard.
+    if (-dy > 64) {
+      ringModeRef.current = "kbd";
+      setRingDragging(false);
       if (ringElRef.current) ringElRef.current.style.transform = "";
       setLiveKeyboard(true);
     }
   };
   const ringUp = () => {
+    const wasTap = ringModeRef.current === "idle";
     if (ringElRef.current) ringElRef.current.style.transform = "";
-    if (ringModeRef.current === "voice") stopListening(false);
     ringModeRef.current = "idle";
+    setRingDragging(false);
+    // Tap → toggle the call. Drag/keyboard release does nothing else.
+    if (wasTap) {
+      if (listening) stopListening(false);
+      else startListening();
+    }
   };
-  // The figure is draggable anywhere in the canvas (WhatsApp-style); a tap that
-  // didn't drag opens the profile instead.
+  // Corners of a safe inset rectangle the figure can rest in without covering
+  // the feed text (top) or the ring/dock (bottom).
+  const orbCorners = () => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    return [
+      { x: 66, y: 150 },
+      { x: w - 66, y: 150 },
+      { x: 66, y: h - 220 },
+      { x: w - 66, y: h - 220 },
+    ];
+  };
+  // The figure is draggable anywhere (WhatsApp-style). While dragging, the drift
+  // loop stands down; a tap (no drag) opens the profile; a real drag snaps it to
+  // the nearest corner on release.
   const orbDown = (e: React.PointerEvent) => {
     orbDragRef.current = { sx: e.clientX, sy: e.clientY, moved: false };
     try {
@@ -5662,6 +5694,7 @@ export default function AppHome() {
     if (!d) return;
     if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 6) d.moved = true;
     if (d.moved && orbElRef.current) {
+      orbMotionRef.current = { x: e.clientX, y: e.clientY };
       orbElRef.current.style.left = `${e.clientX}px`;
       orbElRef.current.style.top = `${e.clientY}px`;
     }
@@ -5670,8 +5703,24 @@ export default function AppHome() {
     const d = orbDragRef.current;
     orbDragRef.current = null;
     if (!d) return;
-    if (d.moved) setOrbPos({ x: e.clientX, y: e.clientY });
-    else flyOrbToProfile();
+    if (!d.moved) {
+      flyOrbToProfile();
+      return;
+    }
+    // Snap to (park in) the nearest corner; the drift loop eases it there.
+    const corners = orbCorners();
+    let best = corners[0];
+    let bestDist = Infinity;
+    for (const c of corners) {
+      const dist = (c.x - e.clientX) ** 2 + (c.y - e.clientY) ** 2;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = c;
+      }
+    }
+    orbMotionRef.current = { x: e.clientX, y: e.clientY };
+    orbTargetRef.current = best;
+    orbParkedRef.current = true;
   };
   // Fly THE SAME figure from wherever it floats up into the profile hero, then
   // hand off to the profile (whose hero fades in exactly there — never two).
@@ -5709,6 +5758,47 @@ export default function AppHome() {
     const el = liveFeedRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat.length, homeMode, thinking]);
+
+  // The figure is ALIVE — it drifts on its own toward gentle wander targets.
+  // Dragging takes over (orbMove writes the position); on release it parks in a
+  // corner (orbParkedRef) and the loop eases it there instead of wandering.
+  // All position writes go straight to the DOM so React never re-renders here.
+  useEffect(() => {
+    if (homeMode !== "live" || space !== "home") return;
+    const el = orbElRef.current;
+    if (!el || typeof window === "undefined") return;
+    if (!orbMotionRef.current) {
+      orbMotionRef.current = { x: window.innerWidth / 2, y: window.innerHeight * 0.42 };
+    }
+    let raf = 0;
+    const rand = (a: number, b: number) => a + Math.random() * (b - a);
+    const tick = (t: number) => {
+      const dragging = orbDragRef.current?.moved;
+      if (!dragging) {
+        const pos = orbMotionRef.current!;
+        // Not parked → pick a fresh wander target every few seconds.
+        if (!orbParkedRef.current && t > orbNextWanderRef.current) {
+          orbTargetRef.current = {
+            x: rand(70, window.innerWidth - 70),
+            y: rand(140, window.innerHeight - 230),
+          };
+          orbNextWanderRef.current = t + rand(3200, 6000);
+        }
+        const tg = orbTargetRef.current;
+        if (tg) {
+          // Ease toward target — snappier when parking, dreamier when wandering.
+          const k = orbParkedRef.current ? 0.12 : 0.018;
+          pos.x += (tg.x - pos.x) * k;
+          pos.y += (tg.y - pos.y) * k;
+          el.style.left = `${pos.x}px`;
+          el.style.top = `${pos.y}px`;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [homeMode, space]);
 
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   // `target` lets a caller (e.g. home→process routing) send into a specific unit
@@ -6779,11 +6869,9 @@ export default function AppHome() {
                   <div
                     className="live-orb-float"
                     ref={orbElRef}
-                    style={{
-                      ...(orbPos ? { left: orbPos.x, top: orbPos.y } : {}),
-                      // Hidden while its twin flies up to the profile — never two.
-                      opacity: flyOrb ? 0 : 1,
-                    }}
+                    // Position is owned by the drift loop (direct DOM writes);
+                    // React only controls opacity (hidden while its twin flies up).
+                    style={{ opacity: flyOrb ? 0 : 1 }}
                     onPointerDown={orbDown}
                     onPointerMove={orbMove}
                     onPointerUp={orbUp}
@@ -6823,16 +6911,22 @@ export default function AppHome() {
                       </div>
                     ) : (
                       <>
-                        {/* Held → an arrow + hint sit ABOVE the ring: push up to type. */}
-                        {listening && (
+                        {/* In a call → the live transcript sits above the ring.
+                            Holding (joystick) → an arrow: push up to type. */}
+                        {listening ? (
+                          <div className="live-hold-hint">
+                            <span className="live-call-transcript">
+                              {interim || (lang === "he" ? "מקשיב…" : "Listening…")}
+                            </span>
+                          </div>
+                        ) : ringDragging ? (
                           <div className="live-hold-hint">
                             <span className="live-hold-arrow" aria-hidden="true">↑</span>
                             <span>
-                              {interim ||
-                                (lang === "he" ? "גרור מעלה למקלדת" : "drag up to type")}
+                              {lang === "he" ? "מעלה למקלדת" : "up to type"}
                             </span>
                           </div>
-                        )}
+                        ) : null}
                         <button
                           className={`live-ring${listening ? " is-live" : ""}`}
                           ref={ringElRef}
@@ -6840,13 +6934,25 @@ export default function AppHome() {
                           onPointerMove={ringMove}
                           onPointerUp={ringUp}
                           onPointerCancel={ringUp}
-                          aria-label={lang === "he" ? "החזק לדיבור" : "Hold to talk"}
+                          aria-label={
+                            listening
+                              ? lang === "he"
+                                ? "הקש לסיום"
+                                : "Tap to end"
+                              : lang === "he"
+                                ? "הקש לדיבור"
+                                : "Tap to talk"
+                          }
                         />
-                        {!listening && (
-                          <div className="live-ring-hint">
-                            {lang === "he" ? "החזק לדיבור" : "Hold to talk"}
-                          </div>
-                        )}
+                        <div className="live-ring-hint">
+                          {listening
+                            ? lang === "he"
+                              ? "הקש לסיום · החזק להזזה"
+                              : "Tap to end · hold to move"
+                            : lang === "he"
+                              ? "הקש לדיבור · החזק להזזה"
+                              : "Tap to talk · hold to move"}
+                        </div>
                         {/* Sign-in / upgrade — the row that used to sit under the input. */}
                         {!user ? (
                           <p className="home-signin">

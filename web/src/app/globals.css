@@ -10301,3 +10301,23 @@ a.get-opt:hover {
   transform-origin: center center;
   transition: transform 460ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Even parked, the figure breathes so it always reads as alive. */
+.live-orb-float .live-orb-btn {
+  animation: liveBreathe 4.6s ease-in-out infinite;
+}
+@keyframes liveBreathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.02);
+  }
+}
+/* The live transcript while in a voice call — prominent, centered above the ring. */
+.live-call-transcript {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--p-text);
+  line-height: 1.35;
+}
