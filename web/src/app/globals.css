@@ -10087,3 +10087,204 @@ a.get-opt:hover {
 .product-root[dir="rtl"] .input-profiles-menu {
   direction: rtl;
 }
+
+/* ══════════════════ EXPERIMENTAL "live" home (Settings → Home: Live) ══════════════════
+   A full-canvas overlay: ONE floats and writes to you; a bottom joystick RING is
+   hold-to-talk (free Web Speech) / drag-up to type. Sits above the nav (z 64) but
+   below the sheets (z 100) so Settings still opens over it. */
+.live-home {
+  position: fixed;
+  inset: 0;
+  z-index: 64;
+  background: var(--p-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: liveIn 300ms ease both;
+}
+@keyframes liveIn {
+  from {
+    opacity: 0;
+  }
+}
+.live-menu-btn {
+  position: absolute;
+  top: 14px;
+  inset-inline-end: 14px;
+  z-index: 4;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: color-mix(in srgb, var(--p-text) 5%, transparent);
+  color: var(--p-text-2);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.live-menu-btn:hover {
+  background: color-mix(in srgb, var(--p-text) 10%, transparent);
+}
+.live-feed {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* Big bottom pad leaves the lower half clear for the floating figure + ring. */
+  padding: 66px 22px 44vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.live-feed::-webkit-scrollbar {
+  display: none;
+}
+.live-msg {
+  max-width: 76%;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--p-text);
+  white-space: pre-wrap;
+  animation: liveMsgIn 260ms ease both;
+}
+@keyframes liveMsgIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.live-msg.one {
+  align-self: flex-start;
+  font-weight: 500;
+}
+.live-msg.user {
+  align-self: flex-end;
+  background: var(--p-face);
+  color: var(--p-bg);
+  padding: 9px 14px;
+  border-radius: 16px;
+  font-weight: 500;
+}
+.live-msg.live-typing {
+  letter-spacing: 3px;
+  opacity: 0.5;
+}
+/* The figure floats free in the lower-middle of the canvas, drifting gently. */
+.live-orb-float {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  z-index: 2;
+  animation: liveDrift 11s ease-in-out infinite;
+}
+@keyframes liveDrift {
+  0%,
+  100% {
+    transform: translate(-50%, -50%);
+  }
+  25% {
+    transform: translate(calc(-50% + 42px), calc(-50% - 30px));
+  }
+  50% {
+    transform: translate(calc(-50% - 34px), calc(-50% + 22px));
+  }
+  75% {
+    transform: translate(calc(-50% + 20px), calc(-50% + 34px));
+  }
+}
+.live-orb-float.is-listening {
+  animation-duration: 4s;
+}
+.live-orb-float.is-thinking {
+  animation-duration: 2.6s;
+}
+.live-dock {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 22px calc(34px + env(safe-area-inset-bottom, 0px));
+}
+.live-interim {
+  max-width: 80%;
+  text-align: center;
+  font-size: 15px;
+  color: var(--p-text-2);
+  min-height: 21px;
+}
+.live-ring {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--p-text) 22%, transparent);
+  background: var(--p-surface);
+  box-shadow: 0 12px 32px -14px rgba(0, 0, 0, 0.34);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  transition: transform 120ms ease, border-color 160ms ease;
+}
+.live-ring:active {
+  transform: scale(0.94);
+}
+.live-ring-core {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--p-face);
+  transition: transform 160ms ease, background 160ms ease;
+}
+.live-ring.is-live {
+  border-color: var(--p-ok);
+  animation: liveRingPulse 1.2s ease-in-out infinite;
+}
+.live-ring.is-live .live-ring-core {
+  background: var(--p-ok);
+  transform: scale(1.35);
+}
+@keyframes liveRingPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-ok) 42%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 15px color-mix(in srgb, var(--p-ok) 0%, transparent);
+  }
+}
+.live-ring-hint {
+  font-size: 12.5px;
+  color: var(--p-text-3);
+}
+.live-kbd {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-kbd-close {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: color-mix(in srgb, var(--p-text) 6%, transparent);
+  color: var(--p-text-2);
+  cursor: pointer;
+  font-size: 18px;
+}
+.beta-tag {
+  display: inline-block;
+  margin-inline-start: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--p-blue);
+  background: color-mix(in srgb, var(--p-blue) 12%, transparent);
+  padding: 1px 6px;
+  border-radius: 999px;
+  vertical-align: middle;
+}

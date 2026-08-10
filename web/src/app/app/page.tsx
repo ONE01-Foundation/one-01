@@ -2235,6 +2235,18 @@ export default function AppHome() {
   const [aiImages, setAiImages] = useState(false);
   const [aiVoice, setAiVoice] = useState(true);
   const [aiWeb, setAiWeb] = useState(true);
+  // EXPERIMENTAL "live" home — ONE floats in a canvas and writes to you; a bottom
+  // joystick RING: hold to talk (free Web Speech), drag up for the keyboard.
+  // Toggled in Settings; "classic" is the current gateway. All persisted.
+  const [homeMode, setHomeMode] = useState<"classic" | "live">("classic");
+  const [listening, setListening] = useState(false);
+  const [interim, setInterim] = useState("");
+  const [liveKeyboard, setLiveKeyboard] = useState(false);
+  const recogRef = useRef<{ stop: () => void; start: () => void } | null>(null);
+  const finalTxtRef = useRef("");
+  const ringStartYRef = useRef(0);
+  const ringModeRef = useRef<"idle" | "voice" | "drag">("idle");
+  const liveFeedRef = useRef<HTMLDivElement>(null);
   // ONE mirrors the language the user actually wrote in — not the app's UI
   // setting. So every line ONE composes locally (greetings, plan confirmations,
   // offline fallbacks) follows the message, and never replies in English to a
@@ -2251,6 +2263,7 @@ export default function AppHome() {
       if (localStorage.getItem("one_ai_images") === "1") setAiImages(true);
       if (localStorage.getItem("one_ai_voice") === "0") setAiVoice(false);
       if (localStorage.getItem("one_ai_web") === "0") setAiWeb(false);
+      if (localStorage.getItem("one_home_mode") === "live") setHomeMode("live");
     } catch {
       /* private mode — defaults are fine */
     }
@@ -2274,6 +2287,10 @@ export default function AppHome() {
   const applyAiWeb = (v: boolean) => {
     setAiWeb(v);
     try { localStorage.setItem("one_ai_web", v ? "1" : "0"); } catch {}
+  };
+  const applyHomeMode = (m: "classic" | "live") => {
+    setHomeMode(m);
+    try { localStorage.setItem("one_home_mode", m); } catch {}
   };
   const t = PRODUCT_UI[lang];
   const [activeProcess, setActiveProcess] = useState<Process | null>(null);
@@ -5516,6 +5533,91 @@ export default function AppHome() {
       ),
     );
 
+  /* ── EXPERIMENTAL "live" home: hold-to-talk (free Web Speech) + ring gestures ── */
+  const startListening = () => {
+    const w = window as unknown as {
+      SpeechRecognition?: new () => typeof recogRef.current & Record<string, unknown>;
+      webkitSpeechRecognition?: new () => typeof recogRef.current & Record<string, unknown>;
+    };
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) {
+      // No browser speech engine → fall back to the keyboard.
+      setLiveKeyboard(true);
+      return;
+    }
+    try {
+      const r = new SR() as unknown as {
+        lang: string;
+        interimResults: boolean;
+        continuous: boolean;
+        onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
+        onend: () => void;
+        onerror: () => void;
+        start: () => void;
+        stop: () => void;
+      };
+      r.lang = lang === "he" ? "he-IL" : "en-US";
+      r.interimResults = true;
+      r.continuous = true;
+      finalTxtRef.current = "";
+      setInterim("");
+      r.onresult = (e) => {
+        let txt = "";
+        for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+        finalTxtRef.current = txt;
+        setInterim(txt);
+      };
+      r.onend = () => setListening(false);
+      r.onerror = () => setListening(false);
+      recogRef.current = r;
+      r.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+  const stopListening = (cancel?: boolean) => {
+    try {
+      recogRef.current?.stop();
+    } catch {
+      /* already stopped */
+    }
+    recogRef.current = null;
+    setListening(false);
+    const txt = finalTxtRef.current.trim();
+    setInterim("");
+    finalTxtRef.current = "";
+    if (!cancel && txt) void send(txt);
+  };
+  const ringDown = (e: React.PointerEvent) => {
+    ringStartYRef.current = e.clientY;
+    ringModeRef.current = "voice";
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer capture unsupported */
+    }
+    startListening();
+  };
+  const ringMove = (e: React.PointerEvent) => {
+    // Drag the ring up past a threshold → switch from voice to the keyboard.
+    if (ringModeRef.current === "voice" && ringStartYRef.current - e.clientY > 60) {
+      ringModeRef.current = "drag";
+      stopListening(true);
+      setLiveKeyboard(true);
+    }
+  };
+  const ringUp = () => {
+    if (ringModeRef.current === "voice") stopListening(false);
+    ringModeRef.current = "idle";
+  };
+  // Keep the live feed pinned to the newest message.
+  useEffect(() => {
+    if (homeMode !== "live") return;
+    const el = liveFeedRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat.length, homeMode, thinking]);
+
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   // `target` lets a caller (e.g. home→process routing) send into a specific unit
   // without waiting for setActiveProcess to flush through React state.
@@ -6559,6 +6661,95 @@ export default function AppHome() {
             </div>
           ) : (
             <>
+              {/* EXPERIMENTAL "live" home — a full-screen canvas overlay: ONE floats
+                  and writes to you, a bottom ring is hold-to-talk / drag-up to type.
+                  Toggle back to the classic gateway from Settings (⋮). */}
+              {homeMode === "live" && space === "home" && !activeProcess && (
+                <div className="live-home" dir={lang === "he" ? "rtl" : "ltr"}>
+                  <button
+                    className="live-menu-btn"
+                    onClick={() => setOpenSheet("settings")}
+                    aria-label={t.settings}
+                    title={t.settings}
+                  >
+                    <span className="dots3" aria-hidden="true">⋮</span>
+                  </button>
+                  <div className="live-feed" ref={liveFeedRef}>
+                    {chat.length === 0 &&
+                      broadcastLines.slice(0, 3).map((line, i) => (
+                        <div key={`seed-${i}`} className="live-msg one">
+                          {line}
+                        </div>
+                      ))}
+                    {chat.map((m, i) =>
+                      m.text ? (
+                        <div key={i} className={`live-msg ${m.role}`}>
+                          {m.text}
+                        </div>
+                      ) : null,
+                    )}
+                    {thinking && <div className="live-msg one live-typing">···</div>}
+                  </div>
+                  <LiveOrb
+                    size={72}
+                    className={`live-orb-float${listening ? " is-listening" : ""}${
+                      thinking ? " is-thinking" : ""
+                    }`}
+                    faceColor="var(--p-face)"
+                    eyeColor="var(--p-bg)"
+                    onClick={openProfile}
+                    ariaLabel={lang === "he" ? "הפרופיל של ONE" : "ONE's profile"}
+                  />
+                  <div className="live-dock">
+                    {liveKeyboard ? (
+                      <div className="live-kbd">
+                        <AppInput
+                          value={draft}
+                          onChange={setDraft}
+                          onSend={() => {
+                            send();
+                            setLiveKeyboard(false);
+                          }}
+                          onVoiceTap={startVoiceCall}
+                          voiceOn={aiVoice}
+                          placeholder={t.talkToOne}
+                          lang={lang}
+                        />
+                        <button
+                          className="live-kbd-close"
+                          onClick={() => setLiveKeyboard(false)}
+                          aria-label={lang === "he" ? "סגור מקלדת" : "Close keyboard"}
+                        >
+                          ⌄
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {(listening || interim) && (
+                          <div className="live-interim">
+                            {interim || (lang === "he" ? "מקשיב…" : "Listening…")}
+                          </div>
+                        )}
+                        <button
+                          className={`live-ring${listening ? " is-live" : ""}`}
+                          onPointerDown={ringDown}
+                          onPointerMove={ringMove}
+                          onPointerUp={ringUp}
+                          onPointerCancel={ringUp}
+                          aria-label={lang === "he" ? "החזק לדיבור" : "Hold to talk"}
+                        >
+                          <span className="live-ring-core" aria-hidden="true" />
+                        </button>
+                        <div className="live-ring-hint">
+                          {lang === "he"
+                            ? "החזק לדיבור · גרור מעלה למקלדת"
+                            : "Hold to talk · drag up to type"}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               {(chat.length > 0 || tempChat) && (
                 <button className="app-close" onClick={endChat} aria-label="Close chat">
                   ×
@@ -8267,6 +8458,26 @@ export default function AppHome() {
                 </button>
                 <button className={theme === "dark" ? "on" : ""} onClick={() => applyTheme("dark")}>
                   {t.dark}
+                </button>
+              </div>
+            </div>
+            <div className="sheet-row">
+              <span className="r-label">
+                {lang === "he" ? "מסך בית" : "Home screen"}
+                <span className="beta-tag">{lang === "he" ? "ניסיוני" : "beta"}</span>
+              </span>
+              <div className="seg2">
+                <button
+                  className={homeMode === "classic" ? "on" : ""}
+                  onClick={() => applyHomeMode("classic")}
+                >
+                  {lang === "he" ? "קלאסי" : "Classic"}
+                </button>
+                <button
+                  className={homeMode === "live" ? "on" : ""}
+                  onClick={() => applyHomeMode("live")}
+                >
+                  {lang === "he" ? "חי" : "Live"}
                 </button>
               </div>
             </div>
