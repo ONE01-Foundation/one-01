@@ -2264,7 +2264,8 @@ export default function AppHome() {
   const finalTxtRef = useRef("");
   const ringStartYRef = useRef(0);
   const ringStartXRef = useRef(0);
-  const ringModeRef = useRef<"idle" | "drag" | "kbd">("idle");
+  const ringModeRef = useRef<"idle" | "drag" | "kbd" | "opt">("idle");
+  const joyDirRef = useRef<"up" | "left" | "right" | null>(null);
   const ringElRef = useRef<HTMLButtonElement>(null);
   const orbElRef = useRef<HTMLDivElement>(null);
   const orbDragRef = useRef<{ sx: number; sy: number; moved: boolean } | null>(null);
@@ -2280,13 +2281,17 @@ export default function AppHome() {
   // The live keyboard focuses this synchronously inside the drag gesture — the
   // only reliable way to pop the on-screen keyboard on mobile.
   const liveInputRef = useRef<HTMLInputElement>(null);
-  // Terminal-style typing of ONE's greeting: number of chars revealed so far.
-  // While typing, the FIGURE itself is the caret — it shrinks to a dot and rides
-  // the end of the text (caretAnchorRef marks that spot); then it grows + drifts.
-  const [liveTyped, setLiveTyped] = useState(0);
+  // ONE's greeting appears WORD by word (gentle fade) — feels like speech, not
+  // typing. While it "speaks", the FIGURE is the caret (a dot riding the last
+  // word via caretAnchorRef); then it grows and settles to centre.
+  const [liveWordN, setLiveWordN] = useState(0);
   const [liveCaret, setLiveCaret] = useState(false);
   const liveTypingRef = useRef(false);
   const caretAnchorRef = useRef<HTMLSpanElement>(null);
+  // Soft-keyboard height (visualViewport) so the input rides ABOVE the keyboard.
+  const [kbInset, setKbInset] = useState(0);
+  // Joystick option picker: while holding the ring you can steer to an option.
+  const [joyDir, setJoyDir] = useState<"up" | "left" | "right" | null>(null);
   // Shared-figure transition: tapping the live figure flies THE SAME figure up
   // and grows it into the profile hero — one continuous figure, never two. The
   // box rests at the target (tx,ty,size); a transform offsets+shrinks it to the
@@ -5664,17 +5669,30 @@ export default function AppHome() {
     }
     const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
     if (ringElRef.current) {
-      // Grows as you grab it (joystick), and follows the finger.
-      ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px) scale(1.5)`;
+      // The ring SHRINKS as you grab it (joystick) and follows the finger.
+      ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px) scale(0.72)`;
     }
-    // Live threshold: pushed up enough → keyboard on release; else joystick.
-    ringModeRef.current = -dy > 64 ? "kbd" : "drag";
+    // Steer to an option: up = keyboard, left/right = a quick option.
+    const mag = Math.hypot(dx, dy);
+    let dir: "up" | "left" | "right" | null = null;
+    if (mag > 44) {
+      if (-dy >= Math.abs(dx)) dir = "up";
+      else dir = dx < 0 ? "left" : "right";
+    }
+    ringModeRef.current = dir === "up" ? "kbd" : dir ? "opt" : "drag";
+    if (joyDirRef.current !== dir) {
+      joyDirRef.current = dir;
+      setJoyDir(dir);
+    }
   };
   const ringUp = () => {
     const mode = ringModeRef.current;
+    const dir = joyDirRef.current;
     if (ringElRef.current) ringElRef.current.style.transform = "";
     ringModeRef.current = "idle";
+    joyDirRef.current = null;
     setRingDragging(false);
+    setJoyDir(null);
     if (mode === "idle") {
       // Tap → toggle the voice call.
       if (listening) stopListening(false);
@@ -5684,8 +5702,22 @@ export default function AppHome() {
       // exists) so the on-screen keyboard actually opens on mobile.
       liveInputRef.current?.focus({ preventScroll: true });
       setLiveKeyboard(true);
+    } else if (mode === "opt" && (dir === "left" || dir === "right")) {
+      const opt = liveJoyOptions()[dir];
+      if (opt) void send(opt.prompt);
     }
   };
+  // Quick options the joystick can steer to while held (questions / refine).
+  const liveJoyOptions = (): Record<"left" | "right", { label: string; prompt: string }> =>
+    lang === "he"
+      ? {
+          left: { label: "שאל אותי", prompt: "תשאל אותי שאלה אחת שתעזור לך להתקדם." },
+          right: { label: "דייק", prompt: "בוא נדייק את המטרה שלי יחד." },
+        }
+      : {
+          left: { label: "Ask me", prompt: "Ask me one question that helps you move forward." },
+          right: { label: "Refine", prompt: "Let's refine my goal together." },
+        };
   // Snap points the figure can rest at: four corners, the three centers of the
   // top / middle / bottom rows, and the left/right mid-edges — nine in all.
   const orbSnapPoints = () => {
@@ -5841,35 +5873,57 @@ export default function AppHome() {
     orbNextWanderRef.current = 0; // recompute a fresh in-place offset next frame
   };
 
-  // ONE's greeting types out like a terminal — one char at a time. The figure IS
-  // the caret (a dot riding the text end). When it finishes, the figure grows
-  // back and drifts aside (unless the user placed it).
+  // ONE's greeting appears WORD by word (each word fades in) — calmer, more like
+  // it's speaking. The figure is the caret (a dot on the last word). When done it
+  // grows back and settles to the CENTRE (unless the user placed it).
   useEffect(() => {
     if (homeMode !== "live" || space !== "home" || chat.length > 0) return;
-    const full = broadcastLines.slice(0, 3).join("\n");
-    setLiveTyped(0);
-    if (!full) return;
+    const lines = broadcastLines.slice(0, 3);
+    const total = lines.reduce((n, l) => n + (l.trim() ? l.split(/\s+/).length : 0), 0);
+    setLiveWordN(0);
+    if (!total) return;
     setLiveCaret(true);
     liveTypingRef.current = true;
     let i = 0;
     const id = window.setInterval(() => {
       i += 1;
-      setLiveTyped(i);
-      if (i >= full.length) {
+      setLiveWordN(i);
+      if (i >= total) {
         window.clearInterval(id);
         liveTypingRef.current = false;
         setLiveCaret(false);
         if (!orbUserPlacedRef.current && typeof window !== "undefined") {
-          setOrbAnchor({ x: window.innerWidth - 70, y: window.innerHeight * 0.42 });
+          setOrbAnchor({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
         }
       }
-    }, 34);
+    }, 190);
     return () => {
       window.clearInterval(id);
       liveTypingRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homeMode, space, chat.length, broadcastLines[0]]);
+
+  // Track the soft keyboard so the live input can sit right above it (mobile).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!liveKeyboard || !vv) {
+      setKbInset(0);
+      return;
+    }
+    const update = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKbInset(inset);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [liveKeyboard]);
 
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   // `target` lets a caller (e.g. home→process routing) send into a specific unit
@@ -6924,26 +6978,39 @@ export default function AppHome() {
                   <div className="live-feed" ref={liveFeedRef}>
                     {chat.length === 0 &&
                       (() => {
-                        // Terminal-style: reveal the greeting char-by-char behind
-                        // a blinking caret that sits at the end of the last line.
-                        const full = broadcastLines.slice(0, 3).join("\n");
-                        const shown = full.slice(0, liveTyped);
-                        const done = liveTyped >= full.length;
-                        const lines = shown.length ? shown.split("\n") : [""];
-                        return lines.map((ln, i) => (
-                          <div key={`seed-${i}`} className="live-msg one">
-                            {ln}
-                            {/* Invisible anchor at the text end — the FIGURE (as a
-                                dot) rides this spot while typing, like a caret. */}
-                            {i === lines.length - 1 && !done && (
-                              <span
-                                ref={caretAnchorRef}
-                                className="term-caret-anchor"
-                                aria-hidden="true"
-                              />
-                            )}
-                          </div>
-                        ));
+                        // Reveal ONE's greeting WORD by word; each word fades in.
+                        // The figure (a dot) rides the caret anchor on the last word.
+                        const lines = broadcastLines.slice(0, 3);
+                        const lineWords = lines.map((l) =>
+                          l.trim() ? l.split(/\s+/) : [],
+                        );
+                        const total = lineWords.reduce((n, ws) => n + ws.length, 0);
+                        const done = liveWordN >= total;
+                        let consumed = 0;
+                        return lineWords.map((ws, li) => {
+                          const start = consumed;
+                          consumed += ws.length;
+                          const shown = Math.max(0, Math.min(ws.length, liveWordN - start));
+                          if (shown === 0) return null;
+                          const caretHere = !done && liveWordN > start && liveWordN <= consumed;
+                          return (
+                            <div key={`seed-${li}`} className="live-msg one">
+                              {ws.slice(0, shown).map((w, wi) => (
+                                <span key={wi} className="live-word">
+                                  {w}
+                                  {wi < ws.length - 1 ? " " : ""}
+                                </span>
+                              ))}
+                              {caretHere && (
+                                <span
+                                  ref={caretAnchorRef}
+                                  className="term-caret-anchor"
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </div>
+                          );
+                        });
                       })()}
                     {chat.map((m, i) =>
                       m.text ? (
@@ -6978,7 +7045,10 @@ export default function AppHome() {
                     {/* Keyboard row — ALWAYS mounted (tucked when hidden) so the
                         ring gesture can focus it synchronously; that's the only
                         reliable way to pop the on-screen keyboard on mobile. */}
-                    <div className={`live-kbd${liveKeyboard ? "" : " is-tucked"}`}>
+                    <div
+                      className={`live-kbd${liveKeyboard ? " is-open" : " is-tucked"}`}
+                      style={liveKeyboard ? { bottom: kbInset } : undefined}
+                    >
                       <AppInput
                         value={draft}
                         onChange={setDraft}
@@ -7005,39 +7075,52 @@ export default function AppHome() {
                     </div>
                     {!liveKeyboard && (
                       <>
-                        {/* In a call → the live transcript sits above the ring.
-                            Holding (joystick) → an arrow: push up to type. */}
-                        {listening ? (
+                        {/* In a call → the live transcript sits above the ring. */}
+                        {listening && (
                           <div className="live-hold-hint">
                             <span className="live-call-transcript">
                               {interim || (lang === "he" ? "מקשיב…" : "Listening…")}
                             </span>
                           </div>
-                        ) : ringDragging ? (
-                          <div className="live-hold-hint">
-                            <span className="live-hold-arrow" aria-hidden="true">↑</span>
-                            <span>
-                              {lang === "he" ? "מעלה למקלדת" : "up to type"}
-                            </span>
-                          </div>
-                        ) : null}
-                        <button
-                          className={`live-ring${listening ? " is-live" : ""}`}
-                          ref={ringElRef}
-                          onPointerDown={ringDown}
-                          onPointerMove={ringMove}
-                          onPointerUp={ringUp}
-                          onPointerCancel={ringUp}
-                          aria-label={
-                            listening
-                              ? lang === "he"
-                                ? "הקש לסיום"
-                                : "Tap to end"
-                              : lang === "he"
-                                ? "הקש לדיבור"
-                                : "Tap to talk"
-                          }
-                        />
+                        )}
+                        <div className="live-ring-wrap">
+                          {/* Hold the ring → it becomes a joystick you steer to an
+                              option: up = keyboard, sides = quick questions. */}
+                          {ringDragging && (
+                            <>
+                              <span className={`live-joy up${joyDir === "up" ? " on" : ""}`}>
+                                {lang === "he" ? "מקלדת" : "Keyboard"}
+                              </span>
+                              <span
+                                className={`live-joy left${joyDir === "left" ? " on" : ""}`}
+                              >
+                                {liveJoyOptions().left.label}
+                              </span>
+                              <span
+                                className={`live-joy right${joyDir === "right" ? " on" : ""}`}
+                              >
+                                {liveJoyOptions().right.label}
+                              </span>
+                            </>
+                          )}
+                          <button
+                            className={`live-ring${listening ? " is-live" : ""}`}
+                            ref={ringElRef}
+                            onPointerDown={ringDown}
+                            onPointerMove={ringMove}
+                            onPointerUp={ringUp}
+                            onPointerCancel={ringUp}
+                            aria-label={
+                              listening
+                                ? lang === "he"
+                                  ? "הקש לסיום"
+                                  : "Tap to end"
+                                : lang === "he"
+                                  ? "הקש לדיבור"
+                                  : "Tap to talk"
+                            }
+                          />
+                        </div>
                       </>
                     )}
                   </div>

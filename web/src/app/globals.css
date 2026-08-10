@@ -10160,6 +10160,15 @@ a.get-opt:hover {
     transform: translateY(6px);
   }
 }
+/* Each greeting word fades in on its own (inline, so lines still wrap). */
+.live-word {
+  animation: liveWordIn 380ms ease both;
+}
+@keyframes liveWordIn {
+  from {
+    opacity: 0;
+  }
+}
 .live-msg.one {
   align-self: flex-start;
   font-weight: 680;
@@ -10240,15 +10249,50 @@ a.get-opt:hover {
 /* Just a ring — hollow, no fill. On hold it becomes a joystick (JS translates
    it under the finger), so no CSS transition on transform. */
 .live-ring {
-  /* Smaller at rest; the joystick hold grows it (JS adds scale to the transform). */
-  width: 58px;
-  height: 58px;
+  /* Big at rest; the joystick hold SHRINKS it (JS adds scale to the transform). */
+  width: 84px;
+  height: 84px;
   border-radius: 50%;
   border: 3px solid color-mix(in srgb, var(--p-text) 26%, transparent);
   background: transparent;
   cursor: pointer;
   touch-action: none;
   transition: border-color 160ms ease;
+}
+/* Wrapper so the joystick option chips can sit around the ring. */
+.live-ring-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+/* Options you can steer to while holding the ring (up = keyboard, sides = asks). */
+.live-joy {
+  position: absolute;
+  z-index: 4;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--p-text-2);
+  background: color-mix(in srgb, var(--p-text) 7%, transparent);
+  pointer-events: none;
+  animation: liveMsgIn 160ms ease both;
+  transition: transform 120ms ease, background 120ms ease, color 120ms ease;
+}
+.live-joy.up {
+  bottom: calc(100% + 12px);
+}
+.live-joy.left {
+  right: calc(100% + 10px);
+}
+.live-joy.right {
+  left: calc(100% + 10px);
+}
+.live-joy.on {
+  color: var(--p-bg);
+  background: var(--p-face);
+  transform: scale(1.08);
 }
 .live-ring.is-live {
   border-color: var(--p-ok);
@@ -10317,6 +10361,29 @@ a.get-opt:hover {
   border: 0;
   opacity: 0;
   pointer-events: none;
+}
+/* When open, the input floats right ABOVE the soft keyboard (bottom = keyboard
+   height, set inline from visualViewport) so it's never hidden on mobile. */
+.live-kbd.is-open {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 8;
+  max-width: none;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--p-bg);
+  box-shadow: 0 -10px 26px -14px rgba(0, 0, 0, 0.22);
+}
+@media (min-width: 760px) {
+  .live-kbd.is-open {
+    left: 50%;
+    right: auto;
+    width: 100%;
+    max-width: 672px;
+    transform: translateX(-50%);
+    background: transparent;
+    box-shadow: none;
+  }
 }
 .live-kbd-close {
   flex-shrink: 0;
