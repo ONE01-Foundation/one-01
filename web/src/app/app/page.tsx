@@ -1126,6 +1126,7 @@ function LiveOrb({
   faceColor,
   eyeColor,
   biasLook = 0,
+  writing = false,
   className,
   onClick,
   ariaLabel,
@@ -1135,6 +1136,8 @@ function LiveOrb({
   eyeColor: string;
   /** Extra downward gaze (e.g. a nudge toward the input while typing). */
   biasLook?: number;
+  /** While writing, ONE condenses to a pure dot (no eyes). */
+  writing?: boolean;
   className?: string;
   onClick?: () => void;
   ariaLabel?: string;
@@ -1187,6 +1190,7 @@ function LiveOrb({
       <Orb
         size={size}
         alive
+        blank={writing}
         gaze={g}
         look={l + biasLook}
         faceColor={faceColor}
@@ -2260,13 +2264,17 @@ export default function AppHome() {
   const orbElRef = useRef<HTMLDivElement>(null);
   const orbDragRef = useRef<{ sx: number; sy: number; moved: boolean } | null>(null);
   const liveFeedRef = useRef<HTMLDivElement>(null);
-  // The figure is alive: it drifts on its own toward a wander target. Dragging
-  // takes over; on release it snaps to (parks in) the nearest corner. All driven
-  // by refs + a rAF loop so it never triggers React re-renders.
-  const orbMotionRef = useRef<{ x: number; y: number } | null>(null);
-  const orbTargetRef = useRef<{ x: number; y: number } | null>(null);
-  const orbParkedRef = useRef(false);
+  // The figure is alive: it floats gently IN PLACE around an anchor (never roams
+  // corner-to-corner). Dragging takes over; on release the anchor snaps to the
+  // nearest snap point. All driven by refs + a rAF loop → no React re-renders.
+  const orbMotionRef = useRef<{ x: number; y: number } | null>(null); // live pos
+  const orbTargetRef = useRef<{ x: number; y: number } | null>(null); // float target
+  const orbAnchorRef = useRef<{ x: number; y: number } | null>(null); // home it floats around
+  const orbUserPlacedRef = useRef(false); // user chose a spot → don't auto-move
   const orbNextWanderRef = useRef(0);
+  // While ONE is writing, the figure condenses to a dot; when done it grows back
+  // and (unless the user placed it) drifts aside.
+  const [liveWriting, setLiveWriting] = useState(false);
   // Shared-figure transition: tapping the live figure flies THE SAME figure up
   // and grows it into the profile hero — one continuous figure, never two. The
   // box rests at the target (tx,ty,size); a transform offsets+shrinks it to the
@@ -5645,7 +5653,8 @@ export default function AppHome() {
     if (ringModeRef.current !== "drag") return;
     const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
     if (ringElRef.current) {
-      ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px)`;
+      // Grows as you grab it (joystick), and follows the finger.
+      ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px) scale(1.5)`;
     }
     // Pushed up past the threshold → open the keyboard.
     if (-dy > 64) {
@@ -5666,16 +5675,18 @@ export default function AppHome() {
       else startListening();
     }
   };
-  // Corners of a safe inset rectangle the figure can rest in without covering
-  // the feed text (top) or the ring/dock (bottom).
-  const orbCorners = () => {
+  // Snap points the figure can rest at: four corners + top-center + bottom-center
+  // (up by the ring), clear-ish of the feed text and dock.
+  const orbSnapPoints = () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
     return [
-      { x: 66, y: 150 },
-      { x: w - 66, y: 150 },
-      { x: 66, y: h - 220 },
-      { x: w - 66, y: h - 220 },
+      { x: 66, y: 150 }, // top-left
+      { x: w / 2, y: 132 }, // top-center
+      { x: w - 66, y: 150 }, // top-right
+      { x: 66, y: h - 210 }, // bottom-left
+      { x: w / 2, y: h - 168 }, // bottom-center (by the ring)
+      { x: w - 66, y: h - 210 }, // bottom-right
     ];
   };
   // The figure is draggable anywhere (WhatsApp-style). While dragging, the drift
@@ -5707,11 +5718,12 @@ export default function AppHome() {
       flyOrbToProfile();
       return;
     }
-    // Snap to (park in) the nearest corner; the drift loop eases it there.
-    const corners = orbCorners();
-    let best = corners[0];
+    // Snap the anchor to the nearest snap point; the loop eases it there and
+    // then floats in place around it. The user chose this spot → keep it.
+    const pts = orbSnapPoints();
+    let best = pts[0];
     let bestDist = Infinity;
-    for (const c of corners) {
+    for (const c of pts) {
       const dist = (c.x - e.clientX) ** 2 + (c.y - e.clientY) ** 2;
       if (dist < bestDist) {
         bestDist = dist;
@@ -5719,8 +5731,8 @@ export default function AppHome() {
       }
     }
     orbMotionRef.current = { x: e.clientX, y: e.clientY };
-    orbTargetRef.current = best;
-    orbParkedRef.current = true;
+    orbUserPlacedRef.current = true;
+    setOrbAnchor(best);
   };
   // Fly THE SAME figure from wherever it floats up into the profile hero, then
   // hand off to the profile (whose hero fades in exactly there — never two).
@@ -5759,46 +5771,67 @@ export default function AppHome() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat.length, homeMode, thinking]);
 
-  // The figure is ALIVE — it drifts on its own toward gentle wander targets.
-  // Dragging takes over (orbMove writes the position); on release it parks in a
-  // corner (orbParkedRef) and the loop eases it there instead of wandering.
-  // All position writes go straight to the DOM so React never re-renders here.
+  // The figure is ALIVE — it floats gently IN PLACE around its anchor (small
+  // offsets, never roaming the screen). Dragging takes over (orbMove writes the
+  // position); on release the anchor snaps and the loop eases there. All writes
+  // go straight to the DOM so React never re-renders here.
   useEffect(() => {
     if (homeMode !== "live" || space !== "home") return;
     const el = orbElRef.current;
     if (!el || typeof window === "undefined") return;
-    if (!orbMotionRef.current) {
-      orbMotionRef.current = { x: window.innerWidth / 2, y: window.innerHeight * 0.42 };
-    }
+    const start = { x: window.innerWidth / 2, y: window.innerHeight * 0.42 };
+    if (!orbAnchorRef.current) orbAnchorRef.current = { ...start };
+    if (!orbMotionRef.current) orbMotionRef.current = { ...orbAnchorRef.current };
     let raf = 0;
     const rand = (a: number, b: number) => a + Math.random() * (b - a);
     const tick = (t: number) => {
       const dragging = orbDragRef.current?.moved;
       if (!dragging) {
         const pos = orbMotionRef.current!;
-        // Not parked → pick a fresh wander target every few seconds.
-        if (!orbParkedRef.current && t > orbNextWanderRef.current) {
+        const anchor = orbAnchorRef.current!;
+        // Small wander offsets AROUND the anchor — gentle life, not travel.
+        if (t > orbNextWanderRef.current) {
           orbTargetRef.current = {
-            x: rand(70, window.innerWidth - 70),
-            y: rand(140, window.innerHeight - 230),
+            x: anchor.x + rand(-22, 22),
+            y: anchor.y + rand(-16, 16),
           };
-          orbNextWanderRef.current = t + rand(3200, 6000);
+          orbNextWanderRef.current = t + rand(2200, 3800);
         }
-        const tg = orbTargetRef.current;
-        if (tg) {
-          // Ease toward target — snappier when parking, dreamier when wandering.
-          const k = orbParkedRef.current ? 0.12 : 0.018;
-          pos.x += (tg.x - pos.x) * k;
-          pos.y += (tg.y - pos.y) * k;
-          el.style.left = `${pos.x}px`;
-          el.style.top = `${pos.y}px`;
-        }
+        const tg = orbTargetRef.current ?? anchor;
+        pos.x += (tg.x - pos.x) * 0.06;
+        pos.y += (tg.y - pos.y) * 0.06;
+        el.style.left = `${pos.x}px`;
+        el.style.top = `${pos.y}px`;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [homeMode, space]);
+
+  // Move the figure's home to a point (used by snap + "drift aside" after writing).
+  const setOrbAnchor = (pt: { x: number; y: number }) => {
+    orbAnchorRef.current = pt;
+    orbTargetRef.current = pt;
+    orbNextWanderRef.current = 0; // recompute a fresh in-place offset next frame
+  };
+
+  // Writing lifecycle: ONE condenses to a dot while composing (and for a short
+  // "finishing" beat), then grows back and — unless the user placed it — drifts
+  // aside so it's out of the way. Runs on mount (intro) and each ONE turn.
+  useEffect(() => {
+    if (homeMode !== "live" || space !== "home") return;
+    setLiveWriting(true);
+    if (thinking) return; // hold the dot for the whole composing stretch
+    const done = window.setTimeout(() => {
+      setLiveWriting(false);
+      if (!orbUserPlacedRef.current && typeof window !== "undefined") {
+        // Rest aside — a calm spot off to the side, clear of text and the ring.
+        setOrbAnchor({ x: window.innerWidth - 70, y: window.innerHeight * 0.42 });
+      }
+    }, 1400);
+    return () => window.clearTimeout(done);
+  }, [homeMode, space, thinking]);
 
   // Chat scoped to the open unit — every reply's changes land on the card beside.
   // `target` lets a caller (e.g. home→process routing) send into a specific unit
@@ -6867,7 +6900,7 @@ export default function AppHome() {
                     {thinking && <div className="live-msg one live-typing">···</div>}
                   </div>
                   <div
-                    className="live-orb-float"
+                    className={`live-orb-float${liveWriting ? " is-writing" : ""}`}
                     ref={orbElRef}
                     // Position is owned by the drift loop (direct DOM writes);
                     // React only controls opacity (hidden while its twin flies up).
@@ -6879,6 +6912,7 @@ export default function AppHome() {
                   >
                     <LiveOrb
                       size={72}
+                      writing={liveWriting}
                       className={`${listening ? "is-listening" : ""}${thinking ? " is-thinking" : ""}`}
                       faceColor="var(--p-face)"
                       eyeColor="var(--p-bg)"

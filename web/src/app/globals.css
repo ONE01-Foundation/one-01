@@ -10175,12 +10175,19 @@ a.get-opt:hover {
   position: absolute;
   left: 50%;
   top: 42%;
-  transform: translate(-50%, -50%);
+  /* Position comes from left/top (drift loop); transform only scales — so the
+     "writing" dot and the grow-back animate without fighting the position. */
+  transform: translate(-50%, -50%) scale(var(--live-scale, 1));
+  transition: transform 440ms cubic-bezier(0.22, 1, 0.36, 1);
   z-index: 2;
   cursor: grab;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+}
+/* While ONE writes, it condenses to a small dot (no eyes, via Orb `blank`). */
+.live-orb-float.is-writing {
+  --live-scale: 0.32;
 }
 .live-orb-float:active {
   cursor: grabbing;
@@ -10192,7 +10199,8 @@ a.get-opt:hover {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 0 22px calc(34px + env(safe-area-inset-bottom, 0px));
+  /* Raised a bit higher off the bottom edge. */
+  padding: 0 22px calc(76px + env(safe-area-inset-bottom, 0px));
 }
 .live-interim {
   max-width: 80%;
@@ -10204,8 +10212,9 @@ a.get-opt:hover {
 /* Just a ring — hollow, no fill. On hold it becomes a joystick (JS translates
    it under the finger), so no CSS transition on transform. */
 .live-ring {
-  width: 82px;
-  height: 82px;
+  /* Smaller at rest; the joystick hold grows it (JS adds scale to the transform). */
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   border: 3px solid color-mix(in srgb, var(--p-text) 26%, transparent);
   background: transparent;

@@ -12,6 +12,7 @@ export function Orb({
   eyeR = 8,
   alive = false,
   closed = false,
+  blank = false,
   className,
 }: {
   size?: number;
@@ -25,6 +26,8 @@ export function Orb({
   alive?: boolean;
   /** When true the eyes close to slits — ONE is concentrating / working. */
   closed?: boolean;
+  /** When true, render just the circle (no eyes) — a pure dot, e.g. while writing. */
+  blank?: boolean;
   className?: string;
 }) {
   // Eye geometry in a 100×100 viewBox.
@@ -43,7 +46,7 @@ export function Orb({
       aria-hidden="true"
     >
       <circle cx="50" cy="50" r="50" fill={faceColor} />
-      {closed ? (
+      {blank ? null : closed ? (
         <>
           {/* Closed eyes — thin rounded slits. */}
           <rect x={lx - eyeR} y={cy - eyeR * 0.28} width={eyeR * 2} height={eyeR * 0.56} rx={eyeR * 0.28} fill={eyeColor} />
