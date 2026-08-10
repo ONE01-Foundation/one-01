@@ -2259,6 +2259,19 @@ export default function AppHome() {
   const orbElRef = useRef<HTMLDivElement>(null);
   const orbDragRef = useRef<{ sx: number; sy: number; moved: boolean } | null>(null);
   const liveFeedRef = useRef<HTMLDivElement>(null);
+  // Shared-figure transition: tapping the live figure flies THE SAME figure up
+  // and grows it into the profile hero — one continuous figure, never two. The
+  // box rests at the target (tx,ty,size); a transform offsets+shrinks it to the
+  // figure's current spot, then releases to (0,0,scale 1).
+  const [flyOrb, setFlyOrb] = useState<{
+    size: number;
+    tx: number;
+    ty: number;
+    dx: number;
+    dy: number;
+    scale0: number;
+    go: boolean;
+  } | null>(null);
   // ONE mirrors the language the user actually wrote in — not the app's UI
   // setting. So every line ONE composes locally (greetings, plan confirmations,
   // offline fallbacks) follows the message, and never replies in English to a
@@ -5658,7 +5671,37 @@ export default function AppHome() {
     orbDragRef.current = null;
     if (!d) return;
     if (d.moved) setOrbPos({ x: e.clientX, y: e.clientY });
-    else openProfile();
+    else flyOrbToProfile();
+  };
+  // Fly THE SAME figure from wherever it floats up into the profile hero, then
+  // hand off to the profile (whose hero fades in exactly there — never two).
+  const flyOrbToProfile = () => {
+    const el = orbElRef.current;
+    if (!el || typeof window === "undefined") {
+      openProfile();
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    const size = 88; // the figure grows as it rises (matches the profile hero)
+    const sx = r.left + r.width / 2;
+    const sy = r.top + r.height / 2;
+    const tx = window.innerWidth / 2;
+    const ty = 150; // roughly the profile hero's resting spot near the top
+    setFlyOrb({
+      size,
+      tx,
+      ty,
+      dx: sx - tx,
+      dy: sy - ty,
+      scale0: r.width / size,
+      go: false,
+    });
+    // Two rAFs so the start transform paints before we release to the target.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        setFlyOrb((f) => (f ? { ...f, go: true } : f)),
+      ),
+    );
   };
   // Keep the live feed pinned to the newest message.
   useEffect(() => {
@@ -6736,7 +6779,11 @@ export default function AppHome() {
                   <div
                     className="live-orb-float"
                     ref={orbElRef}
-                    style={orbPos ? { left: orbPos.x, top: orbPos.y } : undefined}
+                    style={{
+                      ...(orbPos ? { left: orbPos.x, top: orbPos.y } : {}),
+                      // Hidden while its twin flies up to the profile — never two.
+                      opacity: flyOrb ? 0 : 1,
+                    }}
                     onPointerDown={orbDown}
                     onPointerMove={orbMove}
                     onPointerUp={orbUp}
@@ -6831,6 +6878,33 @@ export default function AppHome() {
                   </div>
                 </div>
               )}
+              {/* The SAME figure, flying from the live canvas up into the profile
+                  hero — one continuous figure, never two. */}
+              {flyOrb && (
+                <div
+                  className={`orb-fly${flyOrb.go ? " go" : ""}`}
+                  style={{
+                    left: flyOrb.tx - flyOrb.size / 2,
+                    top: flyOrb.ty - flyOrb.size / 2,
+                    width: flyOrb.size,
+                    height: flyOrb.size,
+                    transform: flyOrb.go
+                      ? "translate(0px, 0px) scale(1)"
+                      : `translate(${flyOrb.dx}px, ${flyOrb.dy}px) scale(${flyOrb.scale0})`,
+                  }}
+                  onTransitionEnd={(e) => {
+                    if (e.propertyName !== "transform") return;
+                    openProfile();
+                    window.setTimeout(() => setFlyOrb(null), 240);
+                  }}
+                >
+                  <LiveOrb
+                    size={flyOrb.size}
+                    faceColor="var(--p-face)"
+                    eyeColor="var(--p-bg)"
+                  />
+                </div>
+              )}
               {(chat.length > 0 || tempChat) && (
                 <button className="app-close" onClick={endChat} aria-label="Close chat">
                   ×
@@ -6912,7 +6986,17 @@ export default function AppHome() {
                         </div>
                       </div>
                       <div className="profile-hero">
-                        <Orb size={76} />
+                        {/* Fades in exactly where the flying figure lands, so the
+                            handoff reads as one continuous figure — never two. */}
+                        <div
+                          className="profile-hero-orb"
+                          style={{
+                            opacity: flyOrb ? 0 : 1,
+                            transition: "opacity 240ms ease",
+                          }}
+                        >
+                          <Orb size={88} />
+                        </div>
                         <div className="profile-title">
                           ONE{" "}
                           <span className={`app-plan ${planMeta.className}`}>{planMeta.word}</span>

@@ -10139,9 +10139,9 @@ a.get-opt:hover {
   display: none;
 }
 .live-msg {
-  max-width: 82%;
-  font-size: 20px;
-  line-height: 1.45;
+  max-width: 86%;
+  font-size: 24px;
+  line-height: 1.4;
   color: var(--p-text);
   white-space: pre-wrap;
   animation: liveMsgIn 260ms ease both;
@@ -10154,8 +10154,8 @@ a.get-opt:hover {
 }
 .live-msg.one {
   align-self: flex-start;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-weight: 680;
+  letter-spacing: -0.015em;
 }
 .live-msg.user {
   align-self: flex-end;
@@ -10288,4 +10288,16 @@ a.get-opt:hover {
   padding: 1px 6px;
   border-radius: 999px;
   vertical-align: middle;
+}
+/* Shared-figure transition — the SAME figure flies from the live canvas up into
+   the profile hero. Only the transform animates (offset+scale), so the box rests
+   at the target and lands pixel-aligned with the profile hero. */
+.orb-fly {
+  position: fixed;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  transform-origin: center center;
+  transition: transform 460ms cubic-bezier(0.22, 1, 0.36, 1);
 }
