@@ -6944,15 +6944,6 @@ export default function AppHome() {
                                 : "Tap to talk"
                           }
                         />
-                        <div className="live-ring-hint">
-                          {listening
-                            ? lang === "he"
-                              ? "הקש לסיום · החזק להזזה"
-                              : "Tap to end · hold to move"
-                            : lang === "he"
-                              ? "הקש לדיבור · החזק להזזה"
-                              : "Tap to talk · hold to move"}
-                        </div>
                         {/* Sign-in / upgrade — the row that used to sit under the input. */}
                         {!user ? (
                           <p className="home-signin">
