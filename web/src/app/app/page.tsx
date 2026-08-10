@@ -305,11 +305,15 @@ function AppInput({
   voiceOn = true,
   onImage,
   leading,
+  autoFocus = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
   placeholder?: string;
+  /** Focus the field on mount — used by the live keyboard so the on-screen
+   *  keyboard pops open on mobile the moment it's revealed. */
+  autoFocus?: boolean;
   /** Quick tap on the (empty) voice button → start a live voice call. */
   onVoiceTap?: () => void;
   /** When false, the mic (record + call) is disabled — cost switch. */
@@ -441,6 +445,8 @@ function AppInput({
         {caret && !value && !focused && <span className="app-bar-caret" aria-hidden="true" />}
         <input
           className="app-bar-input"
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus={autoFocus}
           // Empty → rest the caret on the app-language side (Hebrew right, English
           // left). Once you type, `auto` follows the language you're typing in.
           dir={value ? "auto" : he ? "rtl" : "ltr"}
@@ -2242,10 +2248,16 @@ export default function AppHome() {
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [liveKeyboard, setLiveKeyboard] = useState(false);
+  // Where the figure has been dragged to (WhatsApp-style); null = default spot.
+  const [orbPos, setOrbPos] = useState<{ x: number; y: number } | null>(null);
   const recogRef = useRef<{ stop: () => void; start: () => void } | null>(null);
   const finalTxtRef = useRef("");
   const ringStartYRef = useRef(0);
+  const ringStartXRef = useRef(0);
   const ringModeRef = useRef<"idle" | "voice" | "drag">("idle");
+  const ringElRef = useRef<HTMLButtonElement>(null);
+  const orbElRef = useRef<HTMLDivElement>(null);
+  const orbDragRef = useRef<{ sx: number; sy: number; moved: boolean } | null>(null);
   const liveFeedRef = useRef<HTMLDivElement>(null);
   // ONE mirrors the language the user actually wrote in — not the app's UI
   // setting. So every line ONE composes locally (greetings, plan confirmations,
@@ -5591,6 +5603,7 @@ export default function AppHome() {
   };
   const ringDown = (e: React.PointerEvent) => {
     ringStartYRef.current = e.clientY;
+    ringStartXRef.current = e.clientX;
     ringModeRef.current = "voice";
     try {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -5600,16 +5613,52 @@ export default function AppHome() {
     startListening();
   };
   const ringMove = (e: React.PointerEvent) => {
-    // Drag the ring up past a threshold → switch from voice to the keyboard.
-    if (ringModeRef.current === "voice" && ringStartYRef.current - e.clientY > 60) {
+    if (ringModeRef.current === "idle") return;
+    const dx = e.clientX - ringStartXRef.current;
+    const dy = e.clientY - ringStartYRef.current;
+    const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
+    // Held → the ring itself becomes a joystick that follows the finger.
+    if (ringElRef.current) {
+      ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px)`;
+    }
+    // Pushed up past the threshold → open the keyboard instead of talking.
+    if (ringModeRef.current === "voice" && -dy > 64) {
       ringModeRef.current = "drag";
       stopListening(true);
+      if (ringElRef.current) ringElRef.current.style.transform = "";
       setLiveKeyboard(true);
     }
   };
   const ringUp = () => {
+    if (ringElRef.current) ringElRef.current.style.transform = "";
     if (ringModeRef.current === "voice") stopListening(false);
     ringModeRef.current = "idle";
+  };
+  // The figure is draggable anywhere in the canvas (WhatsApp-style); a tap that
+  // didn't drag opens the profile instead.
+  const orbDown = (e: React.PointerEvent) => {
+    orbDragRef.current = { sx: e.clientX, sy: e.clientY, moved: false };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer capture unsupported */
+    }
+  };
+  const orbMove = (e: React.PointerEvent) => {
+    const d = orbDragRef.current;
+    if (!d) return;
+    if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 6) d.moved = true;
+    if (d.moved && orbElRef.current) {
+      orbElRef.current.style.left = `${e.clientX}px`;
+      orbElRef.current.style.top = `${e.clientY}px`;
+    }
+  };
+  const orbUp = (e: React.PointerEvent) => {
+    const d = orbDragRef.current;
+    orbDragRef.current = null;
+    if (!d) return;
+    if (d.moved) setOrbPos({ x: e.clientX, y: e.clientY });
+    else openProfile();
   };
   // Keep the live feed pinned to the newest message.
   useEffect(() => {
@@ -6666,14 +6715,8 @@ export default function AppHome() {
                   Toggle back to the classic gateway from Settings (⋮). */}
               {homeMode === "live" && space === "home" && !activeProcess && (
                 <div className="live-home" dir={lang === "he" ? "rtl" : "ltr"}>
-                  <button
-                    className="live-menu-btn"
-                    onClick={() => setOpenSheet("settings")}
-                    aria-label={t.settings}
-                    title={t.settings}
-                  >
-                    <span className="dots3" aria-hidden="true">⋮</span>
-                  </button>
+                  {/* No settings button on the canvas — reach it by tapping the
+                      figure → profile → ⋮. Keeps the space clean. */}
                   <div className="live-feed" ref={liveFeedRef}>
                     {chat.length === 0 &&
                       broadcastLines.slice(0, 3).map((line, i) => (
@@ -6690,16 +6733,23 @@ export default function AppHome() {
                     )}
                     {thinking && <div className="live-msg one live-typing">···</div>}
                   </div>
-                  <LiveOrb
-                    size={72}
-                    className={`live-orb-float${listening ? " is-listening" : ""}${
-                      thinking ? " is-thinking" : ""
-                    }`}
-                    faceColor="var(--p-face)"
-                    eyeColor="var(--p-bg)"
-                    onClick={openProfile}
-                    ariaLabel={lang === "he" ? "הפרופיל של ONE" : "ONE's profile"}
-                  />
+                  <div
+                    className="live-orb-float"
+                    ref={orbElRef}
+                    style={orbPos ? { left: orbPos.x, top: orbPos.y } : undefined}
+                    onPointerDown={orbDown}
+                    onPointerMove={orbMove}
+                    onPointerUp={orbUp}
+                    onPointerCancel={orbUp}
+                  >
+                    <LiveOrb
+                      size={72}
+                      className={`${listening ? "is-listening" : ""}${thinking ? " is-thinking" : ""}`}
+                      faceColor="var(--p-face)"
+                      eyeColor="var(--p-bg)"
+                      ariaLabel={lang === "he" ? "הפרופיל של ONE" : "ONE's profile"}
+                    />
+                  </div>
                   <div className="live-dock">
                     {liveKeyboard ? (
                       <div className="live-kbd">
@@ -6714,6 +6764,7 @@ export default function AppHome() {
                           voiceOn={aiVoice}
                           placeholder={t.talkToOne}
                           lang={lang}
+                          autoFocus
                         />
                         <button
                           className="live-kbd-close"
@@ -6725,26 +6776,56 @@ export default function AppHome() {
                       </div>
                     ) : (
                       <>
-                        {(listening || interim) && (
-                          <div className="live-interim">
-                            {interim || (lang === "he" ? "מקשיב…" : "Listening…")}
+                        {/* Held → an arrow + hint sit ABOVE the ring: push up to type. */}
+                        {listening && (
+                          <div className="live-hold-hint">
+                            <span className="live-hold-arrow" aria-hidden="true">↑</span>
+                            <span>
+                              {interim ||
+                                (lang === "he" ? "גרור מעלה למקלדת" : "drag up to type")}
+                            </span>
                           </div>
                         )}
                         <button
                           className={`live-ring${listening ? " is-live" : ""}`}
+                          ref={ringElRef}
                           onPointerDown={ringDown}
                           onPointerMove={ringMove}
                           onPointerUp={ringUp}
                           onPointerCancel={ringUp}
                           aria-label={lang === "he" ? "החזק לדיבור" : "Hold to talk"}
-                        >
-                          <span className="live-ring-core" aria-hidden="true" />
-                        </button>
-                        <div className="live-ring-hint">
-                          {lang === "he"
-                            ? "החזק לדיבור · גרור מעלה למקלדת"
-                            : "Hold to talk · drag up to type"}
-                        </div>
+                        />
+                        {!listening && (
+                          <div className="live-ring-hint">
+                            {lang === "he" ? "החזק לדיבור" : "Hold to talk"}
+                          </div>
+                        )}
+                        {/* Sign-in / upgrade — the row that used to sit under the input. */}
+                        {!user ? (
+                          <p className="home-signin">
+                            {lang === "he" ? "עדיין בלי חשבון?" : "No account yet?"}
+                            {" · "}
+                            <button
+                              type="button"
+                              className="home-signin-link"
+                              onClick={openProfile}
+                            >
+                              {lang === "he" ? "התחברות" : "Sign in"}
+                            </button>
+                          </p>
+                        ) : plan === "free" ? (
+                          <p className="home-signin">
+                            {lang === "he" ? "רוצה יותר יכולות?" : "Want more?"}
+                            {" · "}
+                            <button
+                              type="button"
+                              className="home-signin-link"
+                              onClick={() => setOpenSheet("subscription")}
+                            >
+                              {t.upgrade}
+                            </button>
+                          </p>
+                        ) : null}
                       </>
                     )}
                   </div>
