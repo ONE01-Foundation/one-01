@@ -10129,8 +10129,8 @@ a.get-opt:hover {
   flex: 1;
   overflow-y: auto;
   scrollbar-width: none;
-  /* Big bottom pad leaves the lower half clear for the floating figure + ring. */
-  padding: 66px 22px 44vh;
+  /* Top pad clears the figure (which rests at the top); the text sits BELOW it. */
+  padding: 200px 22px 40vh;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -10232,7 +10232,7 @@ a.get-opt:hover {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(44px + env(safe-area-inset-bottom, 0px));
   z-index: 3;
   margin: 0;
   text-align: center;

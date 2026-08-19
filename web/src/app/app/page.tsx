@@ -5825,7 +5825,8 @@ export default function AppHome() {
     if (homeMode !== "live" || space !== "home") return;
     const el = orbElRef.current;
     if (!el || typeof window === "undefined") return;
-    const start = { x: window.innerWidth / 2, y: window.innerHeight * 0.42 };
+    // The figure lives at the TOP, above the text.
+    const start = { x: window.innerWidth / 2, y: 132 };
     if (!orbAnchorRef.current) orbAnchorRef.current = { ...start };
     if (!orbMotionRef.current) orbMotionRef.current = { ...orbAnchorRef.current };
     let raf = 0;
@@ -5893,7 +5894,8 @@ export default function AppHome() {
         liveTypingRef.current = false;
         setLiveCaret(false);
         if (!orbUserPlacedRef.current && typeof window !== "undefined") {
-          setOrbAnchor({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+          // Rise back up and rest at the TOP, above the text.
+          setOrbAnchor({ x: window.innerWidth / 2, y: 132 });
         }
       }
     }, 190);
