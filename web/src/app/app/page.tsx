@@ -5669,8 +5669,8 @@ export default function AppHome() {
     }
     const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
     if (ringElRef.current) {
-      // The ring SHRINKS as you grab it (joystick) and follows the finger.
-      ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px) scale(0.72)`;
+      // The ring GROWS as you grab it (joystick) and follows the finger.
+      ringElRef.current.style.transform = `translate(${clamp(dx, 72)}px, ${clamp(dy, 72)}px) scale(1.45)`;
     }
     // Steer to an option: up = keyboard, left/right = a quick option.
     const mag = Math.hypot(dx, dy);

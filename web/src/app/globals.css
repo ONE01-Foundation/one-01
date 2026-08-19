@@ -10249,9 +10249,9 @@ a.get-opt:hover {
 /* Just a ring — hollow, no fill. On hold it becomes a joystick (JS translates
    it under the finger), so no CSS transition on transform. */
 .live-ring {
-  /* Big at rest; the joystick hold SHRINKS it (JS adds scale to the transform). */
-  width: 84px;
-  height: 84px;
+  /* Small at rest; the joystick hold GROWS it (JS adds scale to the transform). */
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   border: 3px solid color-mix(in srgb, var(--p-text) 26%, transparent);
   background: transparent;
