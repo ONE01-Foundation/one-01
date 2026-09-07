@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
@@ -559,6 +559,9 @@ function LivingFigure() {
       let ty = vh * 0.5;
       let ts = 1;
       const to = 1;
+      // When locked onto a scrolling element, the figure snap-tracks it (no
+      // easing lag) so small scrolls don't jitter it off the mark.
+      let glued = false;
 
       const dock = qs(".final-visual-empty");
       let docked = false;
@@ -572,6 +575,7 @@ function LivingFigure() {
           ty = r.top + r.height / 2;
           ts = 168 / BASE; // grows large and sits by the Desktop/Mobile buttons
           docked = true;
+          glued = true;
         }
       }
       if (!docked) {
@@ -581,6 +585,7 @@ function LivingFigure() {
           tx = hb.left + hb.width / 2;
           ty = hb.top + hb.height / 2;
           ts = 84 / BASE;
+          glued = true;
         } else {
           // Walk to the nearest section's station.
           let best = stations[0];
@@ -608,6 +613,7 @@ function LivingFigure() {
               tx = slot.left + slot.width / 2;
               ty = slot.top + slot.height / 2;
               ts = slot.width / BASE;
+              glued = true;
             } else {
               tx = vw * best.x;
               ty = vh * best.y;
@@ -620,6 +626,7 @@ function LivingFigure() {
               tx = core.left + core.width / 2;
               ty = core.top + core.height / 2;
               ts = 1.15;
+              glued = true;
             } else {
               tx = vw * best.x;
               ty = vh * best.y;
@@ -632,6 +639,7 @@ function LivingFigure() {
               tx = slot.left + 20;
               ty = slot.top + slot.height / 2;
               ts = 0.6;
+              glued = true;
             } else {
               tx = vw * best.x;
               ty = vh * best.y;
@@ -648,9 +656,18 @@ function LivingFigure() {
       // not fade) — so it's never seen peeking from the top over the footer.
       if (document.querySelector(".nav")?.classList.contains("is-end")) ts = 0;
 
-      pos.x += (tx - pos.x) * 0.075;
-      pos.y += (ty - pos.y) * 0.075;
-      pos.s += (ts - pos.s) * 0.075;
+      // Glued to an element and already near it → snap so it stays glued through
+      // scroll; otherwise glide (arriving from another station).
+      const dx = tx - pos.x;
+      const dy = ty - pos.y;
+      if (glued && dx * dx + dy * dy < 170 * 170) {
+        pos.x = tx;
+        pos.y = ty;
+      } else {
+        pos.x += dx * 0.12;
+        pos.y += dy * 0.12;
+      }
+      pos.s += (ts - pos.s) * 0.12;
       pos.o += (to - pos.o) * 0.12;
       el.style.transform = `translate(${pos.x - BASE / 2}px, ${pos.y - BASE / 2}px) scale(${pos.s})`;
       el.style.opacity = pos.o.toFixed(3);
@@ -697,16 +714,46 @@ function LivingFigure() {
 const MEET_STEP_MS = 4800;
 function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang }) {
   const [active, setActive] = useState(0);
+  const [inView, setInView] = useState(false);
+  // The reveal is owned in React (latched once seen) so the frequent story
+  // re-renders don't strip the scroll-reveal's `.in` class off this section
+  // (which made it blank + jump every step).
+  const [revealed, setRevealed] = useState(false);
+  const sectionRef = useRef<HTMLElement | null>(null);
   const n = copy.features.length;
   const d = copy.demos;
-  // Plays like a story: each step auto-advances after its bar fills. Any
-  // hover/click jumps to that step and restarts its timer from there.
+  // The story only plays while the section is on screen — no wasted animation
+  // (and the progress bars freeze) when you're elsewhere on the page.
   useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      setRevealed(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([e]) => {
+        setInView(e.isIntersecting);
+        if (e.isIntersecting) setRevealed(true);
+      },
+      { threshold: 0.2 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  // Auto-advance after each bar fills — only while in view. Hover/click jumps
+  // to a step and restarts its timer from there.
+  useEffect(() => {
+    if (!inView) return;
     const t = window.setTimeout(() => setActive((a) => (a + 1) % n), MEET_STEP_MS);
     return () => window.clearTimeout(t);
-  }, [active, n]);
+  }, [active, n, inView]);
   return (
-    <section className="section center reveal meet-section" id="problem">
+    <section
+      ref={sectionRef}
+      className={`section center reveal meet-section${revealed ? " in" : ""}${inView ? "" : " is-paused"}`}
+      id="problem"
+    >
       <div className="shell meet-grid">
         <div className="meet-copy">
           <h2 className="meet-title">{copy.title}</h2>
@@ -731,7 +778,7 @@ function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang 
                     active one (over the step), empty for upcoming. */}
                 <span className="meet-feat-bar" aria-hidden="true">
                   <span
-                    key={i === active ? `run-${active}` : `s-${i}`}
+                    key={i === active ? `run-${active}-${inView}` : `s-${i}`}
                     className={`meet-feat-bar-fill${i < active ? " is-done" : i === active ? " is-run" : ""}`}
                     style={i === active ? { animationDuration: `${MEET_STEP_MS}ms` } : undefined}
                   />
@@ -1047,35 +1094,6 @@ export default function LandingPage() {
   const [heroDraft, setHeroDraft] = useState("");
   const [heroFocused, setHeroFocused] = useState(false);
 
-  // Time-aware greeting, resolved on the client to avoid an SSR/hydration
-  // mismatch (starts as a neutral "hello" until the hour is known).
-  const [hour, setHour] = useState<number | null>(null);
-  useEffect(() => {
-    setHour(new Date().getHours());
-  }, []);
-  const greeting =
-    hour == null
-      ? t.hero.greetings.hello
-      : hour < 12
-      ? t.hero.greetings.morning
-      : hour < 18
-      ? t.hero.greetings.afternoon
-      : t.hero.greetings.evening;
-
-  // ONE's rotating "broadcast" in the hero (fades between lines), like the app.
-  const heroLines = useMemo(() => [greeting, ...t.hero.prompts], [greeting, t]);
-  const [bi, setBi] = useState(0);
-  const [bfade, setBfade] = useState(false);
-  useEffect(() => {
-    const t = setInterval(() => {
-      setBfade(true);
-      setTimeout(() => {
-        setBi((i) => (i + 1) % heroLines.length);
-        setBfade(false);
-      }, 420);
-    }, 6400);
-    return () => clearInterval(t);
-  }, [heroLines.length]);
 
   // Animated placeholder — a typewriter cycling through concrete example
   // intentions ("things you can do"), so the empty input suggests what to say.
@@ -1366,7 +1384,6 @@ export default function LandingPage() {
               eyeColor={isDark ? "#ffffff" : "#f5f4f0"}
             />
           </button>
-          <p className={`lhero-line${bfade ? " is-fading" : ""}`}>{heroLines[bi % heroLines.length]}</p>
           <button
             type="button"
             className="lhero-chev down"
@@ -1622,24 +1639,6 @@ export default function LandingPage() {
              below the plans as a momentum beat before the closing CTA.
              Data-driven from news.items; loops seamlessly; pauses on hover;
              holds still under reduced-motion. ── */}
-      <section className="section center reveal news-section">
-        <div className="news-marquee">
-          <div className="news-track">
-            {[...t.news.items, ...t.news.items].map((item, i) => (
-              <article
-                className="news-card"
-                key={`${item.title}-${i}`}
-                aria-hidden={i >= t.news.items.length}
-              >
-                <span className="news-tag">{item.tag}</span>
-                <h3 className="news-card-title">{item.title}</h3>
-                <span className="news-date">{item.date}</span>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── the closing screen — one headline, one subtitle, three buttons.
              The footer is wrapped in with it so the two SHARE one viewport and
              the page ends on a single screen, rather than the footer starting
@@ -1693,6 +1692,23 @@ export default function LandingPage() {
              It's uncovered as the page scrolls up off it (see .page-layer). No
              rounded corners, no reveal class — the scroll itself is the reveal. ── */}
       <footer className="foot foot-rich" ref={footRef}>
+        {/* News marquee — part of the fixed footer LAYER, so it's uncovered as
+            the page scrolls off it (it doesn't scroll with the page content). */}
+        <div className="foot-news news-marquee" aria-label="Latest from ONE01">
+          <div className="news-track">
+            {[...t.news.items, ...t.news.items].map((item, i) => (
+              <article
+                className="news-card"
+                key={`${item.title}-${i}`}
+                aria-hidden={i >= t.news.items.length}
+              >
+                <span className="news-tag">{item.tag}</span>
+                <h3 className="news-card-title">{item.title}</h3>
+                <span className="news-date">{item.date}</span>
+              </article>
+            ))}
+          </div>
+        </div>
         <div className="foot-center">
           <div className="foot-top">
             <div className="foot-brand">

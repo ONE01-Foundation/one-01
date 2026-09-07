@@ -106,10 +106,11 @@ html {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* The whole gateway (orb · broadcast · input) reads as ONE centred group. */
+  /* The gateway (orb + input) reads as ONE centred group, leaning slightly up
+     (the bottom padding lifts the centred content). */
   justify-content: center;
   text-align: center;
-  padding: 0 24px;
+  padding: 0 24px 8vh;
 }
 /* The living core: orb + rotating broadcast, sitting tight together. */
 .lhero-core {
@@ -223,38 +224,13 @@ html {
     animation: none;
   }
 }
-.lhero-line {
-  /* Fixed two-line height so the orb + chevrons never shift when the rotating
-     broadcast is one line vs two — and the text is TOP-aligned so a single line
-     sits close to the orb (the reserved second line grows downward). */
-  margin-top: 24px;
-  min-height: 2.7em;
-  max-width: 30ch;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  text-align: center;
-  text-wrap: balance;
-  font-size: clamp(18px, 2.4vw, 25px);
-  font-weight: 550;
-  letter-spacing: -0.015em;
-  line-height: 1.35;
-  color: var(--text);
-  /* Fades out in place as ONE collapses (and between rotating lines) — no
-     movement, just disappears. */
-  opacity: calc(1 - var(--p, 0) * 3.4);
-  transition: opacity 300ms ease;
-}
-.lhero-line.is-fading {
-  opacity: 0;
-}
-/* Input dock — sits directly under the broadcast as part of the centred group,
-   so "type here" reads as the next beat after ONE's prompt (not a bar stranded
-   at the bottom of the screen). */
+/* Input dock — sits directly under the orb as part of the centred group, so
+   ONE speaks only here, in the box. Kept close to the figure (small top gap)
+   so the two read as one lockup. */
 .lhero-dockwrap {
   width: 100%;
   max-width: 600px;
-  margin: 44px auto 0;
+  margin: 28px auto 0;
   /* Fades away in place as ONE collapses to the dot. */
   opacity: calc(1 - var(--p, 0) * 2.4);
 }
@@ -269,11 +245,9 @@ html {
     min-height: 100vh;
   }
   .lhero-orb-btn,
-  .lhero-line,
   .lhero-dockwrap {
     transform: none;
   }
-  .lhero-line,
   .lhero-dockwrap,
   .lhero-orb .orb-eye {
     opacity: 1;
@@ -647,10 +621,14 @@ html {
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  /* No rubber-band bounce — pulling up at the top must not expose the fixed
+     footer sitting behind the page layer (mobile). */
+  overscroll-behavior-y: none;
 }
 body {
   background: var(--bg);
   color: var(--text);
+  overscroll-behavior-y: none;
   font-family: var(--sans);
   font-size: 17px;
   line-height: 1.6;
@@ -705,6 +683,19 @@ button {
 .nav.is-scrolled {
   opacity: 1;
   transform: translateY(0);
+}
+/* Soft fade below the bar — content dissolves as it passes under the nav (like
+   the news cards' edge-fade) instead of being sliced by a hard edge. The link
+   row above stays crisp on the solid colour. */
+.nav::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 52px;
+  background: linear-gradient(var(--bg), transparent);
+  pointer-events: none;
 }
 /* The docs pages (About / Support / Legal) wear the SAME menu as home — same
    frame, gradient, wordmark, borderless links, outline CTA. Three differences,
@@ -1833,6 +1824,10 @@ footer {
 .meet-feat-bar-fill.is-run {
   animation: meetFill linear forwards;
 }
+/* Frozen while the section is off screen. */
+.meet-section.is-paused .meet-feat-bar-fill.is-run {
+  animation-play-state: paused;
+}
 @keyframes meetFill {
   from {
     width: 0;
@@ -1854,7 +1849,10 @@ footer {
 .meet-card {
   width: 100%;
   max-width: 460px;
-  min-height: 322px;
+  /* Fixed height across every step so swapping the mock never changes the
+     section's height (which used to shove the rest of the page around). */
+  height: 384px;
+  overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -2386,6 +2384,28 @@ footer {
 .news-section .news-marquee {
   margin-top: 0;
 }
+/* News marquee lives in the fixed footer LAYER (revealed on scroll, not part of
+   the page flow). Sits above the footer links, with equal breathing room above
+   (the footer's 76px top padding) and below. Cards are the site's warm cream —
+   softer than stark white and easy on the dark footer. */
+.foot-news.news-marquee {
+  margin-top: 0;
+  margin-bottom: 76px;
+}
+.foot-news .news-card {
+  background: #f5f4f0;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+}
+.foot-news .news-card-title {
+  color: #0a0a0a;
+}
+.foot-news .news-tag {
+  background: #e7e6e0;
+  color: #5b5b5b;
+}
+.foot-news .news-date {
+  color: #8a8a86;
+}
 
 /* ─── newsroom marquee — a row of update cards that slides sideways ──────
    The track is the items rendered twice; translateX(-50%) lands the second
@@ -2691,11 +2711,20 @@ footer {
   text-align: left;
   display: flex;
   flex-direction: column;
-  transition: box-shadow 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  position: relative;
+  transition: box-shadow 320ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .plan:hover,
 .plan:focus-within {
   box-shadow: 0 22px 56px rgba(10, 10, 10, 0.16);
+  transform: translateY(-4px) scale(1.02);
+  z-index: 2;
+}
+/* Free stays flat — it grows on hover but never lifts a shadow. */
+.plan-plain:hover,
+.plan-plain:focus-within {
+  box-shadow: none;
 }
 /* Every feature shows at once (no scroll). The CTA is pinned to the card base
    (.plan .btn margin-top:auto), so the taller Plus/Pro columns keep their
