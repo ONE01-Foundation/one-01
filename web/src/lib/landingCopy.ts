@@ -319,7 +319,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         },
       ],
       enterprise: {
-        line: "Bigger needs? ONE for teams and organizations, tailored to you.",
+        line: "For teams and organizations — ONE, tailored to how you work.",
         cta: "Let's talk",
       },
     },
@@ -633,7 +633,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         },
       ],
       enterprise: {
-        line: "צרכים גדולים יותר? ONE לצוותים ולארגונים, מותאם אליכם.",
+        line: "לצוותים ולארגונים — ONE שמותאם לדרך העבודה שלכם.",
         cta: "דברו איתנו",
       },
     },

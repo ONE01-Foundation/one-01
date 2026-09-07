@@ -550,21 +550,6 @@ function LivingFigure() {
     window.addEventListener("mousemove", onMove, { passive: true });
     let leftEye: Element | null = null;
     let rightEye: Element | null = null;
-    // Which plan is being pointed at — drives the figure's SIZE at the pricing
-    // station (Free regular · Plus medium · Pro a bit bigger), same spot.
-    let hoveredIdx = -1;
-    const cards = Array.from(document.querySelectorAll<HTMLElement>(".plan"));
-    const cardHandlers = cards.map((c, i) => {
-      const enter = () => {
-        hoveredIdx = i;
-      };
-      const leave = () => {
-        hoveredIdx = -1;
-      };
-      c.addEventListener("mouseenter", enter);
-      c.addEventListener("mouseleave", leave);
-      return { c, enter, leave };
-    });
 
     const tick = () => {
       const vw = window.innerWidth;
@@ -610,17 +595,47 @@ function LivingFigure() {
               best = st;
             }
           }
-          const free = best.sel === "#pricing" ? cards[0]?.getBoundingClientRect() : null;
           if (best.follow) {
             // FAQ: moves WITH the cursor, resting just beside it.
             tx = mx + 58;
             ty = my - 6;
             ts = 1;
-          } else if (free && free.width > 0) {
-            // Hovers ABOVE the Free card; grows in place by the pointed-at tier.
-            tx = free.left + free.width / 2;
-            ty = free.top - 20;
-            ts = hoveredIdx === 2 ? 1.5 : hoveredIdx === 1 ? 1.25 : 1;
+          } else if (best.sel === "#pricing") {
+            // Sits exactly on the heading's inline placeholder — a clean leading
+            // mark, sized to the type; the lockup stays centred.
+            const slot = qs(".pricing-h2-orb")?.getBoundingClientRect();
+            if (slot && slot.width > 0) {
+              tx = slot.left + slot.width / 2;
+              ty = slot.top + slot.height / 2;
+              ts = slot.width / BASE;
+            } else {
+              tx = vw * best.x;
+              ty = vh * best.y;
+            }
+          } else if (best.sel === "#identity") {
+            // Sits ON the core card (grown a bit), text below it; rides the card
+            // as you scroll and only leaves when the next section arrives.
+            const core = qs(".bento-core-orb")?.getBoundingClientRect();
+            if (core && core.width > 0) {
+              tx = core.left + core.width / 2;
+              ty = core.top + core.height / 2;
+              ts = 1.15;
+            } else {
+              tx = vw * best.x;
+              ty = vh * best.y;
+            }
+          } else if (best.sel === "#problem") {
+            // Shrinks and lands on the active mock's focus row (e.g. "Your ONE
+            // — reaching out"), moving as the story steps through each panel.
+            const slot = qs(".meet-figure-slot")?.getBoundingClientRect();
+            if (slot && slot.width > 0) {
+              tx = slot.left + 20;
+              ty = slot.top + slot.height / 2;
+              ts = 0.6;
+            } else {
+              tx = vw * best.x;
+              ty = vh * best.y;
+            }
           } else {
             tx = vw * best.x;
             ty = vh * best.y;
@@ -667,10 +682,6 @@ function LivingFigure() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("mousemove", onMove);
-      cardHandlers.forEach(({ c, enter, leave }) => {
-        c.removeEventListener("mouseenter", enter);
-        c.removeEventListener("mouseleave", leave);
-      });
       document.documentElement.classList.remove("has-living-figure");
     };
   }, []);
@@ -683,15 +694,22 @@ function LivingFigure() {
 
 /* "Meet ONE" — a feature list whose active row drives a mock panel beside it.
    Hover or focus a feature to swap the panel; keyboard-reachable via <button>. */
+const MEET_STEP_MS = 4800;
 function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang }) {
   const [active, setActive] = useState(0);
+  const n = copy.features.length;
   const d = copy.demos;
+  // Plays like a story: each step auto-advances after its bar fills. Any
+  // hover/click jumps to that step and restarts its timer from there.
+  useEffect(() => {
+    const t = window.setTimeout(() => setActive((a) => (a + 1) % n), MEET_STEP_MS);
+    return () => window.clearTimeout(t);
+  }, [active, n]);
   return (
     <section className="section center reveal meet-section" id="problem">
       <div className="shell meet-grid">
         <div className="meet-copy">
           <h2 className="meet-title">{copy.title}</h2>
-          <p className="meet-lede">{copy.lede}</p>
           <div className="meet-feats" role="tablist" aria-label={copy.title}>
             {copy.features.map((f, i) => (
               <button
@@ -704,10 +722,19 @@ function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang 
                 onFocus={() => setActive(i)}
                 onClick={() => setActive(i)}
               >
-                <i className={`fi ${f.icon} meet-feat-ico`} aria-hidden="true" />
-                <span className="meet-feat-body">
-                  <span className="meet-feat-title">{f.title}</span>{" "}
-                  <span className="meet-feat-desc">{f.desc}</span>
+                <span className="meet-feat-head">
+                  <i className={`fi ${f.icon} meet-feat-ico`} aria-hidden="true" />
+                  <span className="meet-feat-title">{f.title}</span>
+                </span>
+                <span className="meet-feat-desc">{f.desc}</span>
+                {/* Story progress line: full for done steps, filling for the
+                    active one (over the step), empty for upcoming. */}
+                <span className="meet-feat-bar" aria-hidden="true">
+                  <span
+                    key={i === active ? `run-${active}` : `s-${i}`}
+                    className={`meet-feat-bar-fill${i < active ? " is-done" : i === active ? " is-run" : ""}`}
+                    style={i === active ? { animationDuration: `${MEET_STEP_MS}ms` } : undefined}
+                  />
                 </span>
               </button>
             ))}
@@ -720,7 +747,10 @@ function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang 
                 <div className="meet-mock-head">{d.plan.title}</div>
                 <ul className="meet-steps">
                   {d.plan.steps.map((s, i) => (
-                    <li key={i} className={i === 0 ? "is-done" : ""}>
+                    <li
+                      key={i}
+                      className={`${i === 0 ? "is-done" : ""}${i === 1 ? " meet-figure-slot" : ""}`}
+                    >
                       <span className="meet-step-box" aria-hidden="true" />
                       {s}
                     </li>
@@ -733,10 +763,9 @@ function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang 
                 <div className="meet-mock-head">{d.act.title}</div>
                 <ul className="meet-rows">
                   {d.act.rows.map((r, i) => (
-                    <li key={i}>
-                      <span className={`meet-row-orb${i === 0 ? " is-you" : ""}`} aria-hidden="true">
-                        {i === 0 ? <Orb size={22} faceColor="var(--orb)" eyeColor="var(--orb-eye)" /> : null}
-                      </span>
+                    <li key={i} className={i === 0 ? "meet-figure-slot" : ""}>
+                      {/* First avatar is empty — the living figure sits here. */}
+                      <span className={`meet-row-orb${i === 0 ? " is-you" : ""}`} aria-hidden="true" />
                       <span className="meet-row-name">{r.name}</span>
                       <span className="meet-row-status">{r.status}</span>
                     </li>
@@ -749,7 +778,7 @@ function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang 
                 <div className="meet-mock-head">{d.disclose.title}</div>
                 <ul className="meet-toggles">
                   {d.disclose.items.map((it, i) => (
-                    <li key={i}>
+                    <li key={i} className={i === 2 ? "meet-figure-slot" : ""}>
                       <span className="meet-toggle-label">{it.label}</span>
                       <span
                         className={`meet-toggle${it.on ? " is-on" : ""}`}
@@ -773,6 +802,83 @@ function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang 
         </div>
       </div>
     </section>
+  );
+}
+
+/* A ONE face that's alive wherever it's dropped in (e.g. the sign-in modal): its
+   eyes follow the cursor and, when the mouse rests, it wanders on its own — the
+   same dynamic character as the page's living figure. The loop only runs while
+   the orb is actually on screen (IntersectionObserver), so it's free when hidden. */
+function AliveOrb({ size = 64, eyeR = 8 }: { size?: number; eyeR?: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [eye, setEye] = useState({ look: 0, gaze: 0 });
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof window === "undefined") return;
+    let raf = 0;
+    let idle = 999;
+    let phase = 0;
+    let tGaze = 0;
+    let tLook = 0;
+    let cGaze = 0;
+    let cLook = 0;
+    const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+    const onMove = (e: MouseEvent) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      tGaze = clamp(((e.clientX - cx) / (window.innerWidth / 2)) * 1.5);
+      tLook = clamp(((e.clientY - cy) / (window.innerHeight / 2)) * 1.5);
+      idle = 0;
+    };
+    const tick = () => {
+      idle += 1;
+      if (idle > 100) {
+        phase += 0.01;
+        tGaze = Math.sin(phase) * 0.6;
+        tLook = 0.15 + Math.sin(phase * 0.7) * 0.35;
+      }
+      cGaze += (tGaze - cGaze) * 0.08;
+      cLook += (tLook - cLook) * 0.08;
+      setEye((p) =>
+        Math.abs(p.gaze - cGaze) < 0.004 && Math.abs(p.look - cLook) < 0.004
+          ? p
+          : { look: cLook, gaze: cGaze },
+      );
+      raf = requestAnimationFrame(tick);
+    };
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !raf) {
+          window.addEventListener("mousemove", onMove);
+          raf = requestAnimationFrame(tick);
+        } else if (!entry.isIntersecting && raf) {
+          window.removeEventListener("mousemove", onMove);
+          cancelAnimationFrame(raf);
+          raf = 0;
+        }
+      },
+      { threshold: 0.1 },
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      window.removeEventListener("mousemove", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+  return (
+    <div ref={wrapRef} style={{ lineHeight: 0 }}>
+      <Orb
+        size={size}
+        eyeR={eyeR}
+        alive
+        look={eye.look}
+        gaze={eye.gaze}
+        faceColor="var(--orb)"
+        eyeColor="var(--orb-eye)"
+      />
+    </div>
   );
 }
 
@@ -1321,12 +1427,7 @@ export default function LandingPage() {
       {/* Sign-in popup — opened by tapping the Orb, mirroring the mobile sheet. */}
       <Sheet open={signInOpen} onClose={() => setSignInOpen(false)}>
         <div className="signin">
-          <Orb
-            size={64}
-            eyeR={11}
-            faceColor={isDark ? "#2a2a2a" : "#0a0a0a"}
-            eyeColor={isDark ? "#ffffff" : "#f5f4f0"}
-          />
+          <AliveOrb size={64} />
           <h3 className="signin-title">{t.signin.title}</h3>
           <p className="signin-sub">{t.signin.sub}</p>
           <button className="signin-google" onClick={() => signInWithGoogle()}>
@@ -1359,16 +1460,7 @@ export default function LandingPage() {
       <section className="section center reveal" id="identity">
         <div className="shell">
           <div className="bento bento-one">
-            {/* One heading, living inside the grid as a full-width intro cell. */}
-            <div className="bento-tile bento-full bento-head-cell">
-              <h2>{t.bento.h2}</h2>
-              <p className="lede">{t.bento.lede}</p>
-              <div className="bento-points">
-                {t.bento.points.map((p, i) => (
-                  <span key={i}>{p}</span>
-                ))}
-              </div>
-            </div>
+            {/* Header removed — just the cards. */}
             {t.bento.tiles.map((tile) => {
               const cls = [
                 "bento-tile",
@@ -1441,7 +1533,12 @@ export default function LandingPage() {
       <section className="section center reveal" id="pricing">
         <div className="shell">
           {/* Just the sentence — no wordmark/figure here (removed per design). */}
-          <h2 className="pricing-h2">{t.pricing.h2Rest}</h2>
+          {/* The living figure locks onto this placeholder, so it reads as an
+              inline mark leading the heading and the lockup stays centred. */}
+          <h2 className="pricing-h2">
+            <span className="pricing-h2-orb" aria-hidden="true" />
+            {t.pricing.h2Rest}
+          </h2>
           <div className="plans">
             {t.pricing.plans.map((p, i) => {
               const featured = i === 2;

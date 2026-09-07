@@ -1713,7 +1713,7 @@ footer {
   opacity: 0;
   transform-origin: center;
   will-change: transform, opacity;
-  filter: drop-shadow(0 16px 34px rgba(10, 10, 10, 0.16));
+  filter: drop-shadow(0 8px 20px rgba(10, 10, 10, 0.12));
 }
 /* The living figure REPLACES the page's static hero orb — hide that one when the
    figure is mounted (JS adds .has-living-figure), so there's never a double. */
@@ -1723,6 +1723,11 @@ footer {
 
 /* ─── meet ONE — feature list + a mock panel that swaps with the active row ─── */
 .meet-section {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding-top: 96px;
   padding-bottom: 96px;
 }
@@ -1741,60 +1746,106 @@ footer {
 }
 .section h2.meet-title {
   max-width: none;
-  margin: 0 0 14px;
+  margin: 0 0 22px;
   text-align: start;
-}
-.meet-lede {
-  margin: 0 0 26px;
-  max-width: 46ch;
-  color: var(--text-2);
-  font-size: 17px;
-  line-height: 1.6;
 }
 .meet-feats {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 .meet-feat {
   display: flex;
-  gap: 14px;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   text-align: start;
-  padding: 15px 18px;
+  padding: 14px 18px;
   border: none;
   border-radius: 16px;
   background: transparent;
   cursor: pointer;
   font: inherit;
   color: inherit;
-  transition: background 200ms ease, box-shadow 200ms ease;
+  transition: background 240ms ease, box-shadow 240ms ease;
 }
 .meet-feat.is-active {
   background: var(--bg-card);
   box-shadow: 0 8px 30px rgba(10, 10, 10, 0.08);
 }
+.meet-feat-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .meet-feat-ico {
   flex: none;
   font-size: 18px;
   line-height: 1;
-  margin-top: 2px;
   color: var(--text-3);
   display: inline-flex;
 }
 .meet-feat.is-active .meet-feat-ico {
   color: var(--accent);
 }
-.meet-feat-body {
-  font-size: 15px;
-  line-height: 1.55;
-}
 .meet-feat-title {
   font-weight: 700;
+  font-size: 16px;
+  color: var(--text-2);
+}
+.meet-feat.is-active .meet-feat-title {
   color: var(--text);
 }
+/* Only the active step shows its description — keeps the column uncluttered. */
 .meet-feat-desc {
+  display: block;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
   color: var(--text-2);
+  font-size: 14.5px;
+  line-height: 1.5;
+  transition: max-height 300ms ease, opacity 300ms ease, margin-top 300ms ease;
+}
+.meet-feat.is-active .meet-feat-desc {
+  max-height: 96px;
+  opacity: 1;
+  margin-top: 6px;
+}
+/* Story progress line under each step: full when done, filling for the active
+   one over the step duration, empty for upcoming. */
+.meet-feat-bar {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+  margin-top: 12px;
+}
+.meet-feat-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.meet-feat-bar-fill.is-done {
+  width: 100%;
+}
+.meet-feat-bar-fill.is-run {
+  animation: meetFill linear forwards;
+}
+@keyframes meetFill {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meet-feat-bar-fill.is-run {
+    animation: none;
+    width: 100%;
+  }
 }
 .meet-panel {
   display: flex;
@@ -2577,12 +2628,29 @@ footer {
 /* The name inside the headline is the wordmark itself, face awake in the "O".
    Sized in `em` so it tracks the heading's type. It stays put — the "grows
    with you" is acted out by the plans below. */
+/* The plans own a full screen, vertically centred. */
+#pricing {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
 .pricing-h2 {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.06em;
+}
+/* Reserves the inline slot the living figure locks onto (sized to the type), so
+   the "figure + heading" reads as one centred lockup. */
+.pricing-h2-orb {
+  flex: none;
+  display: inline-block;
+  width: 0.92em;
+  height: 0.92em;
+  margin-inline-end: 0.2em;
 }
 .one-word-eye {
   transform-box: fill-box;
@@ -2594,16 +2662,8 @@ footer {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 22px;
-  /* Volume columns: the cards share a bottom baseline and step UP toward Pro,
-     visualising "grows with you". */
-  align-items: end;
-}
-/* Ascending heights — Free hugs its content, Plus taller, Pro tallest. */
-.plans .plan:nth-child(2) {
-  min-height: 31rem;
-}
-.plans .plan:nth-child(3) {
-  min-height: 35rem;
+  /* All cards equal, natural height — no scroll, no staircase. */
+  align-items: stretch;
 }
 @media (max-width: 880px) {
   .plans {
@@ -2612,11 +2672,6 @@ footer {
     max-width: 440px;
     margin-left: auto;
     margin-right: auto;
-  }
-  /* Stacked on mobile — drop the staircase; each card hugs its content. */
-  .plans .plan:nth-child(2),
-  .plans .plan:nth-child(3) {
-    min-height: 0;
   }
 }
 /* Tailored/enterprise tier — a quiet line + link under the cards, styled like
@@ -8884,9 +8939,10 @@ button.conn-card:hover {
 }
 .bento-core-orb {
   line-height: 0;
-  margin-bottom: 2px;
-  /* Reserves the space the living figure floats into (no static orb now). */
-  min-height: 56px;
+  margin-bottom: 10px;
+  /* Reserves the space the living figure sits in (grown a bit), so the card's
+     text sits clearly below it. */
+  min-height: 88px;
 }
 .bento-wide {
   grid-column: span 2;
