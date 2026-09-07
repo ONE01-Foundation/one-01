@@ -50,8 +50,8 @@ export function Logo({
  * "O" instead of waiting for a hover. Use it where the name appears *inside* a
  * sentence, so the word carries the same face as the logo.
  *
- * Sized in `em` from CSS (see .pricing-one) so it tracks whatever type it sits
- * in; `currentColor` keeps it in the surrounding text's color.
+ * Sized in `em` from the caller's CSS so it tracks whatever type it sits in;
+ * `currentColor` keeps it in the surrounding text's color.
  */
 export function OneWord({
   className,

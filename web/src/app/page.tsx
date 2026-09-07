@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Logo, OneWord } from "@/components/Logo";
+import { Logo } from "@/components/Logo";
 import { Orb } from "@/components/Orb";
 import { Sheet } from "@/components/product/Sheet";
 import { QRCodeSVG } from "qrcode.react";
@@ -31,13 +31,6 @@ function GoogleG() {
   );
 }
 
-function ChevronUp() {
-  return (
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 15l6-6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 function ChevronDown() {
   return (
     <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -345,81 +338,11 @@ function InstagramIcon() {
  */
 const CLOSING_SHOTS: { src: string; alt: string }[] = [];
 
-/** The closing-screen face — alive: its eyes follow the cursor, and when the
-    mouse is idle it drifts on its own in a slow wander. The loop only runs while
-    the orb is on screen (IntersectionObserver), so it costs nothing up top. */
-function ClosingOrb({ isDark }: { isDark: boolean }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [eye, setEye] = useState({ look: 0, gaze: 0 });
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    let raf = 0;
-    let idle = 999;
-    let phase = 0;
-    let targetLook = 0;
-    let targetGaze = 0;
-    let curLook = 0;
-    let curGaze = 0;
-    const clamp = (v: number) => Math.max(-1, Math.min(1, v));
-    const onMove = (e: MouseEvent) => {
-      const r = el.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      targetGaze = clamp(((e.clientX - cx) / (window.innerWidth / 2)) * 1.5);
-      targetLook = clamp(((e.clientY - cy) / (window.innerHeight / 2)) * 1.5);
-      idle = 0;
-    };
-    const tick = () => {
-      idle += 1;
-      // After ~1.5s without the mouse, wander on its own.
-      if (idle > 100) {
-        phase += 0.01;
-        targetGaze = Math.sin(phase) * 0.6;
-        targetLook = 0.15 + Math.sin(phase * 0.7) * 0.35;
-      }
-      curGaze += (targetGaze - curGaze) * 0.08;
-      curLook += (targetLook - curLook) * 0.08;
-      setEye((prev) =>
-        Math.abs(prev.gaze - curGaze) < 0.004 && Math.abs(prev.look - curLook) < 0.004
-          ? prev
-          : { look: curLook, gaze: curGaze }
-      );
-      raf = requestAnimationFrame(tick);
-    };
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !raf) {
-          window.addEventListener("mousemove", onMove);
-          raf = requestAnimationFrame(tick);
-        } else if (!entry.isIntersecting && raf) {
-          window.removeEventListener("mousemove", onMove);
-          cancelAnimationFrame(raf);
-          raf = 0;
-        }
-      },
-      { threshold: 0.15 }
-    );
-    io.observe(el);
-    return () => {
-      io.disconnect();
-      window.removeEventListener("mousemove", onMove);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-  return (
-    <div className="final-visual-empty" ref={wrapRef}>
-      <Orb
-        size={168}
-        alive
-        look={eye.look}
-        gaze={eye.gaze}
-        faceColor={isDark ? "#2a2a2a" : "#0a0a0a"}
-        eyeColor={isDark ? "#ffffff" : "#f5f4f0"}
-        className="final-orb"
-      />
-    </div>
-  );
+/** The closing-screen face is no longer a static orb — the ONE that lives across
+    the page (LivingFigure) docks onto this empty anchor at the CTA, so the footer
+    figure is never doubled. */
+function ClosingOrb() {
+  return <div className="final-visual-empty" aria-hidden="true" />;
 }
 
 function MonitorIcon() {
@@ -578,6 +501,278 @@ function GetOptions({ get }: { get: LandingCopy["download"]["get"] }) {
         )}
       </div>
     </div>
+  );
+}
+
+/* A single ONE figure that lives across the whole landing: hidden while the hero
+   owns the screen, then it floats in (fixed, so it follows the scroll), drifts
+   gently, moves to and grows on a hovered pricing card, and finally docks large
+   onto the footer CTA — the same figure, seated. Pointer-events: none, so it
+   never blocks what's under it; all motion is direct-DOM (no React re-renders). */
+function LivingFigure() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const el = ref.current;
+    if (!el) return;
+    const BASE = 76;
+    const clamp = (v: number, m = 1) => Math.max(-m, Math.min(m, v));
+    const qs = (s: string) => document.querySelector<HTMLElement>(s);
+    // Hide the page's static hero orb — the living figure IS the hero orb now.
+    document.documentElement.classList.add("has-living-figure");
+
+    // It has a will: each section is a "station" it walks to (viewport spot),
+    // instead of aimless hovering. Hero + CTA lock onto real elements.
+    const stations: { sel: string; x: number; y: number; follow?: boolean }[] = [
+      { sel: "#problem", x: 0.82, y: 0.42 },
+      { sel: "#identity", x: 0.17, y: 0.46 },
+      { sel: "#connections", x: 0.82, y: 0.5 },
+      { sel: "#pricing", x: 0.5, y: 0.18 },
+      // At the FAQ the figure simply follows the cursor (see below).
+      { sel: ".faq-section", x: 0.5, y: 0.5, follow: true },
+    ];
+
+    // Start seated at the hero orb so the splash hands off to it seamlessly.
+    const hero0 = qs(".lhero-orb-btn")?.getBoundingClientRect();
+    const pos = hero0
+      ? { x: hero0.left + hero0.width / 2, y: hero0.top + hero0.height / 2, s: 84 / BASE, o: 1 }
+      : { x: window.innerWidth / 2, y: window.innerHeight * 0.4, s: 1, o: 1 };
+    const eye = { g: 0, l: 0 };
+    let mx = window.innerWidth / 2;
+    let my = pos.y;
+    let lastMove = performance.now();
+    let raf = 0;
+    const onMove = (e: MouseEvent) => {
+      mx = e.clientX;
+      my = e.clientY;
+      lastMove = performance.now();
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    let leftEye: Element | null = null;
+    let rightEye: Element | null = null;
+    // Which plan is being pointed at — drives the figure's SIZE at the pricing
+    // station (Free regular · Plus medium · Pro a bit bigger), same spot.
+    let hoveredIdx = -1;
+    const cards = Array.from(document.querySelectorAll<HTMLElement>(".plan"));
+    const cardHandlers = cards.map((c, i) => {
+      const enter = () => {
+        hoveredIdx = i;
+      };
+      const leave = () => {
+        hoveredIdx = -1;
+      };
+      c.addEventListener("mouseenter", enter);
+      c.addEventListener("mouseleave", leave);
+      return { c, enter, leave };
+    });
+
+    const tick = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const midY = vh / 2;
+      let tx = vw * 0.8;
+      let ty = vh * 0.5;
+      let ts = 1;
+      const to = 1;
+
+      const dock = qs(".final-visual-empty");
+      let docked = false;
+      if (dock) {
+        const r = dock.getBoundingClientRect();
+        // Sticky: once the CTA is reached, the figure stays big and LOCKED to it
+        // (riding it up and away with the buttons) — it never detaches, shrinks,
+        // or drifts down into the footer.
+        if (r.top < vh * 0.75 && r.width > 0) {
+          tx = r.left + r.width / 2;
+          ty = r.top + r.height / 2;
+          ts = 168 / BASE; // grows large and sits by the Desktop/Mobile buttons
+          docked = true;
+        }
+      }
+      if (!docked) {
+        const hb = qs(".lhero-orb-btn")?.getBoundingClientRect();
+        if (hb && hb.bottom > vh * 0.12 && hb.top < vh * 0.9) {
+          // At the hero: BE the hero orb (track it, match its size).
+          tx = hb.left + hb.width / 2;
+          ty = hb.top + hb.height / 2;
+          ts = 84 / BASE;
+        } else {
+          // Walk to the nearest section's station.
+          let best = stations[0];
+          let bestD = Infinity;
+          for (const st of stations) {
+            const e2 = qs(st.sel);
+            if (!e2) continue;
+            const r = e2.getBoundingClientRect();
+            const d = Math.abs(r.top + r.height / 2 - midY);
+            if (d < bestD) {
+              bestD = d;
+              best = st;
+            }
+          }
+          const free = best.sel === "#pricing" ? cards[0]?.getBoundingClientRect() : null;
+          if (best.follow) {
+            // FAQ: moves WITH the cursor, resting just beside it.
+            tx = mx + 58;
+            ty = my - 6;
+            ts = 1;
+          } else if (free && free.width > 0) {
+            // Hovers ABOVE the Free card; grows in place by the pointed-at tier.
+            tx = free.left + free.width / 2;
+            ty = free.top - 20;
+            ts = hoveredIdx === 2 ? 1.5 : hoveredIdx === 1 ? 1.25 : 1;
+          } else {
+            tx = vw * best.x;
+            ty = vh * best.y;
+            ts = 1;
+          }
+        }
+      }
+
+      // Only once the footer is FULLY open does the figure shrink away (it does
+      // not fade) — so it's never seen peeking from the top over the footer.
+      if (document.querySelector(".nav")?.classList.contains("is-end")) ts = 0;
+
+      pos.x += (tx - pos.x) * 0.075;
+      pos.y += (ty - pos.y) * 0.075;
+      pos.s += (ts - pos.s) * 0.075;
+      pos.o += (to - pos.o) * 0.12;
+      el.style.transform = `translate(${pos.x - BASE / 2}px, ${pos.y - BASE / 2}px) scale(${pos.s})`;
+      el.style.opacity = pos.o.toFixed(3);
+
+      // Eyes follow the cursor; after a still moment they ease back to centre.
+      let tg = 0;
+      let tl = 0;
+      if (performance.now() - lastMove < 2600) {
+        tg = clamp((mx - pos.x) / 260);
+        tl = clamp((my - pos.y) / 240);
+      }
+      eye.g += (tg - eye.g) * 0.12;
+      eye.l += (tl - eye.l) * 0.12;
+      if (!leftEye) {
+        const eyes = el.querySelectorAll(".orb-eye");
+        leftEye = eyes[0] ?? null;
+        rightEye = eyes[1] ?? null;
+      }
+      if (leftEye && rightEye) {
+        const cy = (45 + eye.l * 6).toFixed(2);
+        leftEye.setAttribute("cx", (34 + eye.g * 5).toFixed(2));
+        leftEye.setAttribute("cy", cy);
+        rightEye.setAttribute("cx", (66 + eye.g * 5).toFixed(2));
+        rightEye.setAttribute("cy", cy);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", onMove);
+      cardHandlers.forEach(({ c, enter, leave }) => {
+        c.removeEventListener("mouseenter", enter);
+        c.removeEventListener("mouseleave", leave);
+      });
+      document.documentElement.classList.remove("has-living-figure");
+    };
+  }, []);
+  return (
+    <div className="living-figure" ref={ref} aria-hidden="true">
+      <Orb size={76} alive faceColor="var(--orb)" eyeColor="var(--orb-eye)" />
+    </div>
+  );
+}
+
+/* "Meet ONE" — a feature list whose active row drives a mock panel beside it.
+   Hover or focus a feature to swap the panel; keyboard-reachable via <button>. */
+function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang }) {
+  const [active, setActive] = useState(0);
+  const d = copy.demos;
+  return (
+    <section className="section center reveal meet-section" id="problem">
+      <div className="shell meet-grid">
+        <div className="meet-copy">
+          <h2 className="meet-title">{copy.title}</h2>
+          <p className="meet-lede">{copy.lede}</p>
+          <div className="meet-feats" role="tablist" aria-label={copy.title}>
+            {copy.features.map((f, i) => (
+              <button
+                key={i}
+                type="button"
+                role="tab"
+                aria-selected={active === i}
+                className={`meet-feat${active === i ? " is-active" : ""}`}
+                onMouseEnter={() => setActive(i)}
+                onFocus={() => setActive(i)}
+                onClick={() => setActive(i)}
+              >
+                <i className={`fi ${f.icon} meet-feat-ico`} aria-hidden="true" />
+                <span className="meet-feat-body">
+                  <span className="meet-feat-title">{f.title}</span>{" "}
+                  <span className="meet-feat-desc">{f.desc}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="meet-panel" aria-live="polite">
+          <div className="meet-card" key={active}>
+            {active === 0 && (
+              <div className="meet-mock">
+                <div className="meet-mock-head">{d.plan.title}</div>
+                <ul className="meet-steps">
+                  {d.plan.steps.map((s, i) => (
+                    <li key={i} className={i === 0 ? "is-done" : ""}>
+                      <span className="meet-step-box" aria-hidden="true" />
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {active === 1 && (
+              <div className="meet-mock">
+                <div className="meet-mock-head">{d.act.title}</div>
+                <ul className="meet-rows">
+                  {d.act.rows.map((r, i) => (
+                    <li key={i}>
+                      <span className={`meet-row-orb${i === 0 ? " is-you" : ""}`} aria-hidden="true">
+                        {i === 0 ? <Orb size={22} faceColor="var(--orb)" eyeColor="var(--orb-eye)" /> : null}
+                      </span>
+                      <span className="meet-row-name">{r.name}</span>
+                      <span className="meet-row-status">{r.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {active === 2 && (
+              <div className="meet-mock">
+                <div className="meet-mock-head">{d.disclose.title}</div>
+                <ul className="meet-toggles">
+                  {d.disclose.items.map((it, i) => (
+                    <li key={i}>
+                      <span className="meet-toggle-label">{it.label}</span>
+                      <span
+                        className={`meet-toggle${it.on ? " is-on" : ""}`}
+                        role="img"
+                        aria-label={
+                          it.on
+                            ? lang === "he"
+                              ? "משותף"
+                              : "shared"
+                            : lang === "he"
+                              ? "מוסתר"
+                              : "hidden"
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -902,58 +1097,8 @@ export default function LandingPage() {
 
   // Global sheet — scrolling UP at the top of the page (or tapping the ↑ chevron)
   // pulls up a full-screen view of the network, like opening Global on mobile.
-  const [globalOpen, setGlobalOpen] = useState(false);
-  useEffect(() => {
-    if (globalOpen) return;
-    let acc = 0;
-    let t = 0;
-    const onWheel = (e: WheelEvent) => {
-      if (window.scrollY > 2) {
-        acc = 0;
-        return;
-      }
-      if (e.deltaY < 0) {
-        acc += -e.deltaY;
-        if (acc > 130) {
-          acc = 0;
-          setGlobalOpen(true);
-        }
-      } else {
-        acc = 0;
-      }
-      window.clearTimeout(t);
-      t = window.setTimeout(() => (acc = 0), 260);
-    };
-    let startY = 0;
-    const onTouchStart = (e: TouchEvent) => {
-      startY = e.touches[0]?.clientY ?? 0;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      if (window.scrollY > 2) return;
-      if ((e.touches[0]?.clientY ?? 0) - startY > 90) setGlobalOpen(true);
-    };
-    window.addEventListener("wheel", onWheel, { passive: true });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
-    return () => {
-      window.removeEventListener("wheel", onWheel);
-      window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.clearTimeout(t);
-    };
-  }, [globalOpen]);
-  useEffect(() => {
-    if (!globalOpen) return;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setGlobalOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [globalOpen]);
+  // Which FAQ drawer is open — driven by HOVER (no click needed).
+  const [faqOpen, setFaqOpen] = useState<number | null>(null);
 
   // Automatic gateway transition: a scroll down inside the hero zone completes
   // the fold-to-a-dot and carries you into the site; a scroll up in that zone
@@ -971,10 +1116,9 @@ export default function LandingPage() {
       const y = window.scrollY;
       if (y !== lastY) dir = y > lastY ? "down" : "up";
       lastY = y;
-      if (snapping || globalOpen) return;
+      if (snapping) return;
       window.clearTimeout(t);
       t = window.setTimeout(() => {
-        if (globalOpen) return;
         const pin = document.querySelector<HTMLElement>(".lhero-pin");
         if (!pin) return;
         const pinH = pin.offsetHeight;
@@ -991,7 +1135,7 @@ export default function LandingPage() {
       window.removeEventListener("scroll", onScroll);
       window.clearTimeout(t);
     };
-  }, [globalOpen]);
+  }, []);
 
   // Nav pill reveals a little AFTER you leave the hero — not the instant it
   // scrolls out — so the gateway stays clean and the pill feels intentional.
@@ -1060,34 +1204,6 @@ export default function LandingPage() {
     return () => io.disconnect();
   }, []);
 
-  // Film section: a scroll-linked parallax — the frame expands toward full width
-  // as it reaches the middle of the viewport and contracts as it leaves. Sets a
-  // 0..1 `--fp` on the frame; the scale itself lives in CSS.
-  useEffect(() => {
-    const el = document.querySelector<HTMLElement>(".why-video");
-    if (!el) return;
-    let raf = 0;
-    const apply = () => {
-      raf = 0;
-      const r = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-      const center = r.top + r.height / 2;
-      const dist = Math.abs(center - vh / 2) / (vh / 2 + r.height / 2);
-      el.style.setProperty("--fp", Math.max(0, Math.min(1, 1 - dist)).toFixed(3));
-    };
-    const onScroll = () => {
-      if (!raf) raf = requestAnimationFrame(apply);
-    };
-    apply();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
   return (
     <>
       {/* The whole page is an opaque layer that sits ABOVE the fixed footer and
@@ -1117,24 +1233,18 @@ export default function LandingPage() {
             />
             <Link className="btn btn-primary" href="/app">
               {t.nav.enter}
-              <span className="btn-arrow" aria-hidden="true">→</span>
             </Link>
           </div>
         </div>
       </nav>
 
+      {/* The one figure that lives across the whole page (see LivingFigure). */}
+      <LivingFigure />
+
       {/* ── hero — the gateway: ONE centre-stage, ready to start ── */}
       <div className="lhero-pin">
       <section className="lhero" ref={heroRef} style={{ ["--p" as string]: 1 } as React.CSSProperties}>
         <div className="lhero-core">
-          <button
-            type="button"
-            className="lhero-chev up"
-            onClick={() => setGlobalOpen(true)}
-            aria-label={t.global.hint}
-          >
-            <ChevronUp />
-          </button>
           <button
             type="button"
             className="lhero-orb-btn"
@@ -1238,32 +1348,9 @@ export default function LandingPage() {
         </div>
       </Sheet>
 
-      {/* ── thesis ── */}
-      {/* ── why ONE — the film IS the section: one full-screen poster ── */}
-      <section className="section center reveal why-section" id="problem">
-        <div className="shell">
-          {/* The frame is the stage. Drop the footage in as a first child
-              <video src="…" poster="…" playsInline /> — it fills the frame and
-              sits UNDER the poster, which carries the copy on a dark scrim. */}
-          <div className="why-video">
-            <div className="why-poster">
-              {/* The copy is nested one level down so it can be counter-scaled:
-                  the frame grows on hover, this cancels that growth back out, so
-                  the box gets bigger and the text does not. */}
-              <div className="why-poster-inner">
-                <h2 className="why-title">{t.thesis.title}</h2>
-                <p className="why-lede">{t.thesis.lede}</p>
-              </div>
-            </div>
-            {/* The whole frame plays — no play button; hovering grows the frame
-                and dims the copy, and that IS the affordance. The transparent
-                button covers the frame rather than wrapping the copy, because a
-                <button> may only contain phrasing content (an <h2> inside one is
-                invalid), and it keeps the control keyboard-reachable. */}
-            <button type="button" className="why-play-target" aria-label={t.thesis.playAria} />
-          </div>
-        </div>
-      </section>
+      {/* ── meet ONE — interactive showcase: feature list + a mock panel that
+             swaps with the active feature (no video) ── */}
+      <MeetShowcase copy={t.thesis} lang={lang} />
 
       {/* ── the whole idea as three themed bentos, stacked: what ONE does
              (capabilities) → the worlds it represents you across → the network
@@ -1293,9 +1380,9 @@ export default function LandingPage() {
               return (
                 <div className={cls} key={tile.key}>
                   {tile.variant === "core" ? (
-                    <div className="bento-core-orb">
-                      <Orb size={54} faceColor={isDark ? "#2a2a2a" : "#0a0a0a"} eyeColor={isDark ? "#ffffff" : "#f5f4f0"} />
-                    </div>
+                    // No static orb — the living figure floats over this spot; the
+                    // empty box just reserves the space so the title stays put.
+                    <div className="bento-core-orb" aria-hidden="true" />
                   ) : tile.icon ? (
                     <i className={`fi ${tile.icon} bento-icon`} aria-hidden="true" />
                   ) : null}
@@ -1353,13 +1440,8 @@ export default function LandingPage() {
       {/* ── pricing ── */}
       <section className="section center reveal" id="pricing">
         <div className="shell">
-          {/* The name is the wordmark, face awake in the "O" — same as the logo.
-              It stays put: the "grows with you" is carried by the plans below,
-              which turn up like a volume step as you move across them. */}
-          <h2 className="pricing-h2">
-            <OneWord className="pricing-one" />
-            {t.pricing.h2Rest}
-          </h2>
+          {/* Just the sentence — no wordmark/figure here (removed per design). */}
+          <h2 className="pricing-h2">{t.pricing.h2Rest}</h2>
           <div className="plans">
             {t.pricing.plans.map((p, i) => {
               const featured = i === 2;
@@ -1379,27 +1461,16 @@ export default function LandingPage() {
                     <small>{per}</small>
                   </div>
                   <p className="plan-blurb">{p.blurb}</p>
-                  <div className="plan-feats">
-                    {p.feats.map((f, fi) => (
-                      <span key={fi}>
-                        <i className={`fi ${f.icon} plan-feat-ico`} aria-hidden="true" />
-                        {f.label}
-                      </span>
-                    ))}
-                  </div>
-                  {/* The rest of the plan, revealed as the card turns up. Purely
-                      CSS (hover / focus-within) so it also opens for keyboard
-                      users tabbing to the CTA. */}
-                  <div className="plan-more">
-                    <div className="plan-more-inner">
-                      <div className="plan-feats">
-                        {p.more.map((f, fi) => (
-                          <span key={fi}>
-                            <i className={`fi ${f.icon} plan-feat-ico`} aria-hidden="true" />
-                            {f.label}
-                          </span>
-                        ))}
-                      </div>
+                  {/* All features in one list that SCROLLS inside the fixed-size
+                      card — the card no longer grows on hover. */}
+                  <div className="plan-scroll">
+                    <div className="plan-feats">
+                      {[...p.feats, ...p.more].map((f, fi) => (
+                        <span key={fi}>
+                          <i className={`fi ${f.icon} plan-feat-ico`} aria-hidden="true" />
+                          {f.label}
+                        </span>
+                      ))}
                     </div>
                   </div>
                   <Link className={btnClass} href="/app">{p.cta}</Link>
@@ -1422,8 +1493,22 @@ export default function LandingPage() {
           <h2>{t.faq.title}</h2>
           <div className="faq-list">
             {t.faq.items.map((item, i) => (
-              <details className="faq-item" key={i}>
-                <summary className="faq-q">
+              <details
+                className="faq-item"
+                key={i}
+                open={faqOpen === i}
+                // Opens on hover, closes when you leave — no click required. A
+                // click/tap still toggles it (touch + keyboard).
+                onMouseEnter={() => setFaqOpen(i)}
+                onMouseLeave={() => setFaqOpen((v) => (v === i ? null : v))}
+              >
+                <summary
+                  className="faq-q"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setFaqOpen((v) => (v === i ? null : i));
+                  }}
+                >
                   <span>{item.q}</span>
                   <svg className="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -1494,7 +1579,7 @@ export default function LandingPage() {
                 />
               ))
             ) : (
-              <ClosingOrb isDark={isDark} />
+              <ClosingOrb />
             )}
           </div>
         </div>
@@ -1597,47 +1682,6 @@ export default function LandingPage() {
         </div>
       )}
 
-      {/* Global — a full-screen network view pulled up by scrolling up at the top. */}
-      <div className={`gsheet${globalOpen ? " open" : ""}`} aria-hidden={!globalOpen}>
-        <div className="gsheet-scrim" onClick={() => setGlobalOpen(false)} />
-        <div
-          className="gsheet-panel"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.global.title}
-          onWheel={(e) => {
-            if (e.currentTarget.scrollTop <= 0 && e.deltaY > 40) setGlobalOpen(false);
-          }}
-        >
-          <button className="gsheet-grab" onClick={() => setGlobalOpen(false)} aria-label="Close Global" />
-          <button className="gsheet-close" onClick={() => setGlobalOpen(false)} aria-label="Close">
-            ✕
-          </button>
-          <div className="gsheet-inner">
-            <h2 className="gsheet-title">{t.global.title}</h2>
-            <p className="gsheet-sub">{t.global.sub}</p>
-            <div className="connect gsheet-connect">
-              <div className="connect-side">
-                <div className="connect-orb" />
-                <div className="connect-name">{t.network.yourOne}</div>
-                <div className="connect-role">{t.network.yourRole}</div>
-                <div className="connect-sub"><i className={`fi ${t.network.yourProcessIcon} connect-ico`} aria-hidden="true" />{t.network.yourProcess}</div>
-              </div>
-              <div className="connect-bridge">
-                <div className="connect-bridge-line">↔</div>
-                <div className="connect-bridge-label">{t.network.connectedLabel}</div>
-              </div>
-              <div className="connect-side">
-                <div className="connect-orb" />
-                <div className="connect-name">{t.network.providerName}</div>
-                <div className="connect-role">{t.network.providerRole}</div>
-                <div className="connect-sub"><i className={`fi ${t.network.providerStatusIcon} connect-ico`} aria-hidden="true" />{t.network.providerStatus}</div>
-              </div>
-            </div>
-            <Link className="btn btn-primary btn-lg gsheet-cta" href="/app">{t.global.cta}</Link>
-          </div>
-        </div>
-      </div>
     </>
   );
 }

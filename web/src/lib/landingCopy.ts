@@ -26,8 +26,18 @@ export interface LandingCopy {
     sent: string;
     failed: string;
   };
-  /** "Why ONE" — the film IS the section: copy sits on a scrim over it. */
-  thesis: { title: string; lede: string; playAria: string };
+  /** "Meet ONE" — an interactive showcase: a feature list on one side and a mock
+   *  panel that swaps with the active feature on the other (no video). */
+  thesis: {
+    title: string;
+    lede: string;
+    features: { icon: string; title: string; desc: string }[];
+    demos: {
+      plan: { title: string; steps: string[] };
+      act: { title: string; rows: { name: string; status: string }[] };
+      disclose: { title: string; items: { label: string; on: boolean }[] };
+    };
+  };
   network: {
     eyebrow: string;
     h2pre: string;
@@ -121,7 +131,6 @@ export interface LandingCopy {
     };
   };
   mobileBanner: { title: string; sub: string; cta: string; dismiss: string };
-  global: { eyebrow: string; title: string; sub: string; cta: string; hint: string };
   foot: {
     about: string;
     support: string;
@@ -190,7 +199,53 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     thesis: {
       title: "Meet ONE",
       lede: "Your digital representative. Tell it what you want, and it carries the process end to end — speaking on your behalf, holding every detail in one place, and disclosing only what you allow.",
-      playAria: "Play the film",
+      features: [
+        {
+          icon: "fi-rr-comment-dots",
+          title: "Understands you.",
+          desc: "Say it in plain words — ONE turns it into a living process and carries it to done.",
+        },
+        {
+          icon: "fi-rr-paper-plane",
+          title: "Acts on your behalf.",
+          desc: "It reaches businesses and other ONEs, works out the details, and brings back one clear answer.",
+        },
+        {
+          icon: "fi-rr-shield-check",
+          title: "Discloses only what you allow.",
+          desc: "You decide what it shares, with whom, and when — selective by design.",
+        },
+      ],
+      demos: {
+        plan: {
+          title: "Renew my driver's license",
+          steps: [
+            "Check what's required",
+            "Book the eye test",
+            "Fill the renewal form",
+            "Pay the fee",
+          ],
+        },
+        act: {
+          title: "Working on your behalf",
+          rows: [
+            { name: "Your ONE", status: "Reaching out" },
+            { name: "Meridian Bank", status: "Booked · Tue 10:00" },
+            { name: "City Clinic", status: "Confirmed" },
+            { name: "The landlord", status: "Draft ready" },
+          ],
+        },
+        disclose: {
+          title: "Shared on this process",
+          items: [
+            { label: "Name", on: true },
+            { label: "Email", on: true },
+            { label: "Home address", on: false },
+            { label: "Payment details", on: false },
+            { label: "ID number", on: false },
+          ],
+        },
+      },
     },
     network: {
       eyebrow: "The network",
@@ -322,8 +377,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       ],
     },
     download: {
-      titleLead: "ONE",
-      titleRest: "for you.",
+      titleLead: "You have",
+      titleRest: "ONE.",
       sub: "In life, at work, and everything in between.",
       get: {
         desktop: "Desktop",
@@ -342,20 +397,13 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       cta: "Open ONE",
       dismiss: "Dismiss",
     },
-    global: {
-      eyebrow: "Global",
-      title: "The network of ONEs.",
-      sub: "Your ONE doesn't work alone. It connects to the ONEs of people, businesses, and institutions — so things move between representatives, around the process itself.",
-      cta: "Step into the network →",
-      hint: "Scroll up for Global",
-    },
     foot: {
       about: "About",
       support: "Support",
       legal: "Legal",
       copy: "© 2026 ONE01",
       tagline: "ONE is your digital representative. Say what you want in plain words, and it turns it into a living process it carries to done — across every part of your life and work.",
-      company: "ONE01 is building the network of ONEs: one representative for people, businesses, and institutions to get things done together.",
+      company: "ONE01 is building the network of ONES — digital representatives that understand, communicate, and act on behalf of people and businesses.",
       madeWith: "From intention to reality.",
       cols: [
         {
@@ -463,9 +511,55 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       failed: "לא הצלחנו לשלוח את הקישור.",
     },
     thesis: {
-      title: "הכירו את וואן",
+      title: "הכירו את ONE",
       lede: "הנציג הדיגיטלי שלכם. אתם אומרים מה אתם רוצים, והוא מוביל את התהליך מקצה לקצה — מדבר בשמכם, שומר כל פרט במקום אחד, וחושף רק מה שאתם מאשרים.",
-      playAria: "נגן את הסרטון",
+      features: [
+        {
+          icon: "fi-rr-comment-dots",
+          title: "מבין אתכם.",
+          desc: "אומרים במילים פשוטות — ONE הופך את זה לתהליך חי ומוביל אותו עד הסוף.",
+        },
+        {
+          icon: "fi-rr-paper-plane",
+          title: "פועל בשמכם.",
+          desc: "הוא פונה לעסקים ול-ONEs אחרים, מסדר את הפרטים, ומחזיר תשובה אחת ברורה.",
+        },
+        {
+          icon: "fi-rr-shield-check",
+          title: "חושף רק מה שתאשרו.",
+          desc: "אתם מחליטים מה הוא משתף, עם מי ומתי — סלקטיבי מהיסוד.",
+        },
+      ],
+      demos: {
+        plan: {
+          title: "לחדש רישיון נהיגה",
+          steps: [
+            "לבדוק מה נדרש",
+            "לקבוע בדיקת ראייה",
+            "למלא טופס חידוש",
+            "לשלם את האגרה",
+          ],
+        },
+        act: {
+          title: "פועל בשמכם",
+          rows: [
+            { name: "‏ה-ONE שלכם", status: "יוצר קשר" },
+            { name: "בנק מרידיאן", status: "נקבע · שלישי 10:00" },
+            { name: "מרפאת העיר", status: "אושר" },
+            { name: "בעל הדירה", status: "טיוטה מוכנה" },
+          ],
+        },
+        disclose: {
+          title: "משותף בתהליך הזה",
+          items: [
+            { label: "שם", on: true },
+            { label: "אימייל", on: true },
+            { label: "כתובת מגורים", on: false },
+            { label: "פרטי תשלום", on: false },
+            { label: "מספר תעודת זהות", on: false },
+          ],
+        },
+      },
     },
     network: {
       eyebrow: "הרשת",
@@ -597,8 +691,8 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       ],
     },
     download: {
-      titleLead: "ONE",
-      titleRest: "בשבילך.",
+      titleLead: "יש לך",
+      titleRest: "ONE.‎",
       sub: "בחיים, בעבודה, וכל מה שביניהם.",
       get: {
         desktop: "מחשב",
@@ -617,20 +711,13 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
       cta: "פתח את ONE",
       dismiss: "סגור",
     },
-    global: {
-      eyebrow: "גלובל",
-      title: "רשת ה-ONEs.",
-      sub: "ה-ONE שלכם לא עובד לבד. הוא מתחבר ל-ONEs של אנשים, עסקים ומוסדות — כך שדברים זזים בין נציגים, סביב התהליך עצמו.",
-      cta: "היכנס לרשת ←",
-      hint: "גלול למעלה לגלובל",
-    },
     foot: {
       about: "אודות",
       support: "תמיכה",
       legal: "משפטי",
       copy: "© 2026 ONE01",
       tagline: "ONE הוא הנציג הדיגיטלי שלכם. אומרים מה רוצים במילים פשוטות, והוא הופך את זה לתהליך חי שהוא מוביל עד הסוף — בכל תחום בחיים ובעבודה.",
-      company: "‏ONE01 בונה את רשת ה-ONEs: נציג אחד לאנשים, לעסקים ולמוסדות, כדי להשלים דברים ביחד.",
+      company: "‏ONE01 בונה את רשת ה-ONES — נציגים דיגיטליים שמבינים, מתקשרים ופועלים בשם אנשים ועסקים.",
       madeWith: "מרצון למציאות.",
       cols: [
         {

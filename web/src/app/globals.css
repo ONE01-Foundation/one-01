@@ -129,7 +129,6 @@ html {
   line-height: 0;
   padding: 0;
 }
-.lhero-chev.up,
 .lhero-chev.down {
   position: absolute;
   left: 50%;
@@ -141,10 +140,6 @@ html {
    The BUTTON carries only the scroll fade (it clears early as ONE collapses;
    the browser clamps the negative value to 0). The arrival hint lives on the
    inner svg instead, so the two never fight over `opacity`. */
-.lhero-chev.up {
-  top: 92px;
-  opacity: calc(1 - var(--p, 0) * 1.8);
-}
 .lhero-chev.down {
   bottom: 92px;
   cursor: pointer;
@@ -161,29 +156,11 @@ html {
   animation-iteration-count: 1;
   animation-fill-mode: both;
 }
-.lhero-chev.up > svg {
-  animation-name: lheroHintUp;
-}
 .lhero-chev.down > svg {
   animation-name: lheroHintDown;
 }
 /* The up arrow lives at the top, so "toward the centre" is DOWN (+y) and it
    travels up (-y) to its resting 0. */
-@keyframes lheroHintUp {
-  0%,
-  15% {
-    transform: translateY(18px);
-    opacity: 0.85;
-  }
-  55% {
-    transform: translateY(0);
-    opacity: 0.85;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 0.2;
-  }
-}
 /* The down arrow lives at the bottom: "toward the centre" is UP (-y), and it
    travels down (+y) to its resting 0. */
 @keyframes lheroHintDown {
@@ -301,7 +278,6 @@ html {
   .lhero-orb .orb-eye {
     opacity: 1;
   }
-  .lhero-chev.up,
   .lhero-chev.down {
     opacity: 1;
   }
@@ -1643,27 +1619,6 @@ h3 {
   align-items: center;
   justify-content: center;
 }
-/* The stand-in Orb feels alive — a slow breath + float (temporary, until the
-   real closing artwork lands). Its eyes also blink via the Orb `alive` prop. */
-.final-orb {
-  animation: finalOrbAlive 6s ease-in-out infinite;
-  transform-origin: center;
-  will-change: transform;
-}
-@keyframes finalOrbAlive {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-8px) scale(1.035);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .final-orb {
-    animation: none;
-  }
-}
 @media (max-width: 900px) {
   .final-grid {
     grid-template-columns: 1fr;
@@ -1745,155 +1700,240 @@ footer {
   color: var(--text-3);
 }
 
-/* ─── why ONE — a full-screen stage: one line, then the film ─────────────── */
-/* The film IS the section, so it gets the whole viewport. Content is centred in
-   what's LEFT after the fixed bar (hence the asymmetric padding) — centring
-   against the raw viewport would optically sink it, since the top ~66px is
-   covered by the menu. `svh` keeps it honest on mobile, where `vh` jumps as the
-   URL bar hides. */
-.section.why-section {
-  min-height: 100vh;
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  /* Clears the fixed bar, so the frame reads optically centred rather than
-     sunk beneath the menu. */
-  padding-top: 104px;
-  padding-bottom: 56px;
+
+/* ─── the living figure — one ONE that floats across the whole page ─── */
+.living-figure {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 76px;
+  height: 76px;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: center;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 16px 34px rgba(10, 10, 10, 0.16));
 }
-/* `.shell` carries `margin: 0 auto`, and auto cross-axis margins cancel a flex
-   column's default `align-items: stretch` — the shell would size to fit-content.
-   Its only child is the frame at `width: 100%` with absolutely-positioned copy,
-   so there's no intrinsic width to fall back on and the whole thing collapses to
-   zero. State the width explicitly. */
-.why-section .shell {
-  width: 100%;
+/* The living figure REPLACES the page's static hero orb — hide that one when the
+   figure is mounted (JS adds .has-living-figure), so there's never a double. */
+.has-living-figure .lhero-orb {
+  opacity: 0;
 }
 
-/* ─── why ONE — the film is the section ─────────────────────────────────── */
-/* 16:9 stage. Dropped-in footage fills the frame and sits UNDER `.why-poster`.
-   `container-type` makes the frame the sizing reference for the copy inside:
-   the frame shrinks on short screens, and the type must shrink WITH it —
-   viewport units would keep the headline big inside a small box. */
-.why-video {
-  container-type: inline-size;
-  position: relative;
-  aspect-ratio: 16 / 9;
-  width: 100%;
-  /* A comfortable poster at rest — substantial, not full-bleed. It grows a
-     touch on hover (below), which is the "this plays" affordance now that
-     there's no play button. The `min()` keeps the fixed-ratio box inside short
-     viewports so it never forces a scroll. */
-  max-width: min(820px, (100svh - 200px) * 16 / 9);
-  margin-inline: auto;
-  border-radius: 24px;
-  overflow: hidden;
-  background: #121212;
-  box-shadow: 0 16px 52px rgba(10, 10, 10, 0.17);
-  /* Scroll-linked parallax: the frame expands toward full width as it reaches
-     the middle of the viewport and contracts as it leaves. --fp (0..1) is set
-     in page.tsx; a short transition just smooths the per-frame steps. */
-  transform: scale(calc(1 + var(--fp, 0) * 0.3));
-  transform-origin: center;
-  transition: transform 120ms linear, box-shadow 360ms ease;
+/* ─── meet ONE — feature list + a mock panel that swaps with the active row ─── */
+.meet-section {
+  padding-top: 96px;
+  padding-bottom: 96px;
 }
-.why-video:hover {
-  box-shadow: 0 30px 84px rgba(10, 10, 10, 0.28);
-}
-.why-video > video,
-.why-video > iframe,
-.why-video > img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border: none;
-}
-/* The copy, over the footage. The scrim is a gradient rather than a flat wash
-   so the picture still reads at the top while the text stays legible over
-   whatever the frame happens to be showing. */
-.why-poster {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
+.meet-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 6cqw 8cqw;
-  text-align: center;
-  background: linear-gradient(
-    to bottom,
-    rgba(8, 8, 8, 0.28) 0%,
-    rgba(8, 8, 8, 0.52) 55%,
-    rgba(8, 8, 8, 0.72) 100%
-  );
+  text-align: start;
 }
-/* Counter-scales the frame's growth, so the box gets bigger and the text keeps
-   exactly its size. 0.9756 is 1 / 1.025 — the inverse of the frame's scale. */
-.why-poster-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: inherit;
-  transition: transform 340ms cubic-bezier(0.2, 0.7, 0.2, 1);
+@media (max-width: 900px) {
+  .meet-grid {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
 }
-/* `.section h2` caps width at 720px and sets its own size — the selector is
-   `.section h2.why-title` so it outranks that inside the frame. */
-.section h2.why-title {
+.section h2.meet-title {
   max-width: none;
-  margin: 0;
-  color: #fff;
-  /* Matches the site's standard section heading (clamp(34px, 4.4vw, 52px)),
-     but in container units so it tracks the frame, not the viewport: 6.3cqw of
-     the 820px frame ≈ 52px, the same cap. */
-  font-size: clamp(30px, 6.3cqw, 52px);
-  line-height: 1.05;
-  letter-spacing: -0.035em;
+  margin: 0 0 14px;
+  text-align: start;
 }
-.why-lede {
-  margin: 0;
-  max-width: 52ch;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: clamp(15px, 2cqw, 18px);
+.meet-lede {
+  margin: 0 0 26px;
+  max-width: 46ch;
+  color: var(--text-2);
+  font-size: 17px;
+  line-height: 1.6;
+}
+.meet-feats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.meet-feat {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  text-align: start;
+  padding: 15px 18px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: background 200ms ease, box-shadow 200ms ease;
+}
+.meet-feat.is-active {
+  background: var(--bg-card);
+  box-shadow: 0 8px 30px rgba(10, 10, 10, 0.08);
+}
+.meet-feat-ico {
+  flex: none;
+  font-size: 18px;
+  line-height: 1;
+  margin-top: 2px;
+  color: var(--text-3);
+  display: inline-flex;
+}
+.meet-feat.is-active .meet-feat-ico {
+  color: var(--accent);
+}
+.meet-feat-body {
+  font-size: 15px;
   line-height: 1.55;
 }
-/* The frame itself is the play control — an invisible button over the whole
-   thing. Nothing is drawn: the frame's growth and the copy's dimming are the
-   affordance. It stays a real <button> so it's keyboard-reachable and named. */
-.why-play-target {
+.meet-feat-title {
+  font-weight: 700;
+  color: var(--text);
+}
+.meet-feat-desc {
+  color: var(--text-2);
+}
+.meet-panel {
+  display: flex;
+  justify-content: center;
+}
+.meet-card {
+  width: 100%;
+  max-width: 460px;
+  min-height: 322px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 18px 48px rgba(10, 10, 10, 0.1);
+  padding: 26px 24px;
+  animation: meetSwap 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes meetSwap {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.meet-mock-head {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 18px;
+}
+.meet-steps,
+.meet-rows,
+.meet-toggles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.meet-steps {
+  gap: 15px;
+}
+.meet-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  color: var(--text);
+}
+.meet-step-box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid var(--line-strong);
+  position: relative;
+}
+.meet-steps li.is-done .meet-step-box {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.meet-steps li.is-done .meet-step-box::after {
+  content: "";
   position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: transparent;
-  border: none;
-  cursor: pointer;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
-.why-play-target:focus-visible {
-  outline: none;
+.meet-steps li.is-done {
+  color: var(--text-3);
+  text-decoration: line-through;
 }
-/* On hover the frame grows and the copy holds its exact size (counter-scaled
-   above). The copy stays FULLY visible — it never dims or fades to transparent;
-   the growth alone is the "this plays" affordance. */
-@media (prefers-reduced-motion: reduce) {
-  .why-video,
-  .why-poster-inner {
-    transition: none;
-  }
-  .why-video:hover {
-    transform: none;
-  }
-  .why-video:hover .why-poster-inner {
-    transform: none;
-  }
+.meet-rows li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
 }
-@media (max-width: 720px) {
-  .why-video {
-    border-radius: 18px;
-  }
+.meet-rows li:first-child {
+  border-top: none;
+}
+.meet-row-orb {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.meet-row-name {
+  flex: 1;
+  color: var(--text);
+  font-weight: 600;
+}
+.meet-row-status {
+  color: var(--text-3);
+  font-size: 13px;
+}
+.meet-toggles li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+  color: var(--text);
+}
+.meet-toggles li:first-child {
+  border-top: none;
+}
+/* Static on/off pill — flex justify handles RTL without a hard-coded translate. */
+.meet-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 42px;
+  height: 24px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+.meet-toggle.is-on {
+  justify-content: flex-end;
+  background: var(--ok);
+}
+.meet-toggle::after {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
 }
 
 /* ─── clean landing: centered sections, steps, slim footer ─── */
@@ -2544,12 +2584,6 @@ footer {
   flex-wrap: wrap;
   gap: 0.06em;
 }
-.pricing-one {
-  flex: none;
-  height: 0.94em;
-  width: 2.4675em; /* 0.94em × the 84:32 crop */
-  margin-inline-end: 0.16em;
-}
 .one-word-eye {
   transform-box: fill-box;
   transform-origin: center;
@@ -2560,10 +2594,16 @@ footer {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 22px;
-  /* `start`, not `stretch`: a hovered card grows on its own. Under `stretch`
-     the whole row would grow with it and the other two would just gain blank
-     space at the bottom. */
-  align-items: start;
+  /* Volume columns: the cards share a bottom baseline and step UP toward Pro,
+     visualising "grows with you". */
+  align-items: end;
+}
+/* Ascending heights — Free hugs its content, Plus taller, Pro tallest. */
+.plans .plan:nth-child(2) {
+  min-height: 31rem;
+}
+.plans .plan:nth-child(3) {
+  min-height: 35rem;
 }
 @media (max-width: 880px) {
   .plans {
@@ -2572,6 +2612,11 @@ footer {
     max-width: 440px;
     margin-left: auto;
     margin-right: auto;
+  }
+  /* Stacked on mobile — drop the staircase; each card hugs its content. */
+  .plans .plan:nth-child(2),
+  .plans .plan:nth-child(3) {
+    min-height: 0;
   }
 }
 /* Tailored/enterprise tier — a quiet line + link under the cards, styled like
@@ -2591,38 +2636,23 @@ footer {
   text-align: left;
   display: flex;
   flex-direction: column;
-}
-/* Turning up a plan: the card lifts and opens, revealing the rest of what it
-   includes. The extra rows live in a 0fr→1fr grid so the card animates to its
-   real content height without a hard-coded max-height. */
-.plan {
-  transition: transform 320ms cubic-bezier(0.2, 0.7, 0.2, 1),
-    box-shadow 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition: box-shadow 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .plan:hover,
 .plan:focus-within {
-  transform: translateY(-6px);
   box-shadow: 0 22px 56px rgba(10, 10, 10, 0.16);
 }
-.plan-more {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition: grid-template-rows 320ms cubic-bezier(0.2, 0.7, 0.2, 1),
-    opacity 220ms ease;
+/* Every feature shows at once (no scroll). The CTA is pinned to the card base
+   (.plan .btn margin-top:auto), so the taller Plus/Pro columns keep their
+   button on the shared baseline while the extra height reads as "more". */
+.plan-scroll {
+  margin-bottom: 22px;
 }
-.plan-more-inner {
-  overflow: hidden;
-  min-height: 0;
-}
-.plan:hover .plan-more,
-.plan:focus-within .plan-more {
-  grid-template-rows: 1fr;
-  opacity: 1;
+.plan-scroll .plan-feats {
+  margin-bottom: 0;
 }
 @media (prefers-reduced-motion: reduce) {
-  .plan,
-  .plan-more {
+  .plan {
     transition: none;
   }
 }
@@ -8855,6 +8885,8 @@ button.conn-card:hover {
 .bento-core-orb {
   line-height: 0;
   margin-bottom: 2px;
+  /* Reserves the space the living figure floats into (no static orb now). */
+  min-height: 56px;
 }
 .bento-wide {
   grid-column: span 2;
@@ -9431,100 +9463,6 @@ a.get-opt:hover {
   }
 }
 
-/* ─── Global sheet — full-screen network view, pulled up by scrolling up ──── */
-.gsheet {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  pointer-events: none;
-}
-.gsheet.open {
-  pointer-events: auto;
-}
-.gsheet-scrim {
-  position: absolute;
-  inset: 0;
-  background: rgba(10, 10, 10, 0.4);
-  opacity: 0;
-  transition: opacity 320ms ease;
-}
-.gsheet.open .gsheet-scrim {
-  opacity: 1;
-}
-.gsheet-panel {
-  position: absolute;
-  inset: 0;
-  background: var(--bg);
-  color: var(--text);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  transform: translateY(100%);
-  transition: transform 400ms cubic-bezier(0.2, 0.75, 0.2, 1);
-}
-.gsheet.open .gsheet-panel {
-  transform: none;
-}
-.gsheet-grab {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 44px;
-  height: 5px;
-  border: none;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text) 20%, transparent);
-  cursor: pointer;
-}
-.gsheet-close {
-  position: absolute;
-  top: 18px;
-  inset-inline-end: 20px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--text-2);
-  font-size: 16px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 140ms ease, color 140ms ease;
-}
-.gsheet-close:hover {
-  background: color-mix(in srgb, var(--text) 12%, transparent);
-  color: var(--text);
-}
-.gsheet-inner {
-  margin: auto;
-  width: 100%;
-  max-width: 760px;
-  padding: 76px 24px;
-  text-align: center;
-}
-.gsheet-title {
-  font-size: clamp(30px, 5vw, 46px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  margin: 8px 0 16px;
-}
-.gsheet-sub {
-  font-size: clamp(15px, 2vw, 18px);
-  line-height: 1.6;
-  color: var(--text-2);
-  max-width: 48ch;
-  margin: 0 auto;
-  text-wrap: balance;
-}
-.gsheet-connect {
-  margin-top: 40px;
-}
-.gsheet-cta {
-  margin-top: 34px;
-}
 
 /* ══════════════════════════ ADMIN CONSOLE (/admin) ══════════════════════════
    A private ops dashboard, gated to the owner's Google account. Wrapped in

@@ -6,18 +6,18 @@ import "./globals.css";
 import "@flaticon/flaticon-uicons/css/regular/rounded.css";
 
 export const metadata: Metadata = {
-  title: "ONE — from intention to done",
+  title: "ONE01 — your digital representative",
   description:
-    "Your digital representative for turning intentions into living processes. ONE is the layer between what you want and what needs to happen.",
+    "ONE01 is building the network of ONES — digital representatives that understand, communicate, and act on behalf of people and businesses.",
   icons: {
     // The real app icon (same mark shipped to the App Store / Play Store).
     icon: "/app-icon.png",
     apple: "/app-icon.png",
   },
   openGraph: {
-    title: "ONE — from intention to done",
+    title: "ONE01 — your digital representative",
     description:
-      "Your digital representative for turning intentions into living processes.",
+      "Digital representatives that understand, communicate, and act on behalf of people and businesses.",
   },
 };
 
