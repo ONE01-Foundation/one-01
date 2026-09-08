@@ -105,19 +105,42 @@ const GEN_STEPS: Step[] = [
   s("Starts the first move for you", "מתחיל בשבילך את הצעד הראשון"),
 ];
 
+// Other ONEs on the map — businesses & professionals (like the cars/POIs in
+// Waze). Scattered ambiently in World view; in a journey the ones for the
+// want's topic become the "who can help" providers wired to the goal.
+type Agent = { di: number; en: string; he: string; em: string };
+const AGENTS: Agent[] = [
+  { di: 1, en: "Clinic ONE", he: "וואן מרפאה", em: "🏥" },
+  { di: 1, en: "Therapist ONE", he: "וואן מטפל", em: "🧠" },
+  { di: 5, en: "Movers ONE", he: "וואן הובלות", em: "📦" },
+  { di: 5, en: "Handyman ONE", he: "וואן הנדימן", em: "🔧" },
+  { di: 2, en: "Bank ONE", he: "וואן בנק", em: "🏦" },
+  { di: 6, en: "Recruiter ONE", he: "וואן גיוס", em: "🧑‍💼" },
+  { di: 3, en: "Travel ONE", he: "וואן טיולים", em: "🧳" },
+  { di: 7, en: "Venue ONE", he: "וואן אולם", em: "🎉" },
+  { di: 9, en: "Coach ONE", he: "וואן מאמן", em: "🏋️" },
+  { di: 8, en: "Store ONE", he: "וואן חנות", em: "🛒" },
+  { di: 0, en: "Tutor ONE", he: "וואן מורה", em: "📖" },
+  { di: 4, en: "Agent ONE", he: "וואן סוכן", em: "🗂️" },
+];
+// The ONE face, reused for the driving navigator and the agent markers.
+const FACE = '<svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true"><circle cx="50" cy="50" r="50" fill="var(--a-orb)"/><circle cx="36" cy="46" r="9" fill="var(--a-orbeye)"/><circle cx="64" cy="46" r="9" fill="var(--a-orbeye)"/></svg>';
+
 const TXT = {
   en: { live: "now", priv: "Anonymous · aggregated", ph: "What do you need?", clr: "Clear",
     hint: "Drag to explore · scroll to zoom · click a want to grow its path",
     nowLbl: "ONEs on this now", pathH: "The path others took", doneK: "finished this week", avgK: "avg. time",
     days: "days", cta: "Start this with your ONE", matches: (n: number) => n + (n === 1 ? " match" : " matches"),
     nomatch: "Nothing here — try another word.", priv2: "Every figure is an anonymous aggregate — never a person.",
-    world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress" },
+    world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress",
+    provH: "Who can help", journeying: "ONE is on the way", arrived: "Arrived" },
   he: { live: "עכשיו", priv: "אנונימי · מצטבר", ph: "מה אתה צריך?", clr: "נקה",
     hint: "גררו כדי לנוע · גלגלו כדי לזום · לחצו על רצון כדי לפרוש את המסלול",
     nowLbl: "וואנים על זה עכשיו", pathH: "המסלול שאחרים עברו", doneK: "הושלמו השבוע", avgK: "זמן ממוצע",
     days: "ימים", cta: "התחל את זה עם ה‑ONE שלך", matches: (n: number) => n + " תוצאות",
     nomatch: "אין תוצאה — נסו מילה אחרת.", priv2: "כל מספר הוא מצבר אנונימי — לעולם לא אדם.",
-    world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך" },
+    world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך",
+    provH: "מי יכול לעזור", journeying: "ה‑ONE בדרך", arrived: "הגעת" },
 };
 
 export function AtlasHome({
@@ -138,14 +161,15 @@ export function AtlasHome({
   useEffect(() => {
     const root = appRef.current;
     if (!root || typeof window === "undefined") return;
-    const $ = (sel: string) => root.querySelector(sel) as HTMLElement | null;
+    const R: HTMLDivElement = root; // non-null alias for use inside hoisted fns
+    const $ = (sel: string) => R.querySelector(sel) as HTMLElement | null;
     const ground = $(".atl-ground")!;
     const qEl = $(".atl-search input") as HTMLInputElement;
     const clrEl = $(".atl-clr")!;
     const panel = $(".atl-panel")!;
     const matchEl = $(".atl-match")!;
-    const baseLinks = root.querySelector(".atl-baselinks") as SVGGElement;
-    const routePath = root.querySelector(".atl-route") as SVGPathElement;
+    const baseLinks = R.querySelector(".atl-baselinks") as SVGGElement;
+    const routePath = R.querySelector(".atl-route") as SVGPathElement;
     const SVGNS = "http://www.w3.org/2000/svg";
 
     const PW = 7000, PH = 5000, CX = PW / 2, CY = PH / 2;
@@ -156,7 +180,7 @@ export function AtlasHome({
     const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
     const sizeFor = (c: number) => 15 + clamp((c - 200) / 1350, 0, 1) * 21;
 
-    let vw = root.clientWidth, vh = root.clientHeight;
+    let vw = R.clientWidth, vh = R.clientHeight;
     const cam = { px: 0, py: -40, z: vw < 720 ? 0.6 : 0.8, rot: 0 };
     let rotTarget = 0, lastZ = -1, dirty = true;
     let hour = new Date().getHours();
@@ -164,6 +188,11 @@ export function AtlasHome({
     let tween: { px0: number; py0: number; z0: number; px1: number; py1: number; z1: number; t: number } | null = null;
     let selected: number | null = null, activeD: number | null = null;
     let view: "world" | "mine" = "world";
+    let journey = false, driving = false, driveT = 0;
+    let driveEl: HTMLDivElement | null = null, driveArrow: HTMLDivElement | null = null;
+    const agentEls: { el: HTMLElement; di: number }[] = [];
+    const providerEls: HTMLElement[] = [];
+    const plinkEls: SVGLineElement[] = [];
     let raf = 0;
     const cleanups: (() => void)[] = [];
 
@@ -220,6 +249,20 @@ export function AtlasHome({
       baseLinks.appendChild(p);
     });
 
+    function addAgent(agent: Agent, wx: number, wy: number, provider: boolean) {
+      const el = document.createElement("div");
+      el.className = "atl-agent" + (provider ? " provider" : "");
+      el.style.left = wx + "px"; el.style.top = wy + "px";
+      el.innerHTML = '<span class="atl-agent-face">' + FACE + '<span class="atl-agent-em">' + agent.em + '</span></span><span class="atl-agent-lbl">' + agent[lang] + '</span>';
+      ground.appendChild(el);
+      return el;
+    }
+    AGENTS.forEach((ag, i) => {
+      const dist = D[ag.di]; const r2 = rng(1000 + i * 57);
+      const ang = r2() * Math.PI * 2, rad = 320 + r2() * 90;
+      agentEls.push({ el: addAgent(ag, dist.x! + Math.cos(ang) * rad, dist.y! + Math.sin(ang) * rad * 0.8, false), di: ag.di });
+    });
+
     function paintText() {
       anchorEls.forEach((a, di) => { (a.querySelector(".atl-alabel") as HTMLElement).textContent = D[di][lang]; });
       wordEls.forEach((o) => {
@@ -250,7 +293,7 @@ export function AtlasHome({
     // ---- expanding route + flowing particles ----
     let stepEls: HTMLElement[] = [];
     let routePts: number[][] = [], routeSeg: number[] = [], routeTotal = 0, flowT = 0, particlesOn = false;
-    const flows = Array.from(root.querySelectorAll(".atl-flow")) as unknown as SVGCircleElement[];
+    const flows = Array.from(R.querySelectorAll(".atl-flow")) as unknown as SVGCircleElement[];
     const pointAt = (u: number): number[] => {
       if (routePts.length < 2) return routePts[0] || [0, 0];
       let d = u * routeTotal;
@@ -264,6 +307,7 @@ export function AtlasHome({
       return routePts[routePts.length - 1];
     };
     function clearRoute() { stepEls.forEach((e) => e.remove()); stepEls = []; routePath.classList.remove("on"); routePath.removeAttribute("d"); particlesOn = false; flows.forEach((f) => (f.style.opacity = "0")); }
+    function clearProviders() { providerEls.forEach((e) => e.remove()); providerEls.length = 0; plinkEls.forEach((e) => e.remove()); plinkEls.length = 0; }
     function growRoute(id: number) {
       clearRoute();
       const o = wordOf(id); if (!o) return; const n = o.n, dist = D[n.d];
@@ -296,7 +340,7 @@ export function AtlasHome({
     const flyTo = (px: number, py: number, z: number) => { tween = { px0: cam.px, py0: cam.py, z0: cam.z, px1: px, py1: py, z1: z, t: 0 }; };
 
     const onWheel = (e: WheelEvent) => { e.preventDefault(); tween = null; cam.z *= Math.pow(1.0016, -e.deltaY); dirty = true; };
-    root.addEventListener("wheel", onWheel, { passive: false }); cleanups.push(() => root.removeEventListener("wheel", onWheel));
+    R.addEventListener("wheel", onWheel, { passive: false }); cleanups.push(() => R.removeEventListener("wheel", onWheel));
 
     const pts: Record<string, { x: number; y: number }> = {};
     let panLast: { x: number; y: number } | null = null;
@@ -305,9 +349,9 @@ export function AtlasHome({
     const pinch = () => { const ids = Object.keys(pts), a = pts[ids[0]], b = pts[ids[1]]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; };
     const onDown = (e: PointerEvent) => {
       if (isChrome(e.target)) return;
-      pts[e.pointerId] = { x: e.clientX, y: e.clientY }; root.setPointerCapture(e.pointerId); tween = null;
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY }; R.setPointerCapture(e.pointerId); tween = null;
       const ids = Object.keys(pts);
-      if (ids.length === 1) { panLast = { x: e.clientX, y: e.clientY }; root.classList.add("drag"); }
+      if (ids.length === 1) { panLast = { x: e.clientX, y: e.clientY }; R.classList.add("drag"); }
       else if (ids.length === 2) { panLast = null; pinchLast = pinch(); }
     };
     const onMove = (e: PointerEvent) => {
@@ -316,11 +360,11 @@ export function AtlasHome({
       if (ids.length >= 2) { const p = pinch(); if (pinchLast) { cam.z *= p.d / pinchLast.d; cam.px += (p.mx - pinchLast.mx) / cam.z; cam.py += (p.my - pinchLast.my) / (cam.z * COST); dirty = true; } pinchLast = p; }
       else if (panLast) { const dx = e.clientX - panLast.x, dy = e.clientY - panLast.y; cam.px += dx / cam.z; cam.py += dy / (cam.z * COST); rotTarget = clamp(rotTarget - dx * 0.018, -7, 7); panLast = { x: e.clientX, y: e.clientY }; dirty = true; }
     };
-    const onUp = (e: PointerEvent) => { delete pts[e.pointerId]; const ids = Object.keys(pts); if (!ids.length) { panLast = null; pinchLast = null; root.classList.remove("drag"); } else if (ids.length === 1) { panLast = { x: pts[ids[0]].x, y: pts[ids[0]].y }; pinchLast = null; } };
-    root.addEventListener("pointerdown", onDown); root.addEventListener("pointermove", onMove); root.addEventListener("pointerup", onUp); root.addEventListener("pointercancel", onUp);
-    cleanups.push(() => { root.removeEventListener("pointerdown", onDown); root.removeEventListener("pointermove", onMove); root.removeEventListener("pointerup", onUp); root.removeEventListener("pointercancel", onUp); });
+    const onUp = (e: PointerEvent) => { delete pts[e.pointerId]; const ids = Object.keys(pts); if (!ids.length) { panLast = null; pinchLast = null; R.classList.remove("drag"); } else if (ids.length === 1) { panLast = { x: pts[ids[0]].x, y: pts[ids[0]].y }; pinchLast = null; } };
+    R.addEventListener("pointerdown", onDown); R.addEventListener("pointermove", onMove); R.addEventListener("pointerup", onUp); R.addEventListener("pointercancel", onUp);
+    cleanups.push(() => { R.removeEventListener("pointerdown", onDown); R.removeEventListener("pointermove", onMove); R.removeEventListener("pointerup", onUp); R.removeEventListener("pointercancel", onUp); });
     const onDbl = (e: MouseEvent) => { if (isChrome(e.target)) return; tween = null; cam.z *= 1.5; dirty = true; };
-    root.addEventListener("dblclick", onDbl); cleanups.push(() => root.removeEventListener("dblclick", onDbl));
+    R.addEventListener("dblclick", onDbl); cleanups.push(() => R.removeEventListener("dblclick", onDbl));
 
     function loop() {
       if (tween) { tween.t = Math.min(1, tween.t + 0.05); const e = 1 - Math.pow(1 - tween.t, 3); cam.px = tween.px0 + (tween.px1 - tween.px0) * e; cam.py = tween.py0 + (tween.py1 - tween.py0) * e; cam.z = tween.z0 + (tween.z1 - tween.z0) * e; dirty = true; if (tween.t >= 1) tween = null; }
@@ -328,6 +372,15 @@ export function AtlasHome({
       if (particlesOn) {
         flowT = (flowT + 0.006) % 1;
         flows.forEach((f, i) => { const u = (flowT + i / flows.length) % 1; const p = pointAt(u); f.setAttribute("cx", p[0].toFixed(1)); f.setAttribute("cy", p[1].toFixed(1)); f.style.opacity = (0.9 * Math.sin(u * Math.PI)).toFixed(2); });
+      }
+      if (journey && driving && driveEl) {
+        driveT = Math.min(1, driveT + 0.0026);
+        const p = pointAt(driveT), p2 = pointAt(Math.min(1, driveT + 0.02));
+        driveEl.style.left = p[0].toFixed(1) + "px"; driveEl.style.top = p[1].toFixed(1) + "px";
+        if (driveArrow) { driveArrow.style.left = p[0].toFixed(1) + "px"; driveArrow.style.top = p[1].toFixed(1) + "px"; driveArrow.style.setProperty("--hd", (Math.atan2(p2[1] - p[1], p2[0] - p[0]) * 180 / Math.PI).toFixed(1) + "deg"); }
+        const pf = R.querySelector(".atl-progress-fill") as HTMLElement | null; if (pf) pf.style.width = (driveT * 100).toFixed(0) + "%";
+        const pp = R.querySelector(".atl-progress-pct") as HTMLElement | null; if (pp) pp.textContent = (driveT * 100).toFixed(0) + "%";
+        if (driveT >= 1) { driving = false; const lb = R.querySelector(".atl-progress-lbl") as HTMLElement | null; if (lb) lb.textContent = TXT[lang].arrived; }
       }
       if (dirty) { apply(); dirty = false; }
       raf = requestAnimationFrame(loop);
@@ -351,7 +404,7 @@ export function AtlasHome({
     const vwWorld = $(".atl-vw-world")!, vwMine = $(".atl-vw-mine")!;
     const setView = (v: "world" | "mine") => {
       view = v; vwWorld.classList.toggle("on", v === "world"); vwMine.classList.toggle("on", v === "mine");
-      root.classList.toggle("view-mine", v === "mine");
+      R.classList.toggle("view-mine", v === "mine");
       activeD = null; qEl.value = ""; clrEl.classList.remove("show"); updateVis();
       if (v === "mine") flyTo(0, -40, vw < 720 ? 0.55 : 0.72);
     };
@@ -434,9 +487,45 @@ export function AtlasHome({
       n.steps.forEach((st, i) => { const li = document.createElement("li"); li.setAttribute("data-n", String(i + 1)); const d = document.createElement("div"); d.className = "atl-stxt"; d.textContent = st[lang]; li.appendChild(d); ol.appendChild(li); });
       const cta = $(".atl-cta")!; cta.textContent = t.cta; cta.classList.remove("done"); (cta as HTMLButtonElement).dataset.intent = n[lang];
       ($(".atl-priv2")!).textContent = t.priv2;
+
+      // --- journey / navigation mode: clear the field, ONE drives the route ---
+      journey = true; R.classList.add("atl-journey");
+      if (driveEl) driveEl.remove(); if (driveArrow) driveArrow.remove();
+      driveArrow = document.createElement("div"); driveArrow.className = "atl-drive-arrow"; ground.appendChild(driveArrow);
+      driveEl = document.createElement("div"); driveEl.className = "atl-drive"; driveEl.innerHTML = FACE; ground.appendChild(driveEl);
+      driveT = 0; driving = !reduce && routePts.length > 1;
+      const start = routePts[0] || [o ? o.wx : dist.x!, o ? o.wy : dist.y!];
+      driveEl.style.left = start[0] + "px"; driveEl.style.top = start[1] + "px";
+      driveArrow.style.left = start[0] + "px"; driveArrow.style.top = start[1] + "px";
+      // "who can help" — the topic's business/pro ONEs, wired to the goal
+      clearProviders();
+      const provs = AGENTS.filter((ag) => ag.di === n.d).slice(0, 3);
+      const goal = routePts[routePts.length - 1] || start;
+      provs.forEach((ag, k) => {
+        const a2 = -0.5 + k * 0.5, rr = 210;
+        const px = goal[0] + Math.cos(a2) * rr, py = goal[1] + Math.sin(a2) * rr * 0.8;
+        providerEls.push(addAgent(ag, px, py, true));
+        const ln = document.createElementNS(SVGNS, "line"); ln.setAttribute("class", "atl-plink");
+        ln.setAttribute("x1", String(goal[0])); ln.setAttribute("y1", String(goal[1])); ln.setAttribute("x2", String(px)); ln.setAttribute("y2", String(py));
+        ln.style.stroke = dist.c; baseLinks.appendChild(ln); plinkEls.push(ln);
+      });
+      ($(".atl-provh")!).textContent = t.provH;
+      const pl = $(".atl-provlist")!; pl.innerHTML = "";
+      provs.forEach((ag) => { const c = document.createElement("span"); c.className = "atl-prov"; c.innerHTML = '<span class="atl-prov-em">' + ag.em + '</span>' + ag[lang]; pl.appendChild(c); });
+      (R.querySelector(".atl-providers") as HTMLElement).style.display = provs.length ? "" : "none";
+      ($(".atl-progress-lbl")!).textContent = driving ? t.journeying : t.arrived;
+      ($(".atl-progress-pct")!).textContent = driving ? "0%" : "100%";
+      (R.querySelector(".atl-progress-fill") as HTMLElement).style.width = driving ? "0%" : "100%";
+
       panel.classList.add("open"); panel.setAttribute("aria-hidden", "false");
     }
-    function closePanel() { panel.classList.remove("open"); panel.setAttribute("aria-hidden", "true"); selected = null; wordEls.forEach((o) => o.el.classList.remove("sel")); clearRoute(); }
+    function closePanel() {
+      panel.classList.remove("open"); panel.setAttribute("aria-hidden", "true"); selected = null;
+      wordEls.forEach((o) => o.el.classList.remove("sel")); clearRoute();
+      journey = false; driving = false; R.classList.remove("atl-journey");
+      if (driveEl) { driveEl.remove(); driveEl = null; } if (driveArrow) { driveArrow.remove(); driveArrow = null; }
+      clearProviders();
+    }
     ($(".atl-close")!).addEventListener("click", closePanel);
     const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") closePanel(); };
     document.addEventListener("keydown", onEsc); cleanups.push(() => document.removeEventListener("keydown", onEsc));
@@ -458,8 +547,8 @@ export function AtlasHome({
 
     // orb idle gaze
     if (!reduce) {
-      const eyeL = root.querySelector(".atl-eyeL") as SVGCircleElement;
-      const eyeR = root.querySelector(".atl-eyeR") as SVGCircleElement;
+      const eyeL = R.querySelector(".atl-eyeL") as SVGCircleElement;
+      const eyeR = R.querySelector(".atl-eyeR") as SVGCircleElement;
       let g = 0, l = 0, tg = 0, tl = 0, next = 0, mx: number | null = null, my: number | null = null, lastMove = 0;
       const mm = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; lastMove = performance.now(); };
       window.addEventListener("mousemove", mm, { passive: true }); cleanups.push(() => window.removeEventListener("mousemove", mm));
@@ -470,7 +559,7 @@ export function AtlasHome({
     }
 
     let rt: ReturnType<typeof setTimeout>;
-    const onResize = () => { clearTimeout(rt); rt = setTimeout(() => { vw = root.clientWidth; vh = root.clientHeight; dirty = true; }, 120); };
+    const onResize = () => { clearTimeout(rt); rt = setTimeout(() => { vw = R.clientWidth; vh = R.clientHeight; dirty = true; }, 120); };
     window.addEventListener("resize", onResize); cleanups.push(() => window.removeEventListener("resize", onResize));
 
     paintText(); buildTicker(); setView("world"); apply(); loop();
@@ -479,7 +568,7 @@ export function AtlasHome({
       cancelAnimationFrame(raf);
       cleanups.forEach((fn) => fn());
       // wipe the imperative DOM so a re-mount rebuilds cleanly
-      ground.querySelectorAll(".atl-blob,.atl-anchor,.atl-word,.atl-step").forEach((e) => e.remove());
+      ground.querySelectorAll(".atl-blob,.atl-anchor,.atl-word,.atl-step,.atl-agent,.atl-drive,.atl-drive-arrow").forEach((e) => e.remove());
       baseLinks.innerHTML = "";
     };
   }, [lang]);
@@ -537,6 +626,8 @@ export function AtlasHome({
         <div className="atl-nowrow"><span className="atl-now" /><span className="atl-nowlbl" /><span className="atl-trend" /></div>
         <div className="atl-stats"><div className="atl-stat"><div className="atl-v atl-done" /><div className="atl-k atl-donek" /></div><div className="atl-stat"><div className="atl-v atl-avg" /><div className="atl-k atl-avgk" /></div></div>
         <div className="atl-sec"><div className="atl-sech atl-pathh" /><ol className="atl-steps" /></div>
+        <div className="atl-sec atl-providers"><div className="atl-sech atl-provh" /><div className="atl-provlist" /></div>
+        <div className="atl-progress"><div className="atl-progress-top"><span className="atl-progress-lbl" /><span className="atl-progress-pct" /></div><div className="atl-progress-bar"><div className="atl-progress-fill" /></div></div>
         <button className="atl-cta" />
         <p className="atl-priv2" />
       </aside>
@@ -645,6 +736,32 @@ const ATLAS_CSS = `
 .atl-cta{ margin-top:22px; width:100%; height:50px; border:0; border-radius:999px; background:var(--a-ink); color:var(--a-bg); cursor:pointer; font:inherit; font-size:15px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:9px; transition:transform .15s,background .3s; }
 .atl-cta:hover{ transform:translateY(-2px); } .atl-cta.done{ background:var(--a-live); color:#fff; }
 .atl-priv2{ margin-top:14px; font-size:11px; line-height:1.45; color:var(--a-ink3); text-align:center; }
+/* other ONEs on the map (businesses / pros) */
+.atl-agent{ position:absolute; transform:translate(-50%,-50%) translateZ(30px) rotateX(-56deg); display:flex; flex-direction:column; align-items:center; gap:5px; pointer-events:none; transition:opacity .35s; }
+.atl-agent-face{ position:relative; width:34px; height:34px; display:block; filter:drop-shadow(0 6px 12px rgba(10,10,10,0.28)); }
+.atl-agent-em{ position:absolute; inset-inline-end:-6px; bottom:-4px; font-size:15px; line-height:1; }
+.atl-agent-lbl{ font-size:10.5px; font-weight:700; color:var(--a-ink2); white-space:nowrap; background:var(--a-card); border:1px solid var(--a-line); border-radius:999px; padding:2px 8px; box-shadow:var(--a-shadow); }
+.atl-app.view-mine .atl-agent{ opacity:0.14; }
+/* ONE driving the route like a Waze arrow */
+.atl-drive{ position:absolute; transform:translate(-50%,-50%) translateZ(64px) rotateX(-56deg); width:58px; height:58px; pointer-events:none; filter:drop-shadow(0 14px 26px rgba(10,10,10,0.36)); }
+.atl-drive-arrow{ position:absolute; transform:translate(-50%,-50%) rotate(calc(var(--hd,0deg) + 90deg)); width:0; height:0; pointer-events:none; border-left:15px solid transparent; border-right:15px solid transparent; border-bottom:26px solid var(--a-live); opacity:0.9; }
+.atl-plink{ stroke-width:3; fill:none; opacity:0.5; stroke-dasharray:4 9; }
+/* process profile — providers + progress in the card */
+.atl-providers{ display:none; margin-top:20px; }
+.atl-provlist{ display:flex; flex-wrap:wrap; gap:7px; }
+.atl-prov{ display:inline-flex; align-items:center; gap:6px; background:var(--a-line); border-radius:999px; padding:6px 12px; font-size:12.5px; font-weight:600; color:var(--a-ink); }
+.atl-prov-em{ font-size:14px; }
+.atl-progress{ display:none; margin-top:20px; }
+.atl-progress-top{ display:flex; justify-content:space-between; font-size:11.5px; font-weight:700; color:var(--a-ink3); margin-bottom:7px; }
+.atl-progress-bar{ height:7px; border-radius:999px; background:var(--a-line); overflow:hidden; }
+.atl-progress-fill{ height:100%; width:0; background:var(--a-live); border-radius:999px; transition:width .3s linear; }
+/* journey mode: clear the field, drop the input, expand the card */
+.atl-app.atl-journey .atl-providers, .atl-app.atl-journey .atl-progress{ display:block; }
+.atl-app.atl-journey .atl-orb{ display:none; }
+.atl-app.atl-journey .atl-core{ top:auto; bottom:22px; gap:0; }
+.atl-app.atl-journey .atl-ticker, .atl-app.atl-journey .atl-view, .atl-app.atl-journey .atl-time{ opacity:0; pointer-events:none; }
+.atl-app.atl-journey .atl-word:not(.sel), .atl-app.atl-journey .atl-anchor, .atl-app.atl-journey .atl-agent:not(.provider), .atl-app.atl-journey .atl-xlink, .atl-app.atl-journey .atl-link, .atl-app.atl-journey .atl-blob{ opacity:0 !important; pointer-events:none; }
+.atl-app.atl-journey .atl-panel{ top:18px; max-height:calc(100dvh - 40px); }
 @media (max-width:860px){ .atl-ticker{ display:none; } }
 @media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-core{ top:42%; } .atl-time-range{ width:120px; } .atl-panel{ inset-inline:12px; inset-inline-end:12px; width:auto; top:auto; bottom:12px; max-height:58dvh; } }
 @media (prefers-reduced-motion: reduce){ .atl-float,.atl-blink,.atl-track,.atl-route.on{ animation:none; } }
