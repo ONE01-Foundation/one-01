@@ -126,6 +126,21 @@ const AGENTS: Agent[] = [
 // The ONE face, reused for the driving navigator and the agent markers.
 const FACE = '<svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true"><circle cx="50" cy="50" r="50" fill="var(--a-orb)"/><circle cx="36" cy="46" r="9" fill="var(--a-orbeye)"/><circle cx="64" cy="46" r="9" fill="var(--a-orbeye)"/></svg>';
 
+// What a specific want actually involves — the sub-needs & providers that
+// appear around it (wedding → photographer, dress, venue…). Wants without an
+// entry fall back to their topic's ambient ONEs.
+type Need = { em: string; en: string; he: string };
+const NEEDS: Record<string, Need[]> = {
+  "Plan a wedding": [{ em: "📸", en: "Photographer", he: "צלם" }, { em: "👰", en: "Dress", he: "שמלת כלה" }, { em: "🏛️", en: "Venue", he: "אולם" }, { em: "🍽️", en: "Catering", he: "קייטרינג" }, { em: "🎵", en: "Band", he: "הרכב" }],
+  "Move apartment": [{ em: "📦", en: "Movers", he: "מובילים" }, { em: "🧹", en: "Cleaning", he: "ניקיון" }, { em: "🔧", en: "Handyman", he: "הנדימן" }, { em: "🏦", en: "Address change", he: "שינוי כתובת" }],
+  "Plan a trip": [{ em: "✈️", en: "Flights", he: "טיסות" }, { em: "🏨", en: "Stays", he: "לינה" }, { em: "🚗", en: "Car", he: "רכב" }, { em: "🗺️", en: "Route", he: "מסלול" }],
+  "Find a job": [{ em: "📄", en: "CV", he: "קו״ח" }, { em: "🔎", en: "Openings", he: "משרות" }, { em: "🎤", en: "Interviews", he: "ראיונות" }, { em: "💬", en: "Negotiation", he: "מו״מ" }],
+  "Find a therapist": [{ em: "🧠", en: "Therapist", he: "מטפל" }, { em: "📋", en: "Intake", he: "אינטייק" }, { em: "🗓️", en: "Sessions", he: "פגישות" }],
+  "Renovate": [{ em: "👷", en: "Contractor", he: "קבלן" }, { em: "🎨", en: "Design", he: "עיצוב" }, { em: "🚪", en: "Materials", he: "חומרים" }, { em: "🧾", en: "Permits", he: "היתרים" }],
+  "Plan a birthday": [{ em: "🎂", en: "Cake", he: "עוגה" }, { em: "📍", en: "Venue", he: "מקום" }, { em: "✉️", en: "Invites", he: "הזמנות" }, { em: "🎈", en: "Decor", he: "קישוטים" }],
+  "Refinance the mortgage": [{ em: "🏦", en: "Banks", he: "בנקים" }, { em: "📊", en: "Rates", he: "ריביות" }, { em: "🧾", en: "Paperwork", he: "מסמכים" }],
+};
+
 const TXT = {
   en: { live: "now", priv: "Anonymous · aggregated", ph: "What do you need?", clr: "Clear",
     hint: "Drag to explore · scroll to zoom · click a want to grow its path",
@@ -135,7 +150,7 @@ const TXT = {
     world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress",
     provH: "Who can help", journeying: "ONE is on the way", arrived: "Arrived",
     stepsH: "The path others took", stepsHgo: "Your steps with ONE", cont: "Continue", stepPh: "reply, or just continue…", allDone: "Done — it's in motion", openIn: "Open in ONE", startJ: "Start this with your ONE",
-    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxTop: "Busiest right now", idxEnter: "Explore this world", mineEmpty: "Your space — the processes you start live here." },
+    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", mineEmpty: "Your space — the processes you start live here." },
   he: { live: "עכשיו", priv: "אנונימי · מצטבר", ph: "מה אתה צריך?", clr: "נקה",
     hint: "גררו כדי לנוע · גלגלו כדי לזום · לחצו על רצון כדי לפרוש את המסלול",
     nowLbl: "וואנים על זה עכשיו", pathH: "המסלול שאחרים עברו", doneK: "הושלמו השבוע", avgK: "זמן ממוצע",
@@ -144,7 +159,7 @@ const TXT = {
     world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך",
     provH: "מי יכול לעזור", journeying: "ה‑ONE בדרך", arrived: "הגעת",
     stepsH: "המסלול שאחרים עברו", stepsHgo: "הצעדים שלך עם ONE", cont: "המשך", stepPh: "תשובה, או פשוט המשך…", allDone: "בוצע — זה בתנועה", openIn: "פתח ב‑ONE", startJ: "התחל את זה עם ה‑ONE שלך",
-    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
+    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
 };
 
 export function AtlasHome({
@@ -200,7 +215,7 @@ export function AtlasHome({
     let journey = false, curStep = 0;
     let drivePos: number[] = [0, 0]; let driveTarget: number[] | null = null;
     let driveEl: HTMLDivElement | null = null, driveArrow: HTMLDivElement | null = null;
-    let cur: { id: number; n: Intent; dist: District; provs: Agent[]; goal: number[] } | null = null;
+    let cur: { id: number; n: Intent; dist: District; needs: Need[]; goal: number[] } | null = null;
     const agentEls: { el: HTMLElement; di: number }[] = [];
     const providerEls: HTMLElement[] = [];
     const plinkEls: SVGLineElement[] = [];
@@ -436,7 +451,7 @@ export function AtlasHome({
     // time-of-day scrubber — the field breathes as you move it
     const timeRange = $(".atl-time-range") as HTMLInputElement;
     const timeIco = $(".atl-time-ico")!, timeLbl = $(".atl-time-lbl")!;
-    const setHour = (h: number) => { hour = h; timeIco.textContent = hourIcon(h); timeLbl.textContent = (h < 10 ? "0" + h : String(h)) + ":00"; refreshCounts(); };
+    const setHour = (h: number) => { hour = h; timeIco.textContent = hourIcon(h); timeLbl.textContent = (h < 10 ? "0" + h : String(h)) + ":00"; R.classList.toggle("atl-night", h < 6 || h >= 19); refreshCounts(); };
     timeRange.value = String(hour);
     timeRange.addEventListener("input", () => setHour(+timeRange.value));
     setHour(hour);
@@ -504,8 +519,20 @@ export function AtlasHome({
       if (driveEl) { driveEl.remove(); driveEl = null; } if (driveArrow) { driveArrow.remove(); driveArrow = null; }
       clearProviders(); clearRoute();
       const o = wordOf(id);
-      cur = { id, n, dist, provs: AGENTS.filter((ag) => ag.di === n.d).slice(0, 3), goal: [o ? o.wx : dist.x!, o ? o.wy : dist.y!] };
+      const wx0 = o ? o.wx : dist.x!, wy0 = o ? o.wy : dist.y!;
+      const needs = NEEDS[n.en] || AGENTS.filter((ag) => ag.di === n.d).slice(0, 3).map((ag) => ({ em: ag.em, en: ag.en, he: ag.he }));
+      cur = { id, n, dist, needs, goal: [wx0, wy0] };
       curStep = 0;
+      // the want's specific needs appear around it (photographer, dress, venue…),
+      // wired to it — added on click, cleared when you switch or close.
+      needs.forEach((nd, k) => {
+        const ang = (k / Math.max(1, needs.length)) * Math.PI * 2 + 0.4;
+        const px = wx0 + Math.cos(ang) * 240, py = wy0 + Math.sin(ang) * 240 * 0.8;
+        providerEls.push(addAgent({ di: n.d, em: nd.em, en: nd.en, he: nd.he }, px, py, true));
+        const ln = document.createElementNS(SVGNS, "line"); ln.setAttribute("class", "atl-plink");
+        ln.setAttribute("x1", String(wx0)); ln.setAttribute("y1", String(wy0)); ln.setAttribute("x2", String(px)); ln.setAttribute("y2", String(py));
+        ln.style.stroke = dist.c; baseLinks.appendChild(ln); plinkEls.push(ln);
+      });
       if (o) flyTo(-(o.wx - CX) + (lang === "he" ? -260 : 260), -(o.wy - CY) - 120, Math.max(cam.z, 1.05));
       (panel.querySelector(".atl-tag") as HTMLElement).style.setProperty("--dc", dist.c);
       ($(".atl-em")!).textContent = dist.em;
@@ -520,10 +547,10 @@ export function AtlasHome({
       ($(".atl-avgk")!).textContent = t.avgK;
       ($(".atl-pathh")!).textContent = t.stepsH;
       renderSteps();
-      ($(".atl-provh")!).textContent = t.provH;
+      ($(".atl-provh")!).textContent = t.needsH;
       const pl = $(".atl-provlist")!; pl.innerHTML = "";
-      cur.provs.forEach((ag) => { const c = document.createElement("span"); c.className = "atl-prov"; c.innerHTML = '<span class="atl-prov-em">' + ag.em + '</span>' + ag[lang]; pl.appendChild(c); });
-      (R.querySelector(".atl-providers") as HTMLElement).style.display = cur.provs.length ? "" : "none";
+      needs.forEach((nd) => { const c = document.createElement("span"); c.className = "atl-prov"; c.innerHTML = '<span class="atl-prov-em">' + nd.em + '</span>' + nd[lang]; pl.appendChild(c); });
+      (R.querySelector(".atl-providers") as HTMLElement).style.display = needs.length ? "" : "none";
       const cta = $(".atl-cta")!; cta.textContent = t.startJ; cta.classList.remove("done");
       ($(".atl-priv2")!).textContent = t.priv2;
       panel.classList.add("open"); panel.setAttribute("aria-hidden", "false");
@@ -575,15 +602,8 @@ export function AtlasHome({
       drivePos = startPt.slice(); driveTarget = startPt.slice();
       driveEl.style.left = startPt[0] + "px"; driveEl.style.top = startPt[1] + "px";
       driveArrow.style.left = startPt[0] + "px"; driveArrow.style.top = startPt[1] + "px";
-      clearProviders();
-      cur.provs.forEach((ag, k) => {
-        const a2 = -0.5 + k * 0.5, rr = 210;
-        const px = cur!.goal[0] + Math.cos(a2) * rr, py = cur!.goal[1] + Math.sin(a2) * rr * 0.8;
-        providerEls.push(addAgent(ag, px, py, true));
-        const ln = document.createElementNS(SVGNS, "line"); ln.setAttribute("class", "atl-plink");
-        ln.setAttribute("x1", String(cur!.goal[0])); ln.setAttribute("y1", String(cur!.goal[1])); ln.setAttribute("x2", String(px)); ln.setAttribute("y2", String(py));
-        ln.style.stroke = dist.c; baseLinks.appendChild(ln); plinkEls.push(ln);
-      });
+      // (the need markers already surround the want from the preview)
+      void dist;
       ($(".atl-pathh")!).textContent = TXT[lang].stepsHgo;
       curStep = 0; renderSteps(); setProgress();
       const cta = $(".atl-cta")!; cta.textContent = TXT[lang].openIn; cta.classList.remove("done");
@@ -751,16 +771,20 @@ export function AtlasHome({
 
 const ATLAS_CSS = `
 .atl-app{ position:fixed; inset:0; z-index:60; overflow:hidden; cursor:grab; touch-action:none;
-  perspective:1200px; perspective-origin:50% 36%; background:var(--bg,#f5f4f0);
+  perspective:1200px; perspective-origin:50% 36%; background:var(--a-bg);
   user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
-  --a-bg:var(--bg,#f5f4f0); --a-card:var(--bg-card,#fff); --a-ink:var(--text,#0a0a0a);
-  --a-ink2:var(--text-2,#5b5850); --a-ink3:var(--text-3,#938f85); --a-line:var(--line,rgba(10,10,10,0.1));
-  --a-line2:color-mix(in srgb, var(--text,#0a0a0a) 6%, transparent); --a-live:#10b981;
+  /* Day palette (the map has its OWN day/night driven by the time scrubber,
+     independent of the app theme). */
+  --a-bg:#f5f4f0; --a-card:#ffffff; --a-ink:#0a0a0a; --a-ink2:#5b5850; --a-ink3:#938f85;
+  --a-line:rgba(10,10,10,0.10); --a-line2:rgba(10,10,10,0.06); --a-live:#10b981;
   --a-orb:#0a0a0a; --a-orbeye:#f5f4f0;
   --a-shadow:0 10px 30px rgba(0,0,0,0.14); --a-shadowlift:0 22px 56px rgba(0,0,0,0.22);
-  font-family:inherit; }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .atl-app{ --a-orb:#f4f2ec; --a-orbeye:#121212; --a-shadow:0 10px 30px rgba(0,0,0,0.5); --a-shadowlift:0 22px 56px rgba(0,0,0,0.6); } }
-:root[data-theme="dark"] .atl-app{ --a-orb:#f4f2ec; --a-orbeye:#121212; --a-shadow:0 10px 30px rgba(0,0,0,0.5); --a-shadowlift:0 22px 56px rgba(0,0,0,0.6); }
+  font-family:inherit; transition:background-color .9s ease; }
+/* Night — deep blue, like a map after dark. */
+.atl-app.atl-night{ --a-bg:#111722; --a-card:#1a2130; --a-ink:#eef2f8; --a-ink2:#aab4c4; --a-ink3:#6b7688;
+  --a-line:rgba(255,255,255,0.13); --a-line2:color-mix(in srgb,#ffffff 7%,transparent); --a-live:#34d399;
+  --a-orb:#eef2f8; --a-orbeye:#111722; --a-shadow:0 10px 30px rgba(0,0,0,0.5); --a-shadowlift:0 22px 56px rgba(0,0,0,0.62); }
+.atl-search, .atl-panel, .atl-time, .atl-view, .atl-agent-lbl, .atl-prov, .atl-clr{ transition:background-color .9s ease, color .9s ease, border-color .9s ease; }
 .atl-app.drag{ cursor:grabbing; }
 .atl-ground{ position:absolute; left:50%; top:50%; width:7000px; height:5000px; transform-origin:50% 50%; transform-style:preserve-3d; will-change:transform; }
 .atl-grid{ position:absolute; inset:0; background:
