@@ -86,17 +86,22 @@ const XLINKS: [string, string][] = [
   ["Register a business", "Build a budget"], ["Refinance the mortgage", "Compare insurance"],
 ];
 
+// The current user's own live intentions (simulated here) — surfaced in "Mine".
+const MINE = new Set(["Move apartment", "Find a job", "Plan a trip", "Fix my sleep"]);
+
 const TXT = {
   en: { live: "now", priv: "Anonymous · aggregated", ph: "What do you need?", clr: "Clear",
     hint: "Drag to explore · scroll to zoom · click a want to grow its path",
     nowLbl: "ONEs on this now", pathH: "The path others took", doneK: "finished this week", avgK: "avg. time",
     days: "days", cta: "Start this with your ONE", matches: (n: number) => n + (n === 1 ? " match" : " matches"),
-    nomatch: "Nothing here — try another word.", priv2: "Every figure is an anonymous aggregate — never a person." },
+    nomatch: "Nothing here — try another word.", priv2: "Every figure is an anonymous aggregate — never a person.",
+    world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress" },
   he: { live: "עכשיו", priv: "אנונימי · מצטבר", ph: "מה אתה צריך?", clr: "נקה",
     hint: "גררו כדי לנוע · גלגלו כדי לזום · לחצו על רצון כדי לפרוש את המסלול",
     nowLbl: "וואנים על זה עכשיו", pathH: "המסלול שאחרים עברו", doneK: "הושלמו השבוע", avgK: "זמן ממוצע",
     days: "ימים", cta: "התחל את זה עם ה‑ONE שלך", matches: (n: number) => n + " תוצאות",
-    nomatch: "אין תוצאה — נסו מילה אחרת.", priv2: "כל מספר הוא מצבר אנונימי — לעולם לא אדם." },
+    nomatch: "אין תוצאה — נסו מילה אחרת.", priv2: "כל מספר הוא מצבר אנונימי — לעולם לא אדם.",
+    world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך" },
 };
 
 export function AtlasHome({
@@ -140,6 +145,7 @@ export function AtlasHome({
     let rotTarget = 0, lastZ = -1, dirty = true;
     let tween: { px0: number; py0: number; z0: number; px1: number; py1: number; z1: number; t: number } | null = null;
     let selected: number | null = null, activeD: number | null = null;
+    let view: "world" | "mine" = "world";
     let raf = 0;
     const cleanups: (() => void)[] = [];
 
@@ -214,9 +220,23 @@ export function AtlasHome({
       });
     }
 
-    // ---- expanding route ----
+    // ---- expanding route + flowing particles ----
     let stepEls: HTMLElement[] = [];
-    function clearRoute() { stepEls.forEach((e) => e.remove()); stepEls = []; routePath.classList.remove("on"); routePath.removeAttribute("d"); }
+    let routePts: number[][] = [], routeSeg: number[] = [], routeTotal = 0, flowT = 0, particlesOn = false;
+    const flows = Array.from(root.querySelectorAll(".atl-flow")) as unknown as SVGCircleElement[];
+    const pointAt = (u: number): number[] => {
+      if (routePts.length < 2) return routePts[0] || [0, 0];
+      let d = u * routeTotal;
+      for (let i = 0; i < routeSeg.length; i++) {
+        if (d <= routeSeg[i] || i === routeSeg.length - 1) {
+          const f = routeSeg[i] ? d / routeSeg[i] : 0;
+          return [routePts[i][0] + (routePts[i + 1][0] - routePts[i][0]) * f, routePts[i][1] + (routePts[i + 1][1] - routePts[i][1]) * f];
+        }
+        d -= routeSeg[i];
+      }
+      return routePts[routePts.length - 1];
+    };
+    function clearRoute() { stepEls.forEach((e) => e.remove()); stepEls = []; routePath.classList.remove("on"); routePath.removeAttribute("d"); particlesOn = false; flows.forEach((f) => (f.style.opacity = "0")); }
     function growRoute(id: number) {
       clearRoute();
       const o = wordOf(id); if (!o) return; const n = o.n, dist = D[n.d];
@@ -233,6 +253,11 @@ export function AtlasHome({
       }
       routePath.setAttribute("d", "M " + pts.map((p) => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L "));
       routePath.style.stroke = dist.c; routePath.classList.add("on");
+      // particle track (arc-length along the polyline) — dots stream to the goal
+      routePts = pts; routeSeg = []; routeTotal = 0;
+      for (let i = 1; i < pts.length; i++) { const s = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); routeSeg.push(s); routeTotal += s; }
+      flows.forEach((f) => f.setAttribute("fill", dist.c));
+      flowT = 0; particlesOn = !reduce;
       requestAnimationFrame(() => stepEls.forEach((e, i) => setTimeout(() => e.classList.add("on"), 90 * i)));
     }
 
@@ -273,6 +298,10 @@ export function AtlasHome({
     function loop() {
       if (tween) { tween.t = Math.min(1, tween.t + 0.05); const e = 1 - Math.pow(1 - tween.t, 3); cam.px = tween.px0 + (tween.px1 - tween.px0) * e; cam.py = tween.py0 + (tween.py1 - tween.py0) * e; cam.z = tween.z0 + (tween.z1 - tween.z0) * e; dirty = true; if (tween.t >= 1) tween = null; }
       rotTarget *= 0.9; if (Math.abs(cam.rot - rotTarget) > 0.02) { cam.rot += (rotTarget - cam.rot) * 0.12; dirty = true; }
+      if (particlesOn) {
+        flowT = (flowT + 0.006) % 1;
+        flows.forEach((f, i) => { const u = (flowT + i / flows.length) % 1; const p = pointAt(u); f.setAttribute("cx", p[0].toFixed(1)); f.setAttribute("cy", p[1].toFixed(1)); f.style.opacity = (0.9 * Math.sin(u * Math.PI)).toFixed(2); });
+      }
       if (dirty) { apply(); dirty = false; }
       raf = requestAnimationFrame(loop);
     }
@@ -282,13 +311,25 @@ export function AtlasHome({
       const q = qEl.value.trim().toLowerCase(), thr = lodThreshold(); let matches = 0;
       wordEls.forEach((o) => {
         let dim = false, hide = false;
+        const isMine = MINE.has(o.n.en);
         if (q) { const m = o.n.en.toLowerCase().includes(q) || o.n.he.includes(q) || D[o.di].en.toLowerCase().includes(q) || D[o.di].he.includes(q); dim = !m; if (m) matches++; }
+        else if (view === "mine") { dim = !isMine; }
         else if (activeD !== null) { dim = o.di !== activeD; } else { hide = o.n.count < thr; }
         o.el.classList.toggle("dim", dim); o.el.classList.toggle("lod", hide);
+        o.el.classList.toggle("mine", isMine && view === "mine" && !q);
       });
-      anchorEls.forEach((a, di) => a.classList.toggle("dim", q ? true : activeD !== null && activeD !== di));
-      matchEl.textContent = q ? (matches ? TXT[lang].matches(matches) : TXT[lang].nomatch) : "";
+      anchorEls.forEach((a, di) => a.classList.toggle("dim", q || view === "mine" ? true : activeD !== null && activeD !== di));
+      matchEl.textContent = q ? (matches ? TXT[lang].matches(matches) : TXT[lang].nomatch) : (view === "mine" ? TXT[lang].inProgress(MINE.size) : "");
     }
+    const vwWorld = $(".atl-vw-world")!, vwMine = $(".atl-vw-mine")!;
+    const setView = (v: "world" | "mine") => {
+      view = v; vwWorld.classList.toggle("on", v === "world"); vwMine.classList.toggle("on", v === "mine");
+      root.classList.toggle("view-mine", v === "mine");
+      activeD = null; qEl.value = ""; clrEl.classList.remove("show"); updateVis();
+      if (v === "mine") flyTo(0, -40, vw < 720 ? 0.55 : 0.72);
+    };
+    vwWorld.addEventListener("click", () => setView("world"));
+    vwMine.addEventListener("click", () => setView("mine"));
     const onInput = () => { clrEl.classList.toggle("show", !!qEl.value.trim()); if (qEl.value.trim()) activeD = null; updateVis(); };
     qEl.addEventListener("input", onInput);
     const onKey = (e: KeyboardEvent) => {
@@ -367,7 +408,7 @@ export function AtlasHome({
     const onResize = () => { clearTimeout(rt); rt = setTimeout(() => { vw = root.clientWidth; vh = root.clientHeight; dirty = true; }, 120); };
     window.addEventListener("resize", onResize); cleanups.push(() => window.removeEventListener("resize", onResize));
 
-    paintText(); buildTicker(); updateVis(); apply(); loop();
+    paintText(); buildTicker(); setView("world"); apply(); loop();
 
     return () => {
       cancelAnimationFrame(raf);
@@ -385,12 +426,20 @@ export function AtlasHome({
         <svg className="atl-links" width={7000} height={5000} viewBox="0 0 7000 5000" aria-hidden="true">
           <g className="atl-baselinks" />
           <path className="atl-route" />
+          <circle className="atl-flow" r={5} />
+          <circle className="atl-flow" r={5} />
+          <circle className="atl-flow" r={5} />
         </svg>
       </div>
       <div className="atl-horizon" aria-hidden="true" />
       <div className="atl-floor" aria-hidden="true" />
 
       <div className="atl-ticker" aria-hidden="true"><div className="atl-track" /></div>
+
+      <div className="atl-view" role="group" aria-label="View">
+        <button className="atl-vw atl-vw-world">{TXT[lang].world}</button>
+        <button className="atl-vw atl-vw-mine">{TXT[lang].mine}</button>
+      </div>
 
       <div className="atl-core">
         <button className="atl-orb" aria-label="ONE">
@@ -433,9 +482,11 @@ const ATLAS_CSS = `
   --a-bg:var(--bg,#f5f4f0); --a-card:var(--bg-card,#fff); --a-ink:var(--text,#0a0a0a);
   --a-ink2:var(--text-2,#5b5850); --a-ink3:var(--text-3,#938f85); --a-line:var(--line,rgba(10,10,10,0.1));
   --a-line2:color-mix(in srgb, var(--text,#0a0a0a) 6%, transparent); --a-live:#10b981;
-  --a-orb:var(--orb,var(--accent,#0a0a0a)); --a-orbeye:var(--orb-eye,var(--bg,#f5f4f0));
+  --a-orb:#0a0a0a; --a-orbeye:#f5f4f0;
   --a-shadow:0 10px 30px rgba(0,0,0,0.14); --a-shadowlift:0 22px 56px rgba(0,0,0,0.22);
   font-family:inherit; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .atl-app{ --a-orb:#f4f2ec; --a-orbeye:#121212; --a-shadow:0 10px 30px rgba(0,0,0,0.5); --a-shadowlift:0 22px 56px rgba(0,0,0,0.6); } }
+:root[data-theme="dark"] .atl-app{ --a-orb:#f4f2ec; --a-orbeye:#121212; --a-shadow:0 10px 30px rgba(0,0,0,0.5); --a-shadowlift:0 22px 56px rgba(0,0,0,0.6); }
 .atl-app.drag{ cursor:grabbing; }
 .atl-ground{ position:absolute; left:50%; top:50%; width:7000px; height:5000px; transform-origin:50% 50%; transform-style:preserve-3d; will-change:transform; }
 .atl-grid{ position:absolute; inset:0; background:
@@ -449,6 +500,10 @@ const ATLAS_CSS = `
 .atl-route{ fill:none; stroke-width:5; stroke-linecap:round; stroke-linejoin:round; opacity:0; transition:opacity .4s; }
 .atl-route.on{ opacity:0.9; stroke-dasharray:2 14; animation:atlDash 1.1s linear infinite; }
 @keyframes atlDash{ to{ stroke-dashoffset:-16; } }
+.atl-flow{ opacity:0; }
+.atl-view{ position:absolute; z-index:28; top:58px; left:50%; transform:translateX(-50%); display:inline-flex; background:var(--a-card); border:1px solid var(--a-line); border-radius:999px; box-shadow:var(--a-shadow); overflow:hidden; }
+.atl-vw{ border:0; background:none; cursor:pointer; font:inherit; font-size:12.5px; font-weight:700; letter-spacing:0.02em; color:var(--a-ink3); padding:7px 16px; }
+.atl-vw.on{ background:var(--a-ink); color:var(--a-bg); }
 .atl-anchor{ position:absolute; transform:translate(-50%,-50%) translateZ(46px) rotateX(-56deg); display:flex; flex-direction:column; align-items:center; gap:6px; background:none; border:0; cursor:pointer; padding:6px; transition:opacity .35s; }
 .atl-emoji{ font-size:46px; line-height:1; filter:drop-shadow(0 12px 16px rgba(10,10,10,0.30)); }
 .atl-alabel{ font-size:12px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:var(--a-ink2); white-space:nowrap; }
@@ -462,6 +517,8 @@ const ATLAS_CSS = `
 .atl-word:focus-visible{ outline:none; } .atl-word:hover .atl-count, .atl-word.sel .atl-count{ opacity:1; }
 .atl-word.dim{ opacity:0.1; } .atl-word.lod{ opacity:0; pointer-events:none; }
 .atl-word.sel .atl-inner{ font-weight:800; text-decoration:underline; text-underline-offset:6px; text-decoration-thickness:3px; text-decoration-color:var(--dc); }
+.atl-word.mine .atl-inner{ text-decoration:underline; text-decoration-color:var(--a-live); text-underline-offset:5px; text-decoration-thickness:2px; }
+.atl-word.mine .atl-inner::before{ content:"\\25CF  "; color:var(--a-live); font-size:0.6em; vertical-align:middle; }
 @keyframes atlFloat{ 0%,100%{ transform:translateY(-4px);} 50%{ transform:translateY(4px);} }
 .atl-step{ position:absolute; transform:translate(-50%,-50%) translateZ(40px) rotateX(-56deg) scale(.7); opacity:0; transition:opacity .35s, transform .35s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
 .atl-step.on{ opacity:1; transform:translate(-50%,-50%) translateZ(40px) rotateX(-56deg) scale(1); }
