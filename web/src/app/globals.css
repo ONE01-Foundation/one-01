@@ -684,21 +684,11 @@ button {
   opacity: 1;
   transform: translateY(0);
 }
-/* Soft fade below the bar — content dissolves as it passes under the nav (like
-   the news cards' edge-fade) instead of being sliced by a hard edge. The link
-   row above stays crisp on the solid colour. */
-.nav::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  height: 52px;
-  background: linear-gradient(var(--bg), transparent);
-  pointer-events: none;
-}
+/* No fade below the bar — a clean sharp edge where the solid nav colour meets
+   the content (and, at the bottom, the dark footer): the colour break is the
+   only edge, so the cream never smudges over the black footer. */
 /* The docs pages (About / Support / Legal) wear the SAME menu as home — same
-   frame, gradient, wordmark, borderless links, outline CTA. Three differences,
+   frame, wordmark, borderless links, outline CTA. Three differences,
    because there's no hero here to float over: it rides with the page (sticky),
    it's always visible (no scroll-reveal to wait for), and it reserves only its
    own bar height, so the docs layout below it is untouched. */
@@ -2721,10 +2711,12 @@ footer {
   transform: translateY(-4px) scale(1.02);
   z-index: 2;
 }
-/* Free stays flat — it grows on hover but never lifts a shadow. */
+/* Free stays flat and still — the entry tier neither lifts a shadow nor grows
+   on hover; only the paid tiers respond. */
 .plan-plain:hover,
 .plan-plain:focus-within {
   box-shadow: none;
+  transform: none;
 }
 /* Every feature shows at once (no scroll). The CTA is pinned to the card base
    (.plan .btn margin-top:auto), so the taller Plus/Pro columns keep their
@@ -2740,8 +2732,18 @@ footer {
     transition: none;
   }
 }
+/* Pro is the emphasized tier — Free and Plus share one size, and only Pro steps
+   up, a subtle ~4% larger so it reads as "the bigger plan" without a staircase. */
 .plan-featured {
   box-shadow: 0 18px 48px rgba(10, 10, 10, 0.13);
+  transform: scale(1.04);
+  z-index: 1;
+}
+/* Keep Pro larger than its neighbours while it lifts on hover (the generic
+   .plan:hover would otherwise shrink it back toward the others). */
+.plan-featured:hover,
+.plan-featured:focus-within {
+  transform: translateY(-4px) scale(1.06);
 }
 /* Free reads as the entry tier — the same white card as the rest, but flat:
    no shadow, so the paid tiers lift above it. */

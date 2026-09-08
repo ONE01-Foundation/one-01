@@ -362,7 +362,6 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         { key: "business", icon: "fi-rr-shop", title: "Businesses get a ONE of their own." },
         { key: "templates", icon: "fi-rr-layers", title: "Knows the domain — fills the process in upfront.", span: "wide" },
         { key: "custom", icon: "fi-rr-settings-sliders", title: "A ONE tailored to how you work." },
-        { key: "identities", icon: "fi-rr-users", title: "One ONE, separate profiles for life and work." },
       ],
     },
     faq: {
@@ -676,7 +675,6 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
         { key: "business", icon: "fi-rr-shop", title: "גם לעסק יש ONE משלו." },
         { key: "templates", icon: "fi-rr-layers", title: "מכיר את התחום — וממלא את התהליך מראש.", span: "wide" },
         { key: "custom", icon: "fi-rr-settings-sliders", title: "ONE שמותאם לאיך שאתם עובדים." },
-        { key: "identities", icon: "fi-rr-users", title: "וואן אחד, פרופילים נפרדים לחיים ולעבודה." },
       ],
     },
     faq: {
