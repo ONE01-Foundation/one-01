@@ -265,7 +265,7 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
     },
     pricing: {
       eyebrow: "Plans",
-      h2Rest: "grows with you.",
+      h2Rest: "Grows with you.",
       perForever: " / forever",
       perMonth: " / month",
       plans: [

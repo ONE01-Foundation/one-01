@@ -143,7 +143,7 @@ html {
    the browser clamps the negative value to 0). The arrival hint lives on the
    inner svg instead, so the two never fight over `opacity`. */
 .lhero-chev.down {
-  bottom: 172px;
+  bottom: 216px;
   cursor: pointer;
   opacity: calc(1 - var(--p, 0) * 1.8);
 }

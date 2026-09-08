@@ -530,6 +530,30 @@ function LivingFigure() {
       ? { x: hero0.left + hero0.width / 2, y: hero0.top + hero0.height / 2, s: 84 / BASE, o: 1 }
       : { x: window.innerWidth / 2, y: window.innerHeight * 0.4, s: 1, o: 1 };
     const eye = { g: 0, l: 0 };
+    // Autonomous idle gaze: when the cursor is quiet the figure looks around on
+    // its own — glancing to a side, sometimes back to centre, holding each look
+    // a beat — so it reads as alive and a little wilful rather than a mirror of
+    // the pointer. Fresh random spots each time give it a sense of choice.
+    let idleG = 0;
+    let idleL = 0;
+    let nextGlance = 0;
+    const pickGlance = (now: number) => {
+      const r = Math.random();
+      if (r < 0.3) {
+        // Settle back toward centre (a small vertical drift keeps it breathing).
+        idleG = 0;
+        idleL = (Math.random() - 0.5) * 0.24;
+      } else {
+        // Look off to one side — usually a gentle glance, occasionally a wider one.
+        const dir = Math.random() < 0.5 ? -1 : 1;
+        const wide = Math.random() < 0.22;
+        idleG = dir * (wide ? 0.78 + Math.random() * 0.18 : 0.3 + Math.random() * 0.34);
+        idleL = (Math.random() - 0.5) * 0.4;
+      }
+      // Hold this look for a beat before the next glance (varied, so it never
+      // feels metronomic).
+      nextGlance = now + 850 + Math.random() * 1850;
+    };
     let mx = window.innerWidth / 2;
     let my = pos.y;
     let lastMove = performance.now();
@@ -664,12 +688,19 @@ function LivingFigure() {
       el.style.transform = `translate(${pos.x - BASE / 2}px, ${pos.y - BASE / 2}px) scale(${pos.s})`;
       el.style.opacity = pos.o.toFixed(3);
 
-      // Eyes follow the cursor; after a still moment they ease back to centre.
+      // Eyes follow the cursor; once it goes quiet the figure looks around on
+      // its own (see pickGlance) instead of staring straight ahead.
+      const now = performance.now();
       let tg = 0;
       let tl = 0;
-      if (performance.now() - lastMove < 2600) {
+      if (now - lastMove < 2200) {
         tg = clamp((mx - pos.x) / 260);
         tl = clamp((my - pos.y) / 240);
+        nextGlance = 0; // re-roll a fresh glance the moment it next goes idle
+      } else {
+        if (now >= nextGlance) pickGlance(now);
+        tg = idleG;
+        tl = idleL;
       }
       eye.g += (tg - eye.g) * 0.12;
       eye.l += (tl - eye.l) * 0.12;
