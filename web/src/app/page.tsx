@@ -9,16 +9,8 @@ import { Sheet } from "@/components/product/Sheet";
 import { QRCodeSVG } from "qrcode.react";
 import { signInWithEmail, signInWithGoogle } from "@/lib/cloud";
 import { LANDING_COPY, type Lang, type LandingCopy } from "@/lib/landingCopy";
-// DEMO — "Your data, live". Delete this import with the section.
-import {
-  DEMO_SEED,
-  mulberry32,
-  nextEvent,
-  seedEvents,
-  tickStats,
-  type PulseEvent,
-  type PulseStats,
-} from "@/lib/demoPulse";
+// DEMO — the live (demo) stat numbers. Delete this import with the section.
+import { DEMO_SEED, mulberry32, tickStats, type PulseStats } from "@/lib/demoPulse";
 
 function GoogleG() {
   return (
@@ -1095,66 +1087,51 @@ export default function LandingPage() {
   const [heroFocused, setHeroFocused] = useState(false);
 
 
-  // Animated placeholder — a typewriter cycling through concrete example
-  // intentions ("things you can do"), so the empty input suggests what to say.
-  // Only runs while the input is empty and unfocused.
+  // Animated placeholder — cycles through concrete example intentions ("things
+  // you can do"), each one gently cross-fading into the next (no typewriter), so
+  // the empty input softly suggests what to say. Only runs while the input is
+  // empty and unfocused.
   const [exText, setExText] = useState("");
+  const [exShown, setExShown] = useState(false);
   useEffect(() => {
+    setExShown(false);
     if (heroDraft || heroFocused) return;
     const examples = t.hero.examples;
+    const FADE = 480; // matches the opacity transition on .lhero-ghost
+    const HOLD = 2600; // each line rests fully visible before the next fade
     let ei = 0;
-    let ci = 0;
-    let deleting = false;
     let timer: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      const full = examples[ei % examples.length];
-      if (!deleting) {
-        ci++;
-        setExText(full.slice(0, ci));
-        if (ci >= full.length) {
-          deleting = true;
-          timer = setTimeout(tick, 1600); // hold the finished line
-          return;
-        }
-        timer = setTimeout(tick, 55);
-      } else {
-        ci--;
-        setExText(full.slice(0, ci));
-        if (ci <= 0) {
-          deleting = false;
-          ei++;
-          timer = setTimeout(tick, 320);
-          return;
-        }
-        timer = setTimeout(tick, 28);
-      }
+    const show = () => {
+      setExText(examples[ei % examples.length]);
+      setExShown(true);
+      timer = setTimeout(hide, HOLD);
     };
-    timer = setTimeout(tick, 600);
+    const hide = () => {
+      setExShown(false);
+      timer = setTimeout(() => {
+        ei++;
+        show();
+      }, FADE);
+    };
+    timer = setTimeout(show, 500);
     return () => {
       clearTimeout(timer);
       setExText("");
+      setExShown(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heroDraft, heroFocused, t]);
 
-  // DEMO — the "Your data, live" section. Invented numbers that drift upward
-  // and a feed that ticks; see src/lib/demoPulse.ts to delete or replace.
-  // Seeded state renders identically on server and client (no Math.random at
-  // module scope), then only starts moving after mount — otherwise React
-  // hydration would mismatch on the very first paint.
+  // DEMO — the live (demo) stat numbers. Invented figures that drift upward;
+  // see src/lib/demoPulse.ts to delete or replace. Seeded state renders
+  // identically on server and client (no Math.random at module scope), then
+  // only starts moving after mount — otherwise React hydration would mismatch
+  // on the very first paint.
   const [stats, setStats] = useState<PulseStats>(DEMO_SEED);
-  const [events, setEvents] = useState<PulseEvent[]>(() => seedEvents(mulberry32(7)));
   useEffect(() => {
     const roll = mulberry32(Date.now() & 0xffff);
-    let nextId = 100;
     const id = setInterval(() => {
       setStats((s) => tickStats(s, roll));
-      setEvents((prev) => {
-        const aged = prev.map((e) => ({ ...e, age: e.age + 4 }));
-        // A new event only sometimes, so the feed breathes instead of marching.
-        if (roll() < 0.6) return [nextEvent(nextId++, roll), ...aged].slice(0, 5);
-        return aged.slice(0, 5);
-      });
     }, 4000);
     return () => clearInterval(id);
   }, []);
@@ -1407,9 +1384,12 @@ export default function LandingPage() {
             </button>
             <span className="lhero-inputwrap">
               {!heroDraft && !heroFocused && (
-                <span className="lhero-ghost" aria-hidden="true" dir="auto">
+                <span
+                  className={`lhero-ghost${exShown ? " is-shown" : ""}`}
+                  aria-hidden="true"
+                  dir="auto"
+                >
                   {exText}
-                  <span className="lhero-caret" />
                 </span>
               )}
               <input
@@ -1507,14 +1487,10 @@ export default function LandingPage() {
 
       {/* ── businesses connect (the network in action) ── */}
       <section className="section center reveal" id="connections">
-        {/* The system, breathing — live (demo) numbers and a running feed. The
-            "Demo data" tag stays: invented numbers shown as live have to say so. */}
-        <div className="shell live-block">
-          <div className="live-head">
-            <h3 className="live-title">{t.pulse.h2}</h3>
-            <span className="pulse-demo-tag">{t.pulse.demoTag}</span>
-          </div>
-          <p className="lede">{t.pulse.lede}</p>
+        {/* The network in numbers — live (demo) figures that drift upward. The
+            "Demo data" note stays: invented numbers shown as live have to say
+            so. (Header and running feed removed — the stats speak for themselves.) */}
+        <div className="shell live-block live-block-stats">
           <div className="pulse-stats">
             {t.pulse.stats.map((s) => (
               <div className="pulse-stat" key={s.key}>
@@ -1523,26 +1499,10 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-          <div className="pulse-feed">
-            <div className="pulse-feed-head">
-              <span className="pulse-feed-title">{t.pulse.timelineTitle}</span>
-              <span className="pulse-live">
-                <span className="pulse-dot" aria-hidden="true" />
-                {t.pulse.liveLabel}
-              </span>
-            </div>
-            <ul className="pulse-list">
-              {events.map((e) => (
-                <li className="pulse-row" key={e.id}>
-                  <span className="pulse-row-dot" aria-hidden="true" />
-                  <span className="pulse-row-text">{t.pulse.events[e.key]}</span>
-                  <span className="pulse-row-age">
-                    {e.age < 60 ? t.pulse.justNow : t.pulse.minsAgo.replace("{n}", String(Math.floor(e.age / 60)))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <span className="pulse-live pulse-live-note">
+            <span className="pulse-dot" aria-hidden="true" />
+            {t.pulse.liveLabel} · {t.pulse.demoTag}
+          </span>
         </div>
       </section>
 

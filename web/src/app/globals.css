@@ -133,16 +133,17 @@ html {
 .lhero-chev.down {
   position: absolute;
   left: 50%;
-  margin-left: -15px;
-  width: 30px;
-  height: 30px;
+  margin-left: -17px;
+  width: 34px;
+  height: 34px;
+  color: var(--text-2);
 }
 /* Gateway hints — pulled in from the screen edge toward the centred hero.
    The BUTTON carries only the scroll fade (it clears early as ONE collapses;
    the browser clamps the negative value to 0). The arrival hint lives on the
    inner svg instead, so the two never fight over `opacity`. */
 .lhero-chev.down {
-  bottom: 92px;
+  bottom: 172px;
   cursor: pointer;
   opacity: calc(1 - var(--p, 0) * 1.8);
 }
@@ -168,15 +169,15 @@ html {
   0%,
   15% {
     transform: translateY(-18px);
-    opacity: 0.85;
+    opacity: 1;
   }
   55% {
     transform: translateY(0);
-    opacity: 0.85;
+    opacity: 1;
   }
   100% {
     transform: translateY(0);
-    opacity: 0.2;
+    opacity: 0.55;
   }
 }
 .lhero-orb-btn {
@@ -258,7 +259,7 @@ html {
   /* Skip the arrival hint; land straight on its resting state. */
   .lhero-chev > svg {
     animation: none;
-    opacity: 0.2;
+    opacity: 0.55;
   }
 }
 .lhero-dock {
@@ -313,8 +314,9 @@ html {
   color: var(--text);
   padding: 0 4px;
 }
-/* Animated example placeholder — a typewriter cycling concrete intentions,
-   overlaid on the empty input. Muted, so it reads as a suggestion. */
+/* Animated example placeholder — concrete intentions overlaid on the empty
+   input, each gently cross-fading into the next (no typewriter). Muted, so it
+   reads as a soft suggestion. */
 .lhero-ghost {
   position: absolute;
   left: 5px;
@@ -327,26 +329,18 @@ html {
   pointer-events: none;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+  /* Fades in/out between lines — the swap happens while invisible, so lines
+     dissolve into one another instead of being typed. */
+  opacity: 0;
+  transition: opacity 480ms ease;
 }
-/* Resting/typing caret — ONE looks ready to type even before you click in. */
-.lhero-caret {
-  display: inline-block;
-  flex: none;
-  width: 2px;
-  height: 21px;
-  margin-inline-start: 1px;
-  background: var(--text);
-  border-radius: 1px;
-  animation: caretBlink 1.1s step-end infinite;
+.lhero-ghost.is-shown {
+  opacity: 1;
 }
-@keyframes caretBlink {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  50.01%,
-  100% {
-    opacity: 0;
+@media (prefers-reduced-motion: reduce) {
+  .lhero-ghost {
+    transition: none;
   }
 }
 .lhero-voice {
@@ -2348,21 +2342,21 @@ footer {
 .live-block {
   margin-top: 76px;
 }
-.live-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
+/* Stats-only variant — no header or feed. The number tiles sit centred in the
+   section with a single small "live · demo data" note beneath them. */
+.live-block-stats {
+  margin-top: 0;
 }
-.live-title {
-  margin: 0;
-  font-size: clamp(22px, 3vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  color: var(--text);
+.live-block-stats .pulse-stats {
+  margin-top: 0;
+}
+.pulse-live-note {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* Newsroom sits below the plans with no heading — drop the marquee's heading
@@ -2682,6 +2676,17 @@ footer {
     max-width: 440px;
     margin-left: auto;
     margin-right: auto;
+  }
+  /* On mobile the cards stack full-width — no hover-lift (a tap would leave one
+     stuck enlarged) and no Pro upscale (it would overflow the column). All
+     three sit flat and equal. */
+  .plan,
+  .plan:hover,
+  .plan:focus-within,
+  .plan-featured,
+  .plan-featured:hover,
+  .plan-featured:focus-within {
+    transform: none;
   }
 }
 /* Tailored/enterprise tier — a quiet line + link under the cards, styled like
@@ -7008,7 +7013,17 @@ button.conn-card:hover {
   align-self: stretch;
 }
 /* Resting caret — at home there's no placeholder copy at all: ONE just looks
-   ready to be spoken to. (Lifted from the landing hero's .lhero-caret.) */
+   ready to be spoken to. */
+@keyframes caretBlink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
 .app-bar-caret {
   position: absolute;
   inset-inline-start: 2px;
@@ -9170,17 +9185,6 @@ button.conn-card:hover {
 .section.center .pulse-eyebrow .eyebrow {
   margin: 0;
 }
-/* The honesty tag. It has to stay visible while the numbers are invented. */
-.pulse-demo-tag {
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
-  color: var(--text-3);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
 .pulse-stats {
   margin-top: 42px;
   display: grid;
@@ -9204,26 +9208,6 @@ button.conn-card:hover {
   margin-top: 6px;
   font-size: 13px;
   color: var(--text-3);
-}
-.pulse-feed {
-  margin-top: 14px;
-  background: var(--bg-card);
-  border-radius: 20px;
-  padding: 22px 24px;
-  text-align: start;
-}
-.pulse-feed-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-}
-.pulse-feed-title {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
 }
 .pulse-live {
   display: inline-flex;
@@ -9249,55 +9233,13 @@ button.conn-card:hover {
     opacity: 0.25;
   }
 }
-.pulse-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.pulse-row {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 11px 0;
-  font-size: 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text) 5%, transparent);
-  animation: pulseRowIn 420ms ease both;
-}
-.pulse-row:last-child {
-  border-bottom: none;
-}
-@keyframes pulseRowIn {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-}
-.pulse-row-dot {
-  flex-shrink: 0;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--text) 30%, transparent);
-}
-.pulse-row-text {
-  flex: 1;
-  min-width: 0;
-  color: var(--text-2);
-}
-.pulse-row-age {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-}
 @media (max-width: 760px) {
   .pulse-stats {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pulse-dot,
-  .pulse-row {
+  .pulse-dot {
     animation: none;
   }
 }
