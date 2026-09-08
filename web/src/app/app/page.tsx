@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Orb } from "@/components/Orb";
 import { OneWord } from "@/components/Logo";
 import { Sheet } from "@/components/product/Sheet";
+import { AtlasHome } from "@/components/AtlasHome";
 import {
   IDENTITIES,
   PROCESSES,
@@ -2253,7 +2254,7 @@ export default function AppHome() {
   // EXPERIMENTAL "live" home — ONE floats in a canvas and writes to you; a bottom
   // joystick RING: hold to talk (free Web Speech), drag up for the keyboard.
   // Toggled in Settings; "classic" is the current gateway. All persisted.
-  const [homeMode, setHomeMode] = useState<"classic" | "live">("classic");
+  const [homeMode, setHomeMode] = useState<"classic" | "live" | "atlas">("classic");
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [liveKeyboard, setLiveKeyboard] = useState(false);
@@ -2321,7 +2322,8 @@ export default function AppHome() {
       if (localStorage.getItem("one_ai_images") === "1") setAiImages(true);
       if (localStorage.getItem("one_ai_voice") === "0") setAiVoice(false);
       if (localStorage.getItem("one_ai_web") === "0") setAiWeb(false);
-      if (localStorage.getItem("one_home_mode") === "live") setHomeMode("live");
+      const hm = localStorage.getItem("one_home_mode");
+      if (hm === "live" || hm === "atlas") setHomeMode(hm);
     } catch {
       /* private mode — defaults are fine */
     }
@@ -2346,7 +2348,7 @@ export default function AppHome() {
     setAiWeb(v);
     try { localStorage.setItem("one_ai_web", v ? "1" : "0"); } catch {}
   };
-  const applyHomeMode = (m: "classic" | "live") => {
+  const applyHomeMode = (m: "classic" | "live" | "atlas") => {
     setHomeMode(m);
     try { localStorage.setItem("one_home_mode", m); } catch {}
   };
@@ -7155,6 +7157,16 @@ export default function AppHome() {
                     ) : null)}
                 </div>
               )}
+              {/* EXPERIMENTAL "atlas" home — the pannable 2.5D map of intention,
+                  a full-screen overlay like the live canvas. Tapping the ONE face
+                  opens the profile (→ ⋮ Settings) to switch back. */}
+              {homeMode === "atlas" && space === "home" && !activeProcess && (
+                <AtlasHome
+                  lang={lang}
+                  onStart={(text) => { applyHomeMode("classic"); send(text); }}
+                  onOrbTap={openProfile}
+                />
+              )}
               {/* The SAME figure, flying from the live canvas up into the profile
                   hero — one continuous figure, never two. */}
               {flyOrb && (
@@ -8920,6 +8932,12 @@ export default function AppHome() {
                   onClick={() => applyHomeMode("live")}
                 >
                   {lang === "he" ? "חי" : "Live"}
+                </button>
+                <button
+                  className={homeMode === "atlas" ? "on" : ""}
+                  onClick={() => applyHomeMode("atlas")}
+                >
+                  {lang === "he" ? "אטלס" : "Atlas"}
                 </button>
               </div>
             </div>
