@@ -89,6 +89,22 @@ const XLINKS: [string, string][] = [
 // The current user's own live intentions (simulated here) — surfaced in "Mine".
 const MINE = new Set(["Move apartment", "Find a job", "Plan a trip", "Fix my sleep"]);
 
+// Time-of-day rhythm: each district peaks at a different hour, so the field
+// breathes as you scrub the clock (work by day, groceries at dusk, gym at dawn).
+const PEAK = [20, 11, 13, 21, 11, 19, 10, 20, 18, 7]; // by district index
+function timeWeight(hour: number, di: number) {
+  const p = PEAK[di] ?? 13;
+  let d = Math.abs(hour - p); d = Math.min(d, 24 - d);
+  return 0.5 + 0.8 * Math.exp(-(d * d) / (2 * 4.5 * 4.5));
+}
+function hourIcon(h: number) { return h < 6 ? "🌙" : h < 12 ? "🌅" : h < 18 ? "☀️" : h < 21 ? "🌆" : "🌙"; }
+// Steps ONE drafts for a brand-new, unmapped intention typed by the user.
+const GEN_STEPS: Step[] = [
+  s("ONE breaks it into clear steps", "ONE מפרק את זה לצעדים ברורים"),
+  s("Finds who or what can help", "מוצא מי או מה יכול לעזור"),
+  s("Starts the first move for you", "מתחיל בשבילך את הצעד הראשון"),
+];
+
 const TXT = {
   en: { live: "now", priv: "Anonymous · aggregated", ph: "What do you need?", clr: "Clear",
     hint: "Drag to explore · scroll to zoom · click a want to grow its path",
@@ -143,6 +159,8 @@ export function AtlasHome({
     let vw = root.clientWidth, vh = root.clientHeight;
     const cam = { px: 0, py: -40, z: vw < 720 ? 0.6 : 0.8, rot: 0 };
     let rotTarget = 0, lastZ = -1, dirty = true;
+    let hour = new Date().getHours();
+    const displayCount = (n: Intent) => Math.max(1, Math.round(n.count * timeWeight(hour, n.d)));
     let tween: { px0: number; py0: number; z0: number; px1: number; py1: number; z1: number; t: number } | null = null;
     let selected: number | null = null, activeD: number | null = null;
     let view: "world" | "mine" = "world";
@@ -178,7 +196,7 @@ export function AtlasHome({
         const el = document.createElement("button"); el.className = "atl-word";
         el.style.left = wx + "px"; el.style.top = wy + "px"; el.style.setProperty("--dc", dist.c);
         el.style.setProperty("--fd", (6 + r() * 4).toFixed(2) + "s"); el.style.setProperty("--fdl", (-r() * 6).toFixed(2) + "s");
-        const fs = sizeFor(n.count);
+        const fs = sizeFor(displayCount(n));
         el.innerHTML = '<span class="atl-float"><span class="atl-inner" style="font-size:' + fs.toFixed(1) + 'px;font-weight:' + (n.count >= 1150 ? 800 : n.count >= 650 ? 700 : 600) + '"></span><span class="atl-count"></span></span>';
         el.setAttribute("data-id", String(idx));
         el.addEventListener("click", (e) => { e.stopPropagation(); openNode(idx); });
@@ -206,8 +224,17 @@ export function AtlasHome({
       anchorEls.forEach((a, di) => { (a.querySelector(".atl-alabel") as HTMLElement).textContent = D[di][lang]; });
       wordEls.forEach((o) => {
         (o.el.querySelector(".atl-inner") as HTMLElement).textContent = o.n[lang];
-        (o.el.querySelector(".atl-count") as HTMLElement).textContent = Math.round(o.n.count * 0.12).toLocaleString();
+        (o.el.querySelector(".atl-count") as HTMLElement).textContent = Math.round(displayCount(o.n) * 0.12).toLocaleString();
       });
+    }
+    // Recompute the field to the current hour: word sizes + live counts breathe.
+    function refreshCounts() {
+      wordEls.forEach((o) => {
+        const dc = displayCount(o.n);
+        (o.el.querySelector(".atl-inner") as HTMLElement).style.fontSize = sizeFor(dc).toFixed(1) + "px";
+        (o.el.querySelector(".atl-count") as HTMLElement).textContent = Math.round(dc * 0.12).toLocaleString();
+      });
+      if (selected !== null) ($(".atl-now")!).textContent = Math.round(displayCount(N[selected]) * 0.12).toLocaleString();
     }
     function buildTicker() {
       const tk = $(".atl-track")!; tk.innerHTML = "";
@@ -215,7 +242,7 @@ export function AtlasHome({
       const items = top.concat(top);
       items.forEach((n) => {
         const sp = document.createElement("span"); sp.className = "atl-ti";
-        sp.innerHTML = '<span class="atl-tidot"></span><span class="atl-tiem">' + D[n.d].em + '</span><b>' + Math.round(n.count * 0.12).toLocaleString() + '</b> ' + TXT[lang].live + ' · ' + n[lang];
+        sp.innerHTML = '<span class="atl-tidot"></span><span class="atl-tiem">' + D[n.d].em + '</span><b>' + Math.round(displayCount(n) * 0.12).toLocaleString() + '</b> ' + TXT[lang].live + ' · ' + n[lang];
         tk.appendChild(sp);
       });
     }
@@ -330,12 +357,21 @@ export function AtlasHome({
     };
     vwWorld.addEventListener("click", () => setView("world"));
     vwMine.addEventListener("click", () => setView("mine"));
+
+    // time-of-day scrubber — the field breathes as you move it
+    const timeRange = $(".atl-time-range") as HTMLInputElement;
+    const timeIco = $(".atl-time-ico")!, timeLbl = $(".atl-time-lbl")!;
+    const setHour = (h: number) => { hour = h; timeIco.textContent = hourIcon(h); timeLbl.textContent = (h < 10 ? "0" + h : String(h)) + ":00"; refreshCounts(); };
+    timeRange.value = String(hour);
+    timeRange.addEventListener("input", () => setHour(+timeRange.value));
+    setHour(hour);
     const onInput = () => { clrEl.classList.toggle("show", !!qEl.value.trim()); if (qEl.value.trim()) activeD = null; updateVis(); };
     qEl.addEventListener("input", onInput);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return; const q = qEl.value.trim().toLowerCase(); if (!q) return;
       for (let i = 0; i < N.length; i++) if (N[i].en.toLowerCase().includes(q) || N[i].he.includes(q)) { openNode(i); qEl.blur(); return; }
       for (let j = 0; j < D.length; j++) if (D[j].en.toLowerCase().includes(q) || D[j].he.includes(q)) { focusDistrict(j); return; }
+      generateArea(qEl.value.trim()); qEl.blur(); // nothing matched — map the new need
     };
     qEl.addEventListener("keydown", onKey);
     const onClr = () => { qEl.value = ""; clrEl.classList.remove("show"); activeD = null; updateVis(); qEl.focus(); };
@@ -345,6 +381,36 @@ export function AtlasHome({
       activeD = activeD === di ? null : di; qEl.value = ""; clrEl.classList.remove("show"); updateVis();
       if (activeD !== null) flyTo(-(D[di].x! - CX), -(D[di].y! - CY) - 160, Math.max(cam.z, 1.0));
       else flyTo(0, -40, vw < 720 ? 0.6 : 0.8);
+    }
+    // A brand-new, unmapped need: ONE spawns a fresh area near the view centre
+    // with a drafted route, so the space grows to the person.
+    function generateArea(text: string) {
+      if (!text) return;
+      const di = D.length;
+      const wx0 = CX - cam.px, wy0 = CY - cam.py;
+      const dist: District = { en: lang === "he" ? "חדש" : "New", he: "חדש", c: "#8a8a86", em: "✨", ox: 0, oy: 0, x: wx0 + 40, y: wy0 - 40 };
+      D.push(dist);
+      const n: Intent = { d: di, en: text, he: text, count: 60, trend: 0, done: 0, avg: 7, steps: GEN_STEPS };
+      N.push(n); const idx = N.length - 1;
+      const a = document.createElement("button"); a.className = "atl-anchor";
+      a.style.left = dist.x! + "px"; a.style.top = dist.y! + "px"; a.style.setProperty("--dc", dist.c);
+      a.innerHTML = '<span class="atl-emoji" aria-hidden="true">' + dist.em + '</span><span class="atl-alabel"></span>';
+      a.addEventListener("click", (e) => { e.stopPropagation(); focusDistrict(di); });
+      ground.appendChild(a); anchorEls.push(a);
+      const wx = dist.x! + 20, wy = dist.y! + 150;
+      const el = document.createElement("button"); el.className = "atl-word gen";
+      el.style.left = wx + "px"; el.style.top = wy + "px"; el.style.setProperty("--dc", dist.c);
+      el.style.setProperty("--fd", "7s"); el.style.setProperty("--fdl", "0s");
+      const fs = sizeFor(displayCount(n));
+      el.innerHTML = '<span class="atl-float"><span class="atl-inner" style="font-size:' + fs.toFixed(1) + 'px;font-weight:700"></span><span class="atl-count"></span></span>';
+      el.setAttribute("data-id", String(idx));
+      el.addEventListener("click", (e) => { e.stopPropagation(); openNode(idx); });
+      ground.appendChild(el); wordEls.push({ el, n, di, wx, wy });
+      const ln = document.createElementNS(SVGNS, "line");
+      ln.setAttribute("class", "atl-link"); ln.setAttribute("x1", String(dist.x)); ln.setAttribute("y1", String(dist.y));
+      ln.setAttribute("x2", String(wx)); ln.setAttribute("y2", String(wy)); baseLinks.appendChild(ln);
+      paintText();
+      openNode(idx);
     }
     function openNode(id: number) {
       selected = id; const n = N[id], dist = D[n.d], t = TXT[lang];
@@ -356,7 +422,7 @@ export function AtlasHome({
       ($(".atl-em")!).textContent = dist.em;
       ($(".atl-district")!).textContent = dist[lang];
       ($(".atl-title")!).textContent = n[lang];
-      ($(".atl-now")!).textContent = Math.round(n.count * 0.12).toLocaleString();
+      ($(".atl-now")!).textContent = Math.round(displayCount(n) * 0.12).toLocaleString();
       ($(".atl-nowlbl")!).textContent = t.nowLbl;
       ($(".atl-trend")!).textContent = "↑ " + n.trend + "%";
       ($(".atl-done")!).textContent = n.done.toLocaleString();
@@ -385,8 +451,7 @@ export function AtlasHome({
     if (!reduce) {
       tick = setInterval(() => {
         for (let k = 0; k < 3; k++) { const n = N[Math.floor(Math.random() * N.length)]; n.count += Math.floor(Math.random() * 3); }
-        wordEls.forEach((o) => { (o.el.querySelector(".atl-count") as HTMLElement).textContent = Math.round(o.n.count * 0.12).toLocaleString(); });
-        if (selected !== null) ($(".atl-now")!).textContent = Math.round(N[selected].count * 0.12).toLocaleString();
+        refreshCounts();
       }, 3400);
       cleanups.push(() => { if (tick) clearInterval(tick); });
     }
@@ -458,6 +523,12 @@ export function AtlasHome({
       </div>
 
       <div className="atl-priv">🔒 {TXT[lang].priv}</div>
+
+      <div className="atl-time">
+        <span className="atl-time-ico" aria-hidden="true">☀️</span>
+        <input className="atl-time-range" type="range" min={0} max={23} step={1} aria-label="Time of day" />
+        <span className="atl-time-lbl" />
+      </div>
 
       <aside className="atl-panel" aria-hidden="true" aria-live="polite">
         <button className="atl-close" aria-label="Close"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -548,6 +619,11 @@ const ATLAS_CSS = `
 .atl-clr.show{ opacity:1; transform:scale(1); }
 .atl-match{ font-size:12.5px; color:var(--a-ink3); font-weight:600; height:16px; text-align:center; }
 .atl-priv{ position:absolute; z-index:26; bottom:16px; inset-inline-start:20px; display:inline-flex; align-items:center; gap:7px; font-size:11.5px; color:var(--a-ink3); font-weight:600; pointer-events:none; }
+.atl-time{ position:absolute; z-index:26; bottom:16px; left:50%; transform:translateX(-50%); display:inline-flex; align-items:center; gap:11px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadow); border-radius:999px; padding:8px 16px; }
+.atl-time-ico{ font-size:15px; line-height:1; }
+.atl-time-range{ width:180px; accent-color:var(--a-ink); cursor:pointer; }
+.atl-time-lbl{ font-size:12.5px; font-weight:700; color:var(--a-ink2); font-variant-numeric:tabular-nums; min-width:44px; text-align:center; }
+.atl-word.gen .atl-inner{ text-decoration:underline dotted; text-decoration-color:var(--a-ink3); text-underline-offset:5px; }
 .atl-panel{ position:absolute; z-index:64; top:74px; inset-inline-start:20px; width:min(360px,calc(100vw - 40px)); max-height:calc(100dvh - 150px); background:var(--a-card); border:1px solid var(--a-line); border-radius:22px; box-shadow:var(--a-shadowlift); display:flex; flex-direction:column; padding:18px 22px 22px; overflow-y:auto; opacity:0; transform:translateY(-8px) scale(.98); transform-origin:top center; pointer-events:none; transition:opacity .3s, transform .3s cubic-bezier(.2,.8,.2,1); user-select:text; -webkit-user-select:text; }
 .atl-panel.open{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
 .atl-close{ align-self:flex-end; border:1px solid var(--a-line); background:var(--a-bg); width:32px; height:32px; border-radius:50%; cursor:pointer; color:var(--a-ink2); display:grid; place-items:center; flex:none; }
@@ -570,6 +646,6 @@ const ATLAS_CSS = `
 .atl-cta:hover{ transform:translateY(-2px); } .atl-cta.done{ background:var(--a-live); color:#fff; }
 .atl-priv2{ margin-top:14px; font-size:11px; line-height:1.45; color:var(--a-ink3); text-align:center; }
 @media (max-width:860px){ .atl-ticker{ display:none; } }
-@media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-core{ top:44%; } .atl-panel{ inset-inline:12px; inset-inline-end:12px; width:auto; top:auto; bottom:12px; max-height:62dvh; } }
+@media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-core{ top:42%; } .atl-time-range{ width:120px; } .atl-panel{ inset-inline:12px; inset-inline-end:12px; width:auto; top:auto; bottom:12px; max-height:58dvh; } }
 @media (prefers-reduced-motion: reduce){ .atl-float,.atl-blink,.atl-track,.atl-route.on{ animation:none; } }
 `;
