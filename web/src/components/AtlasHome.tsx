@@ -134,7 +134,8 @@ const TXT = {
     nomatch: "Nothing here — try another word.", priv2: "Every figure is an anonymous aggregate — never a person.",
     world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress",
     provH: "Who can help", journeying: "ONE is on the way", arrived: "Arrived",
-    stepsH: "The path others took", stepsHgo: "Your steps with ONE", cont: "Continue", stepPh: "reply, or just continue…", allDone: "Done — it's in motion", openIn: "Open in ONE", startJ: "Start this with your ONE" },
+    stepsH: "The path others took", stepsHgo: "Your steps with ONE", cont: "Continue", stepPh: "reply, or just continue…", allDone: "Done — it's in motion", openIn: "Open in ONE", startJ: "Start this with your ONE",
+    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxTop: "Busiest right now", idxEnter: "Explore this world", mineEmpty: "Your space — the processes you start live here." },
   he: { live: "עכשיו", priv: "אנונימי · מצטבר", ph: "מה אתה צריך?", clr: "נקה",
     hint: "גררו כדי לנוע · גלגלו כדי לזום · לחצו על רצון כדי לפרוש את המסלול",
     nowLbl: "וואנים על זה עכשיו", pathH: "המסלול שאחרים עברו", doneK: "הושלמו השבוע", avgK: "זמן ממוצע",
@@ -142,7 +143,8 @@ const TXT = {
     nomatch: "אין תוצאה — נסו מילה אחרת.", priv2: "כל מספר הוא מצבר אנונימי — לעולם לא אדם.",
     world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך",
     provH: "מי יכול לעזור", journeying: "ה‑ONE בדרך", arrived: "הגעת",
-    stepsH: "המסלול שאחרים עברו", stepsHgo: "הצעדים שלך עם ONE", cont: "המשך", stepPh: "תשובה, או פשוט המשך…", allDone: "בוצע — זה בתנועה", openIn: "פתח ב‑ONE", startJ: "התחל את זה עם ה‑ONE שלך" },
+    stepsH: "המסלול שאחרים עברו", stepsHgo: "הצעדים שלך עם ONE", cont: "המשך", stepPh: "תשובה, או פשוט המשך…", allDone: "בוצע — זה בתנועה", openIn: "פתח ב‑ONE", startJ: "התחל את זה עם ה‑ONE שלך",
+    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
 };
 
 export function AtlasHome({
@@ -169,6 +171,7 @@ export function AtlasHome({
     const qEl = $(".atl-search input") as HTMLInputElement;
     const clrEl = $(".atl-clr")!;
     const panel = $(".atl-panel")!;
+    const customEl = $(".atl-custom")!;
     const matchEl = $(".atl-match")!;
     const baseLinks = R.querySelector(".atl-baselinks") as SVGGElement;
     const routePath = R.querySelector(".atl-route") as SVGPathElement;
@@ -219,7 +222,7 @@ export function AtlasHome({
       const a = document.createElement("button"); a.className = "atl-anchor";
       a.style.left = dist.x + "px"; a.style.top = dist.y + "px"; a.style.setProperty("--dc", dist.c);
       a.innerHTML = '<span class="atl-emoji" aria-hidden="true">' + dist.em + '</span><span class="atl-alabel"></span>';
-      a.addEventListener("click", (e) => { e.stopPropagation(); focusDistrict(di); });
+      a.addEventListener("click", (e) => { e.stopPropagation(); openIndex(di); });
       ground.appendChild(a); anchorEls.push(a);
       const r = rng(di * 131 + 7);
       const mine: { n: Intent; idx: number }[] = [];
@@ -265,6 +268,7 @@ export function AtlasHome({
       el.className = "atl-agent" + (provider ? " provider" : "");
       el.style.left = wx + "px"; el.style.top = wy + "px";
       el.innerHTML = '<span class="atl-agent-face">' + FACE + '<span class="atl-agent-em">' + agent.em + '</span></span><span class="atl-agent-lbl">' + agent[lang] + '</span>';
+      el.addEventListener("click", (e) => { e.stopPropagation(); openProvider(agent); });
       ground.appendChild(el);
       return el;
     }
@@ -358,7 +362,7 @@ export function AtlasHome({
     const pts: Record<string, { x: number; y: number }> = {};
     let panLast: { x: number; y: number } | null = null;
     let pinchLast: { d: number; mx: number; my: number } | null = null;
-    const isChrome = (t: EventTarget | null) => t instanceof Element && t.closest(".atl-core,.atl-ticker,.atl-panel,.atl-priv,.atl-word,.atl-anchor");
+    const isChrome = (t: EventTarget | null) => t instanceof Element && t.closest(".atl-core,.atl-ticker,.atl-panel,.atl-priv,.atl-word,.atl-anchor,.atl-agent");
     const pinch = () => { const ids = Object.keys(pts), a = pts[ids[0]], b = pts[ids[1]]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; };
     const onDown = (e: PointerEvent) => {
       if (isChrome(e.target)) return;
@@ -469,7 +473,7 @@ export function AtlasHome({
       const a = document.createElement("button"); a.className = "atl-anchor";
       a.style.left = dist.x! + "px"; a.style.top = dist.y! + "px"; a.style.setProperty("--dc", dist.c);
       a.innerHTML = '<span class="atl-emoji" aria-hidden="true">' + dist.em + '</span><span class="atl-alabel"></span>';
-      a.addEventListener("click", (e) => { e.stopPropagation(); focusDistrict(di); });
+      a.addEventListener("click", (e) => { e.stopPropagation(); openIndex(di); });
       ground.appendChild(a); anchorEls.push(a);
       const wx = dist.x! + 20, wy = dist.y! + 150;
       const el = document.createElement("button"); el.className = "atl-word gen";
@@ -493,7 +497,7 @@ export function AtlasHome({
     // journey (ONE driving, providers on the map, progress) only begins on Start.
     function openNode(id: number) {
       selected = id; const n = N[id], dist = D[n.d], t = TXT[lang];
-      hideTip();
+      hideTip(); panel.classList.remove("is-custom");
       activeD = null; qEl.value = ""; clrEl.classList.remove("show"); updateVis();
       wordEls.forEach((o) => o.el.classList.toggle("sel", +o.el.getAttribute("data-id")! === id));
       journey = false; R.classList.remove("atl-journey");
@@ -585,11 +589,44 @@ export function AtlasHome({
       const cta = $(".atl-cta")!; cta.textContent = TXT[lang].openIn; cta.classList.remove("done");
     }
     function closePanel() {
-      panel.classList.remove("open"); panel.setAttribute("aria-hidden", "true"); selected = null; cur = null;
+      panel.classList.remove("open"); panel.classList.remove("is-custom"); panel.setAttribute("aria-hidden", "true"); selected = null; cur = null;
       wordEls.forEach((o) => o.el.classList.remove("sel")); clearRoute();
       journey = false; R.classList.remove("atl-journey");
       if (driveEl) { driveEl.remove(); driveEl = null; } if (driveArrow) { driveArrow.remove(); driveArrow = null; }
       clearProviders();
+    }
+    // Clicking a business/pro ONE opens its profile card.
+    function openProvider(ag: Agent) {
+      hideTip(); const t = TXT[lang], dc = D[ag.di].c, r = rng(ag.en.length * 131 + ag.di);
+      const rating = (4.2 + r() * 0.7).toFixed(1), jobs = 40 + Math.floor(r() * 200), reply = 5 + Math.floor(r() * 40) + "m";
+      customEl.innerHTML =
+        '<div class="atl-pv" style="--dc:' + dc + '"><div class="atl-pv-head"><span class="atl-pv-face">' + FACE + '<span class="atl-pv-em">' + ag.em + '</span></span>' +
+        '<div><div class="atl-pv-name">' + ag[lang] + '</div><div class="atl-pv-sub">' + D[ag.di][lang] + ' · ★ ' + rating + '</div></div></div>' +
+        '<div class="atl-pv-stats"><div><b>' + jobs + '</b><span>' + t.jobs + '</span></div><div><b>' + reply + '</b><span>' + t.reply + '</span></div><div><b>★ ' + rating + '</b><span>' + t.rating + '</span></div></div>' +
+        '<button class="atl-cta atl-pv-cta">' + t.connect + '</button><p class="atl-priv2">' + t.priv2 + '</p></div>';
+      const c = customEl.querySelector(".atl-pv-cta") as HTMLButtonElement | null;
+      if (c) c.addEventListener("click", () => { if (onStartRef.current) onStartRef.current(ag[lang]); });
+      panel.classList.add("is-custom", "open"); panel.setAttribute("aria-hidden", "false");
+    }
+    // Clicking a topic marker opens its "human index" — a basket of that world.
+    function openIndex(di: number) {
+      hideTip(); const t = TXT[lang], dist = D[di], dc = dist.c;
+      const items = N.filter((n) => n.d === di);
+      const liveTotal = items.reduce((a, n) => a + Math.round(displayCount(n) * 0.12), 0);
+      const provCount = AGENTS.filter((a) => a.di === di).length;
+      const avgTrend = Math.round(items.reduce((a, n) => a + n.trend, 0) / (items.length || 1));
+      const top = items.slice().sort((a, b) => displayCount(b) - displayCount(a)).slice(0, 4);
+      const maxv = (top[0] ? Math.round(displayCount(top[0]) * 0.12) : 1) || 1;
+      const rows = top.map((n) => { const v = Math.round(displayCount(n) * 0.12); return '<div class="atl-idx-row"><span class="atl-idx-bar" style="width:' + Math.max(8, Math.round((v / maxv) * 100)) + '%"></span><span class="atl-idx-name">' + n[lang] + '</span><span class="atl-idx-v">' + v.toLocaleString() + '</span></div>'; }).join("");
+      customEl.innerHTML =
+        '<div class="atl-idx" style="--dc:' + dc + '"><div class="atl-pv-head"><span class="atl-idx-em">' + dist.em + '</span><div><div class="atl-pv-name">' + dist[lang] + '</div><div class="atl-pv-sub">' + t.idxLive + '</div></div><span class="atl-idx-trend">↑ ' + avgTrend + '%</span></div>' +
+        '<div class="atl-idx-big">' + liveTotal.toLocaleString() + '</div>' +
+        '<div class="atl-idx-metrics"><div><b>' + items.length + '</b><span>' + t.idxIntents + '</span></div><div><b>' + provCount + '</b><span>' + t.idxProviders + '</span></div></div>' +
+        '<div class="atl-sech" style="margin-top:18px">' + t.idxTop + '</div>' + rows +
+        '<button class="atl-cta atl-idx-cta">' + t.idxEnter + '</button></div>';
+      const c = customEl.querySelector(".atl-idx-cta") as HTMLButtonElement | null;
+      if (c) c.addEventListener("click", () => { panel.classList.remove("open", "is-custom"); panel.setAttribute("aria-hidden", "true"); focusDistrict(di); });
+      panel.classList.add("is-custom", "open"); panel.setAttribute("aria-hidden", "false");
     }
     ($(".atl-close")!).addEventListener("click", closePanel);
     const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") closePanel(); };
@@ -693,15 +730,18 @@ export function AtlasHome({
 
       <aside className="atl-panel" aria-hidden="true" aria-live="polite">
         <button className="atl-close" aria-label="Close"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-        <span className="atl-tag"><span className="atl-em" /><span className="atl-district" /></span>
-        <h2 className="atl-title" />
-        <div className="atl-nowrow"><span className="atl-now" /><span className="atl-nowlbl" /><span className="atl-trend" /></div>
-        <div className="atl-stats"><div className="atl-stat"><div className="atl-v atl-done" /><div className="atl-k atl-donek" /></div><div className="atl-stat"><div className="atl-v atl-avg" /><div className="atl-k atl-avgk" /></div></div>
-        <div className="atl-sec"><div className="atl-sech atl-pathh" /><ol className="atl-steps" /></div>
-        <div className="atl-sec atl-providers"><div className="atl-sech atl-provh" /><div className="atl-provlist" /></div>
-        <div className="atl-progress"><div className="atl-progress-top"><span className="atl-progress-lbl" /><span className="atl-progress-pct" /></div><div className="atl-progress-bar"><div className="atl-progress-fill" /></div></div>
-        <button className="atl-cta" />
-        <p className="atl-priv2" />
+        <div className="atl-body">
+          <span className="atl-tag"><span className="atl-em" /><span className="atl-district" /></span>
+          <h2 className="atl-title" />
+          <div className="atl-nowrow"><span className="atl-now" /><span className="atl-nowlbl" /><span className="atl-trend" /></div>
+          <div className="atl-stats"><div className="atl-stat"><div className="atl-v atl-done" /><div className="atl-k atl-donek" /></div><div className="atl-stat"><div className="atl-v atl-avg" /><div className="atl-k atl-avgk" /></div></div>
+          <div className="atl-sec"><div className="atl-sech atl-pathh" /><ol className="atl-steps" /></div>
+          <div className="atl-sec atl-providers"><div className="atl-sech atl-provh" /><div className="atl-provlist" /></div>
+          <div className="atl-progress"><div className="atl-progress-top"><span className="atl-progress-lbl" /><span className="atl-progress-pct" /></div><div className="atl-progress-bar"><div className="atl-progress-fill" /></div></div>
+          <button className="atl-cta" />
+          <p className="atl-priv2" />
+        </div>
+        <div className="atl-custom" />
       </aside>
 
       <style>{ATLAS_CSS}</style>
@@ -820,11 +860,42 @@ const ATLAS_CSS = `
 .atl-tip.show{ opacity:1; }
 .atl-tip b{ font-size:13px; font-weight:700; color:var(--a-ink); }
 .atl-tip span{ font-size:11.5px; color:var(--a-ink3); font-variant-numeric:tabular-nums; }
+/* custom card (provider profile / world index) */
+.atl-custom{ display:none; }
+.atl-panel.is-custom .atl-body{ display:none; }
+.atl-panel.is-custom .atl-custom{ display:block; }
+.atl-pv-head{ display:flex; align-items:center; gap:12px; margin-top:4px; }
+.atl-pv-face{ position:relative; width:52px; height:52px; flex:none; filter:drop-shadow(0 8px 16px rgba(10,10,10,0.28)); }
+.atl-pv-em{ position:absolute; inset-inline-end:-6px; bottom:-4px; font-size:18px; }
+.atl-idx-em{ font-size:40px; flex:none; }
+.atl-pv-name{ font-weight:800; font-size:19px; letter-spacing:-0.02em; color:var(--a-ink); }
+.atl-pv-sub{ font-size:12.5px; color:var(--a-ink3); margin-top:2px; }
+.atl-pv-stats{ display:flex; gap:9px; margin-top:18px; }
+.atl-pv-stats > div{ flex:1; background:var(--a-line); border-radius:13px; padding:12px 10px; text-align:center; }
+.atl-pv-stats b{ display:block; font-size:16px; font-weight:700; font-variant-numeric:tabular-nums; }
+.atl-pv-stats span{ font-size:10.5px; color:var(--a-ink3); }
+.atl-idx-trend{ margin-inline-start:auto; color:var(--a-live); font-weight:700; font-size:13px; }
+.atl-idx-big{ font-weight:800; font-size:44px; letter-spacing:-0.03em; font-variant-numeric:tabular-nums; margin-top:12px; color:var(--a-ink); }
+.atl-idx-metrics{ display:flex; gap:9px; margin-top:12px; }
+.atl-idx-metrics > div{ flex:1; background:var(--a-line); border-radius:13px; padding:12px 10px; }
+.atl-idx-metrics b{ font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; }
+.atl-idx-metrics span{ display:block; font-size:11px; color:var(--a-ink3); margin-top:2px; }
+.atl-idx-row{ position:relative; display:flex; align-items:center; gap:8px; padding:9px 10px; margin-top:6px; border-radius:9px; overflow:hidden; font-size:13px; }
+.atl-idx-bar{ position:absolute; inset-inline-start:0; top:0; bottom:0; background:color-mix(in srgb, var(--dc, var(--a-ink)) 20%, transparent); z-index:0; }
+.atl-idx-name{ position:relative; z-index:1; flex:1; color:var(--a-ink); font-weight:600; }
+.atl-idx-v{ position:relative; z-index:1; color:var(--a-ink2); font-weight:700; font-variant-numeric:tabular-nums; }
+.atl-idx-cta, .atl-pv-cta{ margin-top:20px; }
+/* my space (Mine): clear the world, keep only my things */
+.atl-app.view-mine .atl-anchor, .atl-app.view-mine .atl-agent, .atl-app.view-mine .atl-xlink, .atl-app.view-mine .atl-link, .atl-app.view-mine .atl-blob{ opacity:0 !important; pointer-events:none; }
+/* the ONE breathes — a gentle free float */
+.atl-orb{ animation:atlOrbBob 6.5s ease-in-out infinite; }
+@keyframes atlOrbBob{ 0%,100%{ transform:translateY(-3px); } 50%{ transform:translateY(4px); } }
 .atl-cta{ margin-top:22px; width:100%; height:50px; border:0; border-radius:999px; background:var(--a-ink); color:var(--a-bg); cursor:pointer; font:inherit; font-size:15px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:9px; transition:transform .15s,background .3s; }
 .atl-cta:hover{ transform:translateY(-2px); } .atl-cta.done{ background:var(--a-live); color:#fff; }
 .atl-priv2{ margin-top:14px; font-size:11px; line-height:1.45; color:var(--a-ink3); text-align:center; }
 /* other ONEs on the map (businesses / pros) */
-.atl-agent{ position:absolute; transform:translate(-50%,-50%) translateZ(30px) rotateX(calc(var(--tilt,56deg) * -1)); display:flex; flex-direction:column; align-items:center; gap:5px; pointer-events:none; transition:opacity .35s; }
+.atl-agent{ position:absolute; transform:translate(-50%,-50%) translateZ(30px) rotateX(calc(var(--tilt,56deg) * -1)); display:flex; flex-direction:column; align-items:center; gap:5px; pointer-events:auto; cursor:pointer; transition:opacity .35s, transform .2s; background:none; border:0; }
+.atl-agent:hover{ transform:translate(-50%,-50%) translateZ(30px) rotateX(calc(var(--tilt,56deg) * -1)) scale(1.08); }
 .atl-agent-face{ position:relative; width:34px; height:34px; display:block; filter:drop-shadow(0 6px 12px rgba(10,10,10,0.28)); }
 .atl-agent-em{ position:absolute; inset-inline-end:-6px; bottom:-4px; font-size:15px; line-height:1; }
 .atl-agent-lbl{ font-size:10.5px; font-weight:700; color:var(--a-ink2); white-space:nowrap; background:var(--a-card); border:1px solid var(--a-line); border-radius:999px; padding:2px 8px; box-shadow:var(--a-shadow); }
@@ -851,5 +922,5 @@ const ATLAS_CSS = `
 .atl-app.atl-journey .atl-panel{ top:18px; max-height:calc(100dvh - 40px); }
 @media (max-width:860px){ .atl-ticker{ display:none; } }
 @media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-core{ top:42%; } .atl-time-range{ width:120px; } .atl-panel{ inset-inline:12px; inset-inline-end:12px; width:auto; top:auto; bottom:12px; max-height:58dvh; } }
-@media (prefers-reduced-motion: reduce){ .atl-float,.atl-blink,.atl-track,.atl-route.on{ animation:none; } }
+@media (prefers-reduced-motion: reduce){ .atl-float,.atl-blink,.atl-track,.atl-route.on,.atl-orb{ animation:none; } }
 `;
