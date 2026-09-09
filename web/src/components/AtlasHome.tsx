@@ -150,7 +150,7 @@ const TXT = {
     world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress",
     provH: "Who can help", journeying: "ONE is on the way", arrived: "Arrived",
     stepsH: "The path others took", stepsHgo: "Your steps with ONE", cont: "Continue", stepPh: "reply, or just continue…", allDone: "Done — it's in motion", openIn: "Open in ONE", startJ: "Start this with your ONE",
-    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", signinPre: "No account needed to start", signinLink: "Connect", prompts: ["What do you need?", "What can ONE do for you?", "Just say it — ONE takes it from here"], tipHint: "Click to open →", myOne: "Your ONE", myOneSub: "Your representative across the map", manage: "Open full profile", relatedH: "Often paired with", mineEmpty: "Your space — the processes you start live here." },
+    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxVolume: "circulated", idxDemand: "weekly demand", idxChart: "Activity · 24h", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", signinPre: "No account needed to start", signinLink: "Connect", prompts: ["What do you need?", "What can ONE do for you?", "Just say it — ONE takes it from here"], tipHint: "Click to open →", myOne: "Your ONE", myOneSub: "Your representative across the map", manage: "Open full profile", relatedH: "Often paired with", inMotion: "in motion", completed: "completed", worlds: "worlds", meWorlds: "Your worlds", meResume: "Resume", profileTab: "Profile", chatTab: "Chat", chatHi: "Hey — I'm your ONE. What should we get moving?", chatPh: "Message your ONE…", chatAck: "On it — mapping that now.", mineEmpty: "Your space — the processes you start live here." },
   he: { live: "עכשיו", priv: "אנונימי · מצטבר", ph: "מה אתה צריך?", clr: "נקה",
     hint: "גררו כדי לנוע · גלגלו כדי לזום · לחצו על רצון כדי לפרוש את המסלול",
     nowLbl: "וואנים על זה עכשיו", pathH: "המסלול שאחרים עברו", doneK: "הושלמו השבוע", avgK: "זמן ממוצע",
@@ -159,7 +159,7 @@ const TXT = {
     world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך",
     provH: "מי יכול לעזור", journeying: "ה‑ONE בדרך", arrived: "הגעת",
     stepsH: "המסלול שאחרים עברו", stepsHgo: "הצעדים שלך עם ONE", cont: "המשך", stepPh: "תשובה, או פשוט המשך…", allDone: "בוצע — זה בתנועה", openIn: "פתח ב‑ONE", startJ: "התחל את זה עם ה‑ONE שלך",
-    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", signinPre: "לא צריך חשבון כדי להתחיל", signinLink: "התחברות", prompts: ["מה אתה צריך?", "מה ONE יכול לעשות בשבילך?", "רק תגיד — ONE ממשיך מכאן"], tipHint: "לחצו לפתיחה →", myOne: "ה‑ONE שלך", myOneSub: "הנציג שלך על המפה", manage: "פתח פרופיל מלא", relatedH: "לרוב יחד עם", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
+    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxVolume: "התגלגל", idxDemand: "ביקוש שבועי", idxChart: "פעילות · 24ש׳", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", signinPre: "לא צריך חשבון כדי להתחיל", signinLink: "התחברות", prompts: ["מה אתה צריך?", "מה ONE יכול לעשות בשבילך?", "רק תגיד — ONE ממשיך מכאן"], tipHint: "לחצו לפתיחה →", myOne: "ה‑ONE שלך", myOneSub: "הנציג שלך על המפה", manage: "פתח פרופיל מלא", relatedH: "לרוב יחד עם", inMotion: "בתהליך", completed: "הושלמו", worlds: "עולמות", meWorlds: "העולמות שלך", meResume: "המשך", profileTab: "פרופיל", chatTab: "צ'אט", chatHi: "היי — אני ה‑ONE שלך. מה נזיז?", chatPh: "כתבו ל‑ONE…", chatAck: "על זה — ממפה את זה עכשיו.", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
 };
 
 export function AtlasHome({
@@ -184,6 +184,7 @@ export function AtlasHome({
     const $ = (sel: string) => R.querySelector(sel) as HTMLElement | null;
     const ground = $(".atl-ground")!;
     const qEl = $(".atl-search input") as HTMLInputElement;
+    const coreEl = $(".atl-core");
     const clrEl = $(".atl-clr")!;
     const panel = $(".atl-panel")!;
     const customEl = $(".atl-custom")!;
@@ -214,6 +215,8 @@ export function AtlasHome({
     const displayCount = (n: Intent) => Math.max(1, Math.round(n.count * timeWeight(hour, n.d)));
     const tipEl = $(".atl-tip")!;
     let focusText: string | null = null;
+    let meMode = false; // the companion has risen into the profile card as its avatar
+    let focusPrompts: string[] = [], focusPromptI = 0; // rotating contextual placeholders while a card is open
     const setLive = (s: string) => { const l = $(".atl-status-live"); if (l) l.textContent = s; };
     const showTip = (n: Intent, e: MouseEvent) => {
       const t = TXT[lang], live = Math.round(displayCount(n) * 0.12).toLocaleString();
@@ -233,7 +236,23 @@ export function AtlasHome({
       focusText = D[n.d].em + " " + n[lang] + " · " + live + " " + t.live; setLive(focusText);
       qEl.setAttribute("placeholder", n[lang]); // the input invites acting on what you're near
     };
-    const hideTip = () => { tipEl.classList.remove("show"); focusText = null; qEl.setAttribute("placeholder", TXT[lang].prompts[rotI % TXT[lang].prompts.length]); };
+    const hideTip = () => { tipEl.classList.remove("show", "below"); focusText = null; qEl.setAttribute("placeholder", TXT[lang].prompts[rotI % TXT[lang].prompts.length]); };
+    // hover a ONE on the map → a compact preview of that service ONE
+    const showAgentTip = (agent: Agent, e: MouseEvent) => {
+      const t = TXT[lang], r = rng(agent.en.length * 131 + agent.di);
+      const rating = (4.2 + r() * 0.7).toFixed(1), jobs = 40 + Math.floor(r() * 200), reply = 5 + Math.floor(r() * 40) + "m";
+      tipEl.innerHTML =
+        '<div class="atl-tip-top"><span class="atl-tip-em">' + agent.em + '</span>' + D[agent.di][lang] + '</div>' +
+        '<div class="atl-tip-title">' + agent[lang] + '</div>' +
+        '<div class="atl-tip-now"><span class="atl-tip-star">★ ' + rating + '</span> <span class="atl-tip-onelbl">ONE</span></div>' +
+        '<div class="atl-tip-stats"><span><b>' + jobs + '</b> ' + t.jobs + '</span><span><b>' + reply + '</b> ' + t.reply + '</span></div>' +
+        '<div class="atl-tip-hint">' + t.connect + ' →</div>';
+      const w = 250, ex = Math.min(Math.max(e.clientX, w / 2 + 8), vw - w / 2 - 8);
+      tipEl.style.left = ex + "px"; tipEl.classList.add("show");
+      const h = tipEl.offsetHeight || 210;
+      if (e.clientY - h - 24 > 8) { tipEl.style.top = (e.clientY - 14) + "px"; tipEl.classList.remove("below"); }
+      else { tipEl.style.top = (e.clientY + 22) + "px"; tipEl.classList.add("below"); }
+    };
     let tween: { px0: number; py0: number; z0: number; px1: number; py1: number; z1: number; t: number } | null = null;
     let selected: number | null = null, activeD: number | null = null;
     let view: "world" | "mine" = "world";
@@ -311,6 +330,8 @@ export function AtlasHome({
       el.style.left = wx + "px"; el.style.top = wy + "px";
       el.innerHTML = '<span class="atl-agent-face">' + FACE + '<span class="atl-agent-em">' + agent.em + '</span></span><span class="atl-agent-lbl">' + agent[lang] + '</span>';
       el.addEventListener("click", (e) => { e.stopPropagation(); openProvider(agent); });
+      el.addEventListener("mouseenter", (e) => { if (!meMode && !R.classList.contains("atl-compose")) showAgentTip(agent, e as MouseEvent); });
+      el.addEventListener("mouseleave", hideTip);
       ground.appendChild(el);
       return el;
     }
@@ -366,13 +387,11 @@ export function AtlasHome({
     const IC_CAL = IC('<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 3v3M16 3v3"/>');
     const IC_SUN = IC('<circle cx="12" cy="12" r="4"/><path d="M12 3v1.5M12 19.5V21M3 12h1.5M19.5 12H21M5.6 5.6l1 1M17.4 17.4l1 1M18.4 5.6l-1 1M6.6 17.4l-1 1"/>');
     const IC_MOON = IC('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 1 0 9.8 9.8Z"/>');
-    const IC_CLK = IC('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3 1.7"/>');
     function updateStatus() {
       const day = hour >= 7 && hour < 19, temp = 15 + Math.round(9 * Math.max(0, Math.sin(((hour - 6) / 12) * Math.PI)));
       const date = new Date().toLocaleDateString(lang === "he" ? "he-IL" : "en-US", { weekday: "short", month: "short", day: "numeric" });
       const hh = (hour < 10 ? "0" + hour : String(hour)) + ":00";
-      const m = $(".atl-status-main"); if (m) m.innerHTML = IC_CAL + "<span>" + date + "</span><i class='atl-sdot'></i>" + (day ? IC_SUN : IC_MOON) + "<span>" + temp + "°</span>";
-      const ck = $(".atl-clock"); if (ck) ck.innerHTML = IC_CLK + "<span class='atl-clock-t'>" + hh + "</span>";
+      const m = $(".atl-status-main"); if (m) m.innerHTML = IC_CAL + "<span class='atl-status-d'>" + date + "</span><b class='atl-status-t'>" + hh + "</b><i class='atl-sdot'></i>" + (day ? IC_SUN : IC_MOON) + "<span>" + temp + "°</span>";
     }
     let rotI = 0;
     function tickStatus() {
@@ -380,7 +399,10 @@ export function AtlasHome({
       const top = N.slice().sort((a, b) => displayCount(b) - displayCount(a)).slice(0, 12);
       const n = top[rotI++ % top.length];
       setLive("·  " + D[n.d].em + " " + Math.round(displayCount(n) * 0.12).toLocaleString() + " " + TXT[lang].live + " · " + n[lang]);
-      qEl.setAttribute("placeholder", TXT[lang].prompts[rotI % TXT[lang].prompts.length]);
+      // placeholder cycles: contextual sentences while a card is open, generic prompts on the map
+      if (R.classList.contains("atl-compose")) { /* typing — keep it clear */ }
+      else if (R.classList.contains("atl-focus") && focusPrompts.length) { focusPromptI = (focusPromptI + 1) % focusPrompts.length; qEl.setAttribute("placeholder", focusPrompts[focusPromptI]); }
+      else qEl.setAttribute("placeholder", TXT[lang].prompts[rotI % TXT[lang].prompts.length]);
     }
 
     // ---- expanding route + flowing particles ----
@@ -411,6 +433,8 @@ export function AtlasHome({
       routePath.setAttribute("d", "M " + pts.map((p) => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L "));
       routePath.style.stroke = dist.c; routePath.classList.add("on", "preview");
       flows.forEach((f) => f.setAttribute("fill", dist.c)); flowT = 0; particlesOn = !reduce; // dots stream along the path
+      // waypoint pins — a light trace of the steps ahead, like markers on your route
+      pts.forEach((p, i) => { if (i === 0) return; const mk = document.createElement("div"); mk.className = "atl-wp"; mk.style.left = p[0] + "px"; mk.style.top = p[1] + "px"; mk.style.setProperty("--dc", dist.c); mk.style.setProperty("--i", String(i)); ground.appendChild(mk); stepEls.push(mk); });
     }
     function clearProviders() { providerEls.forEach((e) => e.remove()); providerEls.length = 0; plinkEls.forEach((e) => e.remove()); plinkEls.length = 0; }
     function growRoute(id: number) {
@@ -446,14 +470,14 @@ export function AtlasHome({
     }
     const flyTo = (px: number, py: number, z: number) => { tween = { px0: cam.px, py0: cam.py, z0: cam.z, px1: px, py1: py, z1: z, t: 0 }; };
 
-    const onWheel = (e: WheelEvent) => { e.preventDefault(); tween = null; cam.z *= Math.pow(1.0016, -e.deltaY); dirty = true; };
+    const onWheel = (e: WheelEvent) => { if (meMode || isChrome(e.target)) return; e.preventDefault(); tween = null; cam.z *= Math.pow(1.0016, -e.deltaY); dirty = true; }; // no zoom while the profile is open, and let card content scroll
     R.addEventListener("wheel", onWheel, { passive: false }); cleanups.push(() => R.removeEventListener("wheel", onWheel));
 
     const pts: Record<string, { x: number; y: number }> = {};
     let panLast: { x: number; y: number } | null = null;
     let pinchLast: { d: number; mx: number; my: number } | null = null;
     let tapActive = false, tapMoved = 0; // an empty-space tap (not a drag) closes an open card
-    const isChrome = (t: EventTarget | null) => t instanceof Element && t.closest(".atl-core,.atl-ticker,.atl-panel,.atl-priv,.atl-word,.atl-anchor,.atl-agent,.atl-cursor");
+    const isChrome = (t: EventTarget | null) => t instanceof Element && t.closest(".atl-core,.atl-ticker,.atl-topbar,.atl-toasts,.atl-tset,.atl-botbar,.atl-timepop,.atl-panel,.atl-priv,.atl-word,.atl-anchor,.atl-agent,.atl-cursor");
     const pinch = () => { const ids = Object.keys(pts), a = pts[ids[0]], b = pts[ids[1]]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; };
     const onDown = (e: PointerEvent) => {
       if (isChrome(e.target)) return;
@@ -484,11 +508,11 @@ export function AtlasHome({
       // auto-movement is fully off when the pointer left the window, sits on a
       // card, or a card/journey is open — no runaway panning.
       // gentle drift toward a hovered topic (soft, not a snap)
-      if (glideTo && !panLast && !pinchLast && !journey && !tween && !R.classList.contains("atl-focus")) {
+      if (glideTo && !panLast && !pinchLast && !journey && !tween && !meMode && !R.classList.contains("atl-focus")) {
         const tpx = (CX - glideTo.x) + (lang === "he" ? -200 : 200) / cam.z, tpy = (CY - glideTo.y) - 60 / cam.z;
         cam.px += (tpx - cam.px) * 0.03; cam.py += (tpy - cam.py) * 0.03; dirty = true;
       }
-      const autoOk = !isTouch && mouseInside && !overChrome && !panLast && !pinchLast && !journey && !focusText && !tween && !glideTo && !R.classList.contains("atl-focus") && Object.keys(pts).length === 0;
+      const autoOk = !isTouch && mouseInside && !overChrome && !panLast && !pinchLast && !journey && !focusText && !meMode && !tween && !glideTo && !R.classList.contains("atl-focus") && Object.keys(pts).length === 0;
       // map drifts toward wherever the pointer is (whole-screen parallax)
       const ptX = autoOk ? -(mpx - vw / 2) * 0.04 : 0, ptY = autoOk ? -(mpy - vh / 2) * 0.04 : 0;
       if (Math.abs(ptX - parX) > 0.1 || Math.abs(ptY - parY) > 0.1) { parX += (ptX - parX) * 0.06; parY += (ptY - parY) * 0.06; dirty = true; }
@@ -582,10 +606,13 @@ export function AtlasHome({
     const onInput = () => { clrEl.classList.toggle("show", !!qEl.value.trim()); if (qEl.value.trim()) activeD = null; updateVis(); buildSuggest(); buildRelevant(); };
     qEl.addEventListener("input", onInput);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return; const q = qEl.value.trim().toLowerCase(); if (!q) return;
+      if (e.key !== "Enter") return; const raw = qEl.value.trim();
+      // a card is open: the input talks to ONE about this thing (context) — no separate Start button
+      if (R.classList.contains("atl-focus")) { if (onStartRef.current) onStartRef.current(raw || (cur ? cur.n[lang] : "")); return; }
+      const q = raw.toLowerCase(); if (!q) return;
       for (let i = 0; i < N.length; i++) if (N[i].en.toLowerCase().includes(q) || N[i].he.includes(q)) { openNode(i); qEl.blur(); return; }
       for (let j = 0; j < D.length; j++) if (D[j].en.toLowerCase().includes(q) || D[j].he.includes(q)) { focusDistrict(j); return; }
-      generateArea(qEl.value.trim()); qEl.blur(); // nothing matched — map the new need
+      generateArea(raw); qEl.blur(); // nothing matched — map the new need
     };
     qEl.addEventListener("keydown", onKey);
     const onClr = () => { qEl.value = ""; clrEl.classList.remove("show"); sugEl.classList.remove("show"); activeD = null; updateVis(); qEl.focus(); };
@@ -637,7 +664,7 @@ export function AtlasHome({
     // journey (ONE driving, providers on the map, progress) only begins on Start.
     function openNode(id: number) {
       selected = id; const n = N[id], dist = D[n.d], t = TXT[lang];
-      hideTip(); panel.classList.remove("is-custom"); exitCompose();
+      hideTip(); panel.classList.remove("is-custom", "center"); exitCompose();
       activeD = null; qEl.value = ""; clrEl.classList.remove("show"); updateVis();
       wordEls.forEach((o) => o.el.classList.toggle("sel", +o.el.getAttribute("data-id")! === id));
       journey = false; R.classList.remove("atl-journey"); R.classList.add("atl-focus"); // drill into this topic
@@ -687,6 +714,12 @@ export function AtlasHome({
       (R.querySelector(".atl-related-sec") as HTMLElement).style.display = relArr.length ? "" : "none";
       const cta = $(".atl-cta")!; cta.textContent = t.startJ; cta.classList.remove("done");
       ($(".atl-priv2")!).textContent = t.priv2;
+      // the input becomes the call to action — rotating, contextual to this want
+      const nm = n[lang];
+      focusPrompts = lang === "he"
+        ? ["ספרו ל‑ONE מה צריך ל" + nm, "מאיפה מתחילים עם " + nm + "?", "מה הכי חשוב לכם כאן?", "פשוט תגידו — ONE ממשיך מכאן"]
+        : ["Tell ONE what you need for " + nm.toLowerCase(), "Where should ONE start with " + nm.toLowerCase() + "?", "What matters most to you here?", "Just say it — ONE takes it from here"];
+      focusPromptI = 0; qEl.setAttribute("placeholder", focusPrompts[0]);
       panel.classList.add("open"); panel.setAttribute("aria-hidden", "false");
     }
     function renderSteps() {
@@ -728,15 +761,25 @@ export function AtlasHome({
     function openMe() {
       hideTip(); const t = TXT[lang];
       const mine = wordEls.filter((o) => MINE.has(o.n.en));
+      const doneTotal = mine.reduce((s, o) => s + o.n.done, 0);
+      const worlds = Array.from(new Set(mine.map((o) => o.n.d)));
       customEl.innerHTML =
-        '<div class="atl-me"><div class="atl-me-face">' + FACE + '</div>' +
+        '<div class="atl-me"><div class="atl-me-facegap" aria-hidden="true"></div>' +
         '<div class="atl-me-name">' + t.myOne + '</div><div class="atl-me-sub">' + t.myOneSub + '</div>' +
-        '<div class="atl-sech" style="margin-top:20px">' + t.inProgress(mine.length) + '</div>' +
-        '<div class="atl-me-list">' + mine.map((o) => '<button class="atl-me-item" data-id="' + o.el.getAttribute("data-id") + '"><span class="atl-me-em">' + D[o.n.d].em + '</span>' + o.n[lang] + '</button>').join("") + '</div>' +
-        '<button class="atl-cta atl-me-manage">' + t.manage + '</button></div>';
+        '<div class="atl-me-stats"><div><b>' + mine.length + '</b><span>' + t.inMotion + '</span></div><div><b>' + doneTotal.toLocaleString() + '</b><span>' + t.completed + '</span></div><div><b>' + worlds.length + '</b><span>' + t.worlds + '</span></div></div>' +
+        '<div class="atl-sech" style="margin-top:22px">' + t.inProgress(mine.length) + '</div>' +
+        '<div class="atl-me-list">' + mine.map((o) => { const dc = displayCount(o.n); const pc = Math.min(90, 20 + (o.n.done % 70)); return '<button class="atl-me-item" data-id="' + o.el.getAttribute("data-id") + '"><span class="atl-me-em">' + D[o.n.d].em + '</span><span class="atl-me-it-b"><span class="atl-me-it-name">' + o.n[lang] + '</span><span class="atl-me-bar"><span style="width:' + pc + '%"></span></span></span><span class="atl-me-it-n">' + Math.round(dc * 0.12).toLocaleString() + '</span></button>'; }).join("") + '</div>' +
+        '<div class="atl-sech" style="margin-top:20px">' + t.meWorlds + '</div>' +
+        '<div class="atl-me-worlds">' + worlds.map((di) => '<span class="atl-me-world"><span>' + D[di].em + '</span>' + D[di][lang] + '</span>').join("") + '</div>' +
+        '<button class="atl-cta atl-me-manage">' + t.manage + '</button>' +
+        '<p class="atl-priv2">' + t.priv2 + '</p></div>';
       customEl.querySelectorAll(".atl-me-item").forEach((b) => b.addEventListener("click", () => openNode(+(b.getAttribute("data-id") || 0))));
       const mg = customEl.querySelector(".atl-me-manage"); if (mg) mg.addEventListener("click", () => { if (onOrbTapRef.current) onOrbTapRef.current(); });
-      panel.classList.add("is-custom", "open"); panel.setAttribute("aria-hidden", "false");
+      panel.classList.remove("open"); panel.classList.add("is-custom", "center"); R.classList.add("atl-meopen");
+      panel.setAttribute("aria-hidden", "false");
+      meMode = true; // the real companion rises into the card as the avatar
+      // paint the below-and-scaled closed state, then rise — mirrors the close exactly
+      requestAnimationFrame(() => requestAnimationFrame(() => panel.classList.add("open")));
     }
     // Start = the journey actually begins: field clears, ONE drives, providers appear.
     function startJourney() {
@@ -758,11 +801,14 @@ export function AtlasHome({
       const cta = $(".atl-cta")!; cta.textContent = TXT[lang].openIn; cta.classList.remove("done");
     }
     function closePanel() {
-      panel.classList.remove("open"); panel.classList.remove("is-custom"); panel.setAttribute("aria-hidden", "true"); selected = null; cur = null;
+      panel.classList.remove("open"); R.classList.remove("atl-meopen"); panel.setAttribute("aria-hidden", "true");
+      selected = null; cur = null; meMode = false; journey = false;
       wordEls.forEach((o) => o.el.classList.remove("sel")); clearRoute();
-      journey = false; R.classList.remove("atl-journey", "atl-focus");
       if (driveEl) { driveEl.remove(); driveEl = null; } if (driveArrow) { driveArrow.remove(); driveArrow = null; }
       clearProviders();
+      // Keep the whole open-card layout — hidden Start button, in-card composer, dimmed map —
+      // through the fade-out, THEN reset. Otherwise the old layout (with the button) flashes as it closes.
+      setTimeout(() => { if (!panel.classList.contains("open")) { panel.classList.remove("is-custom", "center"); R.classList.remove("atl-focus", "atl-journey"); } }, 340);
       flyTo(0, -30, vw < 720 ? 0.6 : 0.8); // pull back out to the full map
     }
     // Clicking a business/pro ONE opens its profile card.
@@ -776,9 +822,11 @@ export function AtlasHome({
         '<button class="atl-cta atl-pv-cta">' + t.connect + '</button><p class="atl-priv2">' + t.priv2 + '</p></div>';
       const c = customEl.querySelector(".atl-pv-cta") as HTMLButtonElement | null;
       if (c) c.addEventListener("click", () => { if (onStartRef.current) onStartRef.current(ag[lang]); });
-      panel.classList.add("is-custom", "open"); panel.setAttribute("aria-hidden", "false");
+      panel.classList.remove("center"); panel.classList.add("is-custom", "open"); panel.setAttribute("aria-hidden", "false");
     }
     // Clicking a topic marker opens its "human index" — a basket of that world.
+    // format a big money figure with the local currency and K/M suffix
+    const money = (v: number) => { const c = lang === "he" ? "₪" : "$"; return v >= 1e6 ? c + (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? c + Math.round(v / 1e3) + "K" : c + Math.round(v); };
     function openIndex(di: number) {
       hideTip(); const t = TXT[lang], dist = D[di], dc = dist.c;
       const items = N.filter((n) => n.d === di);
@@ -788,15 +836,35 @@ export function AtlasHome({
       const top = items.slice().sort((a, b) => displayCount(b) - displayCount(a)).slice(0, 4);
       const maxv = (top[0] ? Math.round(displayCount(top[0]) * 0.12) : 1) || 1;
       const rows = top.map((n) => { const v = Math.round(displayCount(n) * 0.12); return '<div class="atl-idx-row"><span class="atl-idx-bar" style="width:' + Math.max(8, Math.round((v / maxv) * 100)) + '%"></span><span class="atl-idx-name">' + n[lang] + '</span><span class="atl-idx-v">' + v.toLocaleString() + '</span></div>'; }).join("");
+      // market-style figures: money that moved through this world, weekly demand, its curve
+      const rr = rng(di * 131 + 7); const dealSize = 150 + Math.floor(rr() * 1500);
+      const circulated = liveTotal * dealSize; const weekly = items.reduce((s, n) => s + n.done, 0);
+      const rc = rng(di * 57 + 3);
+      const series = Array.from({ length: 24 }, (_, i) => { const day = 0.62 + 0.38 * Math.sin(((i - 6) / 24) * Math.PI * 2); const noise = 0.86 + rc() * 0.28; const up = 1 + (avgTrend / 100) * (i / 23); return Math.max(1, liveTotal * day * noise * up); });
+      const W = 300, H = 84, pad = 6, mn = Math.min(...series), mx = Math.max(...series) || 1;
+      const xs = (i: number) => pad + (i / (series.length - 1)) * (W - 2 * pad);
+      const ys = (v: number) => H - pad - ((v - mn) / ((mx - mn) || 1)) * (H - 2 * pad);
+      const line = series.map((v, i) => (i ? "L" : "M") + xs(i).toFixed(1) + " " + ys(v).toFixed(1)).join(" ");
+      const area = "M " + xs(0).toFixed(1) + " " + (H - pad) + " " + series.map((v, i) => "L " + xs(i).toFixed(1) + " " + ys(v).toFixed(1)).join(" ") + " L " + xs(series.length - 1).toFixed(1) + " " + (H - pad) + " Z";
+      const gid = "idxg" + di;
+      const chart =
+        '<div class="atl-idx-chtop"><span>' + t.idxChart + '</span><span class="atl-idx-chd">↑ ' + avgTrend + '%</span></div>' +
+        '<div class="atl-idx-chart"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" preserveAspectRatio="none">' +
+          '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + dc + '" stop-opacity="0.26"/><stop offset="1" stop-color="' + dc + '" stop-opacity="0"/></linearGradient></defs>' +
+          '<path d="' + area + '" fill="url(#' + gid + ')"/>' +
+          '<path d="' + line + '" fill="none" stroke="' + dc + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>' +
+          '<circle cx="' + xs(series.length - 1).toFixed(1) + '" cy="' + ys(series[series.length - 1]).toFixed(1) + '" r="3.4" fill="' + dc + '"/>' +
+        '</svg></div>';
       customEl.innerHTML =
         '<div class="atl-idx" style="--dc:' + dc + '"><div class="atl-pv-head"><span class="atl-idx-em">' + dist.em + '</span><div><div class="atl-pv-name">' + dist[lang] + '</div><div class="atl-pv-sub">' + t.idxLive + '</div></div><span class="atl-idx-trend">↑ ' + avgTrend + '%</span></div>' +
         '<div class="atl-idx-big">' + liveTotal.toLocaleString() + '</div>' +
-        '<div class="atl-idx-metrics"><div><b>' + items.length + '</b><span>' + t.idxIntents + '</span></div><div><b>' + provCount + '</b><span>' + t.idxProviders + '</span></div></div>' +
+        chart +
+        '<div class="atl-idx-metrics"><div><b>' + money(circulated) + '</b><span>' + t.idxVolume + '</span></div><div><b>' + weekly.toLocaleString() + '</b><span>' + t.idxDemand + '</span></div><div><b>' + provCount + '</b><span>' + t.idxProviders + '</span></div></div>' +
         '<div class="atl-sech" style="margin-top:18px">' + t.idxTop + '</div>' + rows +
         '<button class="atl-cta atl-idx-cta">' + t.idxEnter + '</button></div>';
       const c = customEl.querySelector(".atl-idx-cta") as HTMLButtonElement | null;
       if (c) c.addEventListener("click", () => { panel.classList.remove("open", "is-custom"); panel.setAttribute("aria-hidden", "true"); focusDistrict(di); });
-      panel.classList.add("is-custom", "open"); panel.setAttribute("aria-hidden", "false");
+      panel.classList.remove("center"); panel.classList.add("is-custom", "open"); panel.setAttribute("aria-hidden", "false");
     }
     ($(".atl-close")!).addEventListener("click", closePanel);
     const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") closePanel(); };
@@ -809,9 +877,9 @@ export function AtlasHome({
     { const openP = () => { if (onOrbTapRef.current) onOrbTapRef.current(); };
       const lg = $(".atl-logo"); if (lg) lg.addEventListener("click", openP);
       const sl = $(".atl-signin-link"); if (sl) sl.addEventListener("click", openP); }
-    { const ck = $(".atl-clock"), pop = $(".atl-timepop");
+    { const ck = $(".atl-status-main"), pop = $(".atl-timepop");
       if (ck && pop) { ck.addEventListener("click", (e) => { e.stopPropagation(); pop.classList.toggle("show"); });
-        R.addEventListener("pointerdown", (e) => { if (!(e.target as Element).closest(".atl-timepop,.atl-clock")) pop.classList.remove("show"); }); } }
+        R.addEventListener("pointerdown", (e) => { if (!(e.target as Element).closest(".atl-timepop,.atl-status-main")) pop.classList.remove("show"); }); } }
 
     // live tick
     let tick: ReturnType<typeof setInterval> | null = null;
@@ -827,24 +895,75 @@ export function AtlasHome({
     // Top-of-screen toasts — live updates & tips that pop and can be dismissed.
     {
       const toastsEl = $(".atl-toasts")!;
+      const L = lang === "he";
       const IC_INFO = IC('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/>');
       const IC_BULB = IC('<path d="M9 18h6M10.5 21h3M12 3a6 6 0 0 0-3.5 10.9c.6.5.9 1.1 1 2.1h5c.1-1 .4-1.6 1-2.1A6 6 0 0 0 12 3Z"/>');
       const IC_X = IC('<path d="M6 6l12 12M18 6L6 18"/>');
-      const tips = lang === "he"
+      const IC_GEAR = IC('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 3.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H8a1.65 1.65 0 0 0 1-1.51V2a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V8a1.65 1.65 0 0 0 1.51 1H22a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>');
+      const tips = L
         ? [["טיפ", "גררו את השעון כדי לראות את היום מתחלף"], ["טיפ", "הקלידו רצון וה‑ONE ימפה אותו"], ["טיפ", "לחצו על נושא לפירוט המלא"]]
         : [["Tip", "Scrub the clock to watch the day shift"], ["Tip", "Type a need — ONE maps it for you"], ["Tip", "Click a topic for the full picture"]];
+      // toast preferences: where they sit, whether they're silenced, which kinds show
+      type TPrefs = { pos: "top" | "bottom"; muted: boolean; upd: boolean; tip: boolean };
+      const DEFP: TPrefs = { pos: "top", muted: false, upd: true, tip: true };
+      let prefs: TPrefs = DEFP;
+      try { const raw = localStorage.getItem("one_atlas_toastprefs"); if (raw) prefs = { ...DEFP, ...JSON.parse(raw) }; } catch { /* first run */ }
+      const saveP = () => { try { localStorage.setItem("one_atlas_toastprefs", JSON.stringify(prefs)); } catch { /* private mode */ } };
+      const applyPos = () => { toastsEl.classList.toggle("pos-bottom", prefs.pos === "bottom"); };
+      applyPos();
+      // the settings card — opens centred from any toast's gear
+      const setEl = document.createElement("div"); setEl.className = "atl-tset"; setEl.setAttribute("aria-hidden", "true");
+      setEl.innerHTML =
+        '<div class="atl-tset-card" role="dialog" aria-modal="true">' +
+          '<div class="atl-tset-head"><b>' + (L ? "הגדרות התראות" : "Notifications") + '</b><button class="atl-tset-x" aria-label="Close">' + IC_X + '</button></div>' +
+          '<div class="atl-tset-lbl">' + (L ? "מיקום" : "Position") + '</div>' +
+          '<div class="atl-tset-seg" data-k="pos"><button data-v="top">' + (L ? "למעלה" : "Top") + '</button><button data-v="bottom">' + (L ? "למטה" : "Bottom") + '</button></div>' +
+          '<div class="atl-tset-lbl">' + (L ? "התראות" : "Alerts") + '</div>' +
+          '<div class="atl-tset-row"><span>' + (L ? "השתקה מלאה" : "Silence all") + '</span><button class="atl-tset-sw" data-k="muted" role="switch"></button></div>' +
+          '<div class="atl-tset-lbl">' + (L ? "סוגים" : "Show") + '</div>' +
+          '<div class="atl-tset-row"><span>' + (L ? "עדכונים" : "Updates") + '</span><button class="atl-tset-sw" data-k="upd" role="switch"></button></div>' +
+          '<div class="atl-tset-row"><span>' + (L ? "טיפים" : "Tips") + '</span><button class="atl-tset-sw" data-k="tip" role="switch"></button></div>' +
+        '</div>';
+      R.appendChild(setEl); cleanups.push(() => setEl.remove());
+      const syncSet = () => {
+        setEl.querySelectorAll('.atl-tset-seg[data-k="pos"] button').forEach((b) => b.classList.toggle("on", (b as HTMLElement).dataset.v === prefs.pos));
+        (["muted", "upd", "tip"] as const).forEach((k) => { const sw = setEl.querySelector('.atl-tset-sw[data-k="' + k + '"]'); if (sw) sw.classList.toggle("on", prefs[k]); });
+      };
+      setEl.querySelectorAll('.atl-tset-seg[data-k="pos"] button').forEach((b) => b.addEventListener("click", () => { prefs.pos = ((b as HTMLElement).dataset.v as "top" | "bottom"); applyPos(); saveP(); syncSet(); }));
+      setEl.querySelectorAll(".atl-tset-sw").forEach((sw) => sw.addEventListener("click", () => { const k = ((sw as HTMLElement).dataset.k as "muted" | "upd" | "tip"); prefs[k] = !prefs[k]; saveP(); syncSet(); }));
+      const openSet = () => { syncSet(); setEl.classList.add("show"); setEl.setAttribute("aria-hidden", "false"); };
+      const closeSet = () => { setEl.classList.remove("show"); setEl.setAttribute("aria-hidden", "true"); };
+      (setEl.querySelector(".atl-tset-x") as HTMLElement).addEventListener("click", closeSet);
+      setEl.addEventListener("click", (e) => { if (e.target === setEl) closeSet(); });
+      // newest in front, older cards peeking behind it — a little stack
+      const restack = () => {
+        const kids = Array.from(toastsEl.children) as HTMLElement[]; const n = kids.length;
+        kids.forEach((el, i) => {
+          if (el.classList.contains("out")) return;
+          const depth = n - 1 - i; el.style.zIndex = String(200 - depth);
+          el.style.transform = "translate(-50%," + depth * 10 + "px) scale(" + (1 - depth * 0.05).toFixed(3) + ")";
+          el.style.opacity = String(Math.max(0.25, 1 - depth * 0.18));
+        });
+      };
       const pushToast = (icon: string, title: string, body: string) => {
+        if (prefs.muted) return; // silenced
         const el = document.createElement("div"); el.className = "atl-toast";
-        el.innerHTML = '<span class="atl-toast-ic">' + icon + '</span><div class="atl-toast-b"><b>' + title + '</b><span>' + body + '</span></div><button class="atl-toast-x" aria-label="Dismiss">' + IC_X + '</button>';
-        let t = 0; const kill = () => { clearTimeout(t); el.classList.remove("in"); setTimeout(() => el.remove(), 300); };
+        el.innerHTML = '<span class="atl-toast-ic">' + icon + '</span><div class="atl-toast-b"><b>' + title + '</b><span>' + body + '</span></div><button class="atl-toast-gear" aria-label="' + (L ? "הגדרות" : "Settings") + '">' + IC_GEAR + '</button><button class="atl-toast-x" aria-label="Dismiss">' + IC_X + '</button>';
+        let t = 0; const kill = () => { clearTimeout(t); el.classList.add("out"); el.style.opacity = "0"; el.style.transform = "translate(-50%,-12px) scale(.92)"; setTimeout(() => { el.remove(); restack(); }, 300); };
         (el.querySelector(".atl-toast-x") as HTMLElement).addEventListener("click", kill);
-        toastsEl.appendChild(el); requestAnimationFrame(() => el.classList.add("in")); t = window.setTimeout(kill, 7000);
-        while (toastsEl.children.length > 3) toastsEl.firstElementChild!.remove();
+        (el.querySelector(".atl-toast-gear") as HTMLElement).addEventListener("click", (e) => { e.stopPropagation(); openSet(); });
+        el.style.opacity = "0"; el.style.transform = "translate(-50%,-12px) scale(.96)";
+        toastsEl.appendChild(el);
+        while (toastsEl.children.length > 4) { const f = toastsEl.firstElementChild as HTMLElement | null; if (f) f.remove(); }
+        requestAnimationFrame(restack);
+        t = window.setTimeout(kill, 7000);
       };
       let tn = 0;
       const ti = setInterval(() => {
-        if (document.hidden) return; tn++;
-        if (tn % 2 === 0) { const n = N[Math.floor(Math.random() * N.length)]; pushToast(IC_INFO, n[lang], n.done.toLocaleString() + " " + TXT[lang].doneK); }
+        if (document.hidden || prefs.muted) return;
+        const kinds: ("upd" | "tip")[] = []; if (prefs.upd) kinds.push("upd"); if (prefs.tip) kinds.push("tip");
+        if (!kinds.length) return; const kind = kinds[tn++ % kinds.length];
+        if (kind === "upd") { const n = N[Math.floor(Math.random() * N.length)]; pushToast(IC_INFO, n[lang], n.done.toLocaleString() + " " + TXT[lang].doneK); }
         else { const tp = tips[Math.floor(Math.random() * tips.length)]; pushToast(IC_BULB, tp[0], tp[1]); }
       }, 9000);
       cleanups.push(() => clearInterval(ti));
@@ -874,16 +993,26 @@ export function AtlasHome({
       const fr = () => {
         const now = performance.now();
         // home unless there's a reason to move: a want under inspection pulls it over
-        let tx = homeX(), ty = homeY(), aside = false;
-        if (R.classList.contains("atl-focus")) { tx = lang === "he" ? vw - 530 : 530; ty = vh * 0.32; } // beside a drilled want; stays centred for the topic index
+        let tx = homeX(), ty = homeY(), aside = false, big = false;
+        if (meMode) { const r = panel.getBoundingClientRect(); tx = r.left + r.width / 2; ty = r.top + 60; big = true; } // rise into the profile card as its avatar
+        else if (R.classList.contains("atl-focus")) { const r = panel.getBoundingClientRect(); tx = clamp((lang === "he" ? r.left - 42 : r.right + 42), 44, vw - 44); ty = clamp(r.bottom - 60, 120, vh - 96); } // stand just outside the card, beside the input it speaks to
         else if (focusText) { tx = mpx + (mpx > vw / 2 ? -170 : 170); ty = mpy - 40; aside = true; } // beside the hover card, not behind it
-        px += (tx - px) * 0.05; py += (ty - py) * 0.05;
-        if (now - lastMove < 1600) { tgx = clamp((mpx - px) / 220, -1, 1); tgy = clamp((mpy - py) / 220, -1, 1); } // glance at you
+        px += (tx - px) * (meMode ? 0.14 : 0.05); py += (ty - py) * (meMode ? 0.14 : 0.05);
+        if (meMode) { tgx = 0; tgy = 0; } // look straight ahead as the avatar
+        else if (now - lastMove < 1600) { tgx = clamp((mpx - px) / 220, -1, 1); tgy = clamp((mpy - py) / 220, -1, 1); } // glance at you
         else if (now >= nextGaze) pickGaze(now);                                                                  // else a slow look around
         gx += (tgx - gx) * 0.07; gy += (tgy - gy) * 0.07;
         if (curEl) {
           curEl.classList.toggle("aside", aside); // small & to the side only next to a hover card
+          curEl.classList.toggle("big", big);     // grown into the profile avatar
           curEl.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)";
+        }
+        // the composer lives INSIDE the open card, pinned to its bottom (pure focus only)
+        if (coreEl) {
+          if (R.classList.contains("atl-focus") && !R.classList.contains("atl-journey")) {
+            const r = panel.getBoundingClientRect();
+            coreEl.style.left = r.left + "px"; coreEl.style.width = r.width + "px"; coreEl.style.top = (r.bottom - coreEl.offsetHeight) + "px";
+          } else if (coreEl.style.left) { coreEl.style.left = ""; coreEl.style.top = ""; coreEl.style.width = ""; }
           if (!reduce && eL && eR) { eL.setAttribute("cx", (34 + gx * 6).toFixed(1)); eR.setAttribute("cx", (66 + gx * 6).toFixed(1)); eL.setAttribute("cy", (45 + gy * 6).toFixed(1)); eR.setAttribute("cy", (45 + gy * 6).toFixed(1)); }
         }
         craf = requestAnimationFrame(fr);
@@ -921,6 +1050,7 @@ export function AtlasHome({
       <div className="atl-stars" aria-hidden="true" />
       <div className="atl-horizon" aria-hidden="true" />
       <div className="atl-floor" aria-hidden="true" />
+      <div className="atl-lens" aria-hidden="true" />
 
       <div className="atl-topbar">
         <button className="atl-logo" aria-label="ONE01">
@@ -973,8 +1103,7 @@ export function AtlasHome({
 
       <div className="atl-botbar">
         <div className="atl-status">
-          <span className="atl-status-main" />
-          <button className="atl-clock" aria-label="Time"><span className="atl-clock-t">--:--</span></button>
+          <button className="atl-status-main" aria-label="Date and time" />
           <span className="atl-status-live" />
         </div>
       </div>
@@ -1022,16 +1151,20 @@ const ATLAS_CSS = `
 .atl-search, .atl-panel, .atl-time, .atl-view, .atl-agent-lbl, .atl-prov, .atl-clr{ transition:background-color .9s ease, color .9s ease, border-color .9s ease; }
 .atl-app.drag{ cursor:grabbing; }
 .atl-search input{ cursor:text; }
-.atl-plus, .atl-voice, .atl-clr, .atl-vw, .atl-cta, .atl-close, .atl-time-range, .atl-stepgo, .atl-agent, .atl-menu, .atl-logo, .atl-clock, .atl-word, .atl-anchor{ cursor:pointer; }
+.atl-plus, .atl-voice, .atl-clr, .atl-vw, .atl-cta, .atl-close, .atl-time-range, .atl-stepgo, .atl-agent, .atl-menu, .atl-logo, .atl-status-main, .atl-word, .atl-anchor{ cursor:pointer; }
 /* the ONE companion — trails the pointer from a distance, never the cursor */
 .atl-cursor{ position:fixed; left:0; top:0; z-index:71; pointer-events:auto; cursor:pointer; width:60px; height:60px; opacity:0.95; filter:drop-shadow(0 12px 24px rgba(10,10,10,0.30)); will-change:transform; transition:width .3s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1); }
 .atl-cursor.aside{ width:38px; height:38px; }
+.atl-cursor.big{ width:72px; height:72px; opacity:1; filter:drop-shadow(0 14px 28px rgba(10,10,10,0.34)); }
 .atl-cursor svg{ display:block; transition:transform .32s cubic-bezier(.2,.8,.2,1); }
 .atl-cursor.react svg{ transform:scale(1.32); }
-.atl-scrim{ position:absolute; inset:0; z-index:62; background:color-mix(in srgb, var(--a-bg) 52%, transparent); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity .3s; }
+.atl-scrim{ position:absolute; inset:0; z-index:62; background:color-mix(in srgb, var(--a-bg) 52%, transparent); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity .34s; }
+/* the ONE profile pulls all focus: the map dims deeply toward the sides behind the centred card */
+.atl-app.atl-meopen .atl-scrim{ opacity:1; pointer-events:auto; background:radial-gradient(120% 120% at 50% 50%, color-mix(in srgb, var(--a-bg) 32%, transparent) 24%, color-mix(in srgb, var(--a-bg) 80%, transparent) 76%, var(--a-bg) 100%); -webkit-backdrop-filter:blur(5px); backdrop-filter:blur(5px); }
 /* dim disabled — the card sits to the side, map stays lit */
 .atl-ground{ position:absolute; left:50%; top:50%; width:7000px; height:5000px; transform-origin:50% 50%; transform-style:preserve-3d; will-change:transform; }
 .atl-grid{ position:absolute; inset:0; background:
+  radial-gradient(circle, color-mix(in srgb, var(--a-line2) 62%, transparent) 0 1.5px, transparent 1.7px) 0 0 / 96px 96px,
   repeating-linear-gradient(0deg, var(--a-line2) 0 1.4px, transparent 1.4px 192px),
   repeating-linear-gradient(90deg, var(--a-line2) 0 1.4px, transparent 1.4px 192px),
   repeating-linear-gradient(0deg, color-mix(in srgb, var(--a-line2) 55%, transparent) 0 1px, transparent 1px 48px),
@@ -1049,24 +1182,50 @@ const ATLAS_CSS = `
 .atl-route.on{ opacity:0.9; stroke-dasharray:2 14; animation:atlDash 1.1s linear infinite; }
 .atl-route.preview{ opacity:0.45; stroke-width:3; stroke-dasharray:1 12; animation:atlDash 2.4s linear infinite; }
 @keyframes atlDash{ to{ stroke-dashoffset:-16; } }
+/* waypoint pins along a route — location markers on your path */
+.atl-wp{ position:absolute; width:11px; height:11px; transform:translate(-50%,-50%) translateZ(6px) rotateX(calc(var(--tilt,56deg) * -1)); pointer-events:none; opacity:0; animation:atlWpIn .45s ease forwards; animation-delay:calc(var(--i,1) * 80ms); }
+.atl-wp::before{ content:""; position:absolute; inset:0; border-radius:50%; background:var(--dc,#888); box-shadow:0 0 0 3px color-mix(in srgb, var(--dc,#888) 20%, transparent), 0 2px 6px rgba(10,10,10,0.32); }
+.atl-wp::after{ content:""; position:absolute; inset:-5px; border-radius:50%; border:1.5px solid var(--dc,#888); opacity:0; animation:atlWpPulse 2.6s ease-out infinite; animation-delay:calc(var(--i,1) * 80ms); }
+@keyframes atlWpIn{ from{ opacity:0; } to{ opacity:1; } }
+@keyframes atlWpPulse{ 0%{ transform:scale(.55); opacity:.6; } 100%{ transform:scale(1.7); opacity:0; } }
+@media (prefers-reduced-motion: reduce){ .atl-wp{ animation:none; opacity:1; } .atl-wp::after{ animation:none; } }
 .atl-flow{ opacity:0; }
 .atl-topbar{ position:absolute; z-index:28; top:0; inset-inline:0; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 20px; pointer-events:none; }
 .atl-topbar > *{ pointer-events:auto; }
 .atl-botbar{ position:absolute; z-index:26; bottom:10px; inset-inline:0; display:flex; align-items:center; justify-content:center; padding:0 20px; pointer-events:none; }
 .atl-botbar > *{ pointer-events:auto; }
 .atl-status{ display:flex; align-items:center; gap:12px; min-width:0; overflow:hidden; }
-.atl-status-main{ display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--a-ink2); white-space:nowrap; }
+.atl-status-main{ display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12.5px; font-weight:700; color:var(--a-ink2); white-space:nowrap; background:none; border:0; padding:0; border-radius:8px; transition:color .2s; }
+.atl-status-main:hover{ color:var(--a-ink); }
+.atl-status-t{ color:var(--a-ink); font-weight:800; font-variant-numeric:tabular-nums; }
 .atl-sdot{ width:3px; height:3px; border-radius:50%; background:var(--a-ink3); display:inline-block; margin:0 3px; }
 .atl-si{ width:13px; height:13px; opacity:0.85; flex:none; }
-.atl-clock{ display:inline-flex; align-items:center; gap:5px; flex:none; background:none; border:0; font:inherit; font-size:12.5px; font-weight:700; color:var(--a-ink); white-space:nowrap; padding:2px 4px; }
 .atl-timepop{ position:absolute; z-index:30; bottom:56px; left:50%; transform:translateX(-50%) translateY(6px); display:inline-flex; align-items:center; gap:10px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:999px; padding:9px 15px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
 .atl-timepop.show{ opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0); }
-.atl-toasts{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; }
-.atl-toast{ pointer-events:auto; display:flex; align-items:center; gap:11px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadow); border-radius:14px; padding:9px 8px 9px 14px; max-width:360px; opacity:0; transform:translateY(-8px); transition:opacity .3s, transform .3s cubic-bezier(.2,.8,.2,1); }
-.atl-toast.in{ opacity:1; transform:translateY(0); }
+.atl-toasts{ position:absolute; z-index:29; top:52px; left:50%; pointer-events:none; }
+.atl-toast{ position:absolute; top:0; left:50%; width:max-content; max-width:min(360px,80vw); pointer-events:auto; display:flex; align-items:center; gap:11px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:14px; padding:9px 8px 9px 14px; transform:translate(-50%,0); transition:transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s; }
 .atl-toast-ic{ color:var(--a-ink2); display:grid; place-items:center; flex:none; } .atl-toast-ic svg{ width:16px; height:16px; }
 .atl-toast-b{ display:flex; flex-direction:column; min-width:0; } .atl-toast-b b{ font-size:12.5px; font-weight:700; color:var(--a-ink); } .atl-toast-b span{ font-size:11.5px; color:var(--a-ink3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .atl-toast-x{ margin-inline-start:6px; background:none; border:0; color:var(--a-ink3); cursor:pointer; display:grid; place-items:center; padding:4px; border-radius:8px; flex:none; } .atl-toast-x:hover{ background:var(--a-line); } .atl-toast-x svg{ width:13px; height:13px; }
+.atl-toast-gear{ margin-inline-start:2px; background:none; border:0; color:var(--a-ink3); cursor:pointer; display:grid; place-items:center; padding:4px; border-radius:8px; flex:none; opacity:0; transform:scale(.8); transition:opacity .2s, transform .2s, background .2s; } .atl-toast:hover .atl-toast-gear{ opacity:1; transform:scale(1); } .atl-toast-gear:hover{ background:var(--a-line); color:var(--a-ink2); } .atl-toast-gear svg{ width:13px; height:13px; }
+.atl-toasts.pos-bottom{ top:auto; bottom:78px; }
+/* toast settings — a small centred modal opened from any toast's gear */
+.atl-tset{ position:absolute; inset:0; z-index:80; display:grid; place-items:center; padding:20px; background:color-mix(in srgb, var(--a-bg) 52%, transparent); opacity:0; pointer-events:none; transition:opacity .2s; }
+.atl-tset.show{ opacity:1; pointer-events:auto; }
+.atl-tset-card{ width:min(340px, calc(100vw - 40px)); background:var(--a-card); border:1px solid var(--a-line); border-radius:20px; box-shadow:var(--a-shadowlift); padding:18px 20px 20px; transform:translateY(14px) scale(.97); transition:transform .28s cubic-bezier(.2,.9,.25,1); }
+.atl-tset.show .atl-tset-card{ transform:translateY(0) scale(1); }
+.atl-tset-head{ display:flex; align-items:center; justify-content:space-between; }
+.atl-tset-head b{ font-size:16px; font-weight:800; letter-spacing:-0.01em; color:var(--a-ink); }
+.atl-tset-x{ background:var(--a-bg); border:1px solid var(--a-line); width:30px; height:30px; border-radius:50%; display:grid; place-items:center; cursor:pointer; color:var(--a-ink2); flex:none; } .atl-tset-x svg{ width:13px; height:13px; }
+.atl-tset-lbl{ font-size:10.5px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--a-ink3); margin:16px 0 9px; } [dir="rtl"] .atl-tset-lbl{ letter-spacing:0.03em; }
+.atl-tset-seg{ display:flex; gap:5px; background:var(--a-line); border-radius:12px; padding:4px; }
+.atl-tset-seg button{ flex:1; height:34px; border:0; background:none; border-radius:9px; font:inherit; font-size:13px; font-weight:700; color:var(--a-ink3); cursor:pointer; transition:color .2s; }
+.atl-tset-seg button.on{ background:var(--a-card); color:var(--a-ink); box-shadow:var(--a-shadow); }
+.atl-tset-row{ display:flex; align-items:center; justify-content:space-between; padding:9px 2px; font-size:13.5px; font-weight:600; color:var(--a-ink); }
+.atl-tset-sw{ width:42px; height:24px; border-radius:999px; border:0; background:var(--a-line); cursor:pointer; position:relative; flex:none; transition:background .2s; }
+.atl-tset-sw::after{ content:""; position:absolute; top:3px; inset-inline-start:3px; width:18px; height:18px; border-radius:50%; background:var(--a-card); box-shadow:var(--a-shadow); transition:transform .2s; }
+.atl-tset-sw.on{ background:var(--a-live); }
+.atl-tset-sw.on::after{ transform:translateX(18px); } [dir="rtl"] .atl-tset-sw.on::after{ transform:translateX(-18px); }
 .atl-logo{ flex:none; background:none; border:0; padding:0; color:var(--a-ink); display:grid; place-items:center; }
 .atl-status-live{ font-size:12.5px; font-weight:500; color:var(--a-ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .atl-menu{ flex:none; width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; padding:0; }
@@ -1109,6 +1268,10 @@ const ATLAS_CSS = `
 .atl-app.atl-night .atl-stars{ opacity:0.55; }
 .atl-horizon{ position:absolute; inset:0 0 auto 0; height:42%; z-index:11; pointer-events:none; background:linear-gradient(var(--a-bg) 12%, rgba(0,0,0,0) 100%); }
 .atl-floor{ position:absolute; inset:auto 0 0 0; height:30%; z-index:11; pointer-events:none; background:linear-gradient(rgba(0,0,0,0) 0%, var(--a-bg) 94%); }
+/* soft lens vignette — the map fades cleanly toward every edge (sides too), like looking through glass */
+.atl-lens{ position:absolute; inset:0; z-index:12; pointer-events:none; background:
+  linear-gradient(to right, var(--a-bg) 0%, rgba(0,0,0,0) 17%, rgba(0,0,0,0) 83%, var(--a-bg) 100%),
+  radial-gradient(102% 108% at 50% 45%, rgba(0,0,0,0) 40%, color-mix(in srgb, var(--a-bg) 55%, transparent) 74%, var(--a-bg) 100%); }
 .atl-ticker{ position:absolute; z-index:29; top:18px; left:50%; transform:translateX(-50%); width:min(42vw,520px); height:32px; overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); }
 .atl-track{ position:absolute; top:0; inset-inline-start:0; display:inline-flex; align-items:center; gap:30px; white-space:nowrap; height:32px; animation:atlCrawl 56s linear infinite; will-change:transform; }
 [dir="rtl"] .atl-track{ animation-name:atlCrawlR; }
@@ -1147,6 +1310,8 @@ const ATLAS_CSS = `
 .atl-word.gen .atl-inner{ text-decoration:underline dotted; text-decoration-color:var(--a-ink3); text-underline-offset:5px; }
 .atl-panel{ position:absolute; z-index:64; top:50%; inset-inline-start:20px; width:min(380px,calc(100vw - 40px)); max-height:calc(100dvh - 48px); background:var(--a-card); border:1px solid var(--a-line); border-radius:22px; box-shadow:var(--a-shadowlift); display:flex; flex-direction:column; padding:18px 22px 22px; overflow-y:auto; opacity:0; transform:translateY(calc(-50% - 8px)) scale(.98); transform-origin:center; pointer-events:none; transition:opacity .3s, transform .3s cubic-bezier(.2,.8,.2,1); user-select:text; -webkit-user-select:text; }
 .atl-panel.open{ opacity:1; transform:translateY(-50%) scale(1); pointer-events:auto; }
+.atl-panel.center{ inset-inline-start:50%; inset-inline-end:auto; width:min(440px,calc(100vw - 40px)); transform:translate(-50%,calc(-50% + 38px)) scale(.96); transition:opacity .32s, transform .42s cubic-bezier(.2,.9,.25,1); }
+.atl-panel.center.open{ transform:translate(-50%,-50%) scale(1); }
 .atl-close{ align-self:flex-end; border:1px solid var(--a-line); background:var(--a-bg); width:32px; height:32px; border-radius:50%; cursor:pointer; color:var(--a-ink2); display:grid; place-items:center; flex:none; }
 .atl-tag{ display:inline-flex; align-items:center; gap:8px; align-self:flex-start; margin-top:4px; padding:5px 12px; border-radius:999px; background:var(--a-line); font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--a-ink2); }
 [dir="rtl"] .atl-tag{ letter-spacing:0.02em; } .atl-em{ font-size:14px; }
@@ -1178,6 +1343,8 @@ const ATLAS_CSS = `
 .atl-tip-em{ font-size:14px; }
 .atl-tip-title{ font-weight:800; font-size:17px; letter-spacing:-0.02em; color:var(--a-ink); line-height:1.1; margin-top:2px; }
 .atl-tip-now{ font-size:12.5px; color:var(--a-ink2); margin-top:3px; } .atl-tip-now b{ color:var(--a-ink); font-weight:800; font-variant-numeric:tabular-nums; } .atl-tip-trend{ color:var(--a-live); font-weight:700; }
+.atl-tip-star{ color:var(--a-ink); font-weight:800; font-variant-numeric:tabular-nums; }
+.atl-tip-onelbl{ display:inline-block; font-size:9px; font-weight:800; letter-spacing:0.06em; color:#fff; background:var(--a-ink); border-radius:5px; padding:1px 5px; vertical-align:middle; margin-inline-start:4px; }
 .atl-tip-stats{ display:flex; gap:14px; margin-top:6px; font-size:11px; color:var(--a-ink3); } .atl-tip-stats b{ color:var(--a-ink2); font-weight:700; }
 .atl-tip-needs{ display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }
 .atl-tip-need{ font-size:11px; font-weight:600; color:var(--a-ink2); background:var(--a-line); border-radius:999px; padding:3px 9px; }
@@ -1198,7 +1365,13 @@ const ATLAS_CSS = `
 .atl-pv-stats span{ font-size:10.5px; color:var(--a-ink3); }
 .atl-idx-trend{ margin-inline-start:auto; color:var(--a-live); font-weight:700; font-size:13px; }
 .atl-idx-big{ font-weight:800; font-size:44px; letter-spacing:-0.03em; font-variant-numeric:tabular-nums; margin-top:12px; color:var(--a-ink); }
-.atl-idx-metrics{ display:flex; gap:9px; margin-top:12px; }
+.atl-idx-chtop{ display:flex; align-items:baseline; justify-content:space-between; margin-top:14px; }
+.atl-idx-chtop > span:first-child{ font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--a-ink3); }
+[dir="rtl"] .atl-idx-chtop > span:first-child{ letter-spacing:0.02em; }
+.atl-idx-chd{ font-size:13px; font-weight:700; color:var(--a-live); font-variant-numeric:tabular-nums; }
+.atl-idx-chart{ margin-top:8px; border-radius:12px; background:color-mix(in srgb, var(--dc,var(--a-ink)) 6%, var(--a-line)); padding:6px 4px 0; overflow:hidden; }
+.atl-idx-chart svg{ display:block; }
+.atl-idx-metrics{ display:flex; gap:9px; margin-top:14px; }
 .atl-idx-metrics > div{ flex:1; background:var(--a-line); border-radius:13px; padding:12px 10px; }
 .atl-idx-metrics b{ font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; }
 .atl-idx-metrics span{ display:block; font-size:11px; color:var(--a-ink3); margin-top:2px; }
@@ -1208,13 +1381,26 @@ const ATLAS_CSS = `
 .atl-idx-v{ position:relative; z-index:1; color:var(--a-ink2); font-weight:700; font-variant-numeric:tabular-nums; }
 .atl-idx-cta, .atl-pv-cta{ margin-top:20px; }
 .atl-me{ display:flex; flex-direction:column; align-items:center; text-align:center; }
-.atl-me-face{ width:72px; height:72px; margin-top:4px; filter:drop-shadow(0 12px 24px rgba(10,10,10,0.3)); }
+.atl-me-facegap{ width:72px; height:72px; margin-top:4px; flex:none; } /* the real companion rises to fill this slot */
 .atl-me-name{ font-weight:800; font-size:22px; letter-spacing:-0.02em; color:var(--a-ink); margin-top:12px; }
 .atl-me-sub{ font-size:13px; color:var(--a-ink3); margin-top:3px; }
 .atl-me .atl-sech{ align-self:flex-start; }
+.atl-me-stats{ display:flex; gap:9px; width:100%; margin-top:18px; }
+.atl-me-stats > div{ flex:1; background:var(--a-line); border-radius:14px; padding:13px 8px; }
+.atl-me-stats b{ display:block; font-size:21px; font-weight:800; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; color:var(--a-ink); }
+.atl-me-stats span{ display:block; font-size:10.5px; color:var(--a-ink3); margin-top:3px; }
 .atl-me-list{ width:100%; display:flex; flex-direction:column; gap:7px; }
-.atl-me-item{ display:flex; align-items:center; gap:10px; width:100%; text-align:start; background:var(--a-line); border:0; border-radius:12px; padding:10px 13px; font:inherit; font-size:14px; font-weight:600; color:var(--a-ink); cursor:pointer; }
-.atl-me-em{ font-size:16px; }
+.atl-me-item{ display:flex; align-items:center; gap:11px; width:100%; text-align:start; background:var(--a-line); border:0; border-radius:12px; padding:10px 13px; font:inherit; color:var(--a-ink); cursor:pointer; transition:transform .15s; }
+.atl-me-item:hover{ transform:translateX(2px); } [dir="rtl"] .atl-me-item:hover{ transform:translateX(-2px); }
+.atl-me-em{ font-size:16px; flex:none; }
+.atl-me-it-b{ flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; }
+.atl-me-it-name{ font-size:13.5px; font-weight:600; color:var(--a-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.atl-me-bar{ height:4px; border-radius:999px; background:color-mix(in srgb, var(--a-ink) 12%, transparent); overflow:hidden; }
+.atl-me-bar > span{ display:block; height:100%; border-radius:999px; background:var(--a-live); }
+.atl-me-it-n{ flex:none; font-size:12px; font-weight:700; color:var(--a-ink2); font-variant-numeric:tabular-nums; }
+.atl-me-worlds{ display:flex; flex-wrap:wrap; gap:7px; width:100%; }
+.atl-me-world{ display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--a-ink2); background:var(--a-line); border-radius:999px; padding:6px 12px; }
+.atl-me-world span{ font-size:14px; }
 .atl-me-manage{ margin-top:18px; }
 /* my space (Mine): clear the world, keep only my things */
 .atl-app.view-mine .atl-anchor, .atl-app.view-mine .atl-agent, .atl-app.view-mine .atl-xlink, .atl-app.view-mine .atl-link, .atl-app.view-mine .atl-blob{ opacity:0 !important; pointer-events:none; }
@@ -1258,7 +1444,12 @@ const ATLAS_CSS = `
 /* journey mode: clear the field, drop the input, expand the card */
 .atl-app.atl-journey .atl-progress{ display:block; }
 .atl-app.atl-journey .atl-orb{ display:none; }
-.atl-app.atl-journey .atl-core, .atl-app.atl-focus .atl-core{ top:auto; bottom:58px; gap:10px; } /* composer drops to the bottom (above the status bar) while a card is open */
+.atl-app.atl-journey .atl-core{ top:auto; bottom:58px; left:auto; inset-inline-start:20px; transform:none; width:min(456px, calc(100vw - 40px)); align-items:stretch; gap:10px; } /* composer docks to the card's side column during a journey */
+/* pure focus: the composer lives INSIDE the card, pinned to its bottom (position set per-frame in JS) */
+.atl-app.atl-focus:not(.atl-journey) .atl-core{ position:fixed; z-index:66; top:0; left:0; transform:none; box-sizing:border-box; align-items:stretch; gap:8px; padding:16px 20px 18px; background:linear-gradient(to top, var(--a-card) 68%, color-mix(in srgb, var(--a-card) 0%, transparent)); border-radius:0 0 22px 22px; }
+.atl-app.atl-focus:not(.atl-journey) .atl-signin, .atl-app.atl-focus:not(.atl-journey) .atl-match, .atl-app.atl-focus:not(.atl-journey) .atl-suggest{ display:none; } /* keep the in-card composer minimal — just the input */
+.atl-app.atl-focus:not(.atl-journey) .atl-cta{ display:none; } /* the input is the call to action now, not a Start button */
+.atl-app.atl-focus:not(.atl-journey) .atl-panel{ padding-bottom:94px; } /* reserve room so content scrolls above the in-card input */
 .atl-app.atl-journey .atl-ticker, .atl-app.atl-journey .atl-view, .atl-app.atl-journey .atl-time{ opacity:0; pointer-events:none; }
 .atl-app.atl-journey .atl-word:not(.sel), .atl-app.atl-journey .atl-anchor, .atl-app.atl-journey .atl-agent:not(.provider), .atl-app.atl-journey .atl-xlink, .atl-app.atl-journey .atl-link, .atl-app.atl-journey .atl-blob{ opacity:0 !important; pointer-events:none; }
 /* focus (a click drills into the topic): the rest of the field recedes, leaving
@@ -1270,7 +1461,10 @@ const ATLAS_CSS = `
 .atl-app.atl-compose .atl-anchor, .atl-app.atl-compose .atl-agent, .atl-app.atl-compose .atl-blob, .atl-app.atl-compose .atl-xlink, .atl-app.atl-compose .atl-link{ opacity:0.04 !important; pointer-events:none; transition:opacity .35s ease; }
 .atl-app.atl-journey .atl-panel, .atl-app.atl-focus .atl-panel{ width:min(456px, calc(100vw - 40px)); max-height:calc(100dvh - 130px); }
 @media (max-width:860px){ .atl-ticker{ display:none; } }
-@media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-cursor{ display:none; } .atl-time-range{ width:120px; } .atl-panel{ left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:64dvh; transform:translateY(16px); } .atl-panel.open{ transform:translateY(0); } }
-@media (max-width:720px){ .atl-status-main{ display:none; } .atl-time-range{ width:88px; } .atl-topbar{ padding:10px 12px; gap:8px; } }
+@media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-time-range{ width:120px; } .atl-panel{ left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:64dvh; transform:translateY(16px); } .atl-panel.open{ transform:translateY(0); } }
+/* on touch the companion just rests above the input; it steps aside while a card is open */
+@media (max-width:720px){ .atl-app.atl-focus .atl-cursor, .atl-app.atl-meopen .atl-cursor{ display:none; } }
+@media (max-width:720px){ .atl-status-d{ display:none; } .atl-time-range{ width:88px; } .atl-topbar{ padding:10px 12px; gap:8px; } }
+@media (max-width:720px){ .atl-toasts{ top:74px; } .atl-toast{ max-width:min(340px, 92vw); } }
 @media (prefers-reduced-motion: reduce){ .atl-float,.atl-blink,.atl-track,.atl-route.on,.atl-orb,.atl-agent-face{ animation:none; } }
 `;
