@@ -97,7 +97,6 @@ function timeWeight(hour: number, di: number) {
   let d = Math.abs(hour - p); d = Math.min(d, 24 - d);
   return 0.5 + 0.8 * Math.exp(-(d * d) / (2 * 4.5 * 4.5));
 }
-function hourIcon(h: number) { return h < 6 ? "🌙" : h < 12 ? "🌅" : h < 18 ? "☀️" : h < 21 ? "🌆" : "🌙"; }
 // Steps ONE drafts for a brand-new, unmapped intention typed by the user.
 const GEN_STEPS: Step[] = [
   s("ONE breaks it into clear steps", "ONE מפרק את זה לצעדים ברורים"),
@@ -150,7 +149,7 @@ const TXT = {
     world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress",
     provH: "Who can help", journeying: "ONE is on the way", arrived: "Arrived",
     stepsH: "The path others took", stepsHgo: "Your steps with ONE", cont: "Continue", stepPh: "reply, or just continue…", allDone: "Done — it's in motion", openIn: "Open in ONE", startJ: "Start this with your ONE",
-    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxVolume: "circulated", idxDemand: "weekly demand", idxChart: "Activity · 24h", pvChart: "Jobs · 12 wk", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", signinPre: "No account needed to start", signinLink: "Connect", prompts: ["What do you need?", "What can ONE do for you?", "Just say it — ONE takes it from here"], tipHint: "Click to open →", mapThis: "Map", myOne: "Your ONE", myOneSub: "Your representative across the map", manage: "Open full profile", relatedH: "Often paired with", inMotion: "in motion", completed: "completed", worlds: "worlds", meWorlds: "Your worlds", meResume: "Resume", profileTab: "Profile", chatTab: "Chat", chatHi: "Hey — I'm your ONE. What should we get moving?", chatPh: "Message your ONE…", chatAck: "On it — mapping that now.", mineEmpty: "Your space — the processes you start live here." },
+    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxVolume: "circulated", idxDemand: "weekly demand", idxChart: "Activity · 24h", pvChart: "Jobs · 12 wk", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", signinPre: "No account needed to start", signinLink: "Connect", prompts: ["What do you need?", "What can ONE do for you?", "Just say it — ONE takes it from here"], tipHint: "Click to open →", mapThis: "Map", walletT: "Wallet", walletSub: "Value you've moved with ONE", walletCredits: "ONE credits", walletMoved: "moved", walletTx: "Recent activity", walletTop: "Add funds", walletSoon: "Coming soon", walletEmpty: "Complete a process and it shows up here.", myOne: "Your ONE", myOneSub: "Your representative across the map", manage: "Open full profile", relatedH: "Often paired with", inMotion: "in motion", completed: "completed", worlds: "worlds", meWorlds: "Your worlds", meResume: "Resume", profileTab: "Profile", chatTab: "Chat", chatHi: "Hey — I'm your ONE. What should we get moving?", chatPh: "Message your ONE…", chatAck: "On it — mapping that now.", mineEmpty: "Your space — the processes you start live here." },
   he: { live: "עכשיו", priv: "אנונימי · מצטבר", ph: "מה אתה צריך?", clr: "נקה",
     hint: "גררו כדי לנוע · גלגלו כדי לזום · לחצו על רצון כדי לפרוש את המסלול",
     nowLbl: "וואנים על זה עכשיו", pathH: "המסלול שאחרים עברו", doneK: "הושלמו השבוע", avgK: "זמן ממוצע",
@@ -159,7 +158,7 @@ const TXT = {
     world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך",
     provH: "מי יכול לעזור", journeying: "ה‑ONE בדרך", arrived: "הגעת",
     stepsH: "המסלול שאחרים עברו", stepsHgo: "הצעדים שלך עם ONE", cont: "המשך", stepPh: "תשובה, או פשוט המשך…", allDone: "בוצע — זה בתנועה", openIn: "פתח ב‑ONE", startJ: "התחל את זה עם ה‑ONE שלך",
-    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxVolume: "התגלגל", idxDemand: "ביקוש שבועי", idxChart: "פעילות · 24ש׳", pvChart: "עבודות · 12ש׳", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", signinPre: "לא צריך חשבון כדי להתחיל", signinLink: "התחברות", prompts: ["מה אתה צריך?", "מה ONE יכול לעשות בשבילך?", "רק תגיד — ONE ממשיך מכאן"], tipHint: "לחצו לפתיחה →", mapThis: "מפו את", myOne: "ה‑ONE שלך", myOneSub: "הנציג שלך על המפה", manage: "פתח פרופיל מלא", relatedH: "לרוב יחד עם", inMotion: "בתהליך", completed: "הושלמו", worlds: "עולמות", meWorlds: "העולמות שלך", meResume: "המשך", profileTab: "פרופיל", chatTab: "צ'אט", chatHi: "היי — אני ה‑ONE שלך. מה נזיז?", chatPh: "כתבו ל‑ONE…", chatAck: "על זה — ממפה את זה עכשיו.", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
+    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxVolume: "התגלגל", idxDemand: "ביקוש שבועי", idxChart: "פעילות · 24ש׳", pvChart: "עבודות · 12ש׳", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", signinPre: "לא צריך חשבון כדי להתחיל", signinLink: "התחברות", prompts: ["מה אתה צריך?", "מה ONE יכול לעשות בשבילך?", "רק תגיד — ONE ממשיך מכאן"], tipHint: "לחצו לפתיחה →", mapThis: "מפו את", walletT: "ארנק", walletSub: "הערך שהזזת עם ONE", walletCredits: "קרדיטים", walletMoved: "הוזז", walletTx: "פעילות אחרונה", walletTop: "הוספת כסף", walletSoon: "בקרוב", walletEmpty: "השלימו תהליך והוא יופיע כאן.", myOne: "ה‑ONE שלך", myOneSub: "הנציג שלך על המפה", manage: "פתח פרופיל מלא", relatedH: "לרוב יחד עם", inMotion: "בתהליך", completed: "הושלמו", worlds: "עולמות", meWorlds: "העולמות שלך", meResume: "המשך", profileTab: "פרופיל", chatTab: "צ'אט", chatHi: "היי — אני ה‑ONE שלך. מה נזיז?", chatPh: "כתבו ל‑ONE…", chatAck: "על זה — ממפה את זה עכשיו.", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
 };
 
 export function AtlasHome({
@@ -301,9 +300,9 @@ export function AtlasHome({
         el.innerHTML = '<span class="atl-float"><span class="atl-inner" style="font-size:' + fs.toFixed(1) + 'px;font-weight:' + (n.count >= 1150 ? 800 : n.count >= 650 ? 700 : 600) + '"></span><span class="atl-count"></span></span>';
         el.setAttribute("data-id", String(idx));
         el.addEventListener("click", (e) => { e.stopPropagation(); openNode(idx); });
-      el.addEventListener("mouseenter", (e) => showTip(n, e));
+      el.addEventListener("mouseenter", (e) => { showTip(n, e); if (!meMode && !R.classList.contains("atl-focus")) highlightConns(n.en); });
       el.addEventListener("mousemove", (e) => { tipEl.style.left = e.clientX + "px"; tipEl.style.top = e.clientY - 16 + "px"; });
-      el.addEventListener("mouseleave", hideTip);
+      el.addEventListener("mouseleave", () => { hideTip(); clearConns(); });
         ground.appendChild(el); wordEls.push({ el, n, di, wx, wy });
         const ln = document.createElementNS(SVGNS, "line");
         ln.setAttribute("class", "atl-link"); ln.setAttribute("x1", String(dist.x)); ln.setAttribute("y1", String(dist.y));
@@ -313,6 +312,7 @@ export function AtlasHome({
     const findWord = (en: string) => wordEls.find((o) => o.n.en === en);
     const wordOf = (id: number) => wordEls.find((o) => +o.el.getAttribute("data-id")! === id) || null;
     // cross-topic curves
+    const xlinkEls: { el: SVGPathElement; a: string; b: string }[] = [];
     XLINKS.forEach(([a, b]) => {
       const A = findWord(a), B = findWord(b); if (!A || !B) return;
       const mx = (A.wx + B.wx) / 2, my = (A.wy + B.wy) / 2;
@@ -321,8 +321,38 @@ export function AtlasHome({
       const p = document.createElementNS(SVGNS, "path");
       p.setAttribute("class", "atl-xlink");
       p.setAttribute("d", `M ${A.wx} ${A.wy} Q ${cx} ${cy} ${B.wx} ${B.wy}`);
-      baseLinks.appendChild(p);
+      baseLinks.appendChild(p); xlinkEls.push({ el: p as SVGPathElement, a, b });
     });
+    // hovering a want reveals what it's paired with — its cross-links light up
+    const highlightConns = (en: string) => {
+      const partners = new Set<string>();
+      xlinkEls.forEach(({ el, a, b }) => { const hit = a === en || b === en; el.classList.toggle("on", hit); if (hit) partners.add(a === en ? b : a); });
+      wordEls.forEach((o) => o.el.classList.toggle("conn", partners.has(o.n.en)));
+    };
+    const clearConns = () => { xlinkEls.forEach(({ el }) => el.classList.remove("on")); wordEls.forEach((o) => o.el.classList.remove("conn")); };
+    // ambient travelers — ONEs drifting between intentions so the network feels alive
+    type Trav = { el: HTMLElement; fx: number; fy: number; tx: number; ty: number; t: number; spd: number };
+    const travelers: Trav[] = [];
+    if (!reduce && wordEls.length > 1) {
+      const pick = () => wordEls[Math.floor(Math.random() * wordEls.length)];
+      for (let i = 0; i < 12; i++) {
+        const a = pick(), b = pick(); const el = document.createElement("div"); el.className = "atl-trav";
+        el.style.setProperty("--dc", D[b.di].c); ground.appendChild(el);
+        travelers.push({ el, fx: a.wx, fy: a.wy, tx: b.wx, ty: b.wy, t: Math.random(), spd: 0.0015 + Math.random() * 0.0022 });
+      }
+    }
+    const updateTravelers = () => {
+      if (!travelers.length) return;
+      const clear = !R.classList.contains("atl-meopen") && !R.classList.contains("atl-focus") && !R.classList.contains("atl-compose");
+      for (const tr of travelers) {
+        tr.t += tr.spd;
+        if (tr.t >= 1) { tr.t = 0; tr.fx = tr.tx; tr.fy = tr.ty; const b = wordEls[Math.floor(Math.random() * wordEls.length)]; tr.tx = b.wx; tr.ty = b.wy; tr.el.style.setProperty("--dc", D[b.di].c); }
+        const e = tr.t < 0.5 ? 2 * tr.t * tr.t : 1 - Math.pow(-2 * tr.t + 2, 2) / 2;
+        const x = tr.fx + (tr.tx - tr.fx) * e, y = tr.fy + (tr.ty - tr.fy) * e;
+        tr.el.style.left = x.toFixed(1) + "px"; tr.el.style.top = y.toFixed(1) + "px";
+        tr.el.style.opacity = clear ? (0.55 * Math.sin(tr.t * Math.PI)).toFixed(2) : "0";
+      }
+    };
 
     function addAgent(agent: Agent, wx: number, wy: number, provider: boolean) {
       const el = document.createElement("div");
@@ -477,7 +507,7 @@ export function AtlasHome({
     }
     const flyTo = (px: number, py: number, z: number) => { tween = { px0: cam.px, py0: cam.py, z0: cam.z, px1: px, py1: py, z1: z, t: 0 }; };
 
-    const onWheel = (e: WheelEvent) => { if (meMode || isChrome(e.target)) return; e.preventDefault(); tween = null; cam.z *= Math.pow(1.0016, -e.deltaY); dirty = true; }; // no zoom while the profile is open, and let card content scroll
+    const onWheel = (e: WheelEvent) => { if (R.classList.contains("atl-meopen") || isChrome(e.target)) return; e.preventDefault(); tween = null; cam.z *= Math.pow(1.0016, -e.deltaY); dirty = true; }; // no zoom while a centred modal is open, and let card content scroll
     R.addEventListener("wheel", onWheel, { passive: false }); cleanups.push(() => R.removeEventListener("wheel", onWheel));
 
     const pts: Record<string, { x: number; y: number }> = {};
@@ -515,11 +545,12 @@ export function AtlasHome({
       // auto-movement is fully off when the pointer left the window, sits on a
       // card, or a card/journey is open — no runaway panning.
       // gentle drift toward a hovered topic (soft, not a snap)
-      if (glideTo && !panLast && !pinchLast && !journey && !tween && !meMode && !R.classList.contains("atl-focus")) {
+      const meopen = R.classList.contains("atl-meopen"); // a centred modal (profile / wallet) is open — freeze the map
+      if (glideTo && !panLast && !pinchLast && !journey && !tween && !meopen && !R.classList.contains("atl-focus")) {
         const tpx = (CX - glideTo.x) + (lang === "he" ? -200 : 200) / cam.z, tpy = (CY - glideTo.y) - 60 / cam.z;
         cam.px += (tpx - cam.px) * 0.03; cam.py += (tpy - cam.py) * 0.03; dirty = true;
       }
-      const autoOk = !isTouch && mouseInside && !overChrome && !panLast && !pinchLast && !journey && !focusText && !meMode && !tween && !glideTo && !R.classList.contains("atl-focus") && Object.keys(pts).length === 0;
+      const autoOk = !isTouch && mouseInside && !overChrome && !panLast && !pinchLast && !journey && !focusText && !meopen && !tween && !glideTo && !R.classList.contains("atl-focus") && Object.keys(pts).length === 0;
       // map drifts toward wherever the pointer is (whole-screen parallax)
       const ptX = autoOk ? -(mpx - vw / 2) * 0.04 : 0, ptY = autoOk ? -(mpy - vh / 2) * 0.04 : 0;
       if (Math.abs(ptX - parX) > 0.1 || Math.abs(ptY - parY) > 0.1) { parX += (ptX - parX) * 0.06; parY += (ptY - parY) * 0.06; dirty = true; }
@@ -541,6 +572,7 @@ export function AtlasHome({
         driveEl.style.left = drivePos[0].toFixed(1) + "px"; driveEl.style.top = drivePos[1].toFixed(1) + "px";
         if (driveArrow) { driveArrow.style.left = drivePos[0].toFixed(1) + "px"; driveArrow.style.top = drivePos[1].toFixed(1) + "px"; const hx = driveTarget[0] - drivePos[0], hy = driveTarget[1] - drivePos[1]; if (Math.abs(hx) + Math.abs(hy) > 1) driveArrow.style.setProperty("--hd", (Math.atan2(hy, hx) * 180 / Math.PI).toFixed(1) + "deg"); }
       }
+      updateTravelers();
       if (dirty) { apply(); dirty = false; }
       raf = requestAnimationFrame(loop);
     }
@@ -579,13 +611,9 @@ export function AtlasHome({
     vwWorld.addEventListener("click", () => setView("world"));
     vwMine.addEventListener("click", () => setView("mine"));
 
-    // time-of-day scrubber — the field breathes as you move it
-    const timeRange = $(".atl-time-range") as HTMLInputElement;
-    const timeIco = $(".atl-time-ico")!, timeLbl = $(".atl-time-lbl")!;
-    const setHour = (h: number) => { hour = h; timeIco.textContent = hourIcon(h); timeLbl.textContent = (h < 10 ? "0" + h : String(h)) + ":00"; R.classList.toggle("atl-night", h < 6 || h >= 19); refreshCounts(); updateStatus(); };
-    timeRange.value = String(hour);
-    timeRange.addEventListener("input", () => setHour(+timeRange.value));
-    setHour(hour);
+    // day/night follows the real clock (the manual scrubber was removed)
+    R.classList.toggle("atl-night", hour < 6 || hour >= 19);
+    refreshCounts();
     function buildSuggest() {
       const q = qEl.value.trim().toLowerCase();
       if (!q) { sugEl.classList.remove("show"); sugEl.innerHTML = ""; return; }
@@ -791,11 +819,36 @@ export function AtlasHome({
         '<p class="atl-priv2">' + t.priv2 + '</p></div>';
       customEl.querySelectorAll(".atl-me-item").forEach((b) => b.addEventListener("click", () => openNode(+(b.getAttribute("data-id") || 0))));
       const mg = customEl.querySelector(".atl-me-manage"); if (mg) mg.addEventListener("click", () => { if (onOrbTapRef.current) onOrbTapRef.current(); });
-      panel.classList.remove("open"); panel.classList.add("is-custom", "center"); R.classList.add("atl-meopen");
+      panel.classList.remove("open"); panel.classList.add("is-custom", "center", "no-anim"); R.classList.add("atl-meopen");
       panel.setAttribute("aria-hidden", "false");
       meMode = true; // the real companion rises into the card as the avatar
-      // paint the below-and-scaled closed state, then rise — mirrors the close exactly
-      requestAnimationFrame(() => requestAnimationFrame(() => panel.classList.add("open")));
+      void panel.offsetWidth; panel.classList.remove("no-anim"); // snap to the centred closed state, THEN animate the rise (never slides in from the side)
+      requestAnimationFrame(() => panel.classList.add("open"));
+    }
+    // Your virtual wallet — value & credits you've moved through ONE (a mock ledger)
+    function openWallet() {
+      hideTip(); const t = TXT[lang]; const cur = lang === "he" ? "₪" : "$";
+      const mine = wordEls.filter((o) => MINE.has(o.n.en));
+      const bal = 640 + mine.reduce((s, o) => s + (o.n.done % 220), 0);
+      const credits = 6 + mine.length * 2;
+      const moved = mine.reduce((s, o) => s + o.n.done, 0) * 8 + 1200;
+      const tx = mine.slice(0, 4).map((o, i) => ({ em: D[o.n.d].em, name: o.n[lang], amt: (i % 2 ? -1 : 1) * (55 + (o.n.done % 190)) }));
+      const txRows = tx.length
+        ? tx.map((x) => '<div class="atl-wal-tx"><span class="atl-wal-tx-em">' + x.em + '</span><span class="atl-wal-tx-name">' + x.name + '</span><span class="atl-wal-tx-amt ' + (x.amt >= 0 ? "pos" : "neg") + '">' + (x.amt >= 0 ? "+" : "−") + cur + Math.abs(x.amt) + '</span></div>').join("")
+        : '<p class="atl-wal-empty">' + t.walletEmpty + '</p>';
+      customEl.innerHTML =
+        '<div class="atl-wal"><div class="atl-wal-cardface"><div class="atl-wal-top"><span>' + t.walletT + '</span><span class="atl-wal-chip" aria-hidden="true"></span></div>' +
+          '<div class="atl-wal-bal"><span class="atl-wal-cur">' + cur + '</span>' + bal.toLocaleString() + '</div>' +
+          '<div class="atl-wal-sub">' + t.walletSub + '</div></div>' +
+        '<div class="atl-wal-stats"><div><b>' + credits + '</b><span>' + t.walletCredits + '</span></div><div><b>' + money(moved) + '</b><span>' + t.walletMoved + '</span></div></div>' +
+        '<div class="atl-sech" style="margin-top:18px">' + t.walletTx + '</div><div class="atl-wal-txs">' + txRows + '</div>' +
+        '<button class="atl-cta atl-wal-add">' + t.walletTop + '</button><p class="atl-priv2">' + t.priv2 + '</p></div>';
+      const add = customEl.querySelector(".atl-wal-add") as HTMLButtonElement | null;
+      if (add) add.addEventListener("click", () => { add.textContent = t.walletSoon; add.classList.add("done"); add.setAttribute("disabled", "true"); });
+      panel.classList.remove("open"); panel.classList.add("is-custom", "center", "no-anim"); R.classList.add("atl-meopen");
+      panel.setAttribute("aria-hidden", "false");
+      void panel.offsetWidth; panel.classList.remove("no-anim"); // snap to centred closed state, then rise from the centre
+      requestAnimationFrame(() => panel.classList.add("open"));
     }
     // Start = the journey actually begins: field clears, ONE drives, providers appear.
     function startJourney() {
@@ -902,9 +955,8 @@ export function AtlasHome({
     { const openP = () => { if (onOrbTapRef.current) onOrbTapRef.current(); };
       const lg = $(".atl-logo"); if (lg) lg.addEventListener("click", openP);
       const sl = $(".atl-signin-link"); if (sl) sl.addEventListener("click", openP); }
-    { const ck = $(".atl-status-main"), pop = $(".atl-timepop");
-      if (ck && pop) { ck.addEventListener("click", (e) => { e.stopPropagation(); pop.classList.toggle("show"); });
-        R.addEventListener("pointerdown", (e) => { if (!(e.target as Element).closest(".atl-timepop,.atl-status-main")) pop.classList.remove("show"); }); } }
+    { const pr = $(".atl-tool-profile"); if (pr) pr.addEventListener("click", openMe);
+      const wa = $(".atl-tool-wallet"); if (wa) wa.addEventListener("click", openWallet); }
 
     // live tick
     let tick: ReturnType<typeof setInterval> | null = null;
@@ -913,7 +965,7 @@ export function AtlasHome({
       tick = setInterval(() => {
         for (let k = 0; k < 3; k++) { const n = N[Math.floor(Math.random() * N.length)]; n.count += Math.floor(Math.random() * 3); }
         refreshCounts(); tickStatus();
-        const clear = !R.classList.contains("atl-focus") && !R.classList.contains("atl-compose") && !meMode;
+        const clear = !R.classList.contains("atl-focus") && !R.classList.contains("atl-compose") && !R.classList.contains("atl-meopen");
         if (wordEls.length && clear) { const o = wordEls[Math.floor(Math.random() * wordEls.length)]; if (o && !o.el.classList.contains("lod") && !o.el.classList.contains("dim")) spawnRipple(o.wx, o.wy, D[o.di].c); }
         // every other tick, flare a surging want — a live "trending now" pulse
         if (clear && flareTick++ % 2 === 0) {
@@ -1037,6 +1089,7 @@ export function AtlasHome({
         if (curEl) {
           curEl.classList.toggle("aside", aside); // small & to the side only next to a hover card
           curEl.classList.toggle("big", big);     // grown into the profile avatar
+          curEl.classList.toggle("hidden", R.classList.contains("atl-meopen") && !meMode); // wallet & other centred modals: step away
           curEl.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)";
         }
         // the composer lives INSIDE the open card, pinned to its bottom (pure focus only)
@@ -1096,14 +1149,18 @@ export function AtlasHome({
           </svg>
         </button>
         <div className="atl-toasts" />
-        <span className="atl-view" role="group" aria-label="View">
-          <button className="atl-vw atl-vw-world">{TXT[lang].world}</button>
-          <button className="atl-vw atl-vw-mine">{TXT[lang].mine}</button>
-        </span>
-        <div className="atl-timepop">
-          <span className="atl-time-ico" aria-hidden="true">☀️</span>
-          <input className="atl-time-range" type="range" min={0} max={23} step={1} aria-label="Time of day" />
-          <span className="atl-time-lbl" />
+        <nav className="atl-nav" aria-label="View">
+          <button className="atl-nav-t atl-vw-world">{TXT[lang].world}</button>
+          <span className="atl-nav-div" aria-hidden="true" />
+          <button className="atl-nav-t atl-vw-mine">{TXT[lang].mine}</button>
+        </nav>
+        <div className="atl-tools">
+          <button className="atl-tool atl-tool-wallet" aria-label={lang === "he" ? "ארנק" : "Wallet"}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v1" /><path d="M3 8v9a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H5" /><circle cx="16.5" cy="13" r="1.35" fill="currentColor" stroke="none" /></svg>
+          </button>
+          <button className="atl-tool atl-tool-profile" aria-label={lang === "he" ? "פרופיל" : "Profile"}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8.5" r="3.6" /><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" /></svg>
+          </button>
         </div>
       </div>
 
@@ -1132,13 +1189,6 @@ export function AtlasHome({
       </div>
 
       <div className="atl-priv">🔒 {TXT[lang].priv}</div>
-
-      <div className="atl-botbar">
-        <div className="atl-status">
-          <button className="atl-status-main" aria-label="Date and time" />
-          <span className="atl-status-live" />
-        </div>
-      </div>
 
       <div className="atl-tip" aria-hidden="true" />
       <div className="atl-scrim" aria-hidden="true" />
@@ -1202,7 +1252,7 @@ const ATLAS_CSS = `
   repeating-linear-gradient(0deg, color-mix(in srgb, var(--a-line2) 55%, transparent) 0 1px, transparent 1px 48px),
   repeating-linear-gradient(90deg, color-mix(in srgb, var(--a-line2) 55%, transparent) 0 1px, transparent 1px 48px),
   repeating-linear-gradient(45deg, color-mix(in srgb, var(--a-line2) 35%, transparent) 0 1px, transparent 1px 384px);
-  -webkit-mask-image:radial-gradient(circle at 50% 50%, #000 42%, transparent 76%); mask-image:radial-gradient(circle at 50% 50%, #000 42%, transparent 76%); }
+  -webkit-mask-image:radial-gradient(ellipse 58% 62% at 50% 46%, #000 26%, rgba(0,0,0,0.5) 58%, transparent 80%); mask-image:radial-gradient(ellipse 58% 62% at 50% 46%, #000 26%, rgba(0,0,0,0.5) 58%, transparent 80%); }
 .atl-blob{ position:absolute; border-radius:50%; filter:blur(55px); opacity:0.5; pointer-events:none; }
 .atl-ripple{ position:absolute; transform:translate(-50%,-50%); border:2px solid var(--a-ink); border-radius:50%; pointer-events:none; animation:atlRipple 1.5s ease-out forwards; }
 @keyframes atlRipple{ from{ width:10px; height:10px; opacity:0.55; } to{ width:160px; height:160px; opacity:0; } }
@@ -1212,7 +1262,11 @@ const ATLAS_CSS = `
 @media (prefers-reduced-motion: reduce){ .atl-flare{ display:none; } }
 .atl-links{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
 .atl-link{ stroke:var(--a-line); stroke-width:1.4; fill:none; }
-.atl-xlink{ stroke:var(--a-ink); opacity:0.10; stroke-width:1.6; fill:none; stroke-dasharray:3 12; animation:atlDash 4s linear infinite; }
+.atl-xlink{ stroke:var(--a-ink); opacity:0.10; stroke-width:1.6; fill:none; stroke-dasharray:3 12; animation:atlDash 4s linear infinite; transition:opacity .25s, stroke-width .25s; }
+.atl-xlink.on{ opacity:0.6; stroke-width:2.6; }
+.atl-word.conn .atl-inner{ color:var(--a-live); }
+.atl-trav{ position:absolute; width:7px; height:7px; border-radius:50%; transform:translate(-50%,-50%) translateZ(4px) rotateX(calc(var(--tilt,56deg) * -1)); background:var(--dc,#888); box-shadow:0 0 7px var(--dc,#888); pointer-events:none; opacity:0; will-change:left,top,opacity; }
+@media (prefers-reduced-motion: reduce){ .atl-trav{ display:none; } }
 .atl-route{ fill:none; stroke-width:5; stroke-linecap:round; stroke-linejoin:round; opacity:0; transition:opacity .4s; }
 .atl-route.on{ opacity:0.9; stroke-dasharray:2 14; animation:atlDash 1.1s linear infinite; }
 .atl-route.preview{ opacity:0.45; stroke-width:3; stroke-dasharray:1 12; animation:atlDash 2.4s linear infinite; }
@@ -1227,16 +1281,17 @@ const ATLAS_CSS = `
 .atl-flow{ opacity:0; }
 .atl-topbar{ position:absolute; z-index:28; top:0; inset-inline:0; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 20px; pointer-events:none; }
 .atl-topbar > *{ pointer-events:auto; }
-.atl-botbar{ position:absolute; z-index:26; bottom:10px; inset-inline:0; display:flex; align-items:center; justify-content:center; padding:0 20px; pointer-events:none; }
-.atl-botbar > *{ pointer-events:auto; }
-.atl-status{ display:flex; align-items:center; gap:12px; min-width:0; overflow:hidden; }
-.atl-status-main{ display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12.5px; font-weight:700; color:var(--a-ink2); white-space:nowrap; background:none; border:0; padding:0; border-radius:8px; transition:color .2s; }
-.atl-status-main:hover{ color:var(--a-ink); }
-.atl-status-t{ color:var(--a-ink); font-weight:800; font-variant-numeric:tabular-nums; }
-.atl-sdot{ width:3px; height:3px; border-radius:50%; background:var(--a-ink3); display:inline-block; margin:0 3px; }
-.atl-si{ width:13px; height:13px; opacity:0.85; flex:none; }
-.atl-timepop{ position:absolute; z-index:30; bottom:56px; left:50%; transform:translateX(-50%) translateY(6px); display:inline-flex; align-items:center; gap:10px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:999px; padding:9px 15px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
-.atl-timepop.show{ opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0); }
+/* center text tabs (World · Mine) with a divider */
+.atl-nav{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:inline-flex; align-items:center; gap:16px; pointer-events:auto; }
+.atl-nav-t{ background:none; border:0; font:inherit; font-size:14px; font-weight:700; color:var(--a-ink3); cursor:pointer; padding:6px 2px; position:relative; transition:color .2s; }
+.atl-nav-t.on{ color:var(--a-ink); }
+.atl-nav-t.on::after{ content:""; position:absolute; inset-inline:0; bottom:-3px; height:2px; border-radius:2px; background:var(--a-ink); }
+.atl-nav-div{ width:1px; height:15px; background:var(--a-line2); }
+/* profile + wallet tools on the side */
+.atl-tools{ display:inline-flex; align-items:center; gap:9px; flex:none; }
+.atl-tool{ width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; color:var(--a-ink2); transition:color .2s, transform .15s, border-color .2s; }
+.atl-tool:hover{ color:var(--a-ink); border-color:var(--a-line2); transform:translateY(-1px); }
+.atl-cursor.hidden{ opacity:0 !important; pointer-events:none; }
 .atl-toasts{ position:absolute; z-index:29; top:52px; left:50%; pointer-events:none; }
 .atl-toast{ position:absolute; top:0; left:50%; width:max-content; max-width:min(360px,80vw); pointer-events:auto; display:flex; align-items:center; gap:11px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:14px; padding:9px 8px 9px 14px; transform:translate(-50%,0); transition:transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s; }
 .atl-toast-ic{ color:var(--a-ink2); display:grid; place-items:center; flex:none; } .atl-toast-ic svg{ width:16px; height:16px; }
@@ -1264,9 +1319,6 @@ const ATLAS_CSS = `
 .atl-logo{ flex:none; background:none; border:0; padding:0; color:var(--a-ink); display:grid; place-items:center; }
 .atl-status-live{ font-size:12.5px; font-weight:500; color:var(--a-ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .atl-menu{ flex:none; width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; padding:0; }
-.atl-view{ display:inline-flex; flex:none; background:var(--a-card); border:1px solid var(--a-line); border-radius:999px; box-shadow:var(--a-shadow); overflow:hidden; }
-.atl-vw{ border:0; background:none; cursor:pointer; font:inherit; font-size:12.5px; font-weight:700; letter-spacing:0.02em; color:var(--a-ink3); padding:7px 16px; }
-.atl-vw.on{ background:var(--a-ink); color:var(--a-bg); }
 .atl-anchor{ position:absolute; transform:translate(-50%,-50%) translateZ(46px) rotateX(calc(var(--tilt,56deg) * -1)); display:flex; flex-direction:column; align-items:center; gap:6px; background:none; border:0; cursor:pointer; padding:6px; transition:opacity .35s; }
 .atl-emoji{ font-size:46px; line-height:1; filter:drop-shadow(0 12px 16px rgba(10,10,10,0.30)); }
 .atl-alabel{ font-size:12px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:var(--a-ink2); white-space:nowrap; }
@@ -1346,8 +1398,9 @@ const ATLAS_CSS = `
 .atl-word.gen .atl-inner{ text-decoration:underline dotted; text-decoration-color:var(--a-ink3); text-underline-offset:5px; }
 .atl-panel{ position:absolute; z-index:64; top:50%; inset-inline-start:20px; width:min(380px,calc(100vw - 40px)); max-height:calc(100dvh - 48px); background:var(--a-card); border:1px solid var(--a-line); border-radius:22px; box-shadow:var(--a-shadowlift); display:flex; flex-direction:column; padding:18px 22px 22px; overflow-y:auto; opacity:0; transform:translateY(calc(-50% - 8px)) scale(.98); transform-origin:center; pointer-events:none; transition:opacity .3s, transform .3s cubic-bezier(.2,.8,.2,1); user-select:text; -webkit-user-select:text; }
 .atl-panel.open{ opacity:1; transform:translateY(-50%) scale(1); pointer-events:auto; }
-.atl-panel.center{ inset-inline-start:50%; inset-inline-end:auto; width:min(440px,calc(100vw - 40px)); transform:translate(-50%,calc(-50% + 38px)) scale(.96); transition:opacity .32s, transform .42s cubic-bezier(.2,.9,.25,1); }
+.atl-panel.center{ inset-inline-start:auto; inset-inline-end:auto; left:50%; right:auto; width:min(440px,calc(100vw - 40px)); transform:translate(-50%,calc(-50% + 38px)) scale(.96); transition:opacity .32s, transform .42s cubic-bezier(.2,.9,.25,1); }
 .atl-panel.center.open{ transform:translate(-50%,-50%) scale(1); }
+.atl-panel.no-anim{ transition:none !important; }
 .atl-close{ align-self:flex-end; border:1px solid var(--a-line); background:var(--a-bg); width:32px; height:32px; border-radius:50%; cursor:pointer; color:var(--a-ink2); display:grid; place-items:center; flex:none; }
 .atl-tag{ display:inline-flex; align-items:center; gap:8px; align-self:flex-start; margin-top:4px; padding:5px 12px; border-radius:999px; background:var(--a-line); font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--a-ink2); }
 [dir="rtl"] .atl-tag{ letter-spacing:0.02em; } .atl-em{ font-size:14px; }
@@ -1417,6 +1470,27 @@ const ATLAS_CSS = `
 .atl-idx-name{ position:relative; z-index:1; flex:1; color:var(--a-ink); font-weight:600; }
 .atl-idx-v{ position:relative; z-index:1; color:var(--a-ink2); font-weight:700; font-variant-numeric:tabular-nums; }
 .atl-idx-cta, .atl-pv-cta{ margin-top:20px; }
+/* virtual wallet card */
+.atl-wal{ display:flex; flex-direction:column; }
+.atl-wal-cardface{ position:relative; overflow:hidden; border-radius:18px; padding:16px 18px 18px; color:#fff; background:linear-gradient(135deg, var(--a-ink), color-mix(in srgb, var(--a-ink) 55%, #4a4a52)); box-shadow:var(--a-shadowlift); }
+.atl-wal-top{ display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; opacity:0.85; }
+.atl-wal-chip{ width:26px; height:19px; border-radius:5px; background:linear-gradient(135deg,#e9c46a,#c99a3b); display:inline-block; }
+.atl-wal-bal{ font-size:38px; font-weight:800; letter-spacing:-0.03em; font-variant-numeric:tabular-nums; margin-top:12px; }
+.atl-wal-cur{ font-size:22px; font-weight:700; opacity:0.8; margin-inline-end:3px; }
+.atl-wal-sub{ font-size:12px; opacity:0.75; margin-top:4px; }
+.atl-wal-stats{ display:flex; gap:9px; margin-top:14px; }
+.atl-wal-stats > div{ flex:1; background:var(--a-line); border-radius:13px; padding:12px 10px; text-align:center; }
+.atl-wal-stats b{ display:block; font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--a-ink); }
+.atl-wal-stats span{ font-size:10.5px; color:var(--a-ink3); margin-top:2px; }
+.atl-wal-txs{ display:flex; flex-direction:column; gap:2px; }
+.atl-wal-tx{ display:flex; align-items:center; gap:11px; padding:9px 4px; font-size:13.5px; border-bottom:1px solid var(--a-line); }
+.atl-wal-tx:last-child{ border-bottom:0; }
+.atl-wal-tx-em{ font-size:16px; }
+.atl-wal-tx-name{ flex:1; color:var(--a-ink); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.atl-wal-tx-amt{ font-weight:800; font-variant-numeric:tabular-nums; }
+.atl-wal-tx-amt.pos{ color:var(--a-live); } .atl-wal-tx-amt.neg{ color:var(--a-ink2); }
+.atl-wal-empty{ font-size:12.5px; color:var(--a-ink3); padding:6px 2px; }
+.atl-wal-add.done{ background:var(--a-line); color:var(--a-ink3); }
 .atl-me{ display:flex; flex-direction:column; align-items:center; text-align:center; }
 .atl-me-facegap{ width:72px; height:72px; margin-top:4px; flex:none; } /* the real companion rises to fill this slot */
 .atl-me-name{ font-weight:800; font-size:22px; letter-spacing:-0.02em; color:var(--a-ink); margin-top:12px; }
@@ -1446,7 +1520,8 @@ const ATLAS_CSS = `
 @keyframes atlOrbBob{ 0%,100%{ transform:translateY(-3px); } 50%{ transform:translateY(4px); } }
 .atl-cta{ margin-top:22px; width:100%; height:50px; border:0; border-radius:999px; background:var(--a-ink); color:var(--a-bg); cursor:pointer; font:inherit; font-size:15px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:9px; transition:transform .15s,background .3s; }
 .atl-cta:hover{ transform:translateY(-2px); } .atl-cta.done{ background:var(--a-live); color:#fff; }
-.atl-priv2{ margin-top:14px; font-size:11px; line-height:1.45; color:var(--a-ink3); text-align:center; }
+.atl-priv2{ display:none; }
+.atl-priv{ display:none; }
 /* other ONEs on the map (businesses / pros) */
 .atl-agent{ position:absolute; transform:translate(-50%,-50%) translateZ(30px) rotateX(calc(var(--tilt,56deg) * -1)); display:flex; flex-direction:column; align-items:center; gap:5px; pointer-events:auto; cursor:pointer; transition:opacity .35s, transform .2s; background:none; border:0; }
 .atl-agent:hover{ transform:translate(-50%,-50%) translateZ(30px) rotateX(calc(var(--tilt,56deg) * -1)) scale(1.08); }
@@ -1498,10 +1573,17 @@ const ATLAS_CSS = `
 .atl-app.atl-compose .atl-anchor, .atl-app.atl-compose .atl-agent, .atl-app.atl-compose .atl-blob, .atl-app.atl-compose .atl-xlink, .atl-app.atl-compose .atl-link{ opacity:0.04 !important; pointer-events:none; transition:opacity .35s ease; }
 .atl-app.atl-journey .atl-panel, .atl-app.atl-focus .atl-panel{ width:min(456px, calc(100vw - 40px)); max-height:calc(100dvh - 130px); }
 @media (max-width:860px){ .atl-ticker{ display:none; } }
-@media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-time-range{ width:120px; } .atl-panel{ left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:64dvh; transform:translateY(16px); } .atl-panel.open{ transform:translateY(0); } }
+@media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; }
+  /* cards are centred, sit higher, and the close stays pinned while content scrolls */
+  .atl-panel{ inset-inline:auto; left:50%; right:auto; top:54px; bottom:auto; width:min(440px, calc(100vw - 20px)); max-height:calc(100dvh - 150px); transform:translate(-50%,-8px); }
+  .atl-panel.open{ transform:translate(-50%,0); }
+  .atl-panel.center{ top:50%; transform:translate(-50%,calc(-50% + 24px)) scale(.96); }
+  .atl-panel.center.open{ transform:translate(-50%,-50%) scale(1); }
+  .atl-close{ position:sticky; top:0; z-index:5; margin-bottom:-8px; }
+}
 /* on touch the companion just rests above the input; it steps aside while a card is open */
 @media (max-width:720px){ .atl-app.atl-focus .atl-cursor, .atl-app.atl-meopen .atl-cursor{ display:none; } }
-@media (max-width:720px){ .atl-status-d{ display:none; } .atl-time-range{ width:88px; } .atl-topbar{ padding:10px 12px; gap:8px; } }
+@media (max-width:720px){ .atl-topbar{ padding:10px 12px; gap:8px; } .atl-nav-t{ font-size:13px; } .atl-tool{ width:34px; height:34px; } }
 @media (max-width:720px){ .atl-toasts{ top:74px; } .atl-toast{ max-width:min(340px, 92vw); } }
 @media (prefers-reduced-motion: reduce){ .atl-float,.atl-blink,.atl-track,.atl-route.on,.atl-orb,.atl-agent-face{ animation:none; } }
 `;
