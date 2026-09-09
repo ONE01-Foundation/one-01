@@ -2332,12 +2332,16 @@ export default function AppHome() {
     setTheme(t);
     try { localStorage.setItem("one_theme", t); } catch {}
   };
-  // Keep the mobile browser bar (theme-color) in sync with the chosen theme.
+  // Keep the mobile status/browser bar (theme-color) in sync with the chosen theme.
   useEffect(() => {
     if (typeof document === "undefined") return;
-    let m = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
-    if (!m) { m = document.createElement("meta"); m.name = "theme-color"; document.head.appendChild(m); }
-    m.content = theme === "dark" ? "#0b0b0d" : "#fafaf8";
+    const color = theme === "dark" ? "#0b0b0d" : "#fafaf8";
+    // iOS Safari only re-reads the status-bar color when the element is replaced, so remove + re-add.
+    document.querySelectorAll('meta[name="theme-color"]').forEach((el) => el.remove());
+    const m = document.createElement("meta"); m.setAttribute("name", "theme-color"); m.setAttribute("content", color); document.head.appendChild(m);
+    let sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]') as HTMLMetaElement | null;
+    if (!sb) { sb = document.createElement("meta"); sb.setAttribute("name", "apple-mobile-web-app-status-bar-style"); document.head.appendChild(sb); }
+    sb.setAttribute("content", theme === "dark" ? "black" : "default");
   }, [theme]);
   const applyLang = (l: UILang) => {
     setLang(l);
