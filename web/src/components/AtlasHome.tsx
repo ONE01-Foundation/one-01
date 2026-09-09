@@ -150,7 +150,7 @@ const TXT = {
     world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress",
     provH: "Who can help", journeying: "ONE is on the way", arrived: "Arrived",
     stepsH: "The path others took", stepsHgo: "Your steps with ONE", cont: "Continue", stepPh: "reply, or just continue…", allDone: "Done — it's in motion", openIn: "Open in ONE", startJ: "Start this with your ONE",
-    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxVolume: "circulated", idxDemand: "weekly demand", idxChart: "Activity · 24h", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", signinPre: "No account needed to start", signinLink: "Connect", prompts: ["What do you need?", "What can ONE do for you?", "Just say it — ONE takes it from here"], tipHint: "Click to open →", myOne: "Your ONE", myOneSub: "Your representative across the map", manage: "Open full profile", relatedH: "Often paired with", inMotion: "in motion", completed: "completed", worlds: "worlds", meWorlds: "Your worlds", meResume: "Resume", profileTab: "Profile", chatTab: "Chat", chatHi: "Hey — I'm your ONE. What should we get moving?", chatPh: "Message your ONE…", chatAck: "On it — mapping that now.", mineEmpty: "Your space — the processes you start live here." },
+    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxVolume: "circulated", idxDemand: "weekly demand", idxChart: "Activity · 24h", pvChart: "Jobs · 12 wk", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", signinPre: "No account needed to start", signinLink: "Connect", prompts: ["What do you need?", "What can ONE do for you?", "Just say it — ONE takes it from here"], tipHint: "Click to open →", mapThis: "Map", myOne: "Your ONE", myOneSub: "Your representative across the map", manage: "Open full profile", relatedH: "Often paired with", inMotion: "in motion", completed: "completed", worlds: "worlds", meWorlds: "Your worlds", meResume: "Resume", profileTab: "Profile", chatTab: "Chat", chatHi: "Hey — I'm your ONE. What should we get moving?", chatPh: "Message your ONE…", chatAck: "On it — mapping that now.", mineEmpty: "Your space — the processes you start live here." },
   he: { live: "עכשיו", priv: "אנונימי · מצטבר", ph: "מה אתה צריך?", clr: "נקה",
     hint: "גררו כדי לנוע · גלגלו כדי לזום · לחצו על רצון כדי לפרוש את המסלול",
     nowLbl: "וואנים על זה עכשיו", pathH: "המסלול שאחרים עברו", doneK: "הושלמו השבוע", avgK: "זמן ממוצע",
@@ -159,7 +159,7 @@ const TXT = {
     world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך",
     provH: "מי יכול לעזור", journeying: "ה‑ONE בדרך", arrived: "הגעת",
     stepsH: "המסלול שאחרים עברו", stepsHgo: "הצעדים שלך עם ONE", cont: "המשך", stepPh: "תשובה, או פשוט המשך…", allDone: "בוצע — זה בתנועה", openIn: "פתח ב‑ONE", startJ: "התחל את זה עם ה‑ONE שלך",
-    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxVolume: "התגלגל", idxDemand: "ביקוש שבועי", idxChart: "פעילות · 24ש׳", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", signinPre: "לא צריך חשבון כדי להתחיל", signinLink: "התחברות", prompts: ["מה אתה צריך?", "מה ONE יכול לעשות בשבילך?", "רק תגיד — ONE ממשיך מכאן"], tipHint: "לחצו לפתיחה →", myOne: "ה‑ONE שלך", myOneSub: "הנציג שלך על המפה", manage: "פתח פרופיל מלא", relatedH: "לרוב יחד עם", inMotion: "בתהליך", completed: "הושלמו", worlds: "עולמות", meWorlds: "העולמות שלך", meResume: "המשך", profileTab: "פרופיל", chatTab: "צ'אט", chatHi: "היי — אני ה‑ONE שלך. מה נזיז?", chatPh: "כתבו ל‑ONE…", chatAck: "על זה — ממפה את זה עכשיו.", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
+    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxVolume: "התגלגל", idxDemand: "ביקוש שבועי", idxChart: "פעילות · 24ש׳", pvChart: "עבודות · 12ש׳", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", signinPre: "לא צריך חשבון כדי להתחיל", signinLink: "התחברות", prompts: ["מה אתה צריך?", "מה ONE יכול לעשות בשבילך?", "רק תגיד — ONE ממשיך מכאן"], tipHint: "לחצו לפתיחה →", mapThis: "מפו את", myOne: "ה‑ONE שלך", myOneSub: "הנציג שלך על המפה", manage: "פתח פרופיל מלא", relatedH: "לרוב יחד עם", inMotion: "בתהליך", completed: "הושלמו", worlds: "עולמות", meWorlds: "העולמות שלך", meResume: "המשך", profileTab: "פרופיל", chatTab: "צ'אט", chatHi: "היי — אני ה‑ONE שלך. מה נזיז?", chatPh: "כתבו ל‑ONE…", chatAck: "על זה — ממפה את זה עכשיו.", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
 };
 
 export function AtlasHome({
@@ -364,6 +364,13 @@ export function AtlasHome({
       const rp = document.createElement("div"); rp.className = "atl-ripple";
       rp.style.left = wx + "px"; rp.style.top = wy + "px"; rp.style.borderColor = color;
       ground.appendChild(rp); setTimeout(() => rp.remove(), 1500);
+    }
+    // a want that's surging gets a brief "↑N%" flare that pops above it — the map feels live
+    function spawnFlare(wx: number, wy: number, color: string, trend: number) {
+      const fl = document.createElement("div"); fl.className = "atl-flare";
+      fl.style.left = wx + "px"; fl.style.top = wy + "px"; fl.style.setProperty("--dc", color);
+      fl.textContent = "↑ " + trend + "%";
+      ground.appendChild(fl); setTimeout(() => fl.remove(), 2200);
     }
     function updateHeat() {
       const totals = D.map((_, di) => N.filter((n) => n.d === di).reduce((a, n) => a + Math.round(displayCount(n) * 0.12), 0));
@@ -584,7 +591,16 @@ export function AtlasHome({
       if (!q) { sugEl.classList.remove("show"); sugEl.innerHTML = ""; return; }
       const ms: number[] = [];
       for (let i = 0; i < N.length && ms.length < 6; i++) { if (N[i].en.toLowerCase().includes(q) || N[i].he.includes(q)) ms.push(i); }
-      if (!ms.length) { sugEl.classList.remove("show"); sugEl.innerHTML = ""; return; }
+      if (!ms.length) {
+        // nothing on the map matches — offer to map it as a new intention
+        sugEl.innerHTML = "";
+        const b = document.createElement("button"); b.className = "atl-sug atl-sug-new";
+        const em = document.createElement("span"); em.className = "atl-sug-em"; em.textContent = "＋";
+        const nm = document.createElement("span"); nm.className = "atl-sug-name"; nm.textContent = TXT[lang].mapThis + " “" + qEl.value.trim() + "”";
+        b.appendChild(em); b.appendChild(nm);
+        b.addEventListener("click", () => { generateArea(qEl.value.trim()); qEl.blur(); });
+        sugEl.appendChild(b); sugEl.classList.add("show"); return;
+      }
       sugEl.innerHTML = ms.map((i) => { const n = N[i]; return '<button class="atl-sug" data-id="' + i + '"><span class="atl-sug-em">' + D[n.d].em + '</span><span class="atl-sug-name">' + n[lang] + '</span><span class="atl-sug-n">' + Math.round(displayCount(n) * 0.12).toLocaleString() + '</span></button>'; }).join("");
       sugEl.querySelectorAll(".atl-sug").forEach((b) => b.addEventListener("click", () => openNode(+(b.getAttribute("data-id") || 0))));
       sugEl.classList.add("show");
@@ -811,14 +827,36 @@ export function AtlasHome({
       setTimeout(() => { if (!panel.classList.contains("open")) { panel.classList.remove("is-custom", "center"); R.classList.remove("atl-focus", "atl-journey"); } }, 340);
       flyTo(0, -30, vw < 720 ? 0.6 : 0.8); // pull back out to the full map
     }
+    // A tiny market-style area chart (line + gradient fill + "now" dot), reused by
+    // the world card and the service-ONE card.
+    let chartN = 0;
+    const marketChart = (series: number[], dc: string, label: string, deltaPct: number): string => {
+      const W = 300, H = 84, pad = 6, mn = Math.min(...series), mx = Math.max(...series) || 1;
+      const xs = (i: number) => pad + (i / (series.length - 1)) * (W - 2 * pad);
+      const ys = (v: number) => H - pad - ((v - mn) / ((mx - mn) || 1)) * (H - 2 * pad);
+      const line = series.map((v, i) => (i ? "L" : "M") + xs(i).toFixed(1) + " " + ys(v).toFixed(1)).join(" ");
+      const area = "M " + xs(0).toFixed(1) + " " + (H - pad) + " " + series.map((v, i) => "L " + xs(i).toFixed(1) + " " + ys(v).toFixed(1)).join(" ") + " L " + xs(series.length - 1).toFixed(1) + " " + (H - pad) + " Z";
+      const gid = "spk" + (chartN++), up = deltaPct >= 0;
+      return '<div class="atl-idx-chtop"><span>' + label + '</span><span class="atl-idx-chd' + (up ? "" : " dn") + '">' + (up ? "↑ " : "↓ ") + Math.abs(deltaPct) + '%</span></div>' +
+        '<div class="atl-idx-chart"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" preserveAspectRatio="none">' +
+          '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + dc + '" stop-opacity="0.26"/><stop offset="1" stop-color="' + dc + '" stop-opacity="0"/></linearGradient></defs>' +
+          '<path d="' + area + '" fill="url(#' + gid + ')"/>' +
+          '<path d="' + line + '" fill="none" stroke="' + dc + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>' +
+          '<circle cx="' + xs(series.length - 1).toFixed(1) + '" cy="' + ys(series[series.length - 1]).toFixed(1) + '" r="3.4" fill="' + dc + '"/>' +
+        '</svg></div>';
+    };
     // Clicking a business/pro ONE opens its profile card.
     function openProvider(ag: Agent) {
       hideTip(); const t = TXT[lang], dc = D[ag.di].c, r = rng(ag.en.length * 131 + ag.di);
       const rating = (4.2 + r() * 0.7).toFixed(1), jobs = 40 + Math.floor(r() * 200), reply = 5 + Math.floor(r() * 40) + "m";
+      const trendP = Math.round(r() * 22 - 4); // mostly rising
+      const s2 = rng(ag.en.length * 71 + ag.di * 13 + 5);
+      const series = Array.from({ length: 12 }, (_, i) => { const up = 1 + (trendP / 100) * (i / 11); return Math.max(1, (jobs / 4) * (0.68 + s2() * 0.64) * up); });
       customEl.innerHTML =
         '<div class="atl-pv" style="--dc:' + dc + '"><div class="atl-pv-head"><span class="atl-pv-face">' + FACE + '<span class="atl-pv-em">' + ag.em + '</span></span>' +
         '<div><div class="atl-pv-name">' + ag[lang] + '</div><div class="atl-pv-sub">' + D[ag.di][lang] + ' · ★ ' + rating + '</div></div></div>' +
         '<div class="atl-pv-stats"><div><b>' + jobs + '</b><span>' + t.jobs + '</span></div><div><b>' + reply + '</b><span>' + t.reply + '</span></div><div><b>★ ' + rating + '</b><span>' + t.rating + '</span></div></div>' +
+        marketChart(series, dc, t.pvChart, trendP) +
         '<button class="atl-cta atl-pv-cta">' + t.connect + '</button><p class="atl-priv2">' + t.priv2 + '</p></div>';
       const c = customEl.querySelector(".atl-pv-cta") as HTMLButtonElement | null;
       if (c) c.addEventListener("click", () => { if (onStartRef.current) onStartRef.current(ag[lang]); });
@@ -841,20 +879,7 @@ export function AtlasHome({
       const circulated = liveTotal * dealSize; const weekly = items.reduce((s, n) => s + n.done, 0);
       const rc = rng(di * 57 + 3);
       const series = Array.from({ length: 24 }, (_, i) => { const day = 0.62 + 0.38 * Math.sin(((i - 6) / 24) * Math.PI * 2); const noise = 0.86 + rc() * 0.28; const up = 1 + (avgTrend / 100) * (i / 23); return Math.max(1, liveTotal * day * noise * up); });
-      const W = 300, H = 84, pad = 6, mn = Math.min(...series), mx = Math.max(...series) || 1;
-      const xs = (i: number) => pad + (i / (series.length - 1)) * (W - 2 * pad);
-      const ys = (v: number) => H - pad - ((v - mn) / ((mx - mn) || 1)) * (H - 2 * pad);
-      const line = series.map((v, i) => (i ? "L" : "M") + xs(i).toFixed(1) + " " + ys(v).toFixed(1)).join(" ");
-      const area = "M " + xs(0).toFixed(1) + " " + (H - pad) + " " + series.map((v, i) => "L " + xs(i).toFixed(1) + " " + ys(v).toFixed(1)).join(" ") + " L " + xs(series.length - 1).toFixed(1) + " " + (H - pad) + " Z";
-      const gid = "idxg" + di;
-      const chart =
-        '<div class="atl-idx-chtop"><span>' + t.idxChart + '</span><span class="atl-idx-chd">↑ ' + avgTrend + '%</span></div>' +
-        '<div class="atl-idx-chart"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" preserveAspectRatio="none">' +
-          '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + dc + '" stop-opacity="0.26"/><stop offset="1" stop-color="' + dc + '" stop-opacity="0"/></linearGradient></defs>' +
-          '<path d="' + area + '" fill="url(#' + gid + ')"/>' +
-          '<path d="' + line + '" fill="none" stroke="' + dc + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>' +
-          '<circle cx="' + xs(series.length - 1).toFixed(1) + '" cy="' + ys(series[series.length - 1]).toFixed(1) + '" r="3.4" fill="' + dc + '"/>' +
-        '</svg></div>';
+      const chart = marketChart(series, dc, t.idxChart, avgTrend);
       customEl.innerHTML =
         '<div class="atl-idx" style="--dc:' + dc + '"><div class="atl-pv-head"><span class="atl-idx-em">' + dist.em + '</span><div><div class="atl-pv-name">' + dist[lang] + '</div><div class="atl-pv-sub">' + t.idxLive + '</div></div><span class="atl-idx-trend">↑ ' + avgTrend + '%</span></div>' +
         '<div class="atl-idx-big">' + liveTotal.toLocaleString() + '</div>' +
@@ -883,11 +908,18 @@ export function AtlasHome({
 
     // live tick
     let tick: ReturnType<typeof setInterval> | null = null;
+    let flareTick = 0;
     if (!reduce) {
       tick = setInterval(() => {
         for (let k = 0; k < 3; k++) { const n = N[Math.floor(Math.random() * N.length)]; n.count += Math.floor(Math.random() * 3); }
         refreshCounts(); tickStatus();
-        if (wordEls.length) { const o = wordEls[Math.floor(Math.random() * wordEls.length)]; if (o && !o.el.classList.contains("lod") && !o.el.classList.contains("dim")) spawnRipple(o.wx, o.wy, D[o.di].c); }
+        const clear = !R.classList.contains("atl-focus") && !R.classList.contains("atl-compose") && !meMode;
+        if (wordEls.length && clear) { const o = wordEls[Math.floor(Math.random() * wordEls.length)]; if (o && !o.el.classList.contains("lod") && !o.el.classList.contains("dim")) spawnRipple(o.wx, o.wy, D[o.di].c); }
+        // every other tick, flare a surging want — a live "trending now" pulse
+        if (clear && flareTick++ % 2 === 0) {
+          const risers = wordEls.filter((o) => !o.el.classList.contains("lod") && !o.el.classList.contains("dim") && o.n.trend >= 6);
+          if (risers.length) { const o = risers[Math.floor(Math.random() * risers.length)]; spawnFlare(o.wx, o.wy - 34, D[o.di].c, o.n.trend); }
+        }
       }, 3400);
       cleanups.push(() => { if (tick) clearInterval(tick); });
     }
@@ -1175,6 +1207,9 @@ const ATLAS_CSS = `
 .atl-ripple{ position:absolute; transform:translate(-50%,-50%); border:2px solid var(--a-ink); border-radius:50%; pointer-events:none; animation:atlRipple 1.5s ease-out forwards; }
 @keyframes atlRipple{ from{ width:10px; height:10px; opacity:0.55; } to{ width:160px; height:160px; opacity:0; } }
 @media (prefers-reduced-motion: reduce){ .atl-ripple{ display:none; } }
+.atl-flare{ position:absolute; transform:translate(-50%,-50%) translateZ(16px) rotateX(calc(var(--tilt,56deg) * -1)); pointer-events:none; font-size:12px; font-weight:800; color:#fff; background:var(--dc,#888); padding:3px 9px; border-radius:999px; white-space:nowrap; box-shadow:0 6px 15px rgba(10,10,10,0.32); font-variant-numeric:tabular-nums; opacity:0; animation:atlFlare 2.2s ease-out forwards; }
+@keyframes atlFlare{ 0%{ opacity:0; } 14%{ opacity:1; } 68%{ opacity:1; } 100%{ opacity:0; } }
+@media (prefers-reduced-motion: reduce){ .atl-flare{ display:none; } }
 .atl-links{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
 .atl-link{ stroke:var(--a-line); stroke-width:1.4; fill:none; }
 .atl-xlink{ stroke:var(--a-ink); opacity:0.10; stroke-width:1.6; fill:none; stroke-dasharray:3 12; animation:atlDash 4s linear infinite; }
@@ -1302,6 +1337,7 @@ const ATLAS_CSS = `
 .atl-sug{ display:flex; align-items:center; gap:10px; width:100%; text-align:start; background:none; border:0; border-radius:11px; padding:9px 12px; font:inherit; cursor:pointer; color:var(--a-ink); }
 .atl-sug:hover{ background:var(--a-line); }
 .atl-sug-em{ font-size:16px; } .atl-sug-name{ flex:1; font-size:14px; font-weight:600; } .atl-sug-n{ font-size:12px; color:var(--a-ink3); font-variant-numeric:tabular-nums; }
+.atl-sug-new .atl-sug-em{ color:var(--a-live); font-weight:800; } .atl-sug-new .atl-sug-name{ font-weight:700; }
 .atl-priv{ position:absolute; z-index:26; bottom:16px; inset-inline-start:20px; display:inline-flex; align-items:center; gap:7px; font-size:11.5px; color:var(--a-ink3); font-weight:600; pointer-events:none; }
 .atl-time{ flex:none; display:inline-flex; align-items:center; gap:9px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadow); border-radius:999px; height:38px; padding:0 14px; }
 .atl-time-ico{ font-size:15px; line-height:1; }
@@ -1369,6 +1405,7 @@ const ATLAS_CSS = `
 .atl-idx-chtop > span:first-child{ font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--a-ink3); }
 [dir="rtl"] .atl-idx-chtop > span:first-child{ letter-spacing:0.02em; }
 .atl-idx-chd{ font-size:13px; font-weight:700; color:var(--a-live); font-variant-numeric:tabular-nums; }
+.atl-idx-chd.dn{ color:var(--a-ink3); }
 .atl-idx-chart{ margin-top:8px; border-radius:12px; background:color-mix(in srgb, var(--dc,var(--a-ink)) 6%, var(--a-line)); padding:6px 4px 0; overflow:hidden; }
 .atl-idx-chart svg{ display:block; }
 .atl-idx-metrics{ display:flex; gap:9px; margin-top:14px; }
