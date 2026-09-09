@@ -680,7 +680,8 @@ export function AtlasHome({
       if (!journey) { startJourney(); return; }               // first press = begin the journey
       if (cur && onStartRef.current) onStartRef.current(cur.n[lang]); // once underway = hand to ONE
     });
-    ($(".atl-orb")!).addEventListener("click", () => { if (onOrbTapRef.current) onOrbTapRef.current(); });
+    { const sc = $(".atl-scrim"); if (sc) sc.addEventListener("click", closePanel); }
+    { const mn = $(".atl-menu"); if (mn) mn.addEventListener("click", () => { if (onOrbTapRef.current) onOrbTapRef.current(); }); }
 
     // live tick
     let tick: ReturnType<typeof setInterval> | null = null;
@@ -692,17 +693,37 @@ export function AtlasHome({
       cleanups.push(() => { if (tick) clearInterval(tick); });
     }
 
-    // orb idle gaze
-    if (!reduce) {
-      const eyeL = R.querySelector(".atl-eyeL") as SVGCircleElement;
-      const eyeR = R.querySelector(".atl-eyeR") as SVGCircleElement;
-      let g = 0, l = 0, tg = 0, tl = 0, next = 0, mx: number | null = null, my: number | null = null, lastMove = 0;
-      const mm = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; lastMove = performance.now(); };
-      window.addEventListener("mousemove", mm, { passive: true }); cleanups.push(() => window.removeEventListener("mousemove", mm));
-      const pick = (now: number) => { if (Math.random() < 0.3) { tg = 0; tl = (Math.random() - 0.5) * 0.5; } else { const d = Math.random() < 0.5 ? -1 : 1, w = Math.random() < 0.22; tg = d * (w ? 0.85 + Math.random() * 0.15 : 0.35 + Math.random() * 0.35); tl = (Math.random() - 0.5) * 0.7; } next = now + 900 + Math.random() * 1900; };
-      let graf = 0;
-      const fr = () => { const now = performance.now(); const ow = $(".atl-orb"); if (ow && eyeL && eyeR) { const rr = ow.getBoundingClientRect(), ocx = rr.left + rr.width / 2, ocy = rr.top + rr.height / 2; if (mx !== null && now - lastMove < 2200) { tg = clamp((mx - ocx) / 300, -1, 1); tl = clamp((my! - ocy) / 300, -1, 1); next = 0; } else if (now >= next) pick(now); g += (tg - g) * 0.12; l += (tl - l) * 0.12; eyeL.setAttribute("cx", (34 + g * 5).toFixed(2)); eyeR.setAttribute("cx", (66 + g * 5).toFixed(2)); eyeL.setAttribute("cy", (45 + l * 5).toFixed(2)); eyeR.setAttribute("cy", (45 + l * 5).toFixed(2)); } graf = requestAnimationFrame(fr); };
-      graf = requestAnimationFrame(fr); cleanups.push(() => cancelAnimationFrame(graf));
+    // ONE is the cursor: a small eyeless dot that wakes into a face over
+    // something interactive, trails the pointer, and reacts when you act.
+    {
+      const curEl = $(".atl-cursor");
+      const eL = curEl ? (curEl.querySelector(".atl-cur-l") as SVGCircleElement) : null;
+      const eR = curEl ? (curEl.querySelector(".atl-cur-r") as SVGCircleElement) : null;
+      let px = vw / 2, py = vh / 2, mx = px, my = py, hot = false, over = false;
+      const mv = (e: MouseEvent) => {
+        mx = e.clientX; my = e.clientY;
+        const el = e.target as Element | null;
+        over = !!(el && el.closest && el.closest(".atl-topbar,.atl-core,.atl-panel,.atl-priv"));
+        hot = !over && !!(el && el.closest && el.closest(".atl-word,.atl-agent"));
+      };
+      window.addEventListener("mousemove", mv, { passive: true }); cleanups.push(() => window.removeEventListener("mousemove", mv));
+      const dn = () => curEl && curEl.classList.add("press");
+      const up = () => curEl && curEl.classList.remove("press");
+      window.addEventListener("pointerdown", dn); window.addEventListener("pointerup", up);
+      cleanups.push(() => { window.removeEventListener("pointerdown", dn); window.removeEventListener("pointerup", up); });
+      let craf = 0;
+      const fr = () => {
+        const nx = px + (mx - px) * 0.24, ny = py + (my - py) * 0.24;
+        const vx = nx - px, vy = ny - py; px = nx; py = ny;
+        if (curEl) {
+          curEl.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)";
+          curEl.classList.toggle("hot", hot);
+          curEl.style.opacity = over ? "0" : "1";
+          if (!reduce && eL && eR) { const gx = clamp(vx / 6, -1, 1), gy = clamp(vy / 6, -1, 1); eL.setAttribute("cx", (34 + gx * 6).toFixed(1)); eR.setAttribute("cx", (66 + gx * 6).toFixed(1)); eL.setAttribute("cy", (45 + gy * 6).toFixed(1)); eR.setAttribute("cy", (45 + gy * 6).toFixed(1)); }
+        }
+        craf = requestAnimationFrame(fr);
+      };
+      craf = requestAnimationFrame(fr); cleanups.push(() => cancelAnimationFrame(craf));
     }
 
     let rt: ReturnType<typeof setTimeout>;
@@ -736,6 +757,9 @@ export function AtlasHome({
       <div className="atl-floor" aria-hidden="true" />
 
       <div className="atl-topbar">
+        <button className="atl-menu" aria-label="ONE">
+          <svg viewBox="0 0 100 100" width="20" height="20" aria-hidden="true"><circle cx="50" cy="50" r="50" fill="var(--a-orb)" /><circle cx="36" cy="46" r="9" fill="var(--a-orbeye)" /><circle cx="66" cy="46" r="9" fill="var(--a-orbeye)" /></svg>
+        </button>
         <span className="atl-view" role="group" aria-label="View">
           <button className="atl-vw atl-vw-world">{TXT[lang].world}</button>
           <button className="atl-vw atl-vw-mine">{TXT[lang].mine}</button>
@@ -748,14 +772,15 @@ export function AtlasHome({
         </div>
       </div>
 
+      <div className="atl-cursor" aria-hidden="true">
+        <svg viewBox="0 0 100 100" width="100%" height="100%">
+          <circle cx="50" cy="50" r="50" fill="var(--a-orb)" />
+          <circle className="atl-cur-eye atl-cur-l" cx="34" cy="45" r="9" fill="var(--a-orbeye)" />
+          <circle className="atl-cur-eye atl-cur-r" cx="66" cy="45" r="9" fill="var(--a-orbeye)" />
+        </svg>
+      </div>
+
       <div className="atl-core">
-        <button className="atl-orb" aria-label="ONE">
-          <svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true">
-            <circle cx="50" cy="50" r="50" fill="var(--a-orb)" />
-            <circle className="atl-blink atl-eyeL" cx="34" cy="45" r="8.5" fill="var(--a-orbeye)" />
-            <circle className="atl-blink atl-eyeR" cx="66" cy="45" r="8.5" fill="var(--a-orbeye)" />
-          </svg>
-        </button>
         <div className="atl-search">
           <button className="atl-plus" aria-label={lang === "he" ? "התחלה חדשה" : "Start fresh"}>
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -772,6 +797,7 @@ export function AtlasHome({
       <div className="atl-priv">🔒 {TXT[lang].priv}</div>
 
       <div className="atl-tip" aria-hidden="true" />
+      <div className="atl-scrim" aria-hidden="true" />
 
       <aside className="atl-panel" aria-hidden="true" aria-live="polite">
         <button className="atl-close" aria-label="Close"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -795,7 +821,7 @@ export function AtlasHome({
 }
 
 const ATLAS_CSS = `
-.atl-app{ position:fixed; inset:0; z-index:60; overflow:hidden; cursor:grab; touch-action:none;
+.atl-app{ position:fixed; inset:0; z-index:60; overflow:hidden; cursor:none; touch-action:none;
   perspective:1200px; perspective-origin:50% 36%; background:var(--a-bg);
   user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
   /* Day palette (the map has its OWN day/night driven by the time scrubber,
@@ -810,7 +836,21 @@ const ATLAS_CSS = `
   --a-line:rgba(255,255,255,0.13); --a-line2:color-mix(in srgb,#ffffff 7%,transparent); --a-live:#34d399;
   --a-orb:#eef2f8; --a-orbeye:#111722; --a-shadow:0 10px 30px rgba(0,0,0,0.5); --a-shadowlift:0 22px 56px rgba(0,0,0,0.62); }
 .atl-search, .atl-panel, .atl-time, .atl-view, .atl-agent-lbl, .atl-prov, .atl-clr{ transition:background-color .9s ease, color .9s ease, border-color .9s ease; }
-.atl-app.drag{ cursor:grabbing; }
+.atl-app.drag{ cursor:none; }
+/* chrome keeps a real cursor (the ONE-cursor hides over it) */
+.atl-topbar, .atl-topbar *, .atl-core, .atl-core *, .atl-panel, .atl-panel *, .atl-priv{ cursor:auto; }
+.atl-search input{ cursor:text; }
+.atl-plus, .atl-voice, .atl-clr, .atl-vw, .atl-cta, .atl-close, .atl-time-range, .atl-stepgo, .atl-agent{ cursor:pointer; }
+/* the ONE cursor */
+.atl-cursor{ position:fixed; left:0; top:0; z-index:66; pointer-events:none; width:15px; height:15px; filter:drop-shadow(0 4px 10px rgba(10,10,10,0.32)); transition:width .2s cubic-bezier(.2,.7,.2,1), height .2s cubic-bezier(.2,.7,.2,1), opacity .2s; will-change:transform; }
+.atl-cursor.hot{ width:42px; height:42px; }
+.atl-cursor.press{ transform-origin:center; }
+.atl-cursor.press svg{ transform:scale(.82); transition:transform .1s; }
+.atl-cursor svg{ transition:transform .12s; display:block; }
+.atl-cur-eye{ opacity:0; transition:opacity .2s; }
+.atl-cursor.hot .atl-cur-eye{ opacity:1; }
+.atl-scrim{ position:absolute; inset:0; z-index:62; background:color-mix(in srgb, var(--a-bg) 52%, transparent); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity .3s; }
+.atl-scrim:has(+ .atl-panel.open){ opacity:1; pointer-events:auto; }
 .atl-ground{ position:absolute; left:50%; top:50%; width:7000px; height:5000px; transform-origin:50% 50%; transform-style:preserve-3d; will-change:transform; }
 .atl-grid{ position:absolute; inset:0; background:
   repeating-linear-gradient(0deg, var(--a-line2) 0 1px, transparent 1px 96px),
@@ -829,6 +869,7 @@ const ATLAS_CSS = `
 .atl-status{ flex:1; min-width:0; display:flex; align-items:center; gap:10px; justify-content:center; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadow); border-radius:999px; height:38px; padding:0 18px; overflow:hidden; }
 .atl-status-main{ font-size:12.5px; font-weight:700; color:var(--a-ink); white-space:nowrap; }
 .atl-status-live{ font-size:12.5px; font-weight:500; color:var(--a-ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.atl-menu{ flex:none; width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; padding:0; }
 .atl-view{ display:inline-flex; flex:none; background:var(--a-card); border:1px solid var(--a-line); border-radius:999px; box-shadow:var(--a-shadow); overflow:hidden; }
 .atl-vw{ border:0; background:none; cursor:pointer; font:inherit; font-size:12.5px; font-weight:700; letter-spacing:0.02em; color:var(--a-ink3); padding:7px 16px; }
 .atl-vw.on{ background:var(--a-ink); color:var(--a-bg); }
@@ -885,8 +926,8 @@ const ATLAS_CSS = `
 .atl-time-range{ width:180px; accent-color:var(--a-ink); cursor:pointer; }
 .atl-time-lbl{ font-size:12.5px; font-weight:700; color:var(--a-ink2); font-variant-numeric:tabular-nums; min-width:44px; text-align:center; }
 .atl-word.gen .atl-inner{ text-decoration:underline dotted; text-decoration-color:var(--a-ink3); text-underline-offset:5px; }
-.atl-panel{ position:absolute; z-index:64; top:74px; inset-inline-start:20px; width:min(360px,calc(100vw - 40px)); max-height:calc(100dvh - 150px); background:var(--a-card); border:1px solid var(--a-line); border-radius:22px; box-shadow:var(--a-shadowlift); display:flex; flex-direction:column; padding:18px 22px 22px; overflow-y:auto; opacity:0; transform:translateY(-8px) scale(.98); transform-origin:top center; pointer-events:none; transition:opacity .3s, transform .3s cubic-bezier(.2,.8,.2,1); user-select:text; -webkit-user-select:text; }
-.atl-panel.open{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+.atl-panel{ position:absolute; z-index:64; left:50%; top:50%; width:min(420px,calc(100vw - 40px)); max-height:min(78dvh,660px); background:var(--a-card); border:1px solid var(--a-line); border-radius:22px; box-shadow:var(--a-shadowlift); display:flex; flex-direction:column; padding:18px 22px 22px; overflow-y:auto; opacity:0; transform:translate(-50%,-46%) scale(.98); pointer-events:none; transition:opacity .3s, transform .35s cubic-bezier(.2,.8,.2,1); user-select:text; -webkit-user-select:text; }
+.atl-panel.open{ opacity:1; transform:translate(-50%,-50%) scale(1); pointer-events:auto; }
 .atl-close{ align-self:flex-end; border:1px solid var(--a-line); background:var(--a-bg); width:32px; height:32px; border-radius:50%; cursor:pointer; color:var(--a-ink2); display:grid; place-items:center; flex:none; }
 .atl-tag{ display:inline-flex; align-items:center; gap:8px; align-self:flex-start; margin-top:4px; padding:5px 12px; border-radius:999px; background:var(--a-line); font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--a-ink2); }
 [dir="rtl"] .atl-tag{ letter-spacing:0.02em; } .atl-em{ font-size:14px; }
@@ -979,9 +1020,9 @@ const ATLAS_CSS = `
 .atl-app.atl-journey .atl-core{ top:auto; bottom:22px; gap:0; }
 .atl-app.atl-journey .atl-ticker, .atl-app.atl-journey .atl-view, .atl-app.atl-journey .atl-time{ opacity:0; pointer-events:none; }
 .atl-app.atl-journey .atl-word:not(.sel), .atl-app.atl-journey .atl-anchor, .atl-app.atl-journey .atl-agent:not(.provider), .atl-app.atl-journey .atl-xlink, .atl-app.atl-journey .atl-link, .atl-app.atl-journey .atl-blob{ opacity:0 !important; pointer-events:none; }
-.atl-app.atl-journey .atl-panel{ top:18px; max-height:calc(100dvh - 40px); }
+.atl-app.atl-journey .atl-panel{ max-height:min(86dvh,760px); }
 @media (max-width:860px){ .atl-ticker{ display:none; } }
-@media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-core{ top:42%; } .atl-time-range{ width:120px; } .atl-panel{ inset-inline:12px; inset-inline-end:12px; width:auto; top:auto; bottom:12px; max-height:58dvh; } }
+@media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-cursor{ display:none; } .atl-time-range{ width:120px; } .atl-panel{ left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:64dvh; transform:translateY(16px); } .atl-panel.open{ transform:translateY(0); } }
 @media (max-width:720px){ .atl-status-main{ display:none; } .atl-time-range{ width:88px; } .atl-topbar{ padding:10px 12px; gap:8px; } }
 @media (prefers-reduced-motion: reduce){ .atl-float,.atl-blink,.atl-track,.atl-route.on,.atl-orb,.atl-agent-face{ animation:none; } }
 `;
