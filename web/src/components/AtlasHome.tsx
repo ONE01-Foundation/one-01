@@ -388,8 +388,10 @@ export function AtlasHome({
     function refreshCounts() {
       wordEls.forEach((o) => {
         const dc = displayCount(o.n);
+        const frac = clamp((dc - 200) / 1350, 0, 1); // busier wants rise higher out of the terrain (3D depth)
         (o.el.querySelector(".atl-inner") as HTMLElement).style.fontSize = sizeFor(dc).toFixed(1) + "px";
         (o.el.querySelector(".atl-count") as HTMLElement).textContent = Math.round(dc * 0.12).toLocaleString();
+        o.el.style.setProperty("--z", (10 + frac * 76).toFixed(0) + "px");
       });
       if (selected !== null) ($(".atl-now")!).textContent = Math.round(displayCount(N[selected]) * 0.12).toLocaleString();
       updateHeat();
@@ -1075,8 +1077,6 @@ export function AtlasHome({
       const onLeaveWin = () => { mouseInside = false; }, onEnterWin = () => { mouseInside = true; };
       document.addEventListener("mouseleave", onLeaveWin); document.addEventListener("mouseenter", onEnterWin);
       cleanups.push(() => { document.removeEventListener("mouseleave", onLeaveWin); document.removeEventListener("mouseenter", onEnterWin); });
-      const react = () => { lastMove = performance.now(); if (curEl) { curEl.classList.add("react"); setTimeout(() => curEl.classList.remove("react"), 340); } };
-      window.addEventListener("pointerdown", react); cleanups.push(() => window.removeEventListener("pointerdown", react));
       if (curEl) curEl.addEventListener("click", openMe); // tap ONE → your profile
       const pickGaze = (now: number) => { const a = Math.random() * Math.PI * 2, r = 0.35 + Math.random() * 0.45; tgx = Math.cos(a) * r; tgy = Math.sin(a) * r; nextGaze = now + 2400 + Math.random() * 2600; };
       let craf = 0;
@@ -1245,7 +1245,6 @@ const ATLAS_CSS = `
 .atl-cursor.aside{ width:38px; height:38px; }
 .atl-cursor.big{ width:72px; height:72px; opacity:1; filter:drop-shadow(0 14px 28px rgba(10,10,10,0.34)); }
 .atl-cursor svg{ display:block; transition:transform .32s cubic-bezier(.2,.8,.2,1); }
-.atl-cursor.react svg{ transform:scale(1.32); }
 .atl-scrim{ position:absolute; inset:0; z-index:62; background:color-mix(in srgb, var(--a-bg) 52%, transparent); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity .34s; }
 /* the ONE profile pulls all focus: the map dims deeply toward the sides behind the centred card */
 .atl-app.atl-meopen .atl-scrim{ opacity:1; pointer-events:auto; background:radial-gradient(120% 120% at 50% 50%, color-mix(in srgb, var(--a-bg) 32%, transparent) 24%, color-mix(in srgb, var(--a-bg) 80%, transparent) 76%, var(--a-bg) 100%); -webkit-backdrop-filter:blur(5px); backdrop-filter:blur(5px); }
@@ -1335,7 +1334,7 @@ const ATLAS_CSS = `
 .atl-asum-up{ color:var(--a-live); font-weight:700; }
 .atl-anchor:hover .atl-asum{ opacity:1; transform:translate(-50%,0) scale(1); }
 .atl-anchor.dim{ opacity:0.18; }
-.atl-word{ position:absolute; transform:translate(-50%,-50%) translateZ(28px) rotateX(calc(var(--tilt,56deg) * -1)); background:none; border:0; padding:5px 6px; cursor:pointer; color:var(--a-ink); transition:opacity .4s; }
+.atl-word{ position:absolute; transform:translate(-50%,-50%) translateZ(var(--z,28px)) rotateX(calc(var(--tilt,56deg) * -1)); background:none; border:0; padding:5px 6px; cursor:pointer; color:var(--a-ink); transition:opacity .4s; }
 .atl-float{ display:inline-block; animation:atlFloat var(--fd,7s) ease-in-out infinite; animation-delay:var(--fdl,0s); }
 .atl-inner{ display:inline-block; transition:transform .2s cubic-bezier(.2,.7,.2,1),color .2s; letter-spacing:-0.015em; line-height:1.05; text-shadow:0 1px 12px var(--a-bg); }
 .atl-count{ display:block; text-align:center; font-size:11px; color:var(--a-ink3); opacity:0; margin-top:3px; font-variant-numeric:tabular-nums; transition:opacity .2s; font-weight:600; }
