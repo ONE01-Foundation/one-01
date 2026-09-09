@@ -892,6 +892,7 @@ export function AtlasHome({
       const cta = $(".atl-cta")!; cta.textContent = TXT[lang].openIn; cta.classList.remove("done");
     }
     function closePanel() {
+      const wasSel = selected; // remember the topic so we can stay on it
       panel.classList.remove("open"); R.classList.remove("atl-meopen"); panel.setAttribute("aria-hidden", "true");
       selected = null; cur = null; meMode = false; journey = false;
       wordEls.forEach((o) => o.el.classList.remove("sel")); clearRoute();
@@ -900,7 +901,11 @@ export function AtlasHome({
       // Keep the whole open-card layout — hidden Start button, in-card composer, dimmed map —
       // through the fade-out, THEN reset. Otherwise the old layout (with the button) flashes as it closes.
       setTimeout(() => { if (!panel.classList.contains("open")) { panel.classList.remove("is-custom", "center"); R.classList.remove("atl-focus", "atl-journey"); } }, 340);
-      flyTo(0, -30, vw < 720 ? 0.6 : 0.8); // pull back out to the full map
+      // Stay on the topic you had open — re-centre it (dropping the card's side offset) at the current zoom,
+      // instead of snapping back to a fixed view.
+      const so = wasSel !== null ? wordOf(wasSel) : null;
+      if (so) flyTo(-(so.wx - CX), -(so.wy - CY), cam.z);
+      else flyTo(0, -30, vw < 720 ? 0.6 : 0.8);
     }
     // A tiny market-style area chart (line + gradient fill + "now" dot), reused by
     // the world card and the service-ONE card.
