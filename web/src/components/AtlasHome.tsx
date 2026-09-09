@@ -187,6 +187,7 @@ export function AtlasHome({
     const clrEl = $(".atl-clr")!;
     const panel = $(".atl-panel")!;
     const customEl = $(".atl-custom")!;
+    const sugEl = $(".atl-suggest")!;
     const matchEl = $(".atl-match")!;
     const baseLinks = R.querySelector(".atl-baselinks") as SVGGElement;
     const routePath = R.querySelector(".atl-route") as SVGPathElement;
@@ -549,7 +550,31 @@ export function AtlasHome({
     timeRange.value = String(hour);
     timeRange.addEventListener("input", () => setHour(+timeRange.value));
     setHour(hour);
-    const onInput = () => { clrEl.classList.toggle("show", !!qEl.value.trim()); if (qEl.value.trim()) activeD = null; updateVis(); };
+    function buildSuggest() {
+      const q = qEl.value.trim().toLowerCase();
+      if (!q) { sugEl.classList.remove("show"); sugEl.innerHTML = ""; return; }
+      const ms: number[] = [];
+      for (let i = 0; i < N.length && ms.length < 6; i++) { if (N[i].en.toLowerCase().includes(q) || N[i].he.includes(q)) ms.push(i); }
+      if (!ms.length) { sugEl.classList.remove("show"); sugEl.innerHTML = ""; return; }
+      sugEl.innerHTML = ms.map((i) => { const n = N[i]; return '<button class="atl-sug" data-id="' + i + '"><span class="atl-sug-em">' + D[n.d].em + '</span><span class="atl-sug-name">' + n[lang] + '</span><span class="atl-sug-n">' + Math.round(displayCount(n) * 0.12).toLocaleString() + '</span></button>'; }).join("");
+      sugEl.querySelectorAll(".atl-sug").forEach((b) => b.addEventListener("click", () => openNode(+(b.getAttribute("data-id") || 0))));
+      sugEl.classList.add("show");
+    }
+    // As you type, the map clears and only what relates to your words lights up
+    // (name, its topic, or its needs — plus wants people pair it with).
+    function buildRelevant() {
+      const q = qEl.value.trim().toLowerCase(); const relevant = new Set<number>();
+      if (q) {
+        N.forEach((n, i) => { const nd = NEEDS[n.en] || []; if (n.en.toLowerCase().includes(q) || n.he.includes(q) || D[n.d].en.toLowerCase().includes(q) || D[n.d].he.includes(q) || nd.some((x) => x.en.toLowerCase().includes(q) || x.he.includes(q))) relevant.add(i); });
+        const names = new Set<string>(); relevant.forEach((i) => names.add(N[i].en));
+        XLINKS.forEach(([a, b]) => { if (names.has(a)) { const j = N.findIndex((x) => x.en === b); if (j >= 0) relevant.add(j); } if (names.has(b)) { const j = N.findIndex((x) => x.en === a); if (j >= 0) relevant.add(j); } });
+      }
+      wordEls.forEach((o) => o.el.classList.toggle("match", relevant.has(+o.el.getAttribute("data-id")!)));
+    }
+    function exitCompose() { R.classList.remove("atl-compose"); qEl.setAttribute("placeholder", TXT[lang].ph); wordEls.forEach((o) => o.el.classList.remove("match")); sugEl.classList.remove("show"); }
+    qEl.addEventListener("focus", () => { qEl.setAttribute("placeholder", ""); R.classList.add("atl-compose"); buildRelevant(); });
+    qEl.addEventListener("blur", () => { if (!qEl.value.trim()) exitCompose(); });
+    const onInput = () => { clrEl.classList.toggle("show", !!qEl.value.trim()); if (qEl.value.trim()) activeD = null; updateVis(); buildSuggest(); buildRelevant(); };
     qEl.addEventListener("input", onInput);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return; const q = qEl.value.trim().toLowerCase(); if (!q) return;
@@ -558,7 +583,7 @@ export function AtlasHome({
       generateArea(qEl.value.trim()); qEl.blur(); // nothing matched — map the new need
     };
     qEl.addEventListener("keydown", onKey);
-    const onClr = () => { qEl.value = ""; clrEl.classList.remove("show"); activeD = null; updateVis(); qEl.focus(); };
+    const onClr = () => { qEl.value = ""; clrEl.classList.remove("show"); sugEl.classList.remove("show"); activeD = null; updateVis(); qEl.focus(); };
     clrEl.addEventListener("click", onClr);
     const plusEl = $(".atl-plus"), voiceEl = $(".atl-voice");
     if (plusEl) plusEl.addEventListener("click", () => { qEl.value = ""; clrEl.classList.remove("show"); activeD = null; updateVis(); qEl.focus(); });
@@ -607,7 +632,7 @@ export function AtlasHome({
     // journey (ONE driving, providers on the map, progress) only begins on Start.
     function openNode(id: number) {
       selected = id; const n = N[id], dist = D[n.d], t = TXT[lang];
-      hideTip(); panel.classList.remove("is-custom");
+      hideTip(); panel.classList.remove("is-custom"); exitCompose();
       activeD = null; qEl.value = ""; clrEl.classList.remove("show"); updateVis();
       wordEls.forEach((o) => o.el.classList.toggle("sel", +o.el.getAttribute("data-id")! === id));
       journey = false; R.classList.remove("atl-journey"); R.classList.add("atl-focus"); // drill into this topic
@@ -902,6 +927,7 @@ export function AtlasHome({
       </div>
 
       <div className="atl-core">
+        <div className="atl-suggest" />
         <div className="atl-search">
           <button className="atl-plus" aria-label={lang === "he" ? "התחלה חדשה" : "Start fresh"}>
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -980,7 +1006,7 @@ const ATLAS_CSS = `
 @media (prefers-reduced-motion: reduce){ .atl-ripple{ display:none; } }
 .atl-links{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
 .atl-link{ stroke:var(--a-line); stroke-width:1.4; fill:none; }
-.atl-xlink{ stroke:var(--a-ink); opacity:0.10; stroke-width:1.6; fill:none; stroke-dasharray:3 12; }
+.atl-xlink{ stroke:var(--a-ink); opacity:0.10; stroke-width:1.6; fill:none; stroke-dasharray:3 12; animation:atlDash 4s linear infinite; }
 .atl-route{ fill:none; stroke-width:5; stroke-linecap:round; stroke-linejoin:round; opacity:0; transition:opacity .4s; }
 .atl-route.on{ opacity:0.9; stroke-dasharray:2 14; animation:atlDash 1.1s linear infinite; }
 .atl-route.preview{ opacity:0.45; stroke-width:3; stroke-dasharray:1 12; animation:atlDash 2.4s linear infinite; }
@@ -1060,6 +1086,11 @@ const ATLAS_CSS = `
 .atl-clr{ flex:none; border:0; background:var(--a-line); color:var(--a-ink2); cursor:pointer; font:inherit; font-size:12px; font-weight:600; height:38px; padding:0 13px; border-radius:999px; opacity:0; width:0; padding-inline:0; overflow:hidden; transition:opacity .2s; }
 .atl-clr.show{ opacity:1; width:auto; padding-inline:13px; }
 .atl-match{ font-size:12.5px; color:var(--a-ink3); font-weight:600; height:16px; text-align:center; }
+.atl-suggest{ position:absolute; bottom:calc(100% + 12px); left:50%; transform:translateX(-50%); width:min(440px,86vw); max-height:280px; overflow-y:auto; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:16px; padding:6px; display:none; }
+.atl-suggest.show{ display:block; }
+.atl-sug{ display:flex; align-items:center; gap:10px; width:100%; text-align:start; background:none; border:0; border-radius:11px; padding:9px 12px; font:inherit; cursor:pointer; color:var(--a-ink); }
+.atl-sug:hover{ background:var(--a-line); }
+.atl-sug-em{ font-size:16px; } .atl-sug-name{ flex:1; font-size:14px; font-weight:600; } .atl-sug-n{ font-size:12px; color:var(--a-ink3); font-variant-numeric:tabular-nums; }
 .atl-priv{ position:absolute; z-index:26; bottom:16px; inset-inline-start:20px; display:inline-flex; align-items:center; gap:7px; font-size:11.5px; color:var(--a-ink3); font-weight:600; pointer-events:none; }
 .atl-time{ flex:none; display:inline-flex; align-items:center; gap:9px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadow); border-radius:999px; height:38px; padding:0 14px; }
 .atl-time-ico{ font-size:15px; line-height:1; }
@@ -1185,6 +1216,10 @@ const ATLAS_CSS = `
 /* focus (a click drills into the topic): the rest of the field recedes, leaving
    the want + its needs. Lighter than a journey — the world is still faintly there. */
 .atl-app.atl-focus .atl-word:not(.sel), .atl-app.atl-focus .atl-anchor, .atl-app.atl-focus .atl-agent:not(.provider), .atl-app.atl-focus .atl-xlink, .atl-app.atl-focus .atl-link, .atl-app.atl-focus .atl-blob{ opacity:0.06 !important; pointer-events:none; transition:opacity .45s ease; }
+/* compose: typing clears the map; only what relates to your words lights up */
+.atl-app.atl-compose .atl-word{ opacity:0.05; transition:opacity .35s ease; }
+.atl-app.atl-compose .atl-word.match{ opacity:1 !important; pointer-events:auto; }
+.atl-app.atl-compose .atl-anchor, .atl-app.atl-compose .atl-agent, .atl-app.atl-compose .atl-blob, .atl-app.atl-compose .atl-xlink, .atl-app.atl-compose .atl-link{ opacity:0.04 !important; pointer-events:none; transition:opacity .35s ease; }
 .atl-app.atl-journey .atl-panel, .atl-app.atl-focus .atl-panel{ width:min(456px, calc(100vw - 40px)); max-height:calc(100dvh - 130px); }
 @media (max-width:860px){ .atl-ticker{ display:none; } }
 @media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-cursor{ display:none; } .atl-time-range{ width:120px; } .atl-panel{ left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:64dvh; transform:translateY(16px); } .atl-panel.open{ transform:translateY(0); } }
