@@ -163,10 +163,13 @@ const TXT = {
 
 export function AtlasHome({
   lang,
+  theme = "light",
   onStart,
   onOrbTap,
 }: {
   lang: Lang;
+  /** Atlas follows the app's light/dark theme (Settings), not the clock. */
+  theme?: "light" | "dark";
   /** Hand the chosen intention to ONE (fork-and-run). */
   onStart?: (text: string) => void;
   /** Tapping the ONE face — the way back to the profile / Settings. */
@@ -175,6 +178,9 @@ export function AtlasHome({
   const appRef = useRef<HTMLDivElement>(null);
   const onStartRef = useRef(onStart); onStartRef.current = onStart;
   const onOrbTapRef = useRef(onOrbTap); onOrbTapRef.current = onOrbTap;
+  const themeRef = useRef(theme); themeRef.current = theme;
+  // Atlas day/night follows the app theme (light/dark), switching live when Settings toggles it.
+  useEffect(() => { appRef.current?.classList.toggle("atl-night", theme === "dark"); }, [theme]);
 
   useEffect(() => {
     const root = appRef.current;
@@ -210,7 +216,7 @@ export function AtlasHome({
     let parX = 0, parY = 0; // eased map parallax toward the pointer direction
     let mouseInside = true, overChrome = false; // auto-pan stops when either fails
     let glideTo: { x: number; y: number } | null = null; // soft drift target (a hovered topic)
-    let hour = new Date().getHours();
+    const hour = new Date().getHours();
     const displayCount = (n: Intent) => Math.max(1, Math.round(n.count * timeWeight(hour, n.d)));
     const tipEl = $(".atl-tip")!;
     let focusText: string | null = null;
@@ -611,8 +617,8 @@ export function AtlasHome({
     vwWorld.addEventListener("click", () => setView("world"));
     vwMine.addEventListener("click", () => setView("mine"));
 
-    // day/night follows the real clock (the manual scrubber was removed)
-    R.classList.toggle("atl-night", hour < 6 || hour >= 19);
+    // day/night follows the app theme (Settings), not the clock
+    R.classList.toggle("atl-night", themeRef.current === "dark");
     refreshCounts();
     function buildSuggest() {
       const q = qEl.value.trim().toLowerCase();
@@ -1060,7 +1066,7 @@ export function AtlasHome({
       const curEl = $(".atl-cursor");
       const eL = curEl ? (curEl.querySelector(".atl-cur-l") as SVGCircleElement) : null;
       const eR = curEl ? (curEl.querySelector(".atl-cur-r") as SVGCircleElement) : null;
-      const homeX = () => vw / 2, homeY = () => vh * 0.33; // big & centred, just above the input
+      const homeX = () => vw / 2, homeY = () => isTouch ? vh - 190 : vh * 0.33; // above the input (which sits low on touch)
       let px = homeX(), py = homeY();
       let gx = 0, gy = 0, tgx = 0, tgy = 0, nextGaze = 0;
       let lastMove = -9999;
@@ -1288,7 +1294,7 @@ const ATLAS_CSS = `
 .atl-nav-t.on::after{ content:""; position:absolute; inset-inline:0; bottom:-3px; height:2px; border-radius:2px; background:var(--a-ink); }
 .atl-nav-div{ width:1px; height:15px; background:var(--a-line2); }
 /* profile + wallet tools on the side */
-.atl-tools{ display:inline-flex; align-items:center; gap:9px; flex:none; }
+.atl-tools{ position:absolute; right:20px; top:50%; transform:translateY(-50%); display:inline-flex; align-items:center; gap:9px; flex:none; } /* always top-right, even in RTL */
 .atl-tool{ width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; color:var(--a-ink2); transition:color .2s, transform .15s, border-color .2s; }
 .atl-tool:hover{ color:var(--a-ink); border-color:var(--a-line2); transform:translateY(-1px); }
 .atl-cursor.hidden{ opacity:0 !important; pointer-events:none; }
@@ -1316,7 +1322,7 @@ const ATLAS_CSS = `
 .atl-tset-sw::after{ content:""; position:absolute; top:3px; inset-inline-start:3px; width:18px; height:18px; border-radius:50%; background:var(--a-card); box-shadow:var(--a-shadow); transition:transform .2s; }
 .atl-tset-sw.on{ background:var(--a-live); }
 .atl-tset-sw.on::after{ transform:translateX(18px); } [dir="rtl"] .atl-tset-sw.on::after{ transform:translateX(-18px); }
-.atl-logo{ flex:none; background:none; border:0; padding:0; color:var(--a-ink); display:grid; place-items:center; }
+.atl-logo{ position:absolute; left:20px; top:50%; transform:translateY(-50%); flex:none; background:none; border:0; padding:0; color:var(--a-ink); display:grid; place-items:center; } /* always top-left, even in RTL */
 .atl-status-live{ font-size:12.5px; font-weight:500; color:var(--a-ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .atl-menu{ flex:none; width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; padding:0; }
 .atl-anchor{ position:absolute; transform:translate(-50%,-50%) translateZ(46px) rotateX(calc(var(--tilt,56deg) * -1)); display:flex; flex-direction:column; align-items:center; gap:6px; background:none; border:0; cursor:pointer; padding:6px; transition:opacity .35s; }
@@ -1580,6 +1586,8 @@ const ATLAS_CSS = `
   .atl-panel.center{ top:50%; transform:translate(-50%,calc(-50% + 24px)) scale(.96); }
   .atl-panel.center.open{ transform:translate(-50%,-50%) scale(1); }
   .atl-close{ position:sticky; top:0; z-index:5; margin-bottom:-8px; }
+  /* on phones the input sits at the bottom (the higher-specificity focus/journey rules still win when a card is open) */
+  .atl-core{ top:auto; bottom:26px; transform:translate(-50%,0); width:min(440px,92vw); }
 }
 /* on touch the companion just rests above the input; it steps aside while a card is open */
 @media (max-width:720px){ .atl-app.atl-focus .atl-cursor, .atl-app.atl-meopen .atl-cursor{ display:none; } }

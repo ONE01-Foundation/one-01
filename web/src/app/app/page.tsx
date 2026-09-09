@@ -2332,6 +2332,13 @@ export default function AppHome() {
     setTheme(t);
     try { localStorage.setItem("one_theme", t); } catch {}
   };
+  // Keep the mobile browser bar (theme-color) in sync with the chosen theme.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    let m = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+    if (!m) { m = document.createElement("meta"); m.name = "theme-color"; document.head.appendChild(m); }
+    m.content = theme === "dark" ? "#0b0b0d" : "#fafaf8";
+  }, [theme]);
   const applyLang = (l: UILang) => {
     setLang(l);
     try { localStorage.setItem("one_lang", l); } catch {}
@@ -7163,6 +7170,7 @@ export default function AppHome() {
               {homeMode === "atlas" && space === "home" && !activeProcess && (
                 <AtlasHome
                   lang={lang}
+                  theme={theme}
                   onStart={(text) => { applyHomeMode("classic"); send(text); }}
                   onOrbTap={openProfile}
                 />
