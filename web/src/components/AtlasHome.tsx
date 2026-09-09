@@ -1234,8 +1234,10 @@ export function AtlasHome({
           </button>
         </div>
         <div className="atl-match" />
-        <p className="atl-signin">{TXT[lang].signinPre} · <button className="atl-signin-link">{TXT[lang].signinLink}</button></p>
       </div>
+
+      {/* out of .atl-core (whose transform would trap a fixed position) so it can dock to the page */}
+      <p className="atl-signin">{TXT[lang].signinPre} · <button className="atl-signin-link">{TXT[lang].signinLink}</button></p>
 
       <div className="atl-priv">🔒 {TXT[lang].priv}</div>
 
@@ -1347,6 +1349,10 @@ const ATLAS_CSS = `
 .atl-prof:hover{ border-color:var(--a-line2); }
 .atl-prof-av{ width:32px; height:32px; border-radius:50%; border:0; background:var(--a-line); color:var(--a-ink2); display:grid; place-items:center; cursor:pointer; padding:0; transition:color .2s, background .2s; }
 .atl-prof-av:hover{ color:var(--a-ink); background:color-mix(in srgb, var(--a-line) 70%, var(--a-ink) 8%); }
+/* Anonymous profile: the ONE masks itself — a visor over the eyes (selective disclosure, made visible) */
+.atl-app.atl-anon .atl-cursor::after{ content:""; position:absolute; left:18%; right:18%; top:39%; height:13%; border-radius:4px; background:var(--a-ink); box-shadow:0 1px 3px rgba(10,10,10,0.35); }
+.atl-app.atl-anon .atl-prof-av{ position:relative; color:var(--a-ink); }
+.atl-app.atl-anon .atl-prof-av::after{ content:""; position:absolute; left:24%; right:24%; top:42%; height:5px; border-radius:2px; background:currentColor; }
 .atl-tool{ width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; color:var(--a-ink2); transition:color .2s, transform .15s, border-color .2s; }
 .atl-tool:hover{ color:var(--a-ink); border-color:var(--a-line2); transform:translateY(-1px); }
 .atl-prof-caret{ width:18px; height:32px; border:0; background:none; cursor:pointer; color:var(--a-ink3); display:grid; place-items:center; padding:0; transition:color .2s, transform .25s; }
@@ -1443,7 +1449,10 @@ const ATLAS_CSS = `
 .atl-blink{ animation:atlBlink 5.6s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
 @keyframes atlBlink{ 0%,92%,100%{transform:scaleY(1);} 96%{transform:scaleY(0.12);} }
 .atl-search{ width:100%; direction:ltr; display:flex; align-items:center; gap:8px; height:58px; padding:0 8px; border-radius:999px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); }
-.atl-signin{ margin:0; font-size:13px; color:var(--a-ink3); text-align:center; }
+/* the sign-in line docks near the page bottom (above the input on phones, a footer on desktop) */
+.atl-signin{ position:fixed; z-index:26; left:50%; bottom:calc(env(safe-area-inset-bottom, 0px) + 92px); transform:translateX(-50%); margin:0; font-size:13px; color:var(--a-ink3); text-align:center; white-space:nowrap; pointer-events:auto; }
+@media (min-width:721px){ .atl-signin{ bottom:22px; } }
+.atl-app.atl-meopen .atl-signin, .atl-app.atl-journey .atl-signin{ display:none; }
 .atl-signin-link{ background:none; border:0; padding:0; color:var(--a-ink); font:inherit; font-weight:700; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
 .atl-search input{ flex:1; min-width:0; border:none !important; outline:none !important; box-shadow:none !important; -webkit-appearance:none; appearance:none; background:transparent; font:inherit; font-size:16px; color:var(--a-ink); padding:0 6px; user-select:text; -webkit-user-select:text; }
 .atl-search input:focus{ outline:none !important; box-shadow:none !important; border:none !important; }
@@ -1656,6 +1665,10 @@ const ATLAS_CSS = `
   .atl-panel::before{ content:""; display:block; width:38px; height:4px; border-radius:2px; background:var(--a-line2); margin:-4px auto 8px; flex:none; }
   /* on phones the input sits at the bottom (focus/journey rules still win when a card is open) */
   .atl-core{ top:auto; bottom:26px; transform:translate(-50%,0); width:min(440px,92vw); }
+  /* a node card is a scrollable sheet: no cut-off floating input — the card's own button is the action */
+  .atl-app.atl-focus:not(.atl-journey) .atl-core{ display:none; }
+  .atl-app.atl-focus:not(.atl-journey) .atl-cta{ display:inline-flex; }
+  .atl-app.atl-focus:not(.atl-journey) .atl-panel{ padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 22px); }
 }
 /* on touch the companion rests above the input; it hides for a node card but STAYS as the avatar on the profile sheet */
 @media (max-width:720px){ .atl-app.atl-focus .atl-cursor{ display:none; } }

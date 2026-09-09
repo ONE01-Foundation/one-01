@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fafaf8",
+  // theme-color is set from the saved theme in the pre-paint script below (iOS reads it once, at load).
   width: "device-width",
   initialScale: 1,
 };
@@ -41,7 +41,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var s=localStorage.getItem('one_web_theme');var d;if(s==='dark'){d=true}else if(s==='light'){d=false}else{var h=new Date().getHours();d=h>=18||h<6}document.documentElement.dataset.theme=d?'dark':'light'}catch(e){}})();",
+              "(function(){try{var s=localStorage.getItem('one_web_theme');var d;if(s==='dark'){d=true}else if(s==='light'){d=false}else{var h=new Date().getHours();d=h>=18||h<6}document.documentElement.dataset.theme=d?'dark':'light';var at=localStorage.getItem('one_theme');var ad=at==='dark'?true:at==='light'?false:d;var c=ad?'#0b0b0d':'#fafaf8';var ms=document.querySelectorAll('meta[name=theme-color]');for(var i=0;i<ms.length;i++){ms[i].parentNode.removeChild(ms[i])}var m=document.createElement('meta');m.setAttribute('name','theme-color');m.setAttribute('content',c);document.head.appendChild(m);var sb=document.createElement('meta');sb.setAttribute('name','apple-mobile-web-app-status-bar-style');sb.setAttribute('content',ad?'black':'default');document.head.appendChild(sb)}catch(e){}})();",
           }}
         />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
