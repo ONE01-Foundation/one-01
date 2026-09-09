@@ -150,7 +150,7 @@ const TXT = {
     world: "World", mine: "Mine", inProgress: (n: number) => n + " in progress",
     provH: "Who can help", journeying: "ONE is on the way", arrived: "Arrived",
     stepsH: "The path others took", stepsHgo: "Your steps with ONE", cont: "Continue", stepPh: "reply, or just continue…", allDone: "Done — it's in motion", openIn: "Open in ONE", startJ: "Start this with your ONE",
-    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", mineEmpty: "Your space — the processes you start live here." },
+    rating: "rating", jobs: "jobs / mo", reply: "avg reply", connect: "Connect with this ONE", idxLive: "active here now", idxIntents: "intentions", idxProviders: "service ONEs", idxTop: "Busiest right now", idxEnter: "Explore this world", needsH: "What this involves", signinPre: "No account needed to start", signinLink: "Connect", prompts: ["What do you need?", "What can ONE do for you?", "Just say it — ONE takes it from here"], tipHint: "Click to open →", myOne: "Your ONE", myOneSub: "Your representative across the map", manage: "Open full profile", relatedH: "Often paired with", mineEmpty: "Your space — the processes you start live here." },
   he: { live: "עכשיו", priv: "אנונימי · מצטבר", ph: "מה אתה צריך?", clr: "נקה",
     hint: "גררו כדי לנוע · גלגלו כדי לזום · לחצו על רצון כדי לפרוש את המסלול",
     nowLbl: "וואנים על זה עכשיו", pathH: "המסלול שאחרים עברו", doneK: "הושלמו השבוע", avgK: "זמן ממוצע",
@@ -159,7 +159,7 @@ const TXT = {
     world: "עולם", mine: "שלי", inProgress: (n: number) => n + " בתהליך",
     provH: "מי יכול לעזור", journeying: "ה‑ONE בדרך", arrived: "הגעת",
     stepsH: "המסלול שאחרים עברו", stepsHgo: "הצעדים שלך עם ONE", cont: "המשך", stepPh: "תשובה, או פשוט המשך…", allDone: "בוצע — זה בתנועה", openIn: "פתח ב‑ONE", startJ: "התחל את זה עם ה‑ONE שלך",
-    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
+    rating: "דירוג", jobs: "עבודות / חודש", reply: "מענה ממוצע", connect: "התחבר ל‑ONE הזה", idxLive: "פעילים כאן עכשיו", idxIntents: "כוונות", idxProviders: "נותני שירות", idxTop: "העמוסים עכשיו", idxEnter: "היכנס לעולם הזה", needsH: "מה צריך בשביל זה", signinPre: "לא צריך חשבון כדי להתחיל", signinLink: "התחברות", prompts: ["מה אתה צריך?", "מה ONE יכול לעשות בשבילך?", "רק תגיד — ONE ממשיך מכאן"], tipHint: "לחצו לפתיחה →", myOne: "ה‑ONE שלך", myOneSub: "הנציג שלך על המפה", manage: "פתח פרופיל מלא", relatedH: "לרוב יחד עם", mineEmpty: "המרחב שלך — התהליכים שתתחיל יופיעו כאן." },
 };
 
 export function AtlasHome({
@@ -204,17 +204,34 @@ export function AtlasHome({
     let vw = R.clientWidth, vh = R.clientHeight;
     const cam = { px: 0, py: -40, z: vw < 720 ? 0.6 : 0.8, rot: 0 };
     let rotTarget = 0, lastZ = -1, dirty = true;
+    let mpx = R.clientWidth / 2, mpy = R.clientHeight / 2; // live pointer position
+    let parX = 0, parY = 0; // eased map parallax toward the pointer direction
+    let mouseInside = true, overChrome = false; // auto-pan stops when either fails
+    let glideTo: { x: number; y: number } | null = null; // soft drift target (a hovered topic)
     let hour = new Date().getHours();
     const displayCount = (n: Intent) => Math.max(1, Math.round(n.count * timeWeight(hour, n.d)));
     const tipEl = $(".atl-tip")!;
     let focusText: string | null = null;
     const setLive = (s: string) => { const l = $(".atl-status-live"); if (l) l.textContent = s; };
     const showTip = (n: Intent, e: MouseEvent) => {
-      tipEl.innerHTML = "<b>" + n[lang] + "</b><span>" + Math.round(displayCount(n) * 0.12).toLocaleString() + " " + TXT[lang].live + " · ↑" + n.trend + "%</span>";
-      tipEl.style.left = e.clientX + "px"; tipEl.style.top = e.clientY - 16 + "px"; tipEl.classList.add("show");
-      focusText = D[n.d].em + " " + n[lang] + " · " + Math.round(displayCount(n) * 0.12).toLocaleString() + " " + TXT[lang].live; setLive(focusText);
+      const t = TXT[lang], live = Math.round(displayCount(n) * 0.12).toLocaleString();
+      const nd = (NEEDS[n.en] || AGENTS.filter((a) => a.di === n.d).map((a) => ({ em: a.em, en: a.en, he: a.he }))).slice(0, 4);
+      tipEl.innerHTML =
+        '<div class="atl-tip-top"><span class="atl-tip-em">' + D[n.d].em + '</span>' + D[n.d][lang] + '</div>' +
+        '<div class="atl-tip-title">' + n[lang] + '</div>' +
+        '<div class="atl-tip-now"><b>' + live + '</b> ' + t.live + ' <span class="atl-tip-trend">↑ ' + n.trend + '%</span></div>' +
+        '<div class="atl-tip-stats"><span><b>' + n.done.toLocaleString() + '</b> ' + t.doneK + '</span><span><b>' + n.avg + ' ' + t.days + '</b> ' + t.avgK + '</span></div>' +
+        (nd.length ? '<div class="atl-tip-needs">' + nd.map((x) => '<span class="atl-tip-need">' + x.em + ' ' + x[lang] + '</span>').join("") + '</div>' : "") +
+        '<div class="atl-tip-hint">' + t.tipHint + '</div>';
+      const w = 250, ex = Math.min(Math.max(e.clientX, w / 2 + 8), vw - w / 2 - 8);
+      tipEl.style.left = ex + "px"; tipEl.classList.add("show");
+      const h = tipEl.offsetHeight || 260; // flip below the cursor if there's no room above
+      if (e.clientY - h - 24 > 8) { tipEl.style.top = (e.clientY - 14) + "px"; tipEl.classList.remove("below"); }
+      else { tipEl.style.top = (e.clientY + 22) + "px"; tipEl.classList.add("below"); }
+      focusText = D[n.d].em + " " + n[lang] + " · " + live + " " + t.live; setLive(focusText);
+      qEl.setAttribute("placeholder", n[lang]); // the input invites acting on what you're near
     };
-    const hideTip = () => { tipEl.classList.remove("show"); focusText = null; };
+    const hideTip = () => { tipEl.classList.remove("show"); focusText = null; qEl.setAttribute("placeholder", TXT[lang].prompts[rotI % TXT[lang].prompts.length]); };
     let tween: { px0: number; py0: number; z0: number; px1: number; py1: number; z1: number; t: number } | null = null;
     let selected: number | null = null, activeD: number | null = null;
     let view: "world" | "mine" = "world";
@@ -243,8 +260,9 @@ export function AtlasHome({
     D.forEach((dist, di) => {
       const a = document.createElement("button"); a.className = "atl-anchor";
       a.style.left = dist.x + "px"; a.style.top = dist.y + "px"; a.style.setProperty("--dc", dist.c);
-      a.innerHTML = '<span class="atl-emoji" aria-hidden="true">' + dist.em + '</span><span class="atl-alabel"></span>';
+      a.innerHTML = '<div class="atl-asum"></div><span class="atl-emoji" aria-hidden="true">' + dist.em + '</span><span class="atl-alabel"></span><span class="atl-astat"></span>';
       a.addEventListener("click", (e) => { e.stopPropagation(); openIndex(di); });
+      // (index opens on click; hover shows the .atl-asum summary tab)
       ground.appendChild(a); anchorEls.push(a);
       const r = rng(di * 131 + 7);
       const mine: { n: Intent; idx: number }[] = [];
@@ -318,6 +336,12 @@ export function AtlasHome({
       updateHeat();
     }
     // Busier topics swell and glow like higher ground — a soft demand terrain.
+    // a soft ring where a ONE just acted — the map pulsing with live activity
+    function spawnRipple(wx: number, wy: number, color: string) {
+      const rp = document.createElement("div"); rp.className = "atl-ripple";
+      rp.style.left = wx + "px"; rp.style.top = wy + "px"; rp.style.borderColor = color;
+      ground.appendChild(rp); setTimeout(() => rp.remove(), 1500);
+    }
     function updateHeat() {
       const totals = D.map((_, di) => N.filter((n) => n.d === di).reduce((a, n) => a + Math.round(displayCount(n) * 0.12), 0));
       let max = 1; totals.forEach((v) => { if (v > max) max = v; });
@@ -326,6 +350,12 @@ export function AtlasHome({
         el.style.width = Rr + "px"; el.style.height = Rr + "px";
         el.style.left = dist.x! - Rr / 2 + "px"; el.style.top = dist.y! - Rr / 2 + "px";
         el.style.opacity = (0.28 + t * 0.42).toFixed(2);
+        const a = anchorEls[di];
+        if (a) {
+          const st = a.querySelector(".atl-astat") as HTMLElement | null; if (st) st.textContent = totals[di].toLocaleString() + " " + TXT[lang].live;
+          const su = a.querySelector(".atl-asum") as HTMLElement | null;
+          if (su) { const items = N.filter((x) => x.d === di); const tr = Math.round(items.reduce((s, x) => s + x.trend, 0) / (items.length || 1)); su.innerHTML = '<b>' + totals[di].toLocaleString() + '</b> ' + TXT[lang].live + ' · ' + items.length + ' ' + TXT[lang].idxIntents + ' · <span class="atl-asum-up">↑' + tr + '%</span>'; }
+        }
       });
     }
     // Top status line: date · weather · time, plus a running feed that reflects
@@ -335,7 +365,8 @@ export function AtlasHome({
       const w = weatherNow();
       const date = new Date().toLocaleDateString(lang === "he" ? "he-IL" : "en-US", { weekday: "short", month: "short", day: "numeric" });
       const hh = (hour < 10 ? "0" + hour : String(hour)) + ":00";
-      const m = $(".atl-status-main"); if (m) m.textContent = "📅 " + date + "   ·   " + w.em + " " + w.temp + "°   ·   🕐 " + hh;
+      const m = $(".atl-status-main"); if (m) m.textContent = "📅 " + date + "   ·   " + w.em + " " + w.temp + "°";
+      const ck = $(".atl-clock"); if (ck) ck.textContent = "🕐 " + hh;
     }
     let rotI = 0;
     function tickStatus() {
@@ -343,6 +374,7 @@ export function AtlasHome({
       const top = N.slice().sort((a, b) => displayCount(b) - displayCount(a)).slice(0, 12);
       const n = top[rotI++ % top.length];
       setLive("·  " + D[n.d].em + " " + Math.round(displayCount(n) * 0.12).toLocaleString() + " " + TXT[lang].live + " · " + n[lang]);
+      qEl.setAttribute("placeholder", TXT[lang].prompts[rotI % TXT[lang].prompts.length]);
     }
 
     // ---- expanding route + flowing particles ----
@@ -361,7 +393,19 @@ export function AtlasHome({
       }
       return routePts[routePts.length - 1];
     };
-    function clearRoute() { stepEls.forEach((e) => e.remove()); stepEls = []; routePath.classList.remove("on"); routePath.removeAttribute("d"); particlesOn = false; flows.forEach((f) => (f.style.opacity = "0")); }
+    function clearRoute() { stepEls.forEach((e) => e.remove()); stepEls = []; routePath.classList.remove("on", "preview"); routePath.removeAttribute("d"); particlesOn = false; flows.forEach((f) => (f.style.opacity = "0")); }
+    // a faint line of the path others took, drawn on the map while the card is open
+    function previewRoute(id: number) {
+      const o = wordOf(id); if (!o) return; const n = o.n, dist = D[n.d];
+      let dx = o.wx - dist.x!, dy = o.wy - dist.y!; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+      const pxp = -dy, pyp = dx; const pts = [[o.wx, o.wy]];
+      for (let i = 0; i < n.steps.length; i++) { const d = 150 + i * 150, off = (i % 2 ? 1 : -1) * 70; pts.push([o.wx + dx * d + pxp * off, o.wy + dy * d + pyp * off]); }
+      routePts = pts; routeSeg = []; routeTotal = 0;
+      for (let i = 1; i < pts.length; i++) { const s = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); routeSeg.push(s); routeTotal += s; }
+      routePath.setAttribute("d", "M " + pts.map((p) => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L "));
+      routePath.style.stroke = dist.c; routePath.classList.add("on", "preview");
+      flows.forEach((f) => f.setAttribute("fill", dist.c)); flowT = 0; particlesOn = !reduce; // dots stream along the path
+    }
     function clearProviders() { providerEls.forEach((e) => e.remove()); providerEls.length = 0; plinkEls.forEach((e) => e.remove()); plinkEls.length = 0; }
     function growRoute(id: number) {
       clearRoute();
@@ -378,7 +422,7 @@ export function AtlasHome({
         ground.appendChild(st); stepEls.push(st);
       }
       routePath.setAttribute("d", "M " + pts.map((p) => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L "));
-      routePath.style.stroke = dist.c; routePath.classList.add("on");
+      routePath.style.stroke = dist.c; routePath.classList.add("on"); routePath.classList.remove("preview");
       // particle track (arc-length along the polyline) — dots stream to the goal
       routePts = pts; routeSeg = []; routeTotal = 0;
       for (let i = 1; i < pts.length; i++) { const s = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); routeSeg.push(s); routeTotal += s; }
@@ -391,7 +435,7 @@ export function AtlasHome({
       cam.z = clamp(cam.z, 0.5, 2.8); cam.px = clamp(cam.px, -2100, 2100); cam.py = clamp(cam.py, -1700, 1700);
       const tilt = tiltFor(cam.z); COST = Math.cos((tilt * Math.PI) / 180);
       ground.style.setProperty("--tilt", tilt.toFixed(2) + "deg");
-      ground.style.transform = "translate(-50%,-50%) rotateX(" + tilt.toFixed(2) + "deg) rotateZ(" + cam.rot.toFixed(3) + "deg) scale(" + cam.z.toFixed(4) + ") translate(" + cam.px.toFixed(1) + "px," + cam.py.toFixed(1) + "px)";
+      ground.style.transform = "translate(" + parX.toFixed(1) + "px," + parY.toFixed(1) + "px) translate(-50%,-50%) rotateX(" + tilt.toFixed(2) + "deg) rotateZ(" + cam.rot.toFixed(3) + "deg) scale(" + cam.z.toFixed(4) + ") translate(" + cam.px.toFixed(1) + "px," + cam.py.toFixed(1) + "px)";
       if (Math.abs(cam.z - lastZ) > 0.004) { lastZ = cam.z; updateVis(); R.classList.toggle("atl-zoomed", cam.z > 1.3); }
     }
     const flyTo = (px: number, py: number, z: number) => { tween = { px0: cam.px, py0: cam.py, z0: cam.z, px1: px, py1: py, z1: z, t: 0 }; };
@@ -402,11 +446,13 @@ export function AtlasHome({
     const pts: Record<string, { x: number; y: number }> = {};
     let panLast: { x: number; y: number } | null = null;
     let pinchLast: { d: number; mx: number; my: number } | null = null;
-    const isChrome = (t: EventTarget | null) => t instanceof Element && t.closest(".atl-core,.atl-ticker,.atl-panel,.atl-priv,.atl-word,.atl-anchor,.atl-agent");
+    let tapActive = false, tapMoved = 0; // an empty-space tap (not a drag) closes an open card
+    const isChrome = (t: EventTarget | null) => t instanceof Element && t.closest(".atl-core,.atl-ticker,.atl-panel,.atl-priv,.atl-word,.atl-anchor,.atl-agent,.atl-cursor");
     const pinch = () => { const ids = Object.keys(pts), a = pts[ids[0]], b = pts[ids[1]]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; };
     const onDown = (e: PointerEvent) => {
       if (isChrome(e.target)) return;
       pts[e.pointerId] = { x: e.clientX, y: e.clientY }; R.setPointerCapture(e.pointerId); tween = null;
+      tapActive = true; tapMoved = 0;
       const ids = Object.keys(pts);
       if (ids.length === 1) { panLast = { x: e.clientX, y: e.clientY }; R.classList.add("drag"); }
       else if (ids.length === 2) { panLast = null; pinchLast = pinch(); }
@@ -415,9 +461,12 @@ export function AtlasHome({
       if (!pts[e.pointerId]) return; pts[e.pointerId] = { x: e.clientX, y: e.clientY };
       const ids = Object.keys(pts);
       if (ids.length >= 2) { const p = pinch(); if (pinchLast) { cam.z *= p.d / pinchLast.d; cam.px += (p.mx - pinchLast.mx) / cam.z; cam.py += (p.my - pinchLast.my) / (cam.z * COST); dirty = true; } pinchLast = p; }
-      else if (panLast) { const dx = e.clientX - panLast.x, dy = e.clientY - panLast.y; cam.px += dx / cam.z; cam.py += dy / (cam.z * COST); rotTarget = clamp(rotTarget - dx * 0.018, -7, 7); panLast = { x: e.clientX, y: e.clientY }; dirty = true; }
+      else if (panLast) { const dx = e.clientX - panLast.x, dy = e.clientY - panLast.y; tapMoved += Math.abs(dx) + Math.abs(dy); cam.px += dx / cam.z; cam.py += dy / (cam.z * COST); rotTarget = clamp(rotTarget - dx * 0.018, -7, 7); panLast = { x: e.clientX, y: e.clientY }; dirty = true; }
     };
-    const onUp = (e: PointerEvent) => { delete pts[e.pointerId]; const ids = Object.keys(pts); if (!ids.length) { panLast = null; pinchLast = null; R.classList.remove("drag"); } else if (ids.length === 1) { panLast = { x: pts[ids[0]].x, y: pts[ids[0]].y }; pinchLast = null; } };
+    const onUp = (e: PointerEvent) => {
+      delete pts[e.pointerId]; const ids = Object.keys(pts); if (!ids.length) { panLast = null; pinchLast = null; R.classList.remove("drag"); } else if (ids.length === 1) { panLast = { x: pts[ids[0]].x, y: pts[ids[0]].y }; pinchLast = null; }
+      if (tapActive) { tapActive = false; if (tapMoved < 6 && panel.classList.contains("open")) closePanel(); } // tap in empty space → close the card
+    };
     R.addEventListener("pointerdown", onDown); R.addEventListener("pointermove", onMove); R.addEventListener("pointerup", onUp); R.addEventListener("pointercancel", onUp);
     cleanups.push(() => { R.removeEventListener("pointerdown", onDown); R.removeEventListener("pointermove", onMove); R.removeEventListener("pointerup", onUp); R.removeEventListener("pointercancel", onUp); });
     const onDbl = (e: MouseEvent) => { if (isChrome(e.target)) return; tween = null; cam.z *= 1.5; dirty = true; };
@@ -426,6 +475,26 @@ export function AtlasHome({
     function loop() {
       if (tween) { tween.t = Math.min(1, tween.t + 0.05); const e = 1 - Math.pow(1 - tween.t, 3); cam.px = tween.px0 + (tween.px1 - tween.px0) * e; cam.py = tween.py0 + (tween.py1 - tween.py0) * e; cam.z = tween.z0 + (tween.z1 - tween.z0) * e; dirty = true; if (tween.t >= 1) tween = null; }
       rotTarget *= 0.9; if (Math.abs(cam.rot - rotTarget) > 0.02) { cam.rot += (rotTarget - cam.rot) * 0.12; dirty = true; }
+      // auto-movement is fully off when the pointer left the window, sits on a
+      // card, or a card/journey is open — no runaway panning.
+      // gentle drift toward a hovered topic (soft, not a snap)
+      if (glideTo && !panLast && !pinchLast && !journey && !tween && !R.classList.contains("atl-focus")) {
+        const tpx = (CX - glideTo.x) + (lang === "he" ? -200 : 200) / cam.z, tpy = (CY - glideTo.y) - 60 / cam.z;
+        cam.px += (tpx - cam.px) * 0.03; cam.py += (tpy - cam.py) * 0.03; dirty = true;
+      }
+      const autoOk = mouseInside && !overChrome && !panLast && !pinchLast && !journey && !focusText && !tween && !glideTo && !R.classList.contains("atl-focus") && Object.keys(pts).length === 0;
+      // map drifts toward wherever the pointer is (whole-screen parallax)
+      const ptX = autoOk ? -(mpx - vw / 2) * 0.04 : 0, ptY = autoOk ? -(mpy - vh / 2) * 0.04 : 0;
+      if (Math.abs(ptX - parX) > 0.1 || Math.abs(ptY - parY) > 0.1) { parX += (ptX - parX) * 0.06; parY += (ptY - parY) * 0.06; dirty = true; }
+      // hold the pointer off-centre and the map keeps scrolling that way (eager,
+      // starts well before the edge).
+      if (autoOk) {
+        const dz = 0.2, spd = 7;
+        let ex = (mpx - vw / 2) / (vw / 2), ey = (mpy - vh / 2) / (vh / 2);
+        const ax = Math.abs(ex) > dz ? (ex - Math.sign(ex) * dz) / (1 - dz) : 0;
+        const ay = Math.abs(ey) > dz ? (ey - Math.sign(ey) * dz) / (1 - dz) : 0;
+        if (ax || ay) { cam.px -= (ax * spd) / cam.z; cam.py -= (ay * spd) / cam.z; dirty = true; }
+      }
       if (particlesOn) {
         flowT = (flowT + 0.006) % 1;
         flows.forEach((f, i) => { const u = (flowT + i / flows.length) % 1; const p = pointAt(u); f.setAttribute("cx", p[0].toFixed(1)); f.setAttribute("cy", p[1].toFixed(1)); f.style.opacity = (0.9 * Math.sin(u * Math.PI)).toFixed(2); });
@@ -514,6 +583,7 @@ export function AtlasHome({
       a.style.left = dist.x! + "px"; a.style.top = dist.y! + "px"; a.style.setProperty("--dc", dist.c);
       a.innerHTML = '<span class="atl-emoji" aria-hidden="true">' + dist.em + '</span><span class="atl-alabel"></span>';
       a.addEventListener("click", (e) => { e.stopPropagation(); openIndex(di); });
+      // (index opens on click; hover shows the .atl-asum summary tab)
       ground.appendChild(a); anchorEls.push(a);
       const wx = dist.x! + 20, wy = dist.y! + 150;
       const el = document.createElement("button"); el.className = "atl-word gen";
@@ -540,7 +610,7 @@ export function AtlasHome({
       hideTip(); panel.classList.remove("is-custom");
       activeD = null; qEl.value = ""; clrEl.classList.remove("show"); updateVis();
       wordEls.forEach((o) => o.el.classList.toggle("sel", +o.el.getAttribute("data-id")! === id));
-      journey = false; R.classList.remove("atl-journey");
+      journey = false; R.classList.remove("atl-journey"); R.classList.add("atl-focus"); // drill into this topic
       if (driveEl) { driveEl.remove(); driveEl = null; } if (driveArrow) { driveArrow.remove(); driveArrow = null; }
       clearProviders(); clearRoute();
       const o = wordOf(id);
@@ -558,7 +628,8 @@ export function AtlasHome({
         ln.setAttribute("x1", String(wx0)); ln.setAttribute("y1", String(wy0)); ln.setAttribute("x2", String(px)); ln.setAttribute("y2", String(py));
         ln.style.stroke = dist.c; baseLinks.appendChild(ln); plinkEls.push(ln);
       });
-      if (o) flyTo(-(o.wx - CX) + (lang === "he" ? -260 : 260), -(o.wy - CY) - 120, Math.max(cam.z, 1.05));
+      previewRoute(id); // the path others took, faint on the map
+      if (o) flyTo(-(o.wx - CX) + (lang === "he" ? -260 : 260), -(o.wy - CY) - 120, Math.max(cam.z, 1.25));
       (panel.querySelector(".atl-tag") as HTMLElement).style.setProperty("--dc", dist.c);
       ($(".atl-em")!).textContent = dist.em;
       ($(".atl-district")!).textContent = dist[lang];
@@ -576,6 +647,14 @@ export function AtlasHome({
       const pl = $(".atl-provlist")!; pl.innerHTML = "";
       needs.forEach((nd) => { const c = document.createElement("span"); c.className = "atl-prov"; c.innerHTML = '<span class="atl-prov-em">' + nd.em + '</span>' + nd[lang]; pl.appendChild(c); });
       (R.querySelector(".atl-providers") as HTMLElement).style.display = needs.length ? "" : "none";
+      // related wants (things people usually pair with this one)
+      const rel = new Set<string>();
+      XLINKS.forEach(([a, b]) => { if (a === n.en) rel.add(b); else if (b === n.en) rel.add(a); });
+      const relArr = Array.from(rel).slice(0, 4);
+      ($(".atl-relh")!).textContent = t.relatedH;
+      const rl = $(".atl-relatedlist")!; rl.innerHTML = "";
+      relArr.forEach((en) => { const idx2 = N.findIndex((x) => x.en === en); if (idx2 < 0) return; const rn = N[idx2]; const b = document.createElement("button"); b.className = "atl-rel"; b.innerHTML = '<span class="atl-rel-em">' + D[rn.d].em + '</span>' + rn[lang]; b.addEventListener("click", () => openNode(idx2)); rl.appendChild(b); });
+      (R.querySelector(".atl-related-sec") as HTMLElement).style.display = relArr.length ? "" : "none";
       const cta = $(".atl-cta")!; cta.textContent = t.startJ; cta.classList.remove("done");
       ($(".atl-priv2")!).textContent = t.priv2;
       panel.classList.add("open"); panel.setAttribute("aria-hidden", "false");
@@ -614,6 +693,21 @@ export function AtlasHome({
       renderSteps(); setProgress();
       if (curStep >= total) { const c = $(".atl-cta")!; c.textContent = TXT[lang].openIn; c.classList.add("done"); }
     }
+    // Clicking the companion opens YOUR ONE — an Atlas-native profile card in the
+    // same style, listing what you've got in motion.
+    function openMe() {
+      hideTip(); const t = TXT[lang];
+      const mine = wordEls.filter((o) => MINE.has(o.n.en));
+      customEl.innerHTML =
+        '<div class="atl-me"><div class="atl-me-face">' + FACE + '</div>' +
+        '<div class="atl-me-name">' + t.myOne + '</div><div class="atl-me-sub">' + t.myOneSub + '</div>' +
+        '<div class="atl-sech" style="margin-top:20px">' + t.inProgress(mine.length) + '</div>' +
+        '<div class="atl-me-list">' + mine.map((o) => '<button class="atl-me-item" data-id="' + o.el.getAttribute("data-id") + '"><span class="atl-me-em">' + D[o.n.d].em + '</span>' + o.n[lang] + '</button>').join("") + '</div>' +
+        '<button class="atl-cta atl-me-manage">' + t.manage + '</button></div>';
+      customEl.querySelectorAll(".atl-me-item").forEach((b) => b.addEventListener("click", () => openNode(+(b.getAttribute("data-id") || 0))));
+      const mg = customEl.querySelector(".atl-me-manage"); if (mg) mg.addEventListener("click", () => { if (onOrbTapRef.current) onOrbTapRef.current(); });
+      panel.classList.add("is-custom", "open"); panel.setAttribute("aria-hidden", "false");
+    }
     // Start = the journey actually begins: field clears, ONE drives, providers appear.
     function startJourney() {
       if (!cur || journey) return; const dist = cur.dist;
@@ -636,9 +730,10 @@ export function AtlasHome({
     function closePanel() {
       panel.classList.remove("open"); panel.classList.remove("is-custom"); panel.setAttribute("aria-hidden", "true"); selected = null; cur = null;
       wordEls.forEach((o) => o.el.classList.remove("sel")); clearRoute();
-      journey = false; R.classList.remove("atl-journey");
+      journey = false; R.classList.remove("atl-journey", "atl-focus");
       if (driveEl) { driveEl.remove(); driveEl = null; } if (driveArrow) { driveArrow.remove(); driveArrow = null; }
       clearProviders();
+      flyTo(0, -30, vw < 720 ? 0.6 : 0.8); // pull back out to the full map
     }
     // Clicking a business/pro ONE opens its profile card.
     function openProvider(ag: Agent) {
@@ -681,7 +776,12 @@ export function AtlasHome({
       if (cur && onStartRef.current) onStartRef.current(cur.n[lang]); // once underway = hand to ONE
     });
     { const sc = $(".atl-scrim"); if (sc) sc.addEventListener("click", closePanel); }
-    { const mn = $(".atl-menu"); if (mn) mn.addEventListener("click", () => { if (onOrbTapRef.current) onOrbTapRef.current(); }); }
+    { const openP = () => { if (onOrbTapRef.current) onOrbTapRef.current(); };
+      const lg = $(".atl-logo"); if (lg) lg.addEventListener("click", openP);
+      const sl = $(".atl-signin-link"); if (sl) sl.addEventListener("click", openP); }
+    { const ck = $(".atl-clock"), pop = $(".atl-timepop");
+      if (ck && pop) { ck.addEventListener("click", (e) => { e.stopPropagation(); pop.classList.toggle("show"); });
+        R.addEventListener("pointerdown", (e) => { if (!(e.target as Element).closest(".atl-timepop,.atl-clock")) pop.classList.remove("show"); }); } }
 
     // live tick
     let tick: ReturnType<typeof setInterval> | null = null;
@@ -689,37 +789,46 @@ export function AtlasHome({
       tick = setInterval(() => {
         for (let k = 0; k < 3; k++) { const n = N[Math.floor(Math.random() * N.length)]; n.count += Math.floor(Math.random() * 3); }
         refreshCounts(); tickStatus();
+        if (wordEls.length) { const o = wordEls[Math.floor(Math.random() * wordEls.length)]; if (o && !o.el.classList.contains("lod") && !o.el.classList.contains("dim")) spawnRipple(o.wx, o.wy, D[o.di].c); }
       }, 3400);
       cleanups.push(() => { if (tick) clearInterval(tick); });
     }
 
-    // ONE is the cursor: a small eyeless dot that wakes into a face over
-    // something interactive, trails the pointer, and reacts when you act.
+    // ONE rests centred above the input and stays put — it only leaves home for
+    // a REASON: it glances at you when you move, startles when you press, and
+    // drifts over to a want while you're inspecting it, then eases back home.
     {
       const curEl = $(".atl-cursor");
       const eL = curEl ? (curEl.querySelector(".atl-cur-l") as SVGCircleElement) : null;
       const eR = curEl ? (curEl.querySelector(".atl-cur-r") as SVGCircleElement) : null;
-      let px = vw / 2, py = vh / 2, mx = px, my = py, hot = false, over = false;
-      const mv = (e: MouseEvent) => {
-        mx = e.clientX; my = e.clientY;
-        const el = e.target as Element | null;
-        over = !!(el && el.closest && el.closest(".atl-topbar,.atl-core,.atl-panel,.atl-priv"));
-        hot = !over && !!(el && el.closest && el.closest(".atl-word,.atl-agent"));
-      };
+      const homeX = () => vw / 2, homeY = () => vh * 0.33; // big & centred, just above the input
+      let px = homeX(), py = homeY();
+      let gx = 0, gy = 0, tgx = 0, tgy = 0, nextGaze = 0;
+      let lastMove = -9999;
+      const mv = (e: MouseEvent) => { mpx = e.clientX; mpy = e.clientY; lastMove = performance.now(); mouseInside = true; const el = e.target as Element | null; overChrome = !!(el && el.closest && el.closest(".atl-topbar,.atl-core,.atl-panel,.atl-priv")); };
       window.addEventListener("mousemove", mv, { passive: true }); cleanups.push(() => window.removeEventListener("mousemove", mv));
-      const dn = () => curEl && curEl.classList.add("press");
-      const up = () => curEl && curEl.classList.remove("press");
-      window.addEventListener("pointerdown", dn); window.addEventListener("pointerup", up);
-      cleanups.push(() => { window.removeEventListener("pointerdown", dn); window.removeEventListener("pointerup", up); });
+      const onLeaveWin = () => { mouseInside = false; }, onEnterWin = () => { mouseInside = true; };
+      document.addEventListener("mouseleave", onLeaveWin); document.addEventListener("mouseenter", onEnterWin);
+      cleanups.push(() => { document.removeEventListener("mouseleave", onLeaveWin); document.removeEventListener("mouseenter", onEnterWin); });
+      const react = () => { lastMove = performance.now(); if (curEl) { curEl.classList.add("react"); setTimeout(() => curEl.classList.remove("react"), 340); } };
+      window.addEventListener("pointerdown", react); cleanups.push(() => window.removeEventListener("pointerdown", react));
+      if (curEl) curEl.addEventListener("click", openMe); // tap ONE → your profile
+      const pickGaze = (now: number) => { const a = Math.random() * Math.PI * 2, r = 0.35 + Math.random() * 0.45; tgx = Math.cos(a) * r; tgy = Math.sin(a) * r; nextGaze = now + 2400 + Math.random() * 2600; };
       let craf = 0;
       const fr = () => {
-        const nx = px + (mx - px) * 0.24, ny = py + (my - py) * 0.24;
-        const vx = nx - px, vy = ny - py; px = nx; py = ny;
+        const now = performance.now();
+        // home unless there's a reason to move: a want under inspection pulls it over
+        let tx = homeX(), ty = homeY(), aside = false;
+        if (R.classList.contains("atl-focus")) { tx = lang === "he" ? vw - 530 : 530; ty = vh * 0.32; } // beside a drilled want; stays centred for the topic index
+        else if (focusText) { tx = mpx + (mpx > vw / 2 ? -170 : 170); ty = mpy - 40; aside = true; } // beside the hover card, not behind it
+        px += (tx - px) * 0.05; py += (ty - py) * 0.05;
+        if (now - lastMove < 1600) { tgx = clamp((mpx - px) / 220, -1, 1); tgy = clamp((mpy - py) / 220, -1, 1); } // glance at you
+        else if (now >= nextGaze) pickGaze(now);                                                                  // else a slow look around
+        gx += (tgx - gx) * 0.07; gy += (tgy - gy) * 0.07;
         if (curEl) {
+          curEl.classList.toggle("aside", aside); // small & to the side only next to a hover card
           curEl.style.transform = "translate(" + px.toFixed(1) + "px," + py.toFixed(1) + "px) translate(-50%,-50%)";
-          curEl.classList.toggle("hot", hot);
-          curEl.style.opacity = over ? "0" : "1";
-          if (!reduce && eL && eR) { const gx = clamp(vx / 6, -1, 1), gy = clamp(vy / 6, -1, 1); eL.setAttribute("cx", (34 + gx * 6).toFixed(1)); eR.setAttribute("cx", (66 + gx * 6).toFixed(1)); eL.setAttribute("cy", (45 + gy * 6).toFixed(1)); eR.setAttribute("cy", (45 + gy * 6).toFixed(1)); }
+          if (!reduce && eL && eR) { eL.setAttribute("cx", (34 + gx * 6).toFixed(1)); eR.setAttribute("cx", (66 + gx * 6).toFixed(1)); eL.setAttribute("cy", (45 + gy * 6).toFixed(1)); eR.setAttribute("cy", (45 + gy * 6).toFixed(1)); }
         }
         craf = requestAnimationFrame(fr);
       };
@@ -736,7 +845,7 @@ export function AtlasHome({
       cancelAnimationFrame(raf);
       cleanups.forEach((fn) => fn());
       // wipe the imperative DOM so a re-mount rebuilds cleanly
-      ground.querySelectorAll(".atl-blob,.atl-anchor,.atl-word,.atl-step,.atl-agent,.atl-drive,.atl-drive-arrow").forEach((e) => e.remove());
+      ground.querySelectorAll(".atl-blob,.atl-anchor,.atl-word,.atl-step,.atl-agent,.atl-drive,.atl-drive-arrow,.atl-ripple").forEach((e) => e.remove());
       baseLinks.innerHTML = "";
     };
   }, [lang]);
@@ -753,19 +862,31 @@ export function AtlasHome({
           <circle className="atl-flow" r={5} />
         </svg>
       </div>
+      <div className="atl-stars" aria-hidden="true" />
       <div className="atl-horizon" aria-hidden="true" />
       <div className="atl-floor" aria-hidden="true" />
 
       <div className="atl-topbar">
-        <button className="atl-menu" aria-label="ONE">
-          <svg viewBox="0 0 100 100" width="20" height="20" aria-hidden="true"><circle cx="50" cy="50" r="50" fill="var(--a-orb)" /><circle cx="36" cy="46" r="9" fill="var(--a-orbeye)" /><circle cx="66" cy="46" r="9" fill="var(--a-orbeye)" /></svg>
+        <button className="atl-logo" aria-label="ONE01">
+          <svg viewBox="0 0 128 32" height="19" fill="currentColor" aria-hidden="true">
+            <path opacity="0.98" d="M64.8281 30.1769V2.43359H83.5224V7.26971H70.6938V13.8804H82.5606V18.7165H70.6938V25.3408H83.5765V30.1769H64.8281Z" />
+            <path opacity="0.98" d="M59.2189 2.43359V30.1769H54.1525L42.0825 12.7154H41.8793V30.1769H36.0137V2.43359H41.1614L53.1365 19.8815H53.3804V2.43359H59.2189Z" />
+            <path opacity="0.98" d="M30.9042 16.3057C30.9042 19.3311 30.3307 21.9049 29.1837 24.0272C28.0458 26.1495 26.4925 27.7706 24.5237 28.8904C22.564 30.0012 20.3604 30.5566 17.913 30.5566C15.4475 30.5566 13.2349 29.9967 11.2752 28.8769C9.31547 27.757 7.76665 26.1359 6.62874 24.0136C5.49083 21.8913 4.92188 19.322 4.92188 16.3057C4.92188 13.2803 5.49083 10.7064 6.62874 8.58413C7.76665 6.46183 9.31547 4.84528 11.2752 3.73446C13.2349 2.61461 15.4475 2.05469 17.913 2.05469C20.3604 2.05469 22.564 2.61461 24.5237 3.73446C26.4925 4.84528 28.0458 6.46183 29.1837 8.58413C30.3307 10.7064 30.9042 13.2803 30.9042 16.3057ZM24.9572 16.3057C24.9572 14.3459 24.6637 12.6932 24.0767 11.3476C23.4987 10.002 22.6814 8.98149 21.6248 8.2861C20.5681 7.59071 19.3309 7.24302 17.913 7.24302C16.4951 7.24302 15.2579 7.59071 14.2013 8.2861C13.1446 8.98149 12.3228 10.002 11.7358 11.3476C11.1578 12.6932 10.8688 14.3459 10.8688 16.3057C10.8688 18.2654 11.1578 19.9181 11.7358 21.2637C12.3228 22.6093 13.1446 23.6298 14.2013 24.3252C15.2579 25.0206 16.4951 25.3683 17.913 25.3683C19.3309 25.3683 20.5681 25.0206 21.6248 24.3252C22.6814 23.6298 23.4987 22.6093 24.0767 21.2637C24.6637 19.9181 24.9572 18.2654 24.9572 16.3057Z" />
+            <path d="M30.9301 15.9805C30.9301 24.8063 24.0061 31.9611 15.465 31.9611C6.92393 31.9611 0 24.8063 0 15.9805C0 7.15473 6.92393 0 15.465 0C24.0061 0 30.9301 7.15473 30.9301 15.9805Z" />
+            <path opacity="0.36" d="M127.487 2.42969V30.1765H121.62V7.99801H121.458L115.104 11.9812V6.77867L121.972 2.42969H127.487Z" />
+            <path opacity="0.36" d="M100.097 30.7866C97.7668 30.7776 95.7617 30.204 94.0817 29.066C92.4107 27.9279 91.1237 26.2795 90.2204 24.1209C89.3263 21.9622 88.8837 19.3654 88.8927 16.3306C88.8927 13.3048 89.3398 10.7262 90.234 8.59458C91.1372 6.46299 92.4243 4.84172 94.0952 3.73076C95.7752 2.61078 97.7758 2.05078 100.097 2.05078C102.418 2.05078 104.414 2.61078 106.085 3.73076C107.765 4.85075 109.057 6.47654 109.96 8.60813C110.863 10.7307 111.311 13.3048 111.301 16.3306C111.301 19.3745 110.85 21.9757 109.947 24.1344C109.052 26.2931 107.77 27.9415 106.099 29.0795C104.428 30.2176 102.427 30.7866 100.097 30.7866ZM100.097 25.9228C101.687 25.9228 102.956 25.1234 103.904 23.5247C104.853 21.926 105.322 19.528 105.313 16.3306C105.313 14.2261 105.096 12.4739 104.663 11.0739C104.238 9.67392 103.633 8.62167 102.847 7.91717C102.071 7.21266 101.154 6.86041 100.097 6.86041C98.5165 6.86041 97.252 7.65072 96.3036 9.23135C95.3552 10.812 94.8765 13.1784 94.8675 16.3306C94.8675 18.4622 95.0797 20.2415 95.5043 21.6686C95.9378 23.0867 96.5475 24.1525 97.3333 24.866C98.1191 25.5705 99.0403 25.9228 100.097 25.9228Z" />
+          </svg>
         </button>
+        <div className="atl-status">
+          <span className="atl-status-main" />
+          <button className="atl-clock" aria-label="Time">🕐 --:--</button>
+          <span className="atl-status-live" />
+        </div>
         <span className="atl-view" role="group" aria-label="View">
           <button className="atl-vw atl-vw-world">{TXT[lang].world}</button>
           <button className="atl-vw atl-vw-mine">{TXT[lang].mine}</button>
         </span>
-        <div className="atl-status"><span className="atl-status-main" /><span className="atl-status-live" /></div>
-        <div className="atl-time">
+        <div className="atl-timepop">
           <span className="atl-time-ico" aria-hidden="true">☀️</span>
           <input className="atl-time-range" type="range" min={0} max={23} step={1} aria-label="Time of day" />
           <span className="atl-time-lbl" />
@@ -785,13 +906,14 @@ export function AtlasHome({
           <button className="atl-plus" aria-label={lang === "he" ? "התחלה חדשה" : "Start fresh"}>
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
-          <input type="text" autoComplete="off" spellCheck={false} placeholder={TXT[lang].ph} aria-label={TXT[lang].ph} />
+          <input type="text" dir={lang === "he" ? "rtl" : "ltr"} autoComplete="off" spellCheck={false} placeholder={TXT[lang].ph} aria-label={TXT[lang].ph} />
           <button className="atl-clr">{TXT[lang].clr}</button>
           <button className="atl-voice" aria-label={lang === "he" ? "דברו עם ONE" : "Talk to ONE"}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M7 10v4M11 6.5v11M15 9v6M19 11v2" /></svg>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1L6.6 10.8z" /></svg>
           </button>
         </div>
         <div className="atl-match" />
+        <p className="atl-signin">{TXT[lang].signinPre} · <button className="atl-signin-link">{TXT[lang].signinLink}</button></p>
       </div>
 
       <div className="atl-priv">🔒 {TXT[lang].priv}</div>
@@ -808,6 +930,7 @@ export function AtlasHome({
           <div className="atl-stats"><div className="atl-stat"><div className="atl-v atl-done" /><div className="atl-k atl-donek" /></div><div className="atl-stat"><div className="atl-v atl-avg" /><div className="atl-k atl-avgk" /></div></div>
           <div className="atl-sec"><div className="atl-sech atl-pathh" /><ol className="atl-steps" /></div>
           <div className="atl-sec atl-providers"><div className="atl-sech atl-provh" /><div className="atl-provlist" /></div>
+          <div className="atl-sec atl-related-sec"><div className="atl-sech atl-relh" /><div className="atl-relatedlist" /></div>
           <div className="atl-progress"><div className="atl-progress-top"><span className="atl-progress-lbl" /><span className="atl-progress-pct" /></div><div className="atl-progress-bar"><div className="atl-progress-fill" /></div></div>
           <button className="atl-cta" />
           <p className="atl-priv2" />
@@ -821,7 +944,7 @@ export function AtlasHome({
 }
 
 const ATLAS_CSS = `
-.atl-app{ position:fixed; inset:0; z-index:60; overflow:hidden; cursor:none; touch-action:none;
+.atl-app{ position:fixed; inset:0; z-index:60; overflow:hidden; cursor:grab; touch-action:none;
   perspective:1200px; perspective-origin:50% 36%; background:var(--a-bg);
   user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
   /* Day palette (the map has its OWN day/night driven by the time scrubber,
@@ -836,38 +959,41 @@ const ATLAS_CSS = `
   --a-line:rgba(255,255,255,0.13); --a-line2:color-mix(in srgb,#ffffff 7%,transparent); --a-live:#34d399;
   --a-orb:#eef2f8; --a-orbeye:#111722; --a-shadow:0 10px 30px rgba(0,0,0,0.5); --a-shadowlift:0 22px 56px rgba(0,0,0,0.62); }
 .atl-search, .atl-panel, .atl-time, .atl-view, .atl-agent-lbl, .atl-prov, .atl-clr{ transition:background-color .9s ease, color .9s ease, border-color .9s ease; }
-.atl-app.drag{ cursor:none; }
-/* chrome keeps a real cursor (the ONE-cursor hides over it) */
-.atl-topbar, .atl-topbar *, .atl-core, .atl-core *, .atl-panel, .atl-panel *, .atl-priv{ cursor:auto; }
+.atl-app.drag{ cursor:grabbing; }
 .atl-search input{ cursor:text; }
-.atl-plus, .atl-voice, .atl-clr, .atl-vw, .atl-cta, .atl-close, .atl-time-range, .atl-stepgo, .atl-agent{ cursor:pointer; }
-/* the ONE cursor */
-.atl-cursor{ position:fixed; left:0; top:0; z-index:66; pointer-events:none; width:15px; height:15px; filter:drop-shadow(0 4px 10px rgba(10,10,10,0.32)); transition:width .2s cubic-bezier(.2,.7,.2,1), height .2s cubic-bezier(.2,.7,.2,1), opacity .2s; will-change:transform; }
-.atl-cursor.hot{ width:42px; height:42px; }
-.atl-cursor.press{ transform-origin:center; }
-.atl-cursor.press svg{ transform:scale(.82); transition:transform .1s; }
-.atl-cursor svg{ transition:transform .12s; display:block; }
-.atl-cur-eye{ opacity:0; transition:opacity .2s; }
-.atl-cursor.hot .atl-cur-eye{ opacity:1; }
+.atl-plus, .atl-voice, .atl-clr, .atl-vw, .atl-cta, .atl-close, .atl-time-range, .atl-stepgo, .atl-agent, .atl-menu, .atl-logo, .atl-clock, .atl-word, .atl-anchor{ cursor:pointer; }
+/* the ONE companion — trails the pointer from a distance, never the cursor */
+.atl-cursor{ position:fixed; left:0; top:0; z-index:71; pointer-events:auto; cursor:pointer; width:60px; height:60px; opacity:0.95; filter:drop-shadow(0 12px 24px rgba(10,10,10,0.30)); will-change:transform; transition:width .3s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1); }
+.atl-cursor.aside{ width:38px; height:38px; }
+.atl-cursor svg{ display:block; transition:transform .32s cubic-bezier(.2,.8,.2,1); }
+.atl-cursor.react svg{ transform:scale(1.32); }
 .atl-scrim{ position:absolute; inset:0; z-index:62; background:color-mix(in srgb, var(--a-bg) 52%, transparent); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity .3s; }
-.atl-scrim:has(+ .atl-panel.open){ opacity:1; pointer-events:auto; }
+/* dim disabled — the card sits to the side, map stays lit */
 .atl-ground{ position:absolute; left:50%; top:50%; width:7000px; height:5000px; transform-origin:50% 50%; transform-style:preserve-3d; will-change:transform; }
 .atl-grid{ position:absolute; inset:0; background:
   repeating-linear-gradient(0deg, var(--a-line2) 0 1px, transparent 1px 96px),
   repeating-linear-gradient(90deg, var(--a-line2) 0 1px, transparent 1px 96px);
   -webkit-mask-image:radial-gradient(circle at 50% 50%, #000 42%, transparent 76%); mask-image:radial-gradient(circle at 50% 50%, #000 42%, transparent 76%); }
 .atl-blob{ position:absolute; border-radius:50%; filter:blur(55px); opacity:0.5; pointer-events:none; }
+.atl-ripple{ position:absolute; transform:translate(-50%,-50%); border:2px solid var(--a-ink); border-radius:50%; pointer-events:none; animation:atlRipple 1.5s ease-out forwards; }
+@keyframes atlRipple{ from{ width:10px; height:10px; opacity:0.55; } to{ width:160px; height:160px; opacity:0; } }
+@media (prefers-reduced-motion: reduce){ .atl-ripple{ display:none; } }
 .atl-links{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
 .atl-link{ stroke:var(--a-line); stroke-width:1.4; fill:none; }
 .atl-xlink{ stroke:var(--a-ink); opacity:0.10; stroke-width:1.6; fill:none; stroke-dasharray:3 12; }
 .atl-route{ fill:none; stroke-width:5; stroke-linecap:round; stroke-linejoin:round; opacity:0; transition:opacity .4s; }
 .atl-route.on{ opacity:0.9; stroke-dasharray:2 14; animation:atlDash 1.1s linear infinite; }
+.atl-route.preview{ opacity:0.45; stroke-width:3; stroke-dasharray:1 12; animation:atlDash 2.4s linear infinite; }
 @keyframes atlDash{ to{ stroke-dashoffset:-16; } }
 .atl-flow{ opacity:0; }
 .atl-topbar{ position:absolute; z-index:28; top:0; inset-inline:0; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 20px; pointer-events:none; }
 .atl-topbar > *{ pointer-events:auto; }
-.atl-status{ flex:1; min-width:0; display:flex; align-items:center; gap:10px; justify-content:center; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadow); border-radius:999px; height:38px; padding:0 18px; overflow:hidden; }
-.atl-status-main{ font-size:12.5px; font-weight:700; color:var(--a-ink); white-space:nowrap; }
+.atl-status{ flex:1; min-width:0; display:flex; align-items:center; gap:12px; justify-content:center; overflow:hidden; }
+.atl-status-main{ font-size:12.5px; font-weight:700; color:var(--a-ink2); white-space:nowrap; }
+.atl-clock{ flex:none; background:none; border:0; font:inherit; font-size:12.5px; font-weight:700; color:var(--a-ink); white-space:nowrap; padding:2px 4px; }
+.atl-timepop{ position:absolute; z-index:30; top:50px; left:50%; transform:translateX(-50%) translateY(-6px); display:inline-flex; align-items:center; gap:10px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:999px; padding:9px 15px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
+.atl-timepop.show{ opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0); }
+.atl-logo{ flex:none; background:none; border:0; padding:0; color:var(--a-ink); display:grid; place-items:center; }
 .atl-status-live{ font-size:12.5px; font-weight:500; color:var(--a-ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .atl-menu{ flex:none; width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; padding:0; }
 .atl-view{ display:inline-flex; flex:none; background:var(--a-card); border:1px solid var(--a-line); border-radius:999px; box-shadow:var(--a-shadow); overflow:hidden; }
@@ -877,6 +1003,11 @@ const ATLAS_CSS = `
 .atl-emoji{ font-size:46px; line-height:1; filter:drop-shadow(0 12px 16px rgba(10,10,10,0.30)); }
 .atl-alabel{ font-size:12px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:var(--a-ink2); white-space:nowrap; }
 [dir="rtl"] .atl-alabel{ letter-spacing:0.03em; font-weight:800; }
+.atl-astat{ font-size:10.5px; font-weight:700; color:var(--a-ink3); font-variant-numeric:tabular-nums; background:var(--a-card); border:1px solid var(--a-line); border-radius:999px; padding:1px 8px; box-shadow:var(--a-shadow); }
+.atl-asum{ position:absolute; bottom:100%; left:50%; margin-bottom:9px; transform:translate(-50%,-4px) scale(.96); white-space:nowrap; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:12px; padding:7px 13px; font-size:11.5px; font-weight:600; color:var(--a-ink2); opacity:0; pointer-events:none; transition:opacity .18s ease, transform .18s cubic-bezier(.2,.8,.2,1); z-index:5; }
+.atl-asum b{ color:var(--a-ink); font-weight:800; font-variant-numeric:tabular-nums; }
+.atl-asum-up{ color:var(--a-live); font-weight:700; }
+.atl-anchor:hover .atl-asum{ opacity:1; transform:translate(-50%,0) scale(1); }
 .atl-anchor.dim{ opacity:0.18; }
 .atl-word{ position:absolute; transform:translate(-50%,-50%) translateZ(28px) rotateX(calc(var(--tilt,56deg) * -1)); background:none; border:0; padding:5px 6px; cursor:pointer; color:var(--a-ink); transition:opacity .4s; }
 .atl-float{ display:inline-block; animation:atlFloat var(--fd,7s) ease-in-out infinite; animation-delay:var(--fdl,0s); }
@@ -895,6 +1026,13 @@ const ATLAS_CSS = `
 [dir="rtl"] .atl-stepin{ padding:6px 7px 6px 13px; }
 .atl-stepn{ width:20px; height:20px; border-radius:50%; background:var(--dc,var(--a-ink)); color:#fff; font-size:11px; font-weight:700; display:grid; place-items:center; flex:none; }
 .atl-stept{ font-size:12.5px; font-weight:600; color:var(--a-ink); line-height:1.15; }
+.atl-stars{ position:absolute; inset:0; z-index:1; pointer-events:none; opacity:0; transition:opacity 1.2s ease; background-image:
+  radial-gradient(1.2px 1.2px at 15% 25%, rgba(255,255,255,.85), transparent 60%), radial-gradient(1px 1px at 70% 40%, rgba(255,255,255,.6), transparent 60%),
+  radial-gradient(1.4px 1.4px at 42% 72%, rgba(255,255,255,.75), transparent 60%), radial-gradient(1px 1px at 86% 82%, rgba(255,255,255,.5), transparent 60%),
+  radial-gradient(1px 1px at 26% 88%, rgba(255,255,255,.6), transparent 60%), radial-gradient(1.2px 1.2px at 62% 14%, rgba(255,255,255,.7), transparent 60%),
+  radial-gradient(1px 1px at 8% 60%, rgba(255,255,255,.5), transparent 60%), radial-gradient(1px 1px at 92% 30%, rgba(255,255,255,.55), transparent 60%);
+  background-size:320px 320px; }
+.atl-app.atl-night .atl-stars{ opacity:0.55; }
 .atl-horizon{ position:absolute; inset:0 0 auto 0; height:42%; z-index:11; pointer-events:none; background:linear-gradient(var(--a-bg) 12%, rgba(0,0,0,0) 100%); }
 .atl-floor{ position:absolute; inset:auto 0 0 0; height:30%; z-index:11; pointer-events:none; background:linear-gradient(rgba(0,0,0,0) 0%, var(--a-bg) 94%); }
 .atl-ticker{ position:absolute; z-index:29; top:18px; left:50%; transform:translateX(-50%); width:min(42vw,520px); height:32px; overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); }
@@ -904,11 +1042,13 @@ const ATLAS_CSS = `
 .atl-tiem{ font-size:14px; } .atl-ti b{ color:var(--a-ink); font-weight:700; font-variant-numeric:tabular-nums; } .atl-tidot{ width:6px; height:6px; border-radius:50%; background:var(--a-live); }
 @keyframes atlCrawl{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
 @keyframes atlCrawlR{ from{transform:translateX(-50%);} to{transform:translateX(0);} }
-.atl-core{ position:absolute; z-index:26; left:50%; bottom:26px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:14px; width:min(440px,86vw); }
+.atl-core{ position:absolute; z-index:26; left:50%; top:47%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:12px; width:min(440px,86vw); }
 .atl-orb{ width:86px; height:86px; padding:0; border:0; background:none; cursor:pointer; filter:drop-shadow(0 16px 34px rgba(10,10,10,0.28)); }
 .atl-blink{ animation:atlBlink 5.6s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
 @keyframes atlBlink{ 0%,92%,100%{transform:scaleY(1);} 96%{transform:scaleY(0.12);} }
-.atl-search{ width:100%; display:flex; align-items:center; gap:8px; height:58px; padding:0 8px; border-radius:999px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); }
+.atl-search{ width:100%; direction:ltr; display:flex; align-items:center; gap:8px; height:58px; padding:0 8px; border-radius:999px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); }
+.atl-signin{ margin:0; font-size:13px; color:var(--a-ink3); text-align:center; }
+.atl-signin-link{ background:none; border:0; padding:0; color:var(--a-ink); font:inherit; font-weight:700; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
 .atl-search input{ flex:1; min-width:0; border:none !important; outline:none !important; box-shadow:none !important; -webkit-appearance:none; appearance:none; background:transparent; font:inherit; font-size:16px; color:var(--a-ink); padding:0 6px; user-select:text; -webkit-user-select:text; }
 .atl-search input:focus{ outline:none !important; box-shadow:none !important; border:none !important; }
 .atl-search input::placeholder{ color:var(--a-ink3); }
@@ -926,8 +1066,8 @@ const ATLAS_CSS = `
 .atl-time-range{ width:180px; accent-color:var(--a-ink); cursor:pointer; }
 .atl-time-lbl{ font-size:12.5px; font-weight:700; color:var(--a-ink2); font-variant-numeric:tabular-nums; min-width:44px; text-align:center; }
 .atl-word.gen .atl-inner{ text-decoration:underline dotted; text-decoration-color:var(--a-ink3); text-underline-offset:5px; }
-.atl-panel{ position:absolute; z-index:64; left:50%; top:50%; width:min(420px,calc(100vw - 40px)); max-height:min(78dvh,660px); background:var(--a-card); border:1px solid var(--a-line); border-radius:22px; box-shadow:var(--a-shadowlift); display:flex; flex-direction:column; padding:18px 22px 22px; overflow-y:auto; opacity:0; transform:translate(-50%,-46%) scale(.98); pointer-events:none; transition:opacity .3s, transform .35s cubic-bezier(.2,.8,.2,1); user-select:text; -webkit-user-select:text; }
-.atl-panel.open{ opacity:1; transform:translate(-50%,-50%) scale(1); pointer-events:auto; }
+.atl-panel{ position:absolute; z-index:64; top:50%; inset-inline-start:20px; width:min(380px,calc(100vw - 40px)); max-height:calc(100dvh - 48px); background:var(--a-card); border:1px solid var(--a-line); border-radius:22px; box-shadow:var(--a-shadowlift); display:flex; flex-direction:column; padding:18px 22px 22px; overflow-y:auto; opacity:0; transform:translateY(calc(-50% - 8px)) scale(.98); transform-origin:center; pointer-events:none; transition:opacity .3s, transform .3s cubic-bezier(.2,.8,.2,1); user-select:text; -webkit-user-select:text; }
+.atl-panel.open{ opacity:1; transform:translateY(-50%) scale(1); pointer-events:auto; }
 .atl-close{ align-self:flex-end; border:1px solid var(--a-line); background:var(--a-bg); width:32px; height:32px; border-radius:50%; cursor:pointer; color:var(--a-ink2); display:grid; place-items:center; flex:none; }
 .atl-tag{ display:inline-flex; align-items:center; gap:8px; align-self:flex-start; margin-top:4px; padding:5px 12px; border-radius:999px; background:var(--a-line); font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--a-ink2); }
 [dir="rtl"] .atl-tag{ letter-spacing:0.02em; } .atl-em{ font-size:14px; }
@@ -951,10 +1091,18 @@ const ATLAS_CSS = `
 .atl-stepact{ display:flex; gap:7px; margin-top:9px; }
 .atl-stepq{ flex:1; min-width:0; height:38px; border:1px solid var(--a-line); border-radius:10px; background:var(--a-bg); color:var(--a-ink); font:inherit; font-size:13px; padding:0 11px; outline:none; }
 .atl-stepgo{ flex:none; height:38px; border:0; border-radius:10px; background:var(--a-ink); color:var(--a-bg); font:inherit; font-size:13px; font-weight:700; padding:0 15px; cursor:pointer; }
-.atl-tip{ position:fixed; z-index:70; transform:translate(-50%,-100%); background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:12px; padding:8px 12px; pointer-events:none; opacity:0; transition:opacity .15s; display:flex; flex-direction:column; gap:2px; max-width:220px; }
+.atl-tip{ position:fixed; z-index:70; transform:translate(-50%,-100%); width:250px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:16px; padding:13px 15px; pointer-events:none; opacity:0; transition:opacity .15s; display:flex; flex-direction:column; gap:4px; }
 .atl-tip.show{ opacity:1; }
-.atl-tip b{ font-size:13px; font-weight:700; color:var(--a-ink); }
-.atl-tip span{ font-size:11.5px; color:var(--a-ink3); font-variant-numeric:tabular-nums; }
+.atl-tip.below{ transform:translate(-50%,0); }
+.atl-tip-top{ display:flex; align-items:center; gap:6px; font-size:10.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--a-ink3); }
+[dir="rtl"] .atl-tip-top{ letter-spacing:0.02em; }
+.atl-tip-em{ font-size:14px; }
+.atl-tip-title{ font-weight:800; font-size:17px; letter-spacing:-0.02em; color:var(--a-ink); line-height:1.1; margin-top:2px; }
+.atl-tip-now{ font-size:12.5px; color:var(--a-ink2); margin-top:3px; } .atl-tip-now b{ color:var(--a-ink); font-weight:800; font-variant-numeric:tabular-nums; } .atl-tip-trend{ color:var(--a-live); font-weight:700; }
+.atl-tip-stats{ display:flex; gap:14px; margin-top:6px; font-size:11px; color:var(--a-ink3); } .atl-tip-stats b{ color:var(--a-ink2); font-weight:700; }
+.atl-tip-needs{ display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }
+.atl-tip-need{ font-size:11px; font-weight:600; color:var(--a-ink2); background:var(--a-line); border-radius:999px; padding:3px 9px; }
+.atl-tip-hint{ margin-top:10px; font-size:11px; font-weight:700; color:var(--a-ink); opacity:0.7; }
 /* custom card (provider profile / world index) */
 .atl-custom{ display:none; }
 .atl-panel.is-custom .atl-body{ display:none; }
@@ -980,6 +1128,15 @@ const ATLAS_CSS = `
 .atl-idx-name{ position:relative; z-index:1; flex:1; color:var(--a-ink); font-weight:600; }
 .atl-idx-v{ position:relative; z-index:1; color:var(--a-ink2); font-weight:700; font-variant-numeric:tabular-nums; }
 .atl-idx-cta, .atl-pv-cta{ margin-top:20px; }
+.atl-me{ display:flex; flex-direction:column; align-items:center; text-align:center; }
+.atl-me-face{ width:72px; height:72px; margin-top:4px; filter:drop-shadow(0 12px 24px rgba(10,10,10,0.3)); }
+.atl-me-name{ font-weight:800; font-size:22px; letter-spacing:-0.02em; color:var(--a-ink); margin-top:12px; }
+.atl-me-sub{ font-size:13px; color:var(--a-ink3); margin-top:3px; }
+.atl-me .atl-sech{ align-self:flex-start; }
+.atl-me-list{ width:100%; display:flex; flex-direction:column; gap:7px; }
+.atl-me-item{ display:flex; align-items:center; gap:10px; width:100%; text-align:start; background:var(--a-line); border:0; border-radius:12px; padding:10px 13px; font:inherit; font-size:14px; font-weight:600; color:var(--a-ink); cursor:pointer; }
+.atl-me-em{ font-size:16px; }
+.atl-me-manage{ margin-top:18px; }
 /* my space (Mine): clear the world, keep only my things */
 .atl-app.view-mine .atl-anchor, .atl-app.view-mine .atl-agent, .atl-app.view-mine .atl-xlink, .atl-app.view-mine .atl-link, .atl-app.view-mine .atl-blob{ opacity:0 !important; pointer-events:none; }
 /* the ONE breathes — a gentle free float */
@@ -1008,6 +1165,11 @@ const ATLAS_CSS = `
 /* process profile — providers + progress in the card */
 .atl-providers{ display:block; margin-top:20px; }
 .atl-provlist{ display:flex; flex-wrap:wrap; gap:7px; }
+.atl-relatedlist{ display:flex; flex-wrap:wrap; gap:7px; }
+.atl-rel{ display:inline-flex; align-items:center; gap:6px; background:none; border:1px solid var(--a-line); border-radius:999px; padding:6px 12px; font:inherit; font-size:12.5px; font-weight:600; color:var(--a-ink2); cursor:pointer; transition:background .2s,color .2s; }
+.atl-rel:hover{ background:var(--a-line); color:var(--a-ink); }
+.atl-rel-em{ font-size:14px; }
+.atl-app.atl-zoomed .atl-word .atl-count{ opacity:0.65; }
 .atl-prov{ display:inline-flex; align-items:center; gap:6px; background:var(--a-line); border-radius:999px; padding:6px 12px; font-size:12.5px; font-weight:600; color:var(--a-ink); }
 .atl-prov-em{ font-size:14px; }
 .atl-progress{ display:none; margin-top:20px; }
@@ -1017,10 +1179,13 @@ const ATLAS_CSS = `
 /* journey mode: clear the field, drop the input, expand the card */
 .atl-app.atl-journey .atl-progress{ display:block; }
 .atl-app.atl-journey .atl-orb{ display:none; }
-.atl-app.atl-journey .atl-core{ top:auto; bottom:22px; gap:0; }
+.atl-app.atl-journey .atl-core, .atl-app.atl-focus .atl-core{ top:auto; bottom:26px; gap:10px; } /* composer drops to the bottom while a card is open */
 .atl-app.atl-journey .atl-ticker, .atl-app.atl-journey .atl-view, .atl-app.atl-journey .atl-time{ opacity:0; pointer-events:none; }
 .atl-app.atl-journey .atl-word:not(.sel), .atl-app.atl-journey .atl-anchor, .atl-app.atl-journey .atl-agent:not(.provider), .atl-app.atl-journey .atl-xlink, .atl-app.atl-journey .atl-link, .atl-app.atl-journey .atl-blob{ opacity:0 !important; pointer-events:none; }
-.atl-app.atl-journey .atl-panel{ max-height:min(86dvh,760px); }
+/* focus (a click drills into the topic): the rest of the field recedes, leaving
+   the want + its needs. Lighter than a journey — the world is still faintly there. */
+.atl-app.atl-focus .atl-word:not(.sel), .atl-app.atl-focus .atl-anchor, .atl-app.atl-focus .atl-agent:not(.provider), .atl-app.atl-focus .atl-xlink, .atl-app.atl-focus .atl-link, .atl-app.atl-focus .atl-blob{ opacity:0.06 !important; pointer-events:none; transition:opacity .45s ease; }
+.atl-app.atl-journey .atl-panel, .atl-app.atl-focus .atl-panel{ width:min(456px, calc(100vw - 40px)); max-height:calc(100dvh - 130px); }
 @media (max-width:860px){ .atl-ticker{ display:none; } }
 @media (max-width:720px){ .atl-emoji{ font-size:38px; } .atl-priv{ display:none; } .atl-cursor{ display:none; } .atl-time-range{ width:120px; } .atl-panel{ left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:64dvh; transform:translateY(16px); } .atl-panel.open{ transform:translateY(0); } }
 @media (max-width:720px){ .atl-status-main{ display:none; } .atl-time-range{ width:88px; } .atl-topbar{ padding:10px 12px; gap:8px; } }
