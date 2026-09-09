@@ -198,6 +198,7 @@ export function AtlasHome({
     let COST = Math.cos((56 * Math.PI) / 180); // updated live as the tilt eases with zoom
     const tiltFor = (z: number) => 16 + 40 * Math.max(0, Math.min(1, (z - 0.5) / 0.9));
     const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isTouch = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches); // no auto-pan on touch
     const rng = (seed: number) => () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
     const sizeFor = (c: number) => 15 + clamp((c - 200) / 1350, 0, 1) * 21;
@@ -361,13 +362,17 @@ export function AtlasHome({
     }
     // Top status line: date · weather · time, plus a running feed that reflects
     // whatever you're focused on (else it cycles the busiest wants).
-    function weatherNow() { const day = hour >= 7 && hour < 18; return { em: hour < 6 || hour >= 20 ? "🌙" : day ? "☀️" : "🌆", temp: 15 + Math.round(9 * Math.max(0, Math.sin(((hour - 6) / 12) * Math.PI))) }; }
+    const IC = (p: string) => '<svg class="atl-si" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
+    const IC_CAL = IC('<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 3v3M16 3v3"/>');
+    const IC_SUN = IC('<circle cx="12" cy="12" r="4"/><path d="M12 3v1.5M12 19.5V21M3 12h1.5M19.5 12H21M5.6 5.6l1 1M17.4 17.4l1 1M18.4 5.6l-1 1M6.6 17.4l-1 1"/>');
+    const IC_MOON = IC('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 1 0 9.8 9.8Z"/>');
+    const IC_CLK = IC('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3 1.7"/>');
     function updateStatus() {
-      const w = weatherNow();
+      const day = hour >= 7 && hour < 19, temp = 15 + Math.round(9 * Math.max(0, Math.sin(((hour - 6) / 12) * Math.PI)));
       const date = new Date().toLocaleDateString(lang === "he" ? "he-IL" : "en-US", { weekday: "short", month: "short", day: "numeric" });
       const hh = (hour < 10 ? "0" + hour : String(hour)) + ":00";
-      const m = $(".atl-status-main"); if (m) m.textContent = "📅 " + date + "   ·   " + w.em + " " + w.temp + "°";
-      const ck = $(".atl-clock"); if (ck) ck.textContent = "🕐 " + hh;
+      const m = $(".atl-status-main"); if (m) m.innerHTML = IC_CAL + "<span>" + date + "</span><i class='atl-sdot'></i>" + (day ? IC_SUN : IC_MOON) + "<span>" + temp + "°</span>";
+      const ck = $(".atl-clock"); if (ck) ck.innerHTML = IC_CLK + "<span class='atl-clock-t'>" + hh + "</span>";
     }
     let rotI = 0;
     function tickStatus() {
@@ -483,7 +488,7 @@ export function AtlasHome({
         const tpx = (CX - glideTo.x) + (lang === "he" ? -200 : 200) / cam.z, tpy = (CY - glideTo.y) - 60 / cam.z;
         cam.px += (tpx - cam.px) * 0.03; cam.py += (tpy - cam.py) * 0.03; dirty = true;
       }
-      const autoOk = mouseInside && !overChrome && !panLast && !pinchLast && !journey && !focusText && !tween && !glideTo && !R.classList.contains("atl-focus") && Object.keys(pts).length === 0;
+      const autoOk = !isTouch && mouseInside && !overChrome && !panLast && !pinchLast && !journey && !focusText && !tween && !glideTo && !R.classList.contains("atl-focus") && Object.keys(pts).length === 0;
       // map drifts toward wherever the pointer is (whole-screen parallax)
       const ptX = autoOk ? -(mpx - vw / 2) * 0.04 : 0, ptY = autoOk ? -(mpy - vh / 2) * 0.04 : 0;
       if (Math.abs(ptX - parX) > 0.1 || Math.abs(ptY - parY) > 0.1) { parX += (ptX - parX) * 0.06; parY += (ptY - parY) * 0.06; dirty = true; }
@@ -819,6 +824,32 @@ export function AtlasHome({
       cleanups.push(() => { if (tick) clearInterval(tick); });
     }
 
+    // Top-of-screen toasts — live updates & tips that pop and can be dismissed.
+    {
+      const toastsEl = $(".atl-toasts")!;
+      const IC_INFO = IC('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/>');
+      const IC_BULB = IC('<path d="M9 18h6M10.5 21h3M12 3a6 6 0 0 0-3.5 10.9c.6.5.9 1.1 1 2.1h5c.1-1 .4-1.6 1-2.1A6 6 0 0 0 12 3Z"/>');
+      const IC_X = IC('<path d="M6 6l12 12M18 6L6 18"/>');
+      const tips = lang === "he"
+        ? [["טיפ", "גררו את השעון כדי לראות את היום מתחלף"], ["טיפ", "הקלידו רצון וה‑ONE ימפה אותו"], ["טיפ", "לחצו על נושא לפירוט המלא"]]
+        : [["Tip", "Scrub the clock to watch the day shift"], ["Tip", "Type a need — ONE maps it for you"], ["Tip", "Click a topic for the full picture"]];
+      const pushToast = (icon: string, title: string, body: string) => {
+        const el = document.createElement("div"); el.className = "atl-toast";
+        el.innerHTML = '<span class="atl-toast-ic">' + icon + '</span><div class="atl-toast-b"><b>' + title + '</b><span>' + body + '</span></div><button class="atl-toast-x" aria-label="Dismiss">' + IC_X + '</button>';
+        let t = 0; const kill = () => { clearTimeout(t); el.classList.remove("in"); setTimeout(() => el.remove(), 300); };
+        (el.querySelector(".atl-toast-x") as HTMLElement).addEventListener("click", kill);
+        toastsEl.appendChild(el); requestAnimationFrame(() => el.classList.add("in")); t = window.setTimeout(kill, 7000);
+        while (toastsEl.children.length > 3) toastsEl.firstElementChild!.remove();
+      };
+      let tn = 0;
+      const ti = setInterval(() => {
+        if (document.hidden) return; tn++;
+        if (tn % 2 === 0) { const n = N[Math.floor(Math.random() * N.length)]; pushToast(IC_INFO, n[lang], n.done.toLocaleString() + " " + TXT[lang].doneK); }
+        else { const tp = tips[Math.floor(Math.random() * tips.length)]; pushToast(IC_BULB, tp[0], tp[1]); }
+      }, 9000);
+      cleanups.push(() => clearInterval(ti));
+    }
+
     // ONE rests centred above the input and stays put — it only leaves home for
     // a REASON: it glances at you when you move, startles when you press, and
     // drifts over to a want while you're inspecting it, then eases back home.
@@ -902,11 +933,7 @@ export function AtlasHome({
             <path opacity="0.36" d="M100.097 30.7866C97.7668 30.7776 95.7617 30.204 94.0817 29.066C92.4107 27.9279 91.1237 26.2795 90.2204 24.1209C89.3263 21.9622 88.8837 19.3654 88.8927 16.3306C88.8927 13.3048 89.3398 10.7262 90.234 8.59458C91.1372 6.46299 92.4243 4.84172 94.0952 3.73076C95.7752 2.61078 97.7758 2.05078 100.097 2.05078C102.418 2.05078 104.414 2.61078 106.085 3.73076C107.765 4.85075 109.057 6.47654 109.96 8.60813C110.863 10.7307 111.311 13.3048 111.301 16.3306C111.301 19.3745 110.85 21.9757 109.947 24.1344C109.052 26.2931 107.77 27.9415 106.099 29.0795C104.428 30.2176 102.427 30.7866 100.097 30.7866ZM100.097 25.9228C101.687 25.9228 102.956 25.1234 103.904 23.5247C104.853 21.926 105.322 19.528 105.313 16.3306C105.313 14.2261 105.096 12.4739 104.663 11.0739C104.238 9.67392 103.633 8.62167 102.847 7.91717C102.071 7.21266 101.154 6.86041 100.097 6.86041C98.5165 6.86041 97.252 7.65072 96.3036 9.23135C95.3552 10.812 94.8765 13.1784 94.8675 16.3306C94.8675 18.4622 95.0797 20.2415 95.5043 21.6686C95.9378 23.0867 96.5475 24.1525 97.3333 24.866C98.1191 25.5705 99.0403 25.9228 100.097 25.9228Z" />
           </svg>
         </button>
-        <div className="atl-status">
-          <span className="atl-status-main" />
-          <button className="atl-clock" aria-label="Time">🕐 --:--</button>
-          <span className="atl-status-live" />
-        </div>
+        <div className="atl-toasts" />
         <span className="atl-view" role="group" aria-label="View">
           <button className="atl-vw atl-vw-world">{TXT[lang].world}</button>
           <button className="atl-vw atl-vw-mine">{TXT[lang].mine}</button>
@@ -943,6 +970,14 @@ export function AtlasHome({
       </div>
 
       <div className="atl-priv">🔒 {TXT[lang].priv}</div>
+
+      <div className="atl-botbar">
+        <div className="atl-status">
+          <span className="atl-status-main" />
+          <button className="atl-clock" aria-label="Time"><span className="atl-clock-t">--:--</span></button>
+          <span className="atl-status-live" />
+        </div>
+      </div>
 
       <div className="atl-tip" aria-hidden="true" />
       <div className="atl-scrim" aria-hidden="true" />
@@ -997,8 +1032,11 @@ const ATLAS_CSS = `
 /* dim disabled — the card sits to the side, map stays lit */
 .atl-ground{ position:absolute; left:50%; top:50%; width:7000px; height:5000px; transform-origin:50% 50%; transform-style:preserve-3d; will-change:transform; }
 .atl-grid{ position:absolute; inset:0; background:
-  repeating-linear-gradient(0deg, var(--a-line2) 0 1px, transparent 1px 96px),
-  repeating-linear-gradient(90deg, var(--a-line2) 0 1px, transparent 1px 96px);
+  repeating-linear-gradient(0deg, var(--a-line2) 0 1.4px, transparent 1.4px 192px),
+  repeating-linear-gradient(90deg, var(--a-line2) 0 1.4px, transparent 1.4px 192px),
+  repeating-linear-gradient(0deg, color-mix(in srgb, var(--a-line2) 55%, transparent) 0 1px, transparent 1px 48px),
+  repeating-linear-gradient(90deg, color-mix(in srgb, var(--a-line2) 55%, transparent) 0 1px, transparent 1px 48px),
+  repeating-linear-gradient(45deg, color-mix(in srgb, var(--a-line2) 35%, transparent) 0 1px, transparent 1px 384px);
   -webkit-mask-image:radial-gradient(circle at 50% 50%, #000 42%, transparent 76%); mask-image:radial-gradient(circle at 50% 50%, #000 42%, transparent 76%); }
 .atl-blob{ position:absolute; border-radius:50%; filter:blur(55px); opacity:0.5; pointer-events:none; }
 .atl-ripple{ position:absolute; transform:translate(-50%,-50%); border:2px solid var(--a-ink); border-radius:50%; pointer-events:none; animation:atlRipple 1.5s ease-out forwards; }
@@ -1014,11 +1052,21 @@ const ATLAS_CSS = `
 .atl-flow{ opacity:0; }
 .atl-topbar{ position:absolute; z-index:28; top:0; inset-inline:0; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 20px; pointer-events:none; }
 .atl-topbar > *{ pointer-events:auto; }
-.atl-status{ flex:1; min-width:0; display:flex; align-items:center; gap:12px; justify-content:center; overflow:hidden; }
-.atl-status-main{ font-size:12.5px; font-weight:700; color:var(--a-ink2); white-space:nowrap; }
-.atl-clock{ flex:none; background:none; border:0; font:inherit; font-size:12.5px; font-weight:700; color:var(--a-ink); white-space:nowrap; padding:2px 4px; }
-.atl-timepop{ position:absolute; z-index:30; top:50px; left:50%; transform:translateX(-50%) translateY(-6px); display:inline-flex; align-items:center; gap:10px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:999px; padding:9px 15px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
+.atl-botbar{ position:absolute; z-index:26; bottom:10px; inset-inline:0; display:flex; align-items:center; justify-content:center; padding:0 20px; pointer-events:none; }
+.atl-botbar > *{ pointer-events:auto; }
+.atl-status{ display:flex; align-items:center; gap:12px; min-width:0; overflow:hidden; }
+.atl-status-main{ display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--a-ink2); white-space:nowrap; }
+.atl-sdot{ width:3px; height:3px; border-radius:50%; background:var(--a-ink3); display:inline-block; margin:0 3px; }
+.atl-si{ width:13px; height:13px; opacity:0.85; flex:none; }
+.atl-clock{ display:inline-flex; align-items:center; gap:5px; flex:none; background:none; border:0; font:inherit; font-size:12.5px; font-weight:700; color:var(--a-ink); white-space:nowrap; padding:2px 4px; }
+.atl-timepop{ position:absolute; z-index:30; bottom:56px; left:50%; transform:translateX(-50%) translateY(6px); display:inline-flex; align-items:center; gap:10px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadowlift); border-radius:999px; padding:9px 15px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
 .atl-timepop.show{ opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0); }
+.atl-toasts{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; }
+.atl-toast{ pointer-events:auto; display:flex; align-items:center; gap:11px; background:var(--a-card); border:1px solid var(--a-line); box-shadow:var(--a-shadow); border-radius:14px; padding:9px 8px 9px 14px; max-width:360px; opacity:0; transform:translateY(-8px); transition:opacity .3s, transform .3s cubic-bezier(.2,.8,.2,1); }
+.atl-toast.in{ opacity:1; transform:translateY(0); }
+.atl-toast-ic{ color:var(--a-ink2); display:grid; place-items:center; flex:none; } .atl-toast-ic svg{ width:16px; height:16px; }
+.atl-toast-b{ display:flex; flex-direction:column; min-width:0; } .atl-toast-b b{ font-size:12.5px; font-weight:700; color:var(--a-ink); } .atl-toast-b span{ font-size:11.5px; color:var(--a-ink3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.atl-toast-x{ margin-inline-start:6px; background:none; border:0; color:var(--a-ink3); cursor:pointer; display:grid; place-items:center; padding:4px; border-radius:8px; flex:none; } .atl-toast-x:hover{ background:var(--a-line); } .atl-toast-x svg{ width:13px; height:13px; }
 .atl-logo{ flex:none; background:none; border:0; padding:0; color:var(--a-ink); display:grid; place-items:center; }
 .atl-status-live{ font-size:12.5px; font-weight:500; color:var(--a-ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .atl-menu{ flex:none; width:38px; height:38px; border-radius:50%; border:1px solid var(--a-line); background:var(--a-card); box-shadow:var(--a-shadow); display:grid; place-items:center; cursor:pointer; padding:0; }
@@ -1210,7 +1258,7 @@ const ATLAS_CSS = `
 /* journey mode: clear the field, drop the input, expand the card */
 .atl-app.atl-journey .atl-progress{ display:block; }
 .atl-app.atl-journey .atl-orb{ display:none; }
-.atl-app.atl-journey .atl-core, .atl-app.atl-focus .atl-core{ top:auto; bottom:26px; gap:10px; } /* composer drops to the bottom while a card is open */
+.atl-app.atl-journey .atl-core, .atl-app.atl-focus .atl-core{ top:auto; bottom:58px; gap:10px; } /* composer drops to the bottom (above the status bar) while a card is open */
 .atl-app.atl-journey .atl-ticker, .atl-app.atl-journey .atl-view, .atl-app.atl-journey .atl-time{ opacity:0; pointer-events:none; }
 .atl-app.atl-journey .atl-word:not(.sel), .atl-app.atl-journey .atl-anchor, .atl-app.atl-journey .atl-agent:not(.provider), .atl-app.atl-journey .atl-xlink, .atl-app.atl-journey .atl-link, .atl-app.atl-journey .atl-blob{ opacity:0 !important; pointer-events:none; }
 /* focus (a click drills into the topic): the rest of the field recedes, leaving
