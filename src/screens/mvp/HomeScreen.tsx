@@ -58,7 +58,7 @@ import Animated, {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import { Orb } from '../../components/mvp/Orb';
 import { UnitCard } from '../../components/mvp/UnitCard';
 import { InputBar } from '../../components/mvp/InputBar';
@@ -664,7 +664,10 @@ export function HomeScreen({
   const callFromChatRef = useRef(false);
   // Live mirror of `chatActive` (computed later in render) for earlier callbacks.
   const chatActiveRef = useRef(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  // expo-audio recorder (hook-based). We only use it to hold the mic hot and
+  // drive the waveform/timer on native; the transcript comes from the recognizer.
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recordingActiveRef = useRef(false);
   const recognizerRef = useRef<SpeechRecognizer | null>(null);
   // Settled (final) transcript so far this recording — interim text is added
   // on top live, but only the final part is committed between phrases.
@@ -721,44 +724,39 @@ export function HomeScreen({
     recognizerRef.current = recog;
     recog?.start();
 
-    // Native audio capture (expo-av) — drives the waveform + timer. On web the
-    // recognizer already owns the mic, so we skip expo-av there.
+    // Native audio capture (expo-audio) — drives the waveform + timer. On web the
+    // recognizer already owns the mic, so we skip native capture there.
     if (Platform.OS !== 'web') {
       try {
-        const perm = await Audio.requestPermissionsAsync();
+        const perm = await requestRecordingPermissionsAsync();
         if (perm.granted) {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: true,
-            playsInSilentModeIOS: true,
-          });
-          const { recording: rec } = await Audio.Recording.createAsync(
-            Audio.RecordingOptionsPresets.HIGH_QUALITY,
-          );
-          recordingRef.current = rec;
+          await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+          await audioRecorder.prepareToRecordAsync();
+          audioRecorder.record();
+          recordingActiveRef.current = true;
         }
       } catch (e) {
         console.warn('[HomeScreen] recording start failed:', e);
       }
     }
     setRecording(true);
-  }, [lang]);
+  }, [lang, audioRecorder]);
 
   const stopRecording = useCallback(async () => {
     setRecording(false);
     // Stop the recognizer; the transcript stays in the input for review.
     recognizerRef.current?.stop();
     recognizerRef.current = null;
-    const rec = recordingRef.current;
-    recordingRef.current = null;
-    if (rec) {
+    if (recordingActiveRef.current) {
+      recordingActiveRef.current = false;
       try {
-        await rec.stopAndUnloadAsync();
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+        await audioRecorder.stop();
+        await setAudioModeAsync({ allowsRecording: false });
       } catch (e) {
         console.warn('[HomeScreen] recording stop failed:', e);
       }
     }
-  }, []);
+  }, [audioRecorder]);
 
   const chatActive =
     !chatDismissed && (inputFocused || sessionMessages.length > 0 || chatHeldOpen);

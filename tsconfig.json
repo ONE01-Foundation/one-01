@@ -2,6 +2,7 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": [
@@ -32,6 +33,7 @@
     "**/*.tsx"
   ],
   "exclude": [
-    "supabase/functions/**"
+    "supabase/functions/**",
+    "src/_archive/**"
   ]
 }

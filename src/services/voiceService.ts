@@ -2,14 +2,13 @@
  * Voice Service - Audio recording and text-to-speech
  */
 
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, requestRecordingPermissionsAsync, type AudioPlayer } from 'expo-audio';
 import { AudioRecording, VoiceConfig } from '../types';
 import { ELEVENLABS_VOICE_ID } from '../utils/constants';
 import { supabaseService } from './supabaseService';
 
 class VoiceService {
-  private recording: Audio.Recording | null = null;
-  private sound: Audio.Sound | null = null;
+  private player: AudioPlayer | null = null;
   private voiceConfig: VoiceConfig = {
     provider: 'elevenlabs',
     language: 'en-US',
@@ -18,59 +17,21 @@ class VoiceService {
 
   async initialize(): Promise<void> {
     try {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      await requestRecordingPermissionsAsync();
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     } catch (error) {
       console.error('Failed to initialize audio:', error);
     }
   }
 
+  // Recording lives at the screen level now (expo-audio's recorder is a hook —
+  // see HomeScreen's useAudioRecorder). Kept as no-ops for the archived InputBar.
   async startRecording(): Promise<AudioRecording | null> {
-    try {
-      if (this.recording) {
-        await this.stopRecording();
-      }
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      this.recording = recording;
-      return null;
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-      return null;
-    }
+    return null;
   }
 
   async stopRecording(): Promise<AudioRecording | null> {
-    if (!this.recording) {
-      return null;
-    }
-
-    try {
-      await this.recording.stopAndUnloadAsync();
-      const uri = this.recording.getURI();
-      const status = await this.recording.getStatusAsync();
-
-      const recording: AudioRecording = {
-        uri: uri || '',
-        duration: status.durationMillis ? status.durationMillis / 1000 : 0,
-        format: 'm4a',
-      };
-
-      this.recording = null;
-      return recording;
-    } catch (error) {
-      console.error('Failed to stop recording:', error);
-      this.recording = null;
-      return null;
-    }
+    return null;
   }
 
   async playTextToSpeech(text: string, config?: Partial<VoiceConfig>): Promise<void> {
@@ -79,13 +40,9 @@ class VoiceService {
       const audioUrl = await this.generateTTS(text, finalConfig);
 
       if (audioUrl) {
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: audioUrl },
-          { shouldPlay: true }
-        );
-        this.sound = sound;
-
-        await sound.playAsync();
+        await this.stopPlayback();
+        this.player = createAudioPlayer({ uri: audioUrl });
+        this.player.play();
       }
     } catch (error) {
       console.error('Failed to play TTS:', error);
@@ -136,10 +93,9 @@ class VoiceService {
   }
 
   async stopPlayback(): Promise<void> {
-    if (this.sound) {
-      await this.sound.stopAsync();
-      await this.sound.unloadAsync();
-      this.sound = null;
+    if (this.player) {
+      try { this.player.remove(); } catch { /* already released */ }
+      this.player = null;
     }
   }
 
