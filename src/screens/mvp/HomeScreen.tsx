@@ -60,6 +60,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import { Orb } from '../../components/mvp/Orb';
+import { BroadcastRing } from '../../components/mvp/BroadcastRing';
 import { UnitCard } from '../../components/mvp/UnitCard';
 import { InputBar } from '../../components/mvp/InputBar';
 import { ArrowDownIcon, PlusThinIcon, StackedCardsIcon, GhostModeIcon, MicIcon, MicOffIcon, CameraIcon, SpeakerIcon } from '../../components/mvp/icons';
@@ -136,6 +137,8 @@ const SNAP_OPEN = SCREEN_H - TITLE_BAR_H - 50;  // pull this far for full open
  *  Pulled in one notch (88 → 84) per latest design — slightly smaller orb
  *  reads cleaner against the broadcast text. */
 const HOME_ORB_SIZE = 84;
+// Story-ring sits a touch outside the Orb (8 px gap all round).
+const HOME_RING_SIZE = HOME_ORB_SIZE + 16;
 /** Vertical position of the resting hero. Sits ABOVE screen center so the
  *  broadcast text reads in the upper third — leaves room for the input dock
  *  and feels less crowded against the bottom bar. */
@@ -453,7 +456,8 @@ function useBroadcastNavigator(
   // hero from collapsing to a blank text box.
   const resolved = lines[index] ?? '';
   const safe = resolved.trim().length > 0 ? resolved : HOME_BROADCAST_CLOSING_LINE;
-  return { line: safe, next, prev, resume };
+  // `index` / `count` drive the story-style progress ring around the Orb.
+  return { line: safe, next, prev, resume, index, count: Math.max(1, lines.length) };
 }
 
 interface InlineMessage {
@@ -1454,6 +1458,8 @@ export function HomeScreen({
     next: nextBroadcast,
     prev: prevBroadcast,
     resume: resumeBroadcast,
+    index: broadcastIndex,
+    count: broadcastCount,
   } = useBroadcastNavigator(broadcastLoop, {
     // Recording a response FREEZES the broadcast on its current line, so the
     // user answers the exact line they long-pressed.
@@ -2685,6 +2691,29 @@ export function HomeScreen({
               {/* In ghost mode the face becomes a hollow outline AND fades to a
                   low opacity (orbGhostDimStyle) — present but faint, temporary. */}
               <Animated.View style={[orbBreathStyle, orbGhostDimStyle]}>
+                {/* Story-ring: one segment per broadcast, filled up to the
+                    current line — ONE's rotating "story" made visible. Only in
+                    the resting broadcast state (not chat/call/ghost). */}
+                {!chatActive && !callActive && !ghostMode && broadcastCount > 1 && (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: (HOME_ORB_SIZE - HOME_RING_SIZE) / 2,
+                      left: (HOME_ORB_SIZE - HOME_RING_SIZE) / 2,
+                      width: HOME_RING_SIZE,
+                      height: HOME_RING_SIZE,
+                    }}
+                  >
+                    <BroadcastRing
+                      size={HOME_RING_SIZE}
+                      count={broadcastCount}
+                      index={broadcastIndex}
+                      color={colors.text}
+                      dimColor={colors.border}
+                    />
+                  </View>
+                )}
                 <Orb
                   size={HOME_ORB_SIZE}
                   eyeLookY={eyeLookY}
