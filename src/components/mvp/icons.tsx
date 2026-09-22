@@ -315,3 +315,64 @@ export function FilterIcon({ size = 20, color = '#000' }: IconProps) {
     </Svg>
   );
 }
+
+/** Single person — the "personal" profile. */
+export function PersonIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="8" r="3.6" fill={color} />
+      <Path d="M4.5 20c0-3.9 3.4-6.2 7.5-6.2s7.5 2.3 7.5 6.2Z" fill={color} />
+    </Svg>
+  );
+}
+
+/** Briefcase — the "business" profile. */
+export function BriefcaseIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="3" y="8" width="18" height="12" rx="2.6" fill={color} />
+      <Path d="M9 8V6.6A1.6 1.6 0 0 1 10.6 5h2.8A1.6 1.6 0 0 1 15 6.6V8" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** House — the "family" profile (family / home). */
+export function HouseIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 3.2 2.8 11h2.4v9h5.2v-5.4h3.2V20h5.2v-9h2.4Z" fill={color} />
+    </Svg>
+  );
+}
+
+/** Padlock — "private" visibility. */
+export function LockIcon({ size = 14, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill={color} />
+      <Path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Globe — "public" visibility. */
+export function GlobeIcon({ size = 14, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={1.8} fill="none" />
+      <Path d="M3.2 12h17.6M12 3.1c2.6 2.6 2.6 15.2 0 17.8M12 3.1c-2.6 2.6-2.6 15.2 0 17.8" stroke={color} strokeWidth={1.5} fill="none" />
+    </Svg>
+  );
+}
+
+/** Two people — "shared" visibility. */
+export function UsersIcon({ size = 14, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="9" cy="8" r="3.1" fill={color} />
+      <Path d="M2.8 19.5c0-3.2 2.8-5 6.2-5s6.2 1.8 6.2 5Z" fill={color} />
+      <Circle cx="17.4" cy="8.6" r="2.5" fill={color} opacity={0.85} />
+      <Path d="M15.6 14.4c2.9.15 5.6 1.7 5.6 4.9" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" opacity={0.85} />
+    </Svg>
+  );
+}

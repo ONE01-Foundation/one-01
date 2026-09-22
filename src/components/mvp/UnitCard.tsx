@@ -32,6 +32,7 @@ import { useThemeStore } from '../../stores/themeStore';
 import { useT, useLanguage } from '../../i18n/useT';
 import { rtlRow, rtlText } from '../../utils/rtl';
 import { unitStatusLine } from '../../utils/unitStatusLine';
+import { LockIcon, GlobeIcon, UsersIcon } from './icons';
 import type { Unit } from '../../core/mvp/types';
 
 // Reveal geometry — 3 pills × 64 + 2 gaps × 6 + an 8px gap from the card = 212.
@@ -109,6 +110,8 @@ export function UnitCard({
       : unit.visibility === 'shared'
         ? unit.relationLabel || (he ? 'משותף' : 'Shared')
         : he ? 'פרטי' : 'Private';
+  const VisibilityIcon =
+    unit.visibility === 'public' ? GlobeIcon : unit.visibility === 'shared' ? UsersIcon : LockIcon;
 
   // Swipe-to-reveal. `tx` is the ROW's horizontal offset: 0 = closed,
   // -ACTIONS_WIDTH = fully open (pills exposed on the RIGHT). Lives on the UI
@@ -234,9 +237,6 @@ export function UnitCard({
                 </View>
               )}
             </View>
-            <Text style={[styles.visibility, { color: colors.textSecondary }]} numberOfLines={1}>
-              {visibilityLabel}
-            </Text>
           </View>
         </View>
 
@@ -265,6 +265,17 @@ export function UnitCard({
             )}
           </View>
         )}
+
+        {/* Status row — pinned to the card's bottom, on the timestamp's side:
+            an icon + Private / Public / Shared +N. */}
+        <View style={[styles.statusRow, { alignItems: he ? 'flex-start' : 'flex-end' }]}>
+          <View style={[styles.statusInner, rtlRow(lang)]}>
+            <VisibilityIcon size={12} color={colors.textSecondary} />
+            <Text style={[styles.visibility, { color: colors.textSecondary }]} numberOfLines={1}>
+              {visibilityLabel}
+            </Text>
+          </View>
+        </View>
 
           </Pressable>
 
@@ -427,9 +438,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   visibility: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
-    opacity: 0.85,
+    opacity: 0.9,
+  },
+  statusRow: {
+    // Sits at the bottom of the card (parallel to the time up top), on the
+    // timestamp's side — alignItems is set per-language at the call site.
+    marginTop: 2,
+  },
+  statusInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   timestamp: {
     fontSize: 12,

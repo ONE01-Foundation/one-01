@@ -60,10 +60,9 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import { Orb } from '../../components/mvp/Orb';
-import { BroadcastRing } from '../../components/mvp/BroadcastRing';
 import { UnitCard } from '../../components/mvp/UnitCard';
 import { InputBar } from '../../components/mvp/InputBar';
-import { ArrowDownIcon, PlusThinIcon, StackedCardsIcon, GhostModeIcon, MicIcon, MicOffIcon, CameraIcon, SpeakerIcon } from '../../components/mvp/icons';
+import { ArrowDownIcon, PlusThinIcon, StackedCardsIcon, GhostModeIcon, MicIcon, MicOffIcon, CameraIcon, SpeakerIcon, PersonIcon, BriefcaseIcon, HouseIcon, PlusIcon } from '../../components/mvp/icons';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
 import { useThemeStore } from '../../stores/themeStore';
 import { useT, useLanguage } from '../../i18n/useT';
@@ -137,8 +136,6 @@ const SNAP_OPEN = SCREEN_H - TITLE_BAR_H - 50;  // pull this far for full open
  *  Pulled in one notch (88 → 84) per latest design — slightly smaller orb
  *  reads cleaner against the broadcast text. */
 const HOME_ORB_SIZE = 84;
-// Story-ring sits a touch outside the Orb (8 px gap all round).
-const HOME_RING_SIZE = HOME_ORB_SIZE + 16;
 /** Vertical position of the resting hero. Sits ABOVE screen center so the
  *  broadcast text reads in the upper third — leaves room for the input dock
  *  and feels less crowded against the bottom bar. */
@@ -522,8 +519,11 @@ export function HomeScreen({
   const addUnit = useMvpStore((s) => s.addUnit);
   const removeUnit = useMvpStore((s) => s.removeUnit);
   const updateUnit = useMvpStore((s) => s.updateUnit);
-  const identityCount = useMvpStore((s) => s.identities.length);
-  const showIdentityChevron = identityCount > 1;
+  // Profiles = identities (personal / business / family). Rendered as a pill
+  // row under the Orb so the user sees + switches profile at a glance.
+  const identities = useMvpStore((s) => s.identities);
+  const activeIdentityId = useMvpStore((s) => s.activeIdentityId);
+  const setActiveIdentity = useMvpStore((s) => s.setActiveIdentity);
 
   // First-time users haven't completed onboarding. Their broadcast loop is
   // the "Hi, I'm ONE…" intro that previously lived on WelcomeScreen — the
@@ -564,10 +564,6 @@ export function HomeScreen({
   // Display name shown in the identity row below the orb. Before the user
   // has signed in / introduced themselves, default to "ONE" — using the
   // seeded "Ariel" mock name would look like ONE already knows them.
-  const displayedIdentityName = hasOnboarded
-    ? identity?.name ?? 'Ariel'
-    : 'ONE';
-
   // ── Inline chat on Home ─────────────────────────────────────────────────
   // There is NO separate chat layout any more. The Home layout is the same
   // whether the user is talking to ONE or not. Tapping the input field opens
@@ -1458,8 +1454,6 @@ export function HomeScreen({
     next: nextBroadcast,
     prev: prevBroadcast,
     resume: resumeBroadcast,
-    index: broadcastIndex,
-    count: broadcastCount,
   } = useBroadcastNavigator(broadcastLoop, {
     // Recording a response FREEZES the broadcast on its current line, so the
     // user answers the exact line they long-pressed.
@@ -2691,29 +2685,6 @@ export function HomeScreen({
               {/* In ghost mode the face becomes a hollow outline AND fades to a
                   low opacity (orbGhostDimStyle) — present but faint, temporary. */}
               <Animated.View style={[orbBreathStyle, orbGhostDimStyle]}>
-                {/* Story-ring: one segment per broadcast, filled up to the
-                    current line — ONE's rotating "story" made visible. Only in
-                    the resting broadcast state (not chat/call/ghost). */}
-                {!chatActive && !callActive && !ghostMode && broadcastCount > 1 && (
-                  <View
-                    pointerEvents="none"
-                    style={{
-                      position: 'absolute',
-                      top: (HOME_ORB_SIZE - HOME_RING_SIZE) / 2,
-                      left: (HOME_ORB_SIZE - HOME_RING_SIZE) / 2,
-                      width: HOME_RING_SIZE,
-                      height: HOME_RING_SIZE,
-                    }}
-                  >
-                    <BroadcastRing
-                      size={HOME_RING_SIZE}
-                      count={broadcastCount}
-                      index={broadcastIndex}
-                      color={colors.text}
-                      dimColor={colors.border}
-                    />
-                  </View>
-                )}
                 <Orb
                   size={HOME_ORB_SIZE}
                   eyeLookY={eyeLookY}
@@ -2806,30 +2777,54 @@ export function HomeScreen({
                   the identity switcher; with a single identity the chevron
                   is omitted and the row is rendered as a plain View so the
                   user can't tap into a dead affordance. */}
-              <AnimatedPressable
-                onPress={showIdentityChevron ? () => onTapHeader && onTapHeader() : undefined}
-                onLongPress={() => { haptic.press(); onLongPressOrb && onLongPressOrb(); }}
-                delayLongPress={450}
-                hitSlop={16}
+              <Animated.View
+                pointerEvents="box-none"
                 style={[styles.heroTextLayer, styles.identityRow, identityCrossfadeStyle]}
-                accessibilityRole={showIdentityChevron ? 'button' : 'text'}
-                accessibilityLabel={
-                  showIdentityChevron
-                    ? `${displayedIdentityName} — tap to switch`
-                    : displayedIdentityName
-                }
               >
-                <Text
-                  style={[styles.identityName, { color: colors.text }]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {displayedIdentityName}
-                </Text>
-                {showIdentityChevron && (
-                  <ArrowDownIcon size={14} color={colors.textSecondary} />
-                )}
-              </AnimatedPressable>
+                <View style={styles.profilePills}>
+                  {identities.map((idn) => {
+                    const active = idn.id === activeIdentityId;
+                    const ProfileIcon =
+                      idn.type === 'business' ? BriefcaseIcon : idn.type === 'family' ? HouseIcon : PersonIcon;
+                    return (
+                      <Pressable
+                        key={idn.id}
+                        onPress={() => { haptic.press(); setActiveIdentity(idn.id); }}
+                        onLongPress={() => { haptic.press(); onLongPressOrb && onLongPressOrb(); }}
+                        delayLongPress={450}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={idn.name}
+                        style={[
+                          styles.profilePill,
+                          { backgroundColor: active ? colors.text : colors.surface },
+                        ]}
+                      >
+                        <ProfileIcon size={15} color={active ? colors.surface : colors.textSecondary} />
+                        {active && (
+                          <Text
+                            style={[styles.profilePillText, { color: colors.surface }]}
+                            numberOfLines={1}
+                          >
+                            {idn.name}
+                          </Text>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                  {/* Add / manage profiles — opens the identity manager. */}
+                  <Pressable
+                    onPress={() => onTapHeader && onTapHeader()}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add profile"
+                    style={[styles.profilePillAdd, { backgroundColor: colors.surface }]}
+                  >
+                    <PlusIcon size={15} color={colors.textSecondary} />
+                  </Pressable>
+                </View>
+              </Animated.View>
             </Animated.View>
 
             {/* Chat header — X (close) on one side, ghost-mode toggle opposite.
@@ -3536,6 +3531,33 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  // Profile switcher pills (personal / business / family + add).
+  profilePills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  profilePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+  },
+  profilePillText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  profilePillAdd: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   signInRow: {
     flexDirection: 'row',
