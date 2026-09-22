@@ -1563,6 +1563,33 @@ export function HomeScreen({
     [onBroadcastTap, onBroadcastLongPress, onBroadcastRelease, nextBroadcast, prevBroadcast],
   );
 
+  // Swipe the Home sideways → switch profile (identity), showing that
+  // profile's cards. A FIRM horizontal drag (55px to arm, 70px / a fling to
+  // commit) + fails on vertical, so the list still scrolls and each card's own
+  // smaller-threshold swipe (pin/share/delete) wins when you drag on a card.
+  const switchProfile = useCallback((delta: number) => {
+    const list = useMvpStore.getState().identities;
+    if (list.length < 2) return;
+    const curId = useMvpStore.getState().activeIdentityId;
+    const i = Math.max(0, list.findIndex((x) => x.id === curId));
+    const nextId = list[(i + delta + list.length) % list.length].id;
+    if (nextId !== curId) { haptic.select(); setActiveIdentity(nextId); }
+  }, [setActiveIdentity]);
+
+  const profileSwipe = React.useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!chatActive)
+        .activeOffsetX([-55, 55])
+        .failOffsetY([-18, 18])
+        .onEnd((e) => {
+          'worklet';
+          if (Math.abs(e.translationX) < 70 && Math.abs(e.velocityX) < 350) return;
+          runOnJS(switchProfile)(e.translationX < 0 ? 1 : -1); // swipe left → next profile
+        }),
+    [chatActive, switchProfile],
+  );
+
   // Tap-grow on the Orb. Driven from native Pressable's onPressIn/onPressOut.
   // Combined multiplicatively with `orbBreathScale` so neither cancels the
   // other.
@@ -2473,6 +2500,7 @@ export function HomeScreen({
             only differences when chat is active: broadcast lines switch to
             suggestions, and a message overlay appears above the input. */}
         <View style={styles.flex1}>
+            <GestureDetector gesture={profileSwipe}>
             <Animated.ScrollView
               ref={scrollRef}
               style={styles.flex1}
@@ -2604,6 +2632,7 @@ export function HomeScreen({
                 )}
               </Animated.View>
             </Animated.ScrollView>
+            </GestureDetector>
 
             {/* EdgeBars sit ABOVE the scroll content + bubbles (zIndex 15)
                 but BELOW the orb / broadcast / chat header / input dock
@@ -2798,6 +2827,7 @@ export function HomeScreen({
                         accessibilityLabel={idn.name}
                         style={[
                           styles.profilePill,
+                          active ? styles.profilePillActive : styles.profilePillBall,
                           { backgroundColor: active ? colors.text : colors.surface },
                         ]}
                       >
@@ -3543,10 +3573,18 @@ const styles = StyleSheet.create({
   profilePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     height: 34,
-    paddingHorizontal: 12,
     borderRadius: 17,
+  },
+  // Active profile → a pill that shows its name.
+  profilePillActive: {
+    paddingHorizontal: 14,
+  },
+  // Inactive profiles → a plain icon "ball".
+  profilePillBall: {
+    width: 34,
   },
   profilePillText: {
     fontSize: 14,
