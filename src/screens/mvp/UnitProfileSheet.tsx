@@ -87,7 +87,7 @@ import { InputBar } from '../../components/mvp/InputBar';
 import { InlinePrompt, type InlinePromptConfig } from '../../components/mvp/InlinePrompt';
 import { SharedProcessPreview } from '../../components/mvp/SharedProcessPreview';
 import { SharedThreadOverlay } from '../../components/mvp/SharedThreadOverlay';
-import { shareUnit } from '../../services/cloudShared';
+import { shareUnit, postSharedMessage } from '../../services/cloudShared';
 import { ActionMenu, type ActionMenuItem } from '../../components/mvp/ActionMenu';
 import { relativeWhen, activityKindMeta } from '../../utils/activity';
 import { analyzeUnit } from '../../utils/processIntelligence';
@@ -1272,6 +1272,12 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
           emoji: '🔗',
           kind: 'event',
         });
+        // Open the conversation: post the outward message (as ONE) so the other
+        // side sees it the moment they join, not just in the static snapshot.
+        const opener = cur.drafts?.[0]?.body?.trim();
+        if (opener) {
+          void postSharedMessage(row.code, sharedByName ?? unitIdentity?.name ?? 'ONE', 'one', opener);
+        }
       }
     };
     setPromptConfig({

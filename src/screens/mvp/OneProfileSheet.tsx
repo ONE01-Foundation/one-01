@@ -93,7 +93,7 @@ interface OneProfileSheetProps {
 // Open as a HALF card by default (matching UnitProfileSheet's pattern).
 // A touch higher than a strict half (72%) so the hero + stats + Today land
 // comfortably without an immediate drag. User can pull up to 92% for the rest.
-const SNAP_POINTS = ['72%', '96%'];
+const SNAP_POINTS = ['92%'];
 
 export function OneProfileSheet({
   visible,
@@ -340,12 +340,15 @@ export function OneProfileSheet({
   const COMPACT_TITLE_THRESHOLD = 120;
   const compactTitleSV = useSharedValue(0);
   const compactShownRef = React.useRef(false);
+  // Drives the bottom switcher dock's tappability (only when it's faded in).
+  const [dockShown, setDockShown] = useState(false);
   const handleProfileScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const y = e?.nativeEvent?.contentOffset?.y ?? 0;
       const show = y > COMPACT_TITLE_THRESHOLD;
       if (show !== compactShownRef.current) {
         compactShownRef.current = show;
+        setDockShown(show);
         compactTitleSV.value = withTiming(show ? 1 : 0, {
           duration: 180,
           easing: Easing.out(Easing.cubic),
@@ -416,11 +419,13 @@ export function OneProfileSheet({
     const mine = units.filter((u) => u.identityId === activeIdentityId);
     let openSteps = 0;
     let openReminders = 0;
+    let shared = 0;
     for (const u of mine) {
       openSteps += (u.nextSteps ?? []).filter((s) => !s.done).length;
       openReminders += (u.reminders ?? []).filter((r) => !r.done).length;
+      if (u.shareCode || u.visibility === 'shared' || u.visibility === 'public') shared += 1;
     }
-    return { processes: mine.length, openSteps, openReminders };
+    return { processes: mine.length, openSteps, openReminders, shared };
   }, [units, activeIdentityId]);
 
   // Role label for an identity type (personal / business / family).
@@ -467,6 +472,7 @@ export function OneProfileSheet({
     { label: he ? 'תהליכים' : 'Processes', value: `${liveStats.processes}` },
     { label: he ? 'צעדים' : 'Open steps', value: `${liveStats.openSteps}` },
     { label: he ? 'תזכורות' : 'Reminders', value: `${liveStats.openReminders}` },
+    { label: he ? 'משותפים' : 'Shared', value: `${liveStats.shared}` },
     { label: he ? 'חיבורים' : 'Connections', value: `${connectedCount}` },
     { label: he ? 'ערוצים' : 'Channels', value: `${CHANNELS.length}` },
     { label: he ? 'מקורות' : 'Sources', value: `${SOURCES.length}` },
@@ -605,9 +611,14 @@ export function OneProfileSheet({
   // hang pinned at the screen bottom during the close.
   const fallbackIndex = useSharedValue(0);
   const sheetIndex = animatedIndex ?? fallbackIndex;
+  // The bottom switcher dock now appears ONLY once the header space chips have
+  // scrolled away (compactTitleSV → 1), so the selector is always reachable:
+  // in the hero at the top, at the bottom once you scroll past it. Also fades
+  // out as the sheet slides closed.
   const dockStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(sheetIndex.value, [-1, 0], [0, 1], Extrapolation.CLAMP),
-    transform: [{ translateY: dockLift.value }],
+    opacity:
+      compactTitleSV.value * interpolate(sheetIndex.value, [-1, 0], [0, 1], Extrapolation.CLAMP),
+    transform: [{ translateY: dockLift.value + (1 - compactTitleSV.value) * 14 }],
   }));
 
   // Resting breath on the Orb.
@@ -703,7 +714,7 @@ export function OneProfileSheet({
   const switcherDockNode = (
     <Animated.View
       style={[styles.switcherDock, { paddingBottom: Math.max(insets.bottom, 12) }, dockStyle]}
-      pointerEvents="box-none"
+      pointerEvents={dockShown ? 'box-none' : 'none'}
     >
       <View style={styles.switcherRow}>
         {/* Add profile → create-identity flow (gated by the plan). */}
@@ -760,9 +771,9 @@ export function OneProfileSheet({
       visible={visible}
       onClose={onClose}
       snapPoints={SNAP_POINTS}
-      // Open FULL (the top snap). The home orb collapses behind it and the
-      // sheet grows its own face in; drag down to the 72% rest or dismiss.
-      initialSnap={1}
+      // One mode: opens tall (92%) with breathing room above (clear of the
+      // clock / safe area). No intermediate snap — drag down to dismiss.
+      initialSnap={0}
       // Content-pan ON + bypass the default BottomSheetView wrapper so
       // BottomSheetScrollView sits as a DIRECT child of gorhom — this
       // is the wiring gorhom's scroll-pan bridge expects. Matches
@@ -875,45 +886,96 @@ export function OneProfileSheet({
               Latin, so the row is fixed LTR (name first, badge after) in every
               language — the badge stays to the right of ONE in Hebrew too. Grey
               when unverified (tap → verify), blue when verified. */}
+          {/* Title: ONE + the subscription plan. The plan is ACCOUNT-level (one
+              ONE, one plan) — so it lives on the name, not on a space. */}
           <View style={styles.heroTitleRow}>
             <Text style={[styles.heroTitle, { color: colors.text }]}>{oneName}</Text>
             <Pressable
-              onPress={comingSoon}
+              onPress={() => openUpgrade(undefined)}
               hitSlop={10}
+              style={styles.planInline}
               accessibilityRole="button"
-              accessibilityLabel={he ? (oneVerified ? 'מאומת' : 'אימות ONE') : oneVerified ? 'Verified' : 'Verify ONE'}
+              accessibilityLabel={planMeta.word}
             >
-              <VerifiedIcon size={20} color={oneVerified ? '#3B82F6' : '#C4C1BA'} />
+              <View style={[styles.planDot, { backgroundColor: planMeta.color }]} />
+              <Text style={[styles.planLabel, { color: planMeta.color }]}>{planMeta.word}</Text>
             </Pressable>
           </View>
-          <Pressable
-            onPress={() => openUpgrade(undefined)}
-            hitSlop={8}
-            style={[styles.identityLineRow, rtlRow(lang)]}
-            accessibilityRole="button"
-            accessibilityLabel={`${identity?.name ?? ''} · ${roleLabelFor(identity?.type)} — ${planMeta.word}`}
-          >
-            <Text style={[styles.identityLine, { color: colors.textSecondary }]} numberOfLines={1}>
-              {[identity?.name || (he ? 'אישי' : 'Personal'), roleLabelFor(identity?.type)].filter(Boolean).join(' · ')}
-            </Text>
-            <View style={[styles.planBadge, { borderColor: planMeta.color }]}>
-              <Text style={[styles.planBadgeText, { color: planMeta.color }]}>{planMeta.word}</Text>
-            </View>
-          </Pressable>
+          {/* Space selector — switch which ONE (profile/space) you're viewing,
+              right under the name where identity lives. + adds a profile; tap
+              another space to switch; the plan badge taps through to upgrade. */}
+          <View style={[styles.spaceRow, rtlRow(lang)]}>
+            <Pressable
+              onPress={handleAddProfile}
+              style={[styles.spaceCircle, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel={he ? 'הוסף פרופיל' : 'Add profile'}
+              hitSlop={6}
+            >
+              <PlusIcon size={18} color={colors.text} />
+            </Pressable>
+            {inactiveIdentities.map((id) => (
+              <Pressable
+                key={id.id}
+                onPress={() => { haptic.select(); setActiveIdentity(id.id); }}
+                style={[styles.spaceCircle, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                accessibilityRole="button"
+                accessibilityLabel={id.name}
+                hitSlop={6}
+              >
+                {identityIcon(id.type, colors.text, 17)}
+              </Pressable>
+            ))}
+            {activeIdentity && (
+              <Pressable
+                onPress={comingSoon}
+                style={[styles.spaceActivePill, { backgroundColor: colors.text }]}
+                accessibilityRole="button"
+                accessibilityLabel={`${activeIdentity.name} · ${oneVerified ? (he ? 'מאומת' : 'Verified') : (he ? 'אימות' : 'Verify')}`}
+                hitSlop={6}
+              >
+                {identityIcon(activeIdentity.type, colors.background, 15)}
+                <Text style={[styles.spaceActiveName, { color: colors.background }]} numberOfLines={1}>
+                  {activeIdentity.name}
+                </Text>
+                {/* Verification is PER-SPACE: "this really is you, as this
+                    identity." Blue when verified, muted placeholder otherwise. */}
+                <VerifiedIcon size={15} color={oneVerified ? '#60A5FA' : 'rgba(255,255,255,0.45)'} />
+              </Pressable>
+            )}
+          </View>
         </View>
 
-        {/* What ONE holds for this profile — a tidy grid (4 per row) so every
-            metric reads at a glance, no clipping or sideways scroll. */}
-        <View style={[styles.metricsGrid, rtlRow(lang)]}>
-          {metrics.map((m) => (
-            <View key={m.label} style={styles.metricGridCell}>
-              <Text style={[styles.metricValue, { color: m.color ?? colors.text }]}>{m.value}</Text>
-              <Text style={[styles.metricLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                {m.label}
-              </Text>
-            </View>
+        {/* Status carousel — a horizontal strip of what ONE holds for this
+            profile. Scrolls sideways so it can carry more metrics without
+            crowding the hero. */}
+        <ScrollView
+          ref={metricsScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[styles.metricsScroll, { borderColor: colors.border }]}
+          contentContainerStyle={[styles.metricsRow, rtlRow(lang)]}
+          onContentSizeChange={() => {
+            // Once per open (Hebrew only): jump to the right edge so the row
+            // reads from Processes, not Plan.
+            if (he && !metricsSnappedRef.current) {
+              metricsSnappedRef.current = true;
+              metricsScrollRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+        >
+          {metrics.map((m, i) => (
+            <React.Fragment key={m.label}>
+              {i > 0 && <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />}
+              <View style={styles.metricCell}>
+                <Text style={[styles.metricValue, { color: m.color ?? colors.text }]}>{m.value}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {m.label}
+                </Text>
+              </View>
+            </React.Fragment>
           ))}
-        </View>
+        </ScrollView>
 
         {/* Today — ONE's command center. A prioritized, cross-process agenda
             of what actually needs the user now, one tap to act. This is the
@@ -1803,6 +1865,36 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
+  // Header space selector — compact row under the name (replaces the bottom dock).
+  spaceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  spaceCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  spaceActivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 17,
+  },
+  spaceActiveName: { fontSize: 14.5, fontWeight: '700', maxWidth: 150 },
+  // Plan shown as a coloured dot + word next to ONE (not a boxed badge).
+  planInline: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  planDot: { width: 7, height: 7, borderRadius: 4 },
+  planLabel: { fontSize: 13.5, fontWeight: '700', letterSpacing: 0.3 },
   identityLine: {
     fontSize: 14.5,
     fontWeight: '600',
@@ -1828,19 +1920,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-  },
-  // Tidy stats grid — 4 cells per row, wraps to as many rows as needed.
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 16,
-    marginTop: 12,
-  },
-  metricGridCell: {
-    width: '25%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 2,
   },
   metricCell: {
     alignItems: 'center',
