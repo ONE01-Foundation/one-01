@@ -93,7 +93,7 @@ interface OneProfileSheetProps {
 // Open as a HALF card by default (matching UnitProfileSheet's pattern).
 // A touch higher than a strict half (72%) so the hero + stats + Today land
 // comfortably without an immediate drag. User can pull up to 92% for the rest.
-const SNAP_POINTS = ['72%', '92%'];
+const SNAP_POINTS = ['72%', '96%'];
 
 export function OneProfileSheet({
   visible,
@@ -760,10 +760,9 @@ export function OneProfileSheet({
       visible={visible}
       onClose={onClose}
       snapPoints={SNAP_POINTS}
-      // Open at the HALF card (65%) — like UnitProfileSheet. The home orb
-      // collapses behind it and this sheet grows its own face in, so the
-      // hand-off reads even though we're not full-height. Drag up for more.
-      initialSnap={0}
+      // Open FULL (the top snap). The home orb collapses behind it and the
+      // sheet grows its own face in; drag down to the 72% rest or dismiss.
+      initialSnap={1}
       // Content-pan ON + bypass the default BottomSheetView wrapper so
       // BottomSheetScrollView sits as a DIRECT child of gorhom — this
       // is the wiring gorhom's scroll-pan bridge expects. Matches
@@ -901,44 +900,20 @@ export function OneProfileSheet({
               <Text style={[styles.planBadgeText, { color: planMeta.color }]}>{planMeta.word}</Text>
             </View>
           </Pressable>
-          <Animated.Text
-            style={[styles.heroSubline, { color: colors.textSecondary }, broadcastLineStyle]}
-            numberOfLines={2}
-          >
-            {oneLines[lineIdx % oneLines.length]}
-          </Animated.Text>
         </View>
 
-        {/* Status carousel — a horizontal strip of what ONE holds for this
-            profile. Scrolls sideways so it can carry more than three metrics
-            without crowding the hero. */}
-        <ScrollView
-          ref={metricsScrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={[styles.metricsScroll, { borderColor: colors.border }]}
-          contentContainerStyle={[styles.metricsRow, rtlRow(lang)]}
-          onContentSizeChange={() => {
-            // Once per open (Hebrew only): jump to the right edge so the row
-            // reads from Processes, not Plan.
-            if (he && !metricsSnappedRef.current) {
-              metricsSnappedRef.current = true;
-              metricsScrollRef.current?.scrollToEnd({ animated: false });
-            }
-          }}
-        >
-          {metrics.map((m, i) => (
-            <React.Fragment key={m.label}>
-              {i > 0 && <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />}
-              <View style={styles.metricCell}>
-                <Text style={[styles.metricValue, { color: m.color ?? colors.text }]}>{m.value}</Text>
-                <Text style={[styles.metricLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {m.label}
-                </Text>
-              </View>
-            </React.Fragment>
+        {/* What ONE holds for this profile — a tidy grid (4 per row) so every
+            metric reads at a glance, no clipping or sideways scroll. */}
+        <View style={[styles.metricsGrid, rtlRow(lang)]}>
+          {metrics.map((m) => (
+            <View key={m.label} style={styles.metricGridCell}>
+              <Text style={[styles.metricValue, { color: m.color ?? colors.text }]}>{m.value}</Text>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+                {m.label}
+              </Text>
+            </View>
           ))}
-        </ScrollView>
+        </View>
 
         {/* Today — ONE's command center. A prioritized, cross-process agenda
             of what actually needs the user now, one tap to act. This is the
@@ -1853,6 +1828,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  // Tidy stats grid — 4 cells per row, wraps to as many rows as needed.
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 16,
+    marginTop: 12,
+  },
+  metricGridCell: {
+    width: '25%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
   },
   metricCell: {
     alignItems: 'center',
