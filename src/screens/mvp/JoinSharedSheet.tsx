@@ -16,6 +16,7 @@ import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
 import { joinSharedUnit, type SharedUnitRow, type SharedSnapshot } from '../../services/cloudShared';
 import { SharedThread } from '../../components/mvp/SharedThread';
+import { useMvpStore } from '../../stores/mvpStore';
 
 export function JoinSharedSheet({
   visible,
@@ -49,13 +50,48 @@ export function JoinSharedSheet({
     const c = code.trim().toLowerCase();
     if (!c) return;
     haptic.tap(); setBusy(true); setErr(null);
-    const r = await joinSharedUnit(c, name.trim() || (he ? 'אורח' : 'Guest'));
+    const joinName = name.trim() || (he ? 'אורח' : 'Guest');
+    const r = await joinSharedUnit(c, joinName);
     setBusy(false);
     if (!r) {
       setErr(he ? 'קוד לא נמצא, או אין חיבור כרגע.' : 'Code not found, or no connection right now.');
       return;
     }
     setRow(r);
+
+    // Give the provider their OWN ONE for this process: a local joined unit, so
+    // it persists in their processes and ONE notifies them of the owner's
+    // replies even when this sheet is closed. Skip if already joined.
+    const store = useMvpStore.getState();
+    if (!store.units.some((u) => u.shareCode === r.code)) {
+      const snap = (r.unit ?? {}) as SharedSnapshot;
+      const nowIso = new Date().toISOString();
+      store.addUnit({
+        id: `unit_join_${Date.now()}`,
+        identityId: store.activeIdentityId,
+        title: snap.title || r.title,
+        emoji: snap.emoji || r.emoji || '📌',
+        tagIds: [],
+        broadcast: [],
+        latestBroadcastText: [
+          snap.sharedByName
+            ? (he ? `${snap.sharedByName} שיתף/ה איתך תהליך.` : `${snap.sharedByName} shared a process with you.`)
+            : (he ? 'תהליך משותף.' : 'A shared process.'),
+        ],
+        lastUpdatedAt: nowIso,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        unreadUpdates: 0,
+        visibility: 'shared',
+        shareCode: r.code,
+        sharedRole: 'human',
+        sharedAs: joinName,
+        relationLabel: snap.sharedByName ? (he ? `מ-${snap.sharedByName}` : `From ${snap.sharedByName}`) : undefined,
+        people: snap.sharedByName
+          ? [{ id: `p_${Date.now()}`, name: snap.sharedByName, role: 'Shared ONE', connectionType: 'partner' as const }]
+          : undefined,
+      });
+    }
   }, [code, name, he]);
 
   const snap = (row?.unit ?? {}) as SharedSnapshot;

@@ -15,6 +15,7 @@ export function SharedThreadOverlay({
   code,
   myName,
   providerName,
+  role = 'one',
   onClose,
   colors,
   lang,
@@ -23,6 +24,8 @@ export function SharedThreadOverlay({
   code: string;
   myName: string;
   providerName?: string;
+  /** 'one' = you shared it (ONE represents you); 'human' = you joined it. */
+  role?: 'one' | 'human';
   onClose: () => void;
   colors: ThemeColors;
   lang: 'en' | 'he';
@@ -50,12 +53,14 @@ export function SharedThreadOverlay({
             </Pressable>
           </View>
           <Text style={[styles.hint, { color: colors.textSecondary }, rtlText(lang)]}>
-            {he ? 'וואן מייצג אותך מול הצד השני.' : 'ONE represents you to the other side.'}
+            {role === 'human'
+              ? (he ? 'שיחה עם הצד שמשתף איתך.' : 'Talking with the side sharing with you.')
+              : (he ? 'וואן מייצג אותך מול הצד השני.' : 'ONE represents you to the other side.')}
           </Text>
           {/* Explicit maxHeight bounds the scroll so it renders + scrolls (an
               unbounded ScrollView in a flex column collapses on web). */}
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-            <SharedThread code={code} myName={myName} role="one" active colors={colors} lang={lang} />
+            <SharedThread code={code} myName={myName} role={role} active colors={colors} lang={lang} />
           </ScrollView>
         </View>
       </KeyboardAvoidingView>

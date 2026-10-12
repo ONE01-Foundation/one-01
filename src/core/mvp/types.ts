@@ -341,6 +341,14 @@ export interface Unit {
   /** Short code from the shared backend once this process is published for the
    *  other side to join (see cloudShared). Absent = local-only share. */
   shareCode?: string;
+  /** Which side of the shared thread THIS user is on for this process:
+   *  'one' = you shared it (ONE represents you); 'human' = you JOINED someone
+   *  else's shared process by code. Drives who's "the other side" for live
+   *  notifications, and which role your messages post as. Undefined = 'one'. */
+  sharedRole?: 'one' | 'human';
+  /** The name you appear as in the shared thread (the provider's join name for a
+   *  joined process; the owner's open Name otherwise). */
+  sharedAs?: string;
 
   progress?: {
     current: number;

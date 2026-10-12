@@ -1560,8 +1560,10 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
             <SharedThreadOverlay
               visible
               code={unit.shareCode}
+              role={unit.sharedRole ?? 'one'}
               myName={
-                disclosureForIdentity(unit.identityId).find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim())?.value?.trim()
+                unit.sharedAs
+                ?? disclosureForIdentity(unit.identityId).find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim())?.value?.trim()
                 ?? unitIdentity?.name
                 ?? 'ONE'
               }
@@ -2194,6 +2196,7 @@ function ProfileView({
               )}
             </View>
           ))}
+          {unit.sharedRole !== 'human' && (
           <Pressable
             onPress={onShareWithOne}
             style={({ pressed }) => [
@@ -2205,6 +2208,7 @@ function ProfileView({
           >
             <Text style={[styles.sharePillText, { color: accent }]}>+ Share with a ONE 🤝</Text>
           </Pressable>
+          )}
         </View>
       </Section>
 
@@ -2315,7 +2319,7 @@ function ProfileView({
                 </Pressable>
               </View>
               <Text style={[styles.settingsHint, { color: colors.textSecondary }, rtlText(lang)]}>{meta.hint}</Text>
-              {vis !== 'private' && (
+              {vis !== 'private' && unit.sharedRole !== 'human' && (
                 <Pressable
                   onPress={() => { haptic.tap(); onPreview?.(); }}
                   style={({ pressed }) => [styles.previewRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }, rtlRow(lang)]}

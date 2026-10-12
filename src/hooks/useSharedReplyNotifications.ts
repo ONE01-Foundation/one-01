@@ -38,12 +38,14 @@ export function useSharedReplyNotifications(): void {
         const uid = (await getSharedUnitByCode(code))?.id;
         if (!alive || !uid) return;
         const off = subscribeSharedMessages(uid, (m) => {
-          // Only the OTHER side's messages are "news" — the user's own ONE posts
-          // (role 'one') aren't notified back.
-          if (m.role !== 'human') return;
           const store = useMvpStore.getState();
           const cur = store.units.find((u) => u.id === unitId);
           if (!cur) return;
+          // Only the OTHER side's messages are "news". My role is 'one' when I
+          // shared this process, 'human' when I joined someone else's — notify
+          // on the opposite role, so BOTH sides hear about replies.
+          const myRole = cur.sharedRole ?? 'one';
+          if (m.role === myRole) return;
           store.pushUnitNotification({
             unitId,
             text: `${m.author}: ${m.text}`,
