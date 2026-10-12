@@ -13,8 +13,10 @@ import {
   createJSONStorage,
   type StateStorage,
 } from 'zustand/middleware';
-import type { Identity, Unit, IdentityType, UnitTimelineItem } from '../core/mvp/types';
+import type { Identity, Unit, IdentityType, UnitTimelineItem, UnitDraft, MemoryItem, DisclosureField, DisclosureTier, QuizRun, BookingRun, FormRun } from '../core/mvp/types';
 import { MOCK_IDENTITIES, DEFAULT_IDENTITY_ID, MOCK_UNITS } from '../data/mvp';
+import { DEFAULT_DISCLOSURE } from '../data/mvp/disclosure';
+import { DEMO_IDENTITY_IDS } from '../data/mvp/identities';
 import { sortByAttention } from '../core/mvp/attentionScore';
 import { storage } from '../utils/session';
 import { inferGenderFromName, type Gender } from '../utils/gender';
@@ -63,6 +65,19 @@ export interface UnitNotification {
 }
 
 /**
+ * An interactive WIDGET ONE can send inside the conversation — ONE doesn't only
+ * talk, it acts in the thread. Rendered as a card by the representative home.
+ * Extensible: new ONE capabilities become new widget kinds.
+ */
+export type ChatWidget =
+  | { kind: 'process'; unitId: string }
+  // A tool ONE deployed in the thread. Each new tool = a new kind here + a
+  // renderer; the payload points at the tool's live state (e.g. a quiz run).
+  | { kind: 'quiz'; runId: string }
+  | { kind: 'booking'; runId: string }
+  | { kind: 'form'; runId: string };
+
+/**
  * A persisted chat message in the home-level conversation with ONE.
  * Stored in the store (not just component state) so the conversation
  * survives reloads + syncs across devices via the same Supabase bridge
@@ -74,6 +89,16 @@ export interface ChatMessageStored {
   text: string;
   /** Epoch ms. */
   ts: number;
+  /** Optional attached image (local URI) — the user can answer with a file,
+   *  not only text/voice. Backward-compatible: old messages simply omit it. */
+  imageUri?: string;
+  /** When present, this message is an interactive widget ONE sent (a process
+   *  card, etc.), not a plain text bubble. Backward-compatible. */
+  widget?: ChatWidget;
+  /** The process this turn is ABOUT — stamped on the user message, ONE's reply,
+   *  and the widget whenever a turn creates/updates a unit. Lets the thread fold
+   *  a whole process's conversation into its drawer. Backward-compatible. */
+  unitId?: string;
 }
 
 /** Subscription tiers. 'free' is the default; 'pro' and 'max' are paid. */
@@ -117,6 +142,16 @@ interface MvpStore {
    */
   unitChats: Record<string, ChatMessageStored[]>;
   /**
+   * Live tool runs ONE deployed in the thread, keyed by run id. The first tool
+   * kind is a quiz; a chat widget `{kind:'quiz', runId}` points here and the
+   * quiz card reads/updates it live (like a process card reads its unit).
+   */
+  quizRuns: Record<string, QuizRun>;
+  /** Live booking widgets ONE deployed in a thread (keyed by run id). */
+  bookingRuns: Record<string, BookingRun>;
+  /** Live form widgets ONE deployed in a thread (keyed by run id). */
+  formRuns: Record<string, FormRun>;
+  /**
    * ISO date (YYYY-MM-DD) on which we last greeted the user with the
    * "what's waiting" digest. Prevents the welcome message from firing
    * on every reload.
@@ -152,12 +187,44 @@ interface MvpStore {
    * "digital intermediary" tangible. Persisted.
    */
   connections: Record<string, boolean>;
+  /** Which of ONE's tools (quizzes, booking…) are enabled. Live tools default
+   *  on; set false to turn one off. See `data/mvp/tools.ts`. */
+  enabledTools: Record<string, boolean>;
+
+  /** Things ONE remembers about the user (account-wide). Persisted. */
+  memories: MemoryItem[];
+  /** Save a fact ONE should remember. No-op on blank / exact-duplicate text. */
+  addMemory: (text: string) => void;
+  /** Forget one remembered fact. */
+  removeMemory: (id: string) => void;
+  /** Set the sharing rule for a remembered fact (open / ask / private). */
+  setMemoryTier: (id: string, tier: DisclosureTier) => void;
+
+  /**
+   * Selective-disclosure policy, PER SPACE (keyed by identityId) — the facts ONE
+   * may represent on your behalf, each with a rule for how freely it may share
+   * it. ONE's trust core: a permissioned representative, never an impersonator.
+   * Per-space because business must never bleed into personal; each profile has
+   * its own open/ask/private. Persisted. Seeds DEFAULT_DISCLOSURE per space on
+   * first access. All four setters operate on the ACTIVE space.
+   */
+  disclosure: Record<string, DisclosureField[]>;
+  /** Change how freely ONE may share a field (open / ask / private). */
+  setDisclosureTier: (id: string, tier: DisclosureTier) => void;
+  /** Set the value ONE would share for a field (empty clears it). */
+  setDisclosureValue: (id: string, value: string) => void;
+  /** Add a custom fact to the disclosure policy. Defaults to ask-first. */
+  addDisclosureField: (label: string, value?: string, tier?: DisclosureTier) => void;
+  /** Remove a user-added field (system fields are not removable). */
+  removeDisclosureField: (id: string) => void;
 
   setName: (name: string) => void;
   /** Set the subscription tier (mock upgrade for now — see `plan`). */
   setPlan: (plan: PlanTier) => void;
   /** Connect / disconnect a source by connector id. */
   setConnection: (id: string, connected: boolean) => void;
+  /** Turn one of ONE's tools on/off. */
+  setToolEnabled: (id: string, enabled: boolean) => void;
   /** Set the user's grammatical gender explicitly (e.g. from Settings). */
   setUserGender: (gender: Gender) => void;
   /** Pick ONE's Orb skin / personality (from Settings). */
@@ -167,6 +234,20 @@ interface MvpStore {
   addUnits: (units: Unit[]) => void;
   addUnit: (unit: Unit) => void;
   updateUnit: (id: string, patch: Partial<Unit>) => void;
+  /**
+   * ONE composed an outward artifact for a process — prepend it to the unit's
+   * drafts, log a 'draft' timeline entry, and bump the badge. This is the
+   * "intent → reality" bridge: the process now holds the actual message/doc to
+   * review + send, not just a status note.
+   */
+  addDraft: (unitId: string, draft: UnitDraft, lang: 'en' | 'he') => void;
+  /** Edit a draft's body/subject in place (user tweaked ONE's wording). */
+  updateDraft: (unitId: string, draftId: string, patch: Partial<UnitDraft>) => void;
+  /** Mark a draft sent (after the user pushed it through the share sheet) +
+   *  log it to the timeline so the process shows ONE's outreach happened. */
+  markDraftSent: (unitId: string, draftId: string, lang: 'en' | 'he') => void;
+  /** Discard a draft the user doesn't want. */
+  removeDraft: (unitId: string, draftId: string) => void;
   /**
    * Lifecycle: close a process out — from intent to reality. Sets status →
    * 'completed', stamps completedAt, clears its badge, writes a ONE-voiced
@@ -222,8 +303,27 @@ interface MvpStore {
   dismissNotification: (id: string) => void;
   /** Append a message to the home chat. Caps the list at 50. */
   appendHomeChat: (msg: ChatMessageStored) => void;
+  /** Patch an existing home-chat message in place (e.g. stamp its unitId). */
+  updateHomeChatMessage: (id: string, patch: Partial<ChatMessageStored>) => void;
   /** Wipe the home chat (e.g. when user closes the chat with X). */
   clearHomeChat: () => void;
+  /** Register a tool run ONE just deployed (e.g. a quiz). */
+  startQuizRun: (run: QuizRun) => void;
+  /** Record the user's answer to one quiz question; sets finishedAt when the
+   *  last one is answered. */
+  answerQuizQuestion: (runId: string, qIndex: number, optionIndex: number) => void;
+  /** Deploy a booking widget into a thread. */
+  startBookingRun: (run: BookingRun) => void;
+  /** Pick a slot in a booking (before confirming). */
+  selectBookingSlot: (runId: string, slotId: string) => void;
+  /** Confirm the chosen slot — sets confirmedAt. */
+  confirmBooking: (runId: string) => void;
+  /** Deploy a form widget into a thread. */
+  startFormRun: (run: FormRun) => void;
+  /** Update one field's value as the user types. */
+  setFormFieldValue: (runId: string, fieldId: string, value: string) => void;
+  /** Submit the form — sets submittedAt. */
+  submitForm: (runId: string) => void;
   /**
    * Queue a message for the Home chat to send (from a non-Home surface).
    * Pass null to clear after Home has consumed it.
@@ -275,21 +375,27 @@ const mvpStorage: StateStorage = {
 export const useMvpStore = create<MvpStore>()(
   persist(
     (set, get) => ({
-      name: 'Ariel',
+      name: '',
       userGender: 'unknown',
       agentSkin: 'classic',
       agentPersonality: 'balanced',
       identities: MOCK_IDENTITIES,
       activeIdentityId: DEFAULT_IDENTITY_ID,
-      units: sortByAttention(MOCK_UNITS),
+      units: [],
       hasCompletedOnboarding: false,
       notifications: [],
       homeChat: [],
       unitChats: {},
+      quizRuns: {},
+      bookingRuns: {},
+      formRuns: {},
       pendingHomeInput: null,
       celebration: null,
       plan: 'free',
       connections: {},
+      enabledTools: {},
+      memories: [],
+      disclosure: {},
 
       // Setting the name also (re)infers gender — but only OVERWRITES the
       // stored gender when the name is confidently gendered, so an explicit
@@ -299,10 +405,62 @@ export const useMvpStore = create<MvpStore>()(
           const inferred = inferGenderFromName(name);
           return { name, userGender: inferred === 'unknown' ? s.userGender : inferred };
         }),
+      addMemory: (text) =>
+        set((s) => {
+          const t = text.trim();
+          if (!t) return {};
+          // Skip an exact duplicate (case-insensitive) so ONE doesn't stack the
+          // same fact twice.
+          if (s.memories.some((m) => m.text.trim().toLowerCase() === t.toLowerCase())) return {};
+          // A remembered fact is private by default — you open it up deliberately.
+          const item: MemoryItem = { id: `mem_${Date.now()}`, text: t, ts: Date.now(), tier: 'private' };
+          // Newest first, capped so the list stays a digest, not an archive.
+          return { memories: [item, ...s.memories].slice(0, 100) };
+        }),
+      removeMemory: (id) => set((s) => ({ memories: s.memories.filter((m) => m.id !== id) })),
+      setMemoryTier: (id, tier) =>
+        set((s) => ({ memories: s.memories.map((m) => (m.id === id ? { ...m, tier } : m)) })),
+      setDisclosureTier: (id, tier) =>
+        set((s) => {
+          const aid = s.activeIdentityId;
+          const cur = s.disclosure[aid] ?? DEFAULT_DISCLOSURE;
+          return { disclosure: { ...s.disclosure, [aid]: cur.map((d) => (d.id === id ? { ...d, tier } : d)) } };
+        }),
+      setDisclosureValue: (id, value) =>
+        set((s) => {
+          const aid = s.activeIdentityId;
+          const cur = s.disclosure[aid] ?? DEFAULT_DISCLOSURE;
+          return {
+            disclosure: { ...s.disclosure, [aid]: cur.map((d) => (d.id === id ? { ...d, value: value.trim() } : d)) },
+          };
+        }),
+      addDisclosureField: (label, value, tier = 'ask') =>
+        set((s) => {
+          const t = label.trim();
+          if (!t) return {};
+          const aid = s.activeIdentityId;
+          const cur = s.disclosure[aid] ?? DEFAULT_DISCLOSURE;
+          const field: DisclosureField = {
+            id: `disc_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+            label: t,
+            value: value?.trim() || undefined,
+            tier,
+          };
+          return { disclosure: { ...s.disclosure, [aid]: [...cur, field] } };
+        }),
+      removeDisclosureField: (id) =>
+        set((s) => {
+          const aid = s.activeIdentityId;
+          const cur = s.disclosure[aid] ?? DEFAULT_DISCLOSURE;
+          // System fields are the baseline policy — only user-added fields go.
+          return { disclosure: { ...s.disclosure, [aid]: cur.filter((d) => d.id !== id || d.system) } };
+        }),
       setUserGender: (userGender) => set({ userGender }),
       setPlan: (plan) => set({ plan }),
       setConnection: (id, connected) =>
         set((s) => ({ connections: { ...s.connections, [id]: connected } })),
+      setToolEnabled: (id, enabled) =>
+        set((s) => ({ enabledTools: { ...s.enabledTools, [id]: enabled } })),
       setAgentSkin: (agentSkin) => set({ agentSkin }),
       setAgentPersonality: (agentPersonality) => set({ agentPersonality }),
       setActiveIdentity: (activeIdentityId) => set({ activeIdentityId }),
@@ -312,6 +470,96 @@ export const useMvpStore = create<MvpStore>()(
       updateUnit: (id, patch) =>
         set((s) => ({
           units: s.units.map((u) => (u.id === id ? { ...u, ...patch } : u)),
+        })),
+      addDraft: (unitId, draft, lang) =>
+        set((s) => {
+          const now = Date.now();
+          const ts = new Date(now).toISOString();
+          const he = lang === 'he';
+          const unit = s.units.find((u) => u.id === unitId);
+          if (!unit) return {};
+          const timelineEntry: UnitTimelineItem = {
+            id: `tl_${now}_${Math.floor(Math.random() * 1e6)}`,
+            title: he ? 'ONE ניסח טיוטה' : 'ONE drafted a message',
+            subtitle: draft.to,
+            date: ts,
+            kind: 'draft',
+          };
+          const note: UnitNotification = {
+            id: `n_${now}_${Math.floor(Math.random() * 1e6)}`,
+            at: now,
+            unitId,
+            text: he
+              ? `טיוטה מוכנה לבדיקה${draft.to ? ` — ${draft.to}` : ''}`
+              : `A draft is ready to review${draft.to ? ` — ${draft.to}` : ''}`,
+            emoji: '✍️',
+            kind: 'event',
+          };
+          return {
+            notifications: [...s.notifications, note],
+            units: s.units.map((u) =>
+              u.id === unitId
+                ? {
+                    ...u,
+                    drafts: [draft, ...(u.drafts ?? [])].slice(0, 12),
+                    timeline: [timelineEntry, ...(u.timeline ?? [])].slice(0, 40),
+                    unreadUpdates: (u.unreadUpdates ?? 0) + 1,
+                    lastUpdatedAt: ts,
+                    updatedAt: ts,
+                  }
+                : u,
+            ),
+          };
+        }),
+      updateDraft: (unitId, draftId, patch) =>
+        set((s) => ({
+          units: s.units.map((u) =>
+            u.id === unitId
+              ? {
+                  ...u,
+                  drafts: (u.drafts ?? []).map((d) => (d.id === draftId ? { ...d, ...patch } : d)),
+                }
+              : u,
+          ),
+        })),
+      markDraftSent: (unitId, draftId, lang) =>
+        set((s) => {
+          const now = Date.now();
+          const ts = new Date(now).toISOString();
+          const he = lang === 'he';
+          const unit = s.units.find((u) => u.id === unitId);
+          const draft = unit?.drafts?.find((d) => d.id === draftId);
+          if (!unit || !draft) return {};
+          const timelineEntry: UnitTimelineItem = {
+            id: `tl_${now}_${Math.floor(Math.random() * 1e6)}`,
+            title: he ? 'נשלח' : 'Sent',
+            subtitle: draft.to,
+            date: ts,
+            kind: 'event',
+          };
+          return {
+            units: s.units.map((u) =>
+              u.id === unitId
+                ? {
+                    ...u,
+                    drafts: (u.drafts ?? []).map((d) =>
+                      d.id === draftId ? { ...d, status: 'sent' as const, sentAt: ts } : d,
+                    ),
+                    timeline: [timelineEntry, ...(u.timeline ?? [])].slice(0, 40),
+                    lastUpdatedAt: ts,
+                    updatedAt: ts,
+                  }
+                : u,
+            ),
+          };
+        }),
+      removeDraft: (unitId, draftId) =>
+        set((s) => ({
+          units: s.units.map((u) =>
+            u.id === unitId
+              ? { ...u, drafts: (u.drafts ?? []).filter((d) => d.id !== draftId) }
+              : u,
+          ),
         })),
       completeUnit: (id, lang) =>
         set((s) => {
@@ -528,7 +776,58 @@ export const useMvpStore = create<MvpStore>()(
         })),
       appendHomeChat: (msg) =>
         set((s) => ({ homeChat: [...s.homeChat, msg].slice(-50) })),
+      updateHomeChatMessage: (id, patch) =>
+        set((s) => ({ homeChat: s.homeChat.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
       clearHomeChat: () => set({ homeChat: [] }),
+      startQuizRun: (run) =>
+        set((s) => ({ quizRuns: { ...s.quizRuns, [run.id]: run } })),
+      answerQuizQuestion: (runId, qIndex, optionIndex) =>
+        set((s) => {
+          const run = s.quizRuns[runId];
+          if (!run) return {};
+          const answers = run.answers.slice();
+          answers[qIndex] = optionIndex;
+          const done = answers.length === run.questions.length && answers.every((a) => a != null);
+          return {
+            quizRuns: {
+              ...s.quizRuns,
+              [runId]: { ...run, answers, finishedAt: done ? new Date().toISOString() : run.finishedAt },
+            },
+          };
+        }),
+      startBookingRun: (run) =>
+        set((s) => ({ bookingRuns: { ...s.bookingRuns, [run.id]: run } })),
+      selectBookingSlot: (runId, slotId) =>
+        set((s) => {
+          const run = s.bookingRuns[runId];
+          if (!run || run.confirmedAt) return {};
+          return { bookingRuns: { ...s.bookingRuns, [runId]: { ...run, selectedSlotId: slotId } } };
+        }),
+      confirmBooking: (runId) =>
+        set((s) => {
+          const run = s.bookingRuns[runId];
+          if (!run || !run.selectedSlotId || run.confirmedAt) return {};
+          return { bookingRuns: { ...s.bookingRuns, [runId]: { ...run, confirmedAt: new Date().toISOString() } } };
+        }),
+      startFormRun: (run) =>
+        set((s) => ({ formRuns: { ...s.formRuns, [run.id]: run } })),
+      setFormFieldValue: (runId, fieldId, value) =>
+        set((s) => {
+          const run = s.formRuns[runId];
+          if (!run || run.submittedAt) return {};
+          return {
+            formRuns: {
+              ...s.formRuns,
+              [runId]: { ...run, fields: run.fields.map((f) => (f.id === fieldId ? { ...f, value } : f)) },
+            },
+          };
+        }),
+      submitForm: (runId) =>
+        set((s) => {
+          const run = s.formRuns[runId];
+          if (!run || run.submittedAt) return {};
+          return { formRuns: { ...s.formRuns, [runId]: { ...run, submittedAt: new Date().toISOString() } } };
+        }),
       setPendingHomeInput: (text) => set({ pendingHomeInput: text }),
       appendUnitChat: (unitId, msg) =>
         set((s) => {
@@ -550,14 +849,16 @@ export const useMvpStore = create<MvpStore>()(
       markOnboardingComplete: () => set({ hasCompletedOnboarding: true }),
       reset: () =>
         set({
-          name: 'Ariel',
+          name: '',
           identities: MOCK_IDENTITIES,
           activeIdentityId: DEFAULT_IDENTITY_ID,
-          units: sortByAttention(MOCK_UNITS),
+          units: [],
           hasCompletedOnboarding: false,
           notifications: [],
           homeChat: [],
           unitChats: {},
+          disclosure: {},
+          memories: [],
         }),
       clearUnits: () => set({ units: [], unitChats: {} }),
       hydrateFromSync: (payload) =>
@@ -574,6 +875,36 @@ export const useMvpStore = create<MvpStore>()(
     {
       name: 'one_mvp_v1',
       storage: createJSONStorage(() => mvpStorage),
+      // v2 stripped the old demo account. v3: disclosure moved from a single
+      // global array to PER-SPACE (keyed by identityId) — an old flat array is
+      // migrated onto the active/first space so a user's existing policy carries
+      // over, and the rest of the spaces seed defaults on first access.
+      version: 3,
+      migrate: (persisted: any, _version: number) => {
+        if (!persisted) return persisted;
+        const demoIds = new Set(DEMO_IDENTITY_IDS);
+        const demoUnitIds = new Set(MOCK_UNITS.map((u) => u.id));
+        let identities = (persisted.identities ?? []).filter((i: Identity) => !demoIds.has(i.id));
+        if (identities.length === 0) identities = MOCK_IDENTITIES;
+        const validIds = new Set(identities.map((i: Identity) => i.id));
+        const fallbackId = identities[0].id;
+        const units = (persisted.units ?? [])
+          .filter((u: Unit) => !demoUnitIds.has(u.id))
+          .map((u: Unit) => (validIds.has(u.identityId) ? u : { ...u, identityId: fallbackId }));
+        const activeIdentityId = validIds.has(persisted.activeIdentityId) ? persisted.activeIdentityId : fallbackId;
+        // disclosure: old flat array → { [activeSpace]: array }; anything else → {}.
+        let disclosure = persisted.disclosure;
+        if (Array.isArray(disclosure)) disclosure = { [activeIdentityId]: disclosure };
+        else if (!disclosure || typeof disclosure !== 'object') disclosure = {};
+        return {
+          ...persisted,
+          identities,
+          activeIdentityId,
+          units,
+          disclosure,
+          name: persisted.name === 'Ariel' ? '' : persisted.name,
+        };
+      },
       // Persist user-facing state. Methods/functions are skipped automatically.
       partialize: (state) => ({
         name: state.name,
@@ -585,9 +916,15 @@ export const useMvpStore = create<MvpStore>()(
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         homeChat: state.homeChat,
         unitChats: state.unitChats,
+        quizRuns: state.quizRuns,
+        bookingRuns: state.bookingRuns,
+        formRuns: state.formRuns,
         lastDigestDate: state.lastDigestDate,
         plan: state.plan,
         connections: state.connections,
+        enabledTools: state.enabledTools,
+        memories: state.memories,
+        disclosure: state.disclosure,
       }),
     },
   ),
@@ -653,4 +990,23 @@ export function useActiveIdentity(): Identity | undefined {
     () => identities.find((i) => i.id === activeIdentityId),
     [identities, activeIdentityId],
   );
+}
+
+/** The ACTIVE space's selective-disclosure policy, seeded with defaults. The
+ *  stored array (or the shared DEFAULT_DISCLOSURE constant) is a stable ref, so
+ *  this never loops React's snapshot caching. */
+export function useActiveDisclosure(): DisclosureField[] {
+  const { disclosure, activeIdentityId } = useMvpStore(
+    useShallow((s) => ({ disclosure: s.disclosure, activeIdentityId: s.activeIdentityId })),
+  );
+  return useMemo(
+    () => disclosure[activeIdentityId] ?? DEFAULT_DISCLOSURE,
+    [disclosure, activeIdentityId],
+  );
+}
+
+/** Non-hook read of a space's disclosure policy (for callbacks / services).
+ *  Pass the identity the action belongs to (e.g. a unit's identityId). */
+export function disclosureForIdentity(id: string): DisclosureField[] {
+  return useMvpStore.getState().disclosure[id] ?? DEFAULT_DISCLOSURE;
 }

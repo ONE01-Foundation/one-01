@@ -23,6 +23,9 @@ import { useSharedValue } from 'react-native-reanimated';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SignInSheet } from '../screens/mvp/SignInSheet';
 import { HomeScreen } from '../screens/mvp/HomeScreen';
+import { ChatHomeScreen } from '../screens/mvp/ChatHomeScreen';
+import { PresenceHomeScreen } from '../screens/mvp/PresenceHomeScreen';
+import { useHomePrefs } from '../stores/homePrefsStore';
 import { UnitProfileSheet } from '../screens/mvp/UnitProfileSheet';
 import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
 import { OneProfileSheet } from '../screens/mvp/OneProfileSheet';
@@ -39,6 +42,7 @@ import { DeleteAccountSheet } from '../screens/mvp/DeleteAccountSheet';
 import { LegalSheet, type LegalDoc } from '../screens/mvp/LegalSheet';
 import { useMvpStore } from '../stores/mvpStore';
 import { NotificationToast } from '../components/mvp/NotificationToast';
+import { SubscriptionPanel } from '../screens/mvp/SubscriptionPanel';
 import { CompletionCelebration } from '../components/mvp/CompletionCelebration';
 import { useDueReminderWatcher } from '../hooks/useDueReminderWatcher';
 
@@ -77,8 +81,13 @@ function useOverlayState() {
   const [legalDoc, setLegalDoc] = useState<LegalDoc>(null);
   const [signInOpen, setSignInOpen] = useState(false);
   const [globalOpen, setGlobalOpen] = useState(false);
+  // Mirrors Home's voice-call state up so the ONE profile sheet (opened over Home
+  // mid-call) can show the call ring on its own orb.
+  const [callActive, setCallActive] = useState(false);
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [createBusinessOpen, setCreateBusinessOpen] = useState(false);
+  // The pricing / upgrade sheet (opened from the home "שדרג" line).
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   return {
     openUnitId, setOpenUnitId,
@@ -92,8 +101,10 @@ function useOverlayState() {
     legalDoc, setLegalDoc,
     signInOpen, setSignInOpen,
     globalOpen, setGlobalOpen,
+    callActive, setCallActive,
     businessId, setBusinessId,
     createBusinessOpen, setCreateBusinessOpen,
+    upgradeOpen, setUpgradeOpen,
   };
 }
 
@@ -129,7 +140,20 @@ function HomeWithOverlays() {
   // Live animated index of the ONE profile sheet, shared between the sheet
   // (which writes it as it slides) and HomeScreen (which reads it to bring
   // the home orb back in sync with the close drag). -1 = closed … 1 = full.
+  const homeMode = useHomePrefs((p) => p.homeMode);
   const profileSheetIndex = useSharedValue(-1);
+  // Same live-index bridge for the sign-in sheet: SignInSheet writes it as it
+  // slides, HomeScreen reads it to drop/return the orb + connect line in sync
+  // with the drag (no delayed timer on close). -1 = closed … 0 = open.
+  const signInSheetIndex = useSharedValue(-1);
+  // Same live-index bridge for ONE01 Global: HomeScreen reads it to fade its
+  // input dock back in sync with the Global close drag (no delay).
+  const globalSheetIndex = useSharedValue(-1);
+
+  // Bumped when the Timeline is chosen from ONE's profile menu. The timeline
+  // itself lives on HomeScreen (it reads the cross-profile history); we close
+  // the profile sheet, then bump this so Home raises the drawer.
+  const [timelineSignal, setTimelineSignal] = React.useState(0);
 
   // Demo: fire a small SEQUENCE of unit events so the user sees the toast
   // → card badge → home-aggregate flow naturally without a real backend.
@@ -231,6 +255,24 @@ function HomeWithOverlays() {
 
   return (
     <>
+      {homeMode === 'chat' || homeMode === 'presence' ? (
+        (() => {
+          const homeProps = {
+            onCreateProcess: () => s.setQuickActionsOpen(true),
+            onOpenProfile: () => {
+              if (!useMvpStore.getState().hasCompletedOnboarding) s.setSignInOpen(true);
+              else s.setOneProfileOpen(true);
+            },
+            onOpenUnit: (id: string) => {
+              s.setOpenUnitId(id);
+              setTimeout(() => useMvpStore.getState().markUnitOpened(id), 0);
+            },
+          };
+          return homeMode === 'presence'
+            ? <PresenceHomeScreen {...homeProps} />
+            : <ChatHomeScreen {...homeProps} />;
+        })()
+      ) : (
       <HomeScreen
         onTapUnit={(id) => {
           setUnitForceChat(false);
@@ -274,6 +316,14 @@ function HomeWithOverlays() {
         }}
         onCreateProcess={() => s.setQuickActionsOpen(true)}
         onSignIn={() => s.setSignInOpen(true)}
+        onUpgrade={() => {
+          if (!useMvpStore.getState().hasCompletedOnboarding) {
+            s.setSignInOpen(true);
+          } else {
+            // "שדרג" → the pricing sheet (not Settings).
+            s.setUpgradeOpen(true);
+          }
+        }}
         // When ONE creates a process via the home chat, open it
         // immediately so the next turn happens inside the unit.
         onCreatedFromChat={(unitId) => {
@@ -302,11 +352,17 @@ function HomeWithOverlays() {
           !!s.businessId ||
           s.createBusinessOpen
         }
+        onCallActiveChange={s.setCallActive}
         profileSheetIndex={profileSheetIndex}
+        signInSheetIndex={signInSheetIndex}
         onOpenGlobal={() => s.setGlobalOpen(true)}
+        globalOpen={s.globalOpen}
+        globalSheetIndex={globalSheetIndex}
         onOpenBusiness={(id) => s.setBusinessId(id)}
+        openTimelineSignal={timelineSignal}
       />
-      <GlobalSheet visible={s.globalOpen} onClose={() => s.setGlobalOpen(false)} />
+      )}
+      <GlobalSheet visible={s.globalOpen} onClose={() => s.setGlobalOpen(false)} animatedIndex={globalSheetIndex} />
       <BusinessSheet
         visible={!!s.businessId}
         // Prefer the live cloud record (carries cloudId → follow + owner
@@ -337,6 +393,7 @@ function HomeWithOverlays() {
       />
       <UnitProfileSheet
         unitId={s.openUnitId}
+        callActive={s.callActive}
         // onClose flushes any queued sheet (e.g. CreateProcess from the + panel's
         // "New process") once the unit Modal has actually released.
         onClose={() => {
@@ -364,6 +421,7 @@ function HomeWithOverlays() {
       />
       <OneProfileSheet
         visible={s.oneProfileOpen}
+        callActive={s.callActive}
         onClose={() => {
           s.setOneProfileOpen(false);
           // openPending fires the queued sheet (e.g. Settings) AFTER the
@@ -389,6 +447,13 @@ function HomeWithOverlays() {
         onCreateBusiness={() => {
           setPendingSheet('createBusiness');
           s.setOneProfileOpen(false);
+        }}
+        onOpenTimeline={() => {
+          // The timeline is an in-Home overlay (not a Modal), so it must appear
+          // AFTER the profile sheet has slid away — otherwise it opens behind
+          // it. Close first, then bump the signal once the Modal has released.
+          s.setOneProfileOpen(false);
+          setTimeout(() => setTimelineSignal((n) => n + 1), 340);
         }}
         animatedIndex={profileSheetIndex}
       />
@@ -439,6 +504,7 @@ function HomeWithOverlays() {
       <SignInSheet
         visible={s.signInOpen}
         onClose={() => s.setSignInOpen(false)}
+        animatedIndex={signInSheetIndex}
         onSignedIn={() => {
           useMvpStore.getState().markOnboardingComplete();
           s.setSignInOpen(false);
@@ -460,6 +526,9 @@ function HomeWithOverlays() {
           confetti bursts + a warm line names what just became real. It's its
           own Modal so it overlays everything (home and any open sheet). */}
       <CompletionCelebration />
+      {/* Pricing / upgrade sheet — a screen-pinned slide-up (not a Modal), so it
+          overlays the home directly when the user taps "שדרג". */}
+      <SubscriptionPanel visible={s.upgradeOpen} onClose={() => s.setUpgradeOpen(false)} />
     </>
   );
 }

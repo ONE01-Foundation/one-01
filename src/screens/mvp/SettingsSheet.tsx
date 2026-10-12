@@ -23,6 +23,7 @@ import Constants from 'expo-constants';
 import { useThemeStore } from '../../stores/themeStore';
 import { useLocaleStore, type AppLanguage } from '../../stores/localeStore';
 import { useMvpStore } from '../../stores/mvpStore';
+import { useHomePrefs, type HomeMode } from '../../stores/homePrefsStore';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { CloseIcon } from '../../components/mvp/icons';
 import { haptic } from '../../utils/haptics';
@@ -66,6 +67,8 @@ export function SettingsSheet({
 }: SettingsSheetProps) {
   const { colors, preference, setPreference } = useThemeStore();
   const { language, setLanguage } = useLocaleStore();
+  const homeMode = useHomePrefs((p) => p.homeMode);
+  const setHomeMode = useHomePrefs((p) => p.setHomeMode);
   const reset = useMvpStore((s) => s.reset);
   const name = useMvpStore((s) => s.name);
   const units = useMvpStore((s) => s.units);
@@ -214,6 +217,26 @@ export function SettingsSheet({
               selected={language}
               onChange={(v) => setLanguage(v)}
             />
+          </Group>
+
+          {/* Home surface — classic resting broadcast vs. ONE as a continuous
+              chat that speaks first. Experimental; default stays classic. */}
+          <Group title={he ? 'דף הבית' : 'Home'} colors={colors} he={he}>
+            <SegmentedRow
+              colors={colors}
+              options={[
+                { value: 'classic' as HomeMode, label: he ? 'קלאסי' : 'Classic' },
+                { value: 'presence' as HomeMode, label: he ? 'נוכחות' : 'Presence' },
+                { value: 'chat' as HomeMode, label: he ? 'שיחה' : 'Chat' },
+              ]}
+              selected={homeMode}
+              onChange={(v) => setHomeMode(v)}
+            />
+            <Text style={[styles.rowLabel, { color: colors.textSecondary, marginTop: 8 }, rtlText(language)]}>
+              {he
+                ? 'נוכחות: דמות ממורכזת ומשפט מתחלף, גלילה חושפת את התהליכים. שיחה: ת׳אט מתמשך שבו ONE פונה ראשון. בשניהם ONE מדבר אליך ביוזמתו.'
+                : 'Presence: a centered ONE with one evolving line; scroll reveals your processes. Chat: an ongoing thread where ONE speaks first. In both, ONE reaches out on its own.'}
+            </Text>
           </Group>
 
           {/* How ONE addresses you — drives gendered phrasing in Hebrew. */}

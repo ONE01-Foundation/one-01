@@ -1,5 +1,5 @@
 import { registerRootComponent } from 'expo';
-import { I18nManager } from 'react-native';
+import { I18nManager, Platform } from 'react-native';
 
 import App from './App';
 
@@ -9,9 +9,14 @@ import App from './App';
 // forceRTL (which is unreliable in Expo Go). We DO turn OFF the automatic
 // left↔right swap so that `textAlign: 'left' | 'right'` mean their PHYSICAL side
 // in every engine — that's what alignText assumes after reading the flag.
-I18nManager.allowRTL(false);
-I18nManager.forceRTL(false);
-I18nManager.swapLeftAndRightInRTL(false);
+// react-native-web's I18nManager doesn't implement these (swapLeftAndRightInRTL
+// in particular throws), so only run the native RTL setup off the web. On web,
+// direction is driven by CSS on the content instead.
+if (Platform.OS !== 'web') {
+  I18nManager.allowRTL(false);
+  I18nManager.forceRTL(false);
+  I18nManager.swapLeftAndRightInRTL(false);
+}
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,

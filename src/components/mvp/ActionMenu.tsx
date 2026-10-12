@@ -26,6 +26,8 @@ export interface ActionMenuItem {
   label: string;
   /** Optional emoji glyph shown on the leading side. */
   icon?: string;
+  /** Optional rendered icon node (SVG) — preferred over the emoji `icon`. */
+  iconNode?: React.ReactNode;
   /** Secondary line under the label (e.g. current value). */
   sub?: string;
   destructive?: boolean;
@@ -102,7 +104,7 @@ export function ActionMenu({
             accessibilityLabel={it.label}
           >
             <View style={styles.iconSlot}>
-              {it.icon ? <Text style={styles.iconGlyph}>{it.icon}</Text> : null}
+              {it.iconNode ?? (it.icon ? <Text style={styles.iconGlyph}>{it.icon}</Text> : null)}
             </View>
             <View style={styles.flex1}>
               <Text

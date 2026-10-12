@@ -60,6 +60,11 @@ interface BottomSheetProps {
   /** When TRUE, `children` are rendered as DIRECT children of gorhom's
    *  `<BottomSheet>` (no `BottomSheetView` wrapper). */
   bypassDefaultView?: boolean;
+  /** When TRUE, the sheet SIZES ITSELF to its content (gorhom dynamic sizing),
+   *  using `snapPoints` as the max cap. The content view is no longer flex:1
+   *  (so it can measure its natural height). Use for short, content-fitted
+   *  sheets like sign-in — no empty space, no touching the edge. */
+  enableDynamicSizing?: boolean;
   /** Optional shared value gorhom writes the LIVE animated index into
    *  (-1 = closed … N = snap index, continuous while dragging). Lets a
    *  surface BEHIND the sheet (e.g. the Home orb) track the slide in
@@ -109,6 +114,7 @@ export function BottomSheet({
   enablePan = true,
   enableContentPan = false,
   bypassDefaultView = false,
+  enableDynamicSizing = false,
   animatedIndex,
   backdropOpacity = 0.32,
   onDragDismissCross,
@@ -212,6 +218,19 @@ export function BottomSheet({
   // True from the moment a parent-driven close begins until it (or the
   // fallback) unmounts. Lets us detect a re-open that lands MID-close.
   const closingRef = useRef(false);
+  // Guards onClose to EXACTLY ONCE per open→close cycle. onClose is what
+  // advances the parent's pendingSheet queue (e.g. "close ONE profile → open
+  // Settings"), so it MUST fire on every close path — including the fallback
+  // unmount below, which previously dropped it whenever gorhom's onChange(-1)
+  // was missed, silently stalling the queued sheet.
+  const closeFiredRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const fireClose = useCallback(() => {
+    if (closeFiredRef.current) return;
+    closeFiredRef.current = true;
+    onCloseRef.current();
+  }, []);
 
   // Sync parent intent → local Modal lifecycle.
   useEffect(() => {
@@ -221,6 +240,7 @@ export function BottomSheet({
       if (!mounted) {
         mountedAtRef.current = Date.now();
         closingRef.current = false;
+        closeFiredRef.current = false; // arm onClose for the next close
         setInteractive(true);
         setMounted(true);
       } else if (closingRef.current) {
@@ -250,6 +270,9 @@ export function BottomSheet({
         unmountTimer.current = null;
         closingRef.current = false;
         setMounted(false);
+        // Fallback path: gorhom's onChange(-1) was missed. Still advance the
+        // parent (fires the queued sheet) — guarded so it never double-fires.
+        fireClose();
       }, wait + CLOSE_SLIDE_MS + 140);
     }
   }, [visible, mounted, initialSnap, clearTimers]);
@@ -303,14 +326,14 @@ export function BottomSheet({
           closingRef.current = false;
           presentedRef.current = false;
           setMounted(false);
-          onClose();
+          fireClose();
         };
         const wait = Math.max(0, MIN_PRESENT_MS - (Date.now() - mountedAtRef.current));
         if (wait === 0) finish();
         else unmountTimer.current = setTimeout(finish, wait);
       }
     },
-    [onClose, clearTimers],
+    [fireClose, clearTimers],
   );
 
   // Closing via backdrop / back-button: trigger gorhom's animated close.
@@ -383,7 +406,10 @@ export function BottomSheet({
           // animates here on prop change too, so a later initialSnap change
           // (profile → tap input → chat) still expands.
           index={initialSnap}
-          snapPoints={snaps}
+          // Dynamic-sizing sheets snap ONLY to their content height (no manual
+          // snap points), so they can't be dragged up to a taller detent —
+          // they just fit the content and pan down to close.
+          snapPoints={enableDynamicSizing ? undefined : snaps}
           // Live index — out to the caller's SharedValue (behind-the-sheet
           // surfaces like the Home orb) when given, else our internal one. We
           // ALWAYS watch it (see the dismiss-cross reaction above).
@@ -391,7 +417,7 @@ export function BottomSheet({
           enablePanDownToClose
           enableContentPanningGesture={enablePan && enableContentPan}
           enableHandlePanningGesture={enablePan}
-          enableDynamicSizing={false}
+          enableDynamicSizing={enableDynamicSizing}
           onChange={handleSheetChanges}
           // gorhom's animated backdrop. Opacity rises/falls with the sheet's
           // slide — no boom-in/boom-out cut. Tap-to-close handled via the
@@ -406,7 +432,9 @@ export function BottomSheet({
           {bypassDefaultView ? (
             children
           ) : (
-            <BottomSheetView style={[styles.content, sheetStyle]}>
+            // Dynamic-sizing sheets must NOT flex:1 (gorhom measures the natural
+            // content height); fixed-snap sheets flex:1 to fill the detent.
+            <BottomSheetView style={[enableDynamicSizing ? styles.contentDynamic : styles.content, sheetStyle]}>
               {children}
             </BottomSheetView>
           )}
@@ -444,4 +472,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   content: { flex: 1 },
+  // Dynamic sizing: no flex, so the view reports its natural content height.
+  contentDynamic: {},
 });

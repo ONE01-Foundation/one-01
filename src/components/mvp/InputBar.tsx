@@ -45,8 +45,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useThemeStore } from '../../stores/themeStore';
 import { useLanguage } from '../../i18n/useT';
-import { PlusIcon, CloseIcon } from './icons';
+import { PlusIcon, CloseIcon, PhoneIcon, MicIcon } from './icons';
 import { haptic } from '../../utils/haptics';
+
+// Pressable that accepts a reanimated animated style (for the voice-button
+// grow/shrink at Home rest).
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** Live-recording green — voice button + waveform while the user holds. */
 const RECORD_GREEN = '#22C55E';
@@ -227,6 +231,23 @@ export interface InputBarProps {
   /** Outer container style override. */
   style?: StyleProp<ViewStyle>;
   textInputProps?: TextInputProps;
+  /**
+   * Glyph shown on the right button while the field is EMPTY. 'phone' (default)
+   * = a phone handset, reads as "call ONE". 'wave' = the legacy three-bar voice
+   * waveform. Default is phone across every dock (Home, OneChat, UnitProfile).
+   */
+  voiceIcon?: 'wave' | 'phone';
+  /** Optional reanimated style applied to the right (voice/call/send) button —
+   *  used at Home to grow it at rest and shrink it back as the user scrolls into
+   *  the cards. */
+  voiceBtnStyle?: StyleProp<ViewStyle>;
+  /**
+   * While ONE is idle / resting, a soft ROTATING line from ONE shown inside the
+   * empty box (muted colour) with its own blinking caret — ONE inviting you to
+   * talk, in its own voice. Takes precedence over the bare caret and the
+   * placeholder. Clear it (undefined) to return to the normal resting caret.
+   */
+  idleLine?: string;
 }
 
 export function InputBar({
@@ -254,6 +275,9 @@ export function InputBar({
   callControls,
   style,
   textInputProps,
+  voiceIcon = 'phone',
+  voiceBtnStyle,
+  idleLine,
 }: InputBarProps) {
   const { colors, theme } = useThemeStore();
   const lang = useLanguage();
@@ -295,12 +319,25 @@ export function InputBar({
     );
   }, [caretPulse]);
   const caretStyle = useAnimatedStyle(() => ({ opacity: caretPulse.value }));
-  // The custom resting caret is ONLY the keyboard-closed "ready to type" hint.
-  // Hide it the moment the field is focused OR the bar is in chat/compact mode
-  // (keyboard open) — otherwise it sat alongside the real native cursor and
-  // read as two carets. `!compact` makes the hide robust even if the focus
-  // state lags a frame across the rest→chat transition.
-  const showCaret = value.length === 0 && !focused && !compact;
+  // The custom caret is the BIG black "ready to type" bar. Show it whenever the
+  // field is empty (keyboard closed AND open) — so the caret stays big + black
+  // when the keyboard opens, instead of the thin native cursor (whose colour
+  // isn't reliably black on iOS). We hide the native cursor while it shows (see
+  // nativeCaretColor) so the two never read as two carets. In compact docks or
+  // when a placeholder is given (e.g. ONE's onboarding invite), show that hint
+  // instead of the bare caret.
+  const hasPlaceholder = !!placeholder && placeholder.length > 0;
+  // ONE's soft rotating invite inside the empty box while idle — muted text
+  // with its own blinking caret. Wins over the bare caret and the placeholder.
+  const showIdle = !!idleLine && idleLine.length > 0 && value.length === 0 && !focused && !compact;
+  const showCaret = value.length === 0 && !compact && !hasPlaceholder && !showIdle;
+  // Hide the native cursor whenever a custom caret (bare or idle) stands in.
+  const nativeCaretColor = showCaret || showIdle ? 'transparent' : colors.text;
+
+  // Local "holding the voice button" flag — drives the phone→mic glyph swap
+  // while the user holds to record, even in docks that don't manage a
+  // `recording` prop, so the affordance is identical in every input box.
+  const [holding, setHolding] = React.useState(false);
 
   // Voice glyph ripple — bumped the moment the field gains focus (the keyboard
   // opens) so the three bars do ONE wave, then settle. Replaces the old scale
@@ -351,9 +388,10 @@ export function InputBar({
       {/* + inside the capsule ONLY in resting mode */}
       {!compact && plusButton}
 
-      {/* While recording, the field is replaced by a live green waveform so
-          the user sees the mic is hot. Otherwise the normal text input. */}
-      {recording ? (
+      {/* While recording the field shows a waveform — UNTIL live transcription
+          starts filling it, at which point the words replace the waves (where
+          speech-to-text is available). Then the normal text input. */}
+      {recording && value.trim().length === 0 ? (
         <View style={styles.recordingRow}>
           <RecordingWave />
           {!!recordingTime && (
@@ -361,16 +399,18 @@ export function InputBar({
           )}
         </View>
       ) : (
-        <View style={styles.inputWrap}>
+        <View style={[styles.inputWrap, !compact && styles.inputWrapFull]}>
           <TextInput
             ref={inputRef}
             value={value}
             onChangeText={onChangeText}
-            // No placeholder text — the gentle blinking caret IS the resting
-            // "ready to type" signal (replaces "Talk to ONE" etc.).
-            placeholder=""
-            cursorColor={colors.text}
-            selectionColor={colors.text}
+            // Usually no placeholder — the blinking caret IS the resting "ready
+            // to type" signal. When one IS given (onboarding invite), render it
+            // as a gentle in-box hint.
+            placeholder={showIdle ? '' : placeholder}
+            placeholderTextColor={colors.textSecondary}
+            cursorColor={nativeCaretColor}
+            selectionColor={nativeCaretColor}
             // Match the system keyboard chrome to the app theme — a light
             // keyboard under a dark UI (and vice-versa) reads as a glitch.
             keyboardAppearance={theme === 'dark' ? 'dark' : 'light'}
@@ -381,6 +421,12 @@ export function InputBar({
                 textAlign: isRTL ? 'right' : 'left',
                 writingDirection: isRTL ? 'rtl' : 'ltr',
               },
+              // On web a multiline TextInput renders as a <textarea>, which
+              // carries the browser's default border + focus outline. Strip both
+              // so the field reads as part of the capsule, like on native.
+              Platform.OS === 'web'
+                ? ({ outlineWidth: 0, outlineStyle: 'none', borderWidth: 0 } as object)
+                : null,
             ]}
             // Enter inserts a newline (multiline) — sending is via the send
             // arrow, not the return key.
@@ -417,6 +463,28 @@ export function InputBar({
               ]}
             />
           )}
+          {/* ONE's idle invite — a blinking caret followed by a soft, rotating
+              line in ONE's voice, sitting where the text would start. */}
+          {showIdle && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.idleRow,
+                isRTL ? { right: 6, direction: 'rtl' } : { left: 6, direction: 'ltr' },
+              ]}
+            >
+              <Animated.View style={[styles.idleCaret, caretStyle, { backgroundColor: colors.text }]} />
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.idleText,
+                  { color: colors.textSecondary, textAlign: isRTL ? 'right' : 'left' },
+                ]}
+              >
+                {idleLine}
+              </Text>
+            </Animated.View>
+          )}
         </View>
       )}
 
@@ -426,7 +494,7 @@ export function InputBar({
             (onRecordStart / onRecordEnd). delayLongPress distinguishes them.
           • empty, no call host → TAP focuses the field (legacy: keyboard mic).
           Glyph is always white; the pill greens while recording. */}
-      <Pressable
+      <AnimatedPressable
         onPress={() => {
           if (value.trim().length > 0) {
             onPressVoice?.();
@@ -437,25 +505,53 @@ export function InputBar({
           }
         }}
         onLongPress={() => {
-          if (value.trim().length === 0 && onRecordStart) onRecordStart();
+          // Hold the empty button → start recording; the glyph flips to a mic.
+          if (value.trim().length === 0) {
+            setHolding(true);
+            onRecordStart?.();
+          }
         }}
         onPressOut={() => {
-          if (recording && onRecordEnd) onRecordEnd();
+          if (holding) {
+            setHolding(false);
+            onRecordEnd?.();
+          } else if (recording && onRecordEnd) {
+            onRecordEnd();
+          }
         }}
         delayLongPress={250}
         hitSlop={14}
         accessibilityLabel={value.trim().length > 0 ? 'Send' : 'Voice — tap to call, hold to record'}
         style={[
           styles.voiceBtn,
-          { backgroundColor: recording ? RECORD_GREEN : colors.circle },
+          voiceBtnStyle,
+          {
+            backgroundColor:
+              recording || holding
+                ? // Recording (held) → RED.
+                  HANGUP_RED
+                : value.trim().length > 0
+                  ? // Text present → GREEN send.
+                    RECORD_GREEN
+                  : // Empty → the neutral dark (black) circle, keyboard open or
+                    // not. Green is reserved for the SEND state; the resting /
+                    // composing "call ONE" button stays black so it reads as
+                    // ONE, not an action.
+                    colors.circle,
+          },
         ]}
       >
         {value.trim().length > 0 ? (
           <SendArrow color="#FFFFFF" />
+        ) : recording || holding ? (
+          // Recording (held) → microphone, sized to match the phone handset.
+          <MicIcon size={30} color="#FFFFFF" />
+        ) : voiceIcon === 'phone' ? (
+          <PhoneIcon size={22} color="#FFFFFF" />
         ) : (
           <VoiceWave color="#FFFFFF" pulse={wavePulse} />
         )}
-      </Pressable>
+      </AnimatedPressable>
     </View>
   );
 
@@ -477,9 +573,12 @@ export function InputBar({
             onPress={onEndCall}
             hitSlop={14}
             accessibilityLabel="End call"
-            style={[styles.voiceBtn, { backgroundColor: HANGUP_RED }]}
+            style={[styles.voiceBtn, voiceBtnStyle, { backgroundColor: HANGUP_RED }]}
           >
-            <CloseIcon size={22} color="#FFFFFF" />
+            {/* Phone handset tilted to the classic "hang up" angle. */}
+            <View style={styles.hangUp}>
+              <PhoneIcon size={22} color="#FFFFFF" />
+            </View>
           </Pressable>
         </View>
       </View>
@@ -590,6 +689,12 @@ const styles = StyleSheet.create({
     // the text on the capsule's centre line. Grows past this as lines are added.
     minHeight: 52,
   },
+  // RESTING (Home) only: the right voice button GROWS ~20% at rest, so it
+  // reaches in toward the text. Extra trailing gap keeps the caret / typed
+  // text (RTL sits on the right, next to that button) clear of the bigger circle.
+  inputWrapFull: {
+    marginRight: 10,
+  },
   input: {
     alignSelf: 'stretch',
     fontSize: 18,
@@ -613,6 +718,20 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 1,
   },
+  // ONE's idle invite row — blinking caret + a soft rotating line, sitting at
+  // the text's start, vertically centred in the capsule.
+  idleRow: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -12,
+    height: 24,
+    maxWidth: '90%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  idleCaret: { width: 2, height: 22, borderRadius: 1 },
+  idleText: { fontSize: 16, lineHeight: 22, flexShrink: 1 },
   // Recording waveform — fills the same slot the TextInput occupies.
   waveRow: {
     flex: 1,
@@ -625,7 +744,7 @@ const styles = StyleSheet.create({
   waveBar: {
     width: 4,
     borderRadius: 2,
-    backgroundColor: RECORD_GREEN,
+    backgroundColor: HANGUP_RED,
   },
   // Idle voice glyph — three softly-waving bars, centred in the voice button.
   voiceWaveRow: {
@@ -644,7 +763,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   recordingTime: {
-    color: RECORD_GREEN,
+    color: HANGUP_RED,
     fontSize: 15,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
@@ -656,6 +775,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Handset rotated to the universal "hang up" tilt.
+  hangUp: { transform: [{ rotate: '135deg' }] },
   // Call-mode middle slot — holds the speaker/mute/camera cluster in the same
   // space the TextInput normally occupies.
   callControlsSlot: {

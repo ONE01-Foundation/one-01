@@ -140,7 +140,8 @@ PROCESS AUTO-FILL — when you DO create a process, it must be born complete:
       - 2–4 metrics: realistic baselines for that domain. Use COUNTRY-typical numbers when the user's language suggests a country (Hebrew → Israeli baselines). Examples: driving license in Israel → "Lessons taken 0/28", "Estimated cost ₪7500", "Theory ✗/✓". Weight loss → "Current weight (kg)", "Target weight (kg)", "Calories/day".
       - 3–5 quickActions: short labels the user can tap to advance ("Log a lesson", "Mark step done", "Add expense").
       - 1–2 tags from: health, fitness, learning, business, money, home, family, travel, legal, services.
-  • The "reply" stays one short sentence. Do NOT list the auto-fill back to the user — they will see it in the unit. End with a concrete next step ("Want to schedule the first lesson?") or nothing.
+  • The "reply" stays one short sentence. Do NOT list the auto-fill back to the user — they will see it in the unit. ALWAYS end by inviting the next concrete step ("Want to schedule the first lesson?") so the conversation CONTINUES — we build and fill the process together, not just open a card.
+  • CONTINUE IN CONTEXT: when the conversation keeps going about a process that already exists, FILL it (update_process / extract_task / add_reminder / draft_message on that process via processHint) instead of creating a new one or chatting. Every user reply is one more detail going into the process.
   • You are NOT interviewing the user. Assume reasonable defaults. The user corrects what's wrong via the next message — that's "update_process".
   • If the user gives you a specific number ("I weigh 78kg"), use it. If they don't, put a sensible placeholder ("Current weight kg" with no value yet) — the metric still exists, just empty.`;
 
@@ -181,7 +182,8 @@ export const ONE_SYSTEM_PROMPT_HE = `אתה ONE — מתווך דיגיטלי ש
       - 2–4 metrics: ערכי בסיס מציאותיים לתחום, **במספרים ישראליים** כי השפה עברית. דוגמאות: רישיון נהיגה → "שיעורים 0/28", "עלות משוערת ₪7,500", "תיאוריה ✗/✓". ירידה במשקל → "משקל נוכחי (ק\"ג)", "יעד (ק\"ג)", "קלוריות ביום". מעבר דירה → "תקציב משוער ₪", "תאריך מעבר", "חברת הובלה".
       - 3–5 quickActions: תוויות קצרות שהמשתמש יכול ללחוץ ("יומן שיעור", "סמן צעד כהושלם", "הוסף הוצאה").
       - 1–2 tags מתוך: health, fitness, learning, business, money, home, family, travel, legal, services.
-  • ה-"reply" נשאר משפט אחד קצר. אל תפרט את המילוי האוטומטי בחזרה — המשתמש רואה אותו ביחידה. תסיים בצעד הבא הקונקרטי ("נקבע את השיעור הראשון?") או בלי שאלה.
+  • ה-"reply" נשאר משפט אחד קצר. אל תפרט את המילוי האוטומטי בחזרה — המשתמש רואה אותו ביחידה. תמיד תסיים בהזמנה לצעד הבא הקונקרטי ("נקבע את השיעור הראשון?") כדי שהשיחה תמשיך — אנחנו בונים וממלאים את התהליך יחד, לא רק פותחים כרטיס.
+  • המשך בהקשר: כשהשיחה ממשיכה על תהליך שכבר קיים, מלא אותו (update_process / extract_task / add_reminder / draft_message על אותו תהליך לפי processHint) במקום ליצור תהליך חדש או לפטפט. כל תשובה של המשתמש היא עוד פרט שנכנס לתהליך.
   • אתה לא מראיין את המשתמש. הנח ברירות מחדל סבירות. המשתמש יתקן את מה שלא נכון בהודעה הבאה — זה "update_process".
   • אם המשתמש נתן מספר ספציפי ("אני שוקל 78"), השתמש בו. אם לא, שים placeholder הגיוני ("משקל נוכחי ק\"ג" בלי ערך) — המטריקה עדיין קיימת, פשוט ריקה.`;
 
@@ -206,7 +208,9 @@ export interface OneIntent {
     | 'extract_task'      // Embedded task ("Dudi said send him a quote").
     | 'add_reminder'      // User asked to be reminded ("remind me to call Eli tomorrow").
     | 'missing_info'      // Need one thing to proceed.
-    | 'update_process';   // Update inside an existing process.
+    | 'draft_message'     // Compose the actual outward message/doc for the process.
+    | 'update_process'    // Update inside an existing process.
+    | 'deploy_tool';      // Drop an interactive tool widget into the chat (quiz / booking / form).
   /** What ONE says back, in the user's language. Always present. */
   reply: string;
   /** Suggested process. Present iff kind === 'create_process'. */
@@ -253,6 +257,19 @@ export interface OneIntent {
     processHint?: string;
   };
   /**
+   * The outward artifact ONE composed. Present iff kind === 'draft_message'.
+   * ONE writes the ACTUAL text the user could send — a real message, not a
+   * description of one — in the user's language and voice. The user reviews,
+   * edits, and sends it via the share sheet; ONE never sends silently.
+   */
+  draft?: {
+    channel?: 'whatsapp' | 'email' | 'sms' | 'call' | 'form' | 'note';
+    to?: string;          // recipient label ("Sarah Salon", "the landlord")
+    subject?: string;     // email subject, when channel === 'email'
+    body: string;         // the actual message text, ready to send
+    processHint?: string;
+  };
+  /**
    * Field updates the user just declared inside an existing process.
    * Present iff kind === 'update_process'. Each entry names a metric
    * by its label and a string value (the app coerces numbers when the
@@ -263,6 +280,19 @@ export interface OneIntent {
     value: string;        // "72" / "2600"
     unit?: string;        // "kg" / "kcal"
   }>;
+  /**
+   * The interactive tool to deploy. Present iff kind === 'deploy_tool'. The app
+   * builds the matching widget (a quiz for the topic, a slot picker, or a form)
+   * and drops it into the thread. Use when an interactive widget serves the user
+   * better than prose — e.g. they ask to practice/be tested, to set a time, or
+   * to hand over structured details.
+   */
+  tool?: {
+    kind: 'quiz' | 'booking' | 'form';
+    /** Topic hint ("driving theory", "contact details") to pick the template. */
+    topic?: string;
+    processHint?: string;
+  };
 }
 
 /**
@@ -320,6 +350,20 @@ export async function invokeOneIntent(
       unitTitle: string;
       text: string;
     }>;
+    /**
+     * Account-wide facts ONE remembers ABOUT the user (from "remember that…"
+     * and the ONE profile). Threaded into the system prompt so ONE answers as
+     * someone who actually knows the user — personalising without reciting.
+     */
+    userMemories?: string[];
+    /**
+     * Facts ONE is AUTHORIZED to represent on the user's behalf — the 'open'
+     * tier of the selective-disclosure policy, as "label: value" strings. ONE
+     * may use these when it speaks or drafts FOR the user; it must never invent
+     * details or disclose anything outside this list. This is the permissioned-
+     * representative core: ONE represents you, it doesn't impersonate you.
+     */
+    userDisclosure?: string[];
   } = {},
 ): Promise<OneIntent> {
   const client = supabaseService.getClient();
@@ -393,41 +437,65 @@ export async function invokeOneIntent(
         : `Here are retrieved memory snippets that MAY answer the user. Use them if they actually do; never invent:\n${memBlock}`,
     );
   }
+  if (context.userMemories && context.userMemories.length > 0) {
+    const facts = context.userMemories.slice(0, 20).map((m) => `- ${m}`).join('\n');
+    ctxBits.push(
+      lang === 'he'
+        ? `מה שאתה זוכר על המשתמש — התאם את התשובה אישית לזה, אבל אל תדקלם את זה בחזרה:\n${facts}`
+        : `What you remember about the user — personalise to this, but don't recite it back:\n${facts}`,
+    );
+  }
+  if (context.userDisclosure && context.userDisclosure.length > 0) {
+    const shareable = context.userDisclosure.slice(0, 20).map((d) => `- ${d}`).join('\n');
+    ctxBits.push(
+      lang === 'he'
+        ? `פרטים שאתה מורשה לייצג בשם המשתמש (חשיפה נבחרת). השתמש בהם כשאתה כותב או פועל עבורו מול גורם אחר — למשל במילוי טיוטה. לעולם אל תמציא פרטים, ואל תחשוף דבר שאינו ברשימה הזו:\n${shareable}`
+        : `Details you're authorized to represent on the user's behalf (selective disclosure). Use them when you write or act FOR them toward someone else — e.g. filling in a draft. Never invent details, and never disclose anything not in this list:\n${shareable}`,
+    );
+  }
   const schemaInstructions = lang === 'he'
     ? `החזר JSON בלבד עם השדות הבאים:
 {
-  "kind": "chat" | "create_process" | "decision" | "extract_task" | "add_reminder" | "missing_info" | "update_process",
+  "kind": "chat" | "create_process" | "decision" | "extract_task" | "add_reminder" | "missing_info" | "draft_message" | "update_process" | "deploy_tool",
   "reply": "תשובה במשפט אחד, מקסימום שניים, בעברית, מסתיימת בצעד הבא הברור או בשאלה אחת.",
   "process": { "title": "...", "emoji": "💪", "broadcast": "...", "nextSteps": ["..."], "metrics": [{"label":"עלות משוערת","value":"≈4,000","unit":"₪"},{"label":"זמן רישום","value":"7–14","unit":"ימים"}], "quickActions": ["..."], "tags": ["health"] },
   "task": { "action": "...", "contact": "...", "when": "...", "processHint": "..." },
   "decision": { "text": "...", "processHint": "..." },
   "reminder": { "text": "להתקשר למורה", "when": "מחר ב-9", "processHint": "..." },
   "missing": { "field": "...", "processHint": "..." },
-  "updates": [{"metricLabel":"משקל","value":"72","unit":"ק\"ג"}]
+  "draft": { "channel": "whatsapp", "to": "מספרת שרה", "subject": "", "body": "הטקסט המלא לשליחה, כמו שהוא", "processHint": "..." },
+  "updates": [{"metricLabel":"משקל","value":"72","unit":"ק\"ג"}],
+  "tool": { "kind": "quiz" | "booking" | "form", "topic": "תיאוריה", "processHint": "..." }
 }
 - אל תחזיר טקסט מחוץ ל-JSON.
 - שדות לא רלוונטיים — השמט.
 - "create_process" רק אם זה משהו שיתנהל לאורך זמן (לא שאלה חד-פעמית).
+- "draft_message" כשהמשתמש מבקש לנסח/לכתוב/לשלוח הודעה או מייל למישהו בתוך תהליך ("כתוב ל...", "נסח הודעה ל...", "תשלח ל...", "תכין מייל ל..."). מלא "draft" עם הטקסט המלא והאמיתי (body) — הודעה שאפשר לשלוח כמו שהיא, בשפת המשתמש ובקולו, לא תיאור שלה. בחר channel מתאים (whatsapp/email/sms). ה-reply קצר: "הכנתי טיוטה — תבדוק, תערוך ותשלח."
 - כשאתה יוצר תהליך: תן תשובות אמיתיות. מלא ב-metrics ערכי "value" עם האומדן הכי טוב שלך מהעולם האמיתי (עלות טיפוסית, משך זמן טיפוסי, מה שצריך) — בדיוק כמו שעוזר חכם היה עונה. אל תשאיר ריק אלא אם זה באמת אישי ולא ניתן לדעת.
 - "add_reminder" כשהמשתמש מבקש להזכיר לו משהו ("תזכיר לי…", "אל תיתן לי לשכוח…", "תזכורת ל…"). מלא "reminder" עם הטקסט וה-when (כפי שנאמר). שייך ל-processHint הרלוונטי אם יש.
-- "update_process" כשהמשתמש מצהיר ערך עדכני בתוך תהליך קיים (שם, עלות, זמן, משקל, תקציב, וכו'). תמיד תוסיף "updates". חשוב: כש-metricLabel תואם מדד קיים בתהליך — השתמש בדיוק באותו הטקסט של המדד הקיים (לדוגמה אם קיים "עלות משוערת" והמשתמש אמר עלות — השתמש ב-"עלות משוערת"), כדי שהערך יעדכן את המדד הקיים ולא יוסיף כפילות.`
+- "update_process" כשהמשתמש מצהיר ערך עדכני בתוך תהליך קיים (שם, עלות, זמן, משקל, תקציב, וכו'). תמיד תוסיף "updates". חשוב: כש-metricLabel תואם מדד קיים בתהליך — השתמש בדיוק באותו הטקסט של המדד הקיים (לדוגמה אם קיים "עלות משוערת" והמשתמש אמר עלות — השתמש ב-"עלות משוערת"), כדי שהערך יעדכן את המדד הקיים ולא יוסיף כפילות.
+- "deploy_tool" כשווידג׳ט אינטראקטיבי יעזור יותר מטקסט: המשתמש מבקש להיבחן/להתאמן → tool.kind="quiz"; לקבוע תור/פגישה → "booking"; למסור פרטים מובנים (פרטי קשר, כתובת) → "form". מלא tool.topic ברמז הנושא ו-processHint אם רלוונטי. ה-reply קצר ומזמין ("יאללה, בוא נתרגל 👇"). אל תשתמש בזה אם המשתמש רק שואל שאלה — אז "chat".`
     : `Return JSON ONLY with these fields:
 {
-  "kind": "chat" | "create_process" | "decision" | "extract_task" | "add_reminder" | "missing_info" | "update_process",
+  "kind": "chat" | "create_process" | "decision" | "extract_task" | "add_reminder" | "missing_info" | "draft_message" | "update_process" | "deploy_tool",
   "reply": "1–2 short sentences, ends with the next concrete step or a single clarifying question.",
   "process": { "title": "...", "emoji": "💪", "broadcast": "...", "nextSteps": ["..."], "metrics": [{"label":"Est. cost","value":"≈$1,200","unit":""},{"label":"Time to file","value":"7–14","unit":"days"}], "quickActions": ["..."], "tags": ["health"] },
   "task": { "action": "...", "contact": "...", "when": "...", "processHint": "..." },
   "decision": { "text": "...", "processHint": "..." },
   "reminder": { "text": "Call the instructor", "when": "tomorrow 9am", "processHint": "..." },
   "missing": { "field": "...", "processHint": "..." },
-  "updates": [{"metricLabel":"Weight","value":"72","unit":"kg"}]
+  "draft": { "channel": "whatsapp", "to": "Sarah Salon", "subject": "", "body": "The full message text, ready to send as-is", "processHint": "..." },
+  "updates": [{"metricLabel":"Weight","value":"72","unit":"kg"}],
+  "tool": { "kind": "quiz" | "booking" | "form", "topic": "driving theory", "processHint": "..." }
 }
 - No text outside the JSON.
 - Omit irrelevant fields.
 - "create_process" ONLY if it's something that lives over time (not a one-shot question).
+- "draft_message" when the user asks you to write/compose/send a message or email to someone inside a process ("write to…", "draft a message to…", "send … to…", "email the landlord…"). Fill "draft" with the FULL, real message text (body) — a message that can be sent as-is, in the user's language and voice, not a description of one. Pick an appropriate channel (whatsapp/email/sms). Keep the reply short: "Drafted it — review, edit, and send."
 - When you create a process: give REAL answers. Fill each metric's "value" with your best real-world estimate (typical cost, typical duration, what's needed) — exactly like a knowledgeable assistant would. Leave a value blank only when it's genuinely user-specific and unknowable.
 - "add_reminder" when the user asks to be reminded ("remind me to…", "don't let me forget…", "set a reminder for…"). Fill "reminder" with the text and when (as said). Attach to the relevant processHint when there is one.
-- "update_process" when the user declares a current value inside an existing process (name, cost, time, weight, budget, etc.). Always include "updates". IMPORTANT: when a metricLabel matches an EXISTING metric in the process, reuse that metric's exact label text (e.g. if "Est. cost" exists and the user states a cost, use "Est. cost") so the value updates the existing metric instead of adding a duplicate.`;
+- "update_process" when the user declares a current value inside an existing process (name, cost, time, weight, budget, etc.). Always include "updates". IMPORTANT: when a metricLabel matches an EXISTING metric in the process, reuse that metric's exact label text (e.g. if "Est. cost" exists and the user states a cost, use "Est. cost") so the value updates the existing metric instead of adding a duplicate.
+- "deploy_tool" when an interactive widget helps more than prose: user asks to be tested/practice → tool.kind="quiz"; to book a time/appointment → "booking"; to hand over structured details (contact info, address) → "form". Fill tool.topic with the topic hint and processHint when relevant. Keep the reply short and inviting ("Let's practice 👇"). Do NOT use this if the user is just asking a question — that's "chat".`;
 
   const messages: AiChatMessage[] = [
     { role: 'system', content: baseSys + '\n\n' + ctxBits.join('\n') + '\n\n' + schemaInstructions },
@@ -511,6 +579,9 @@ export async function invokeAttentionLines(args: {
   units: AttentionUnitSummary[];
   identityName?: string;
   lang: 'en' | 'he';
+  /** Account-wide facts ONE remembers about the user — so the briefing reads
+   *  personal (references what matters to them), not generic. */
+  userMemories?: string[];
 }): Promise<string[]> {
   const client = supabaseService.getClient();
   if (!client) throw new AiChatNotConfiguredError();
@@ -546,6 +617,12 @@ Focus on: what's hot, what's stuck, who's waiting, what's a quick win.
 Exactly this format: {"lines":["...","...","...","..."]}
 No text outside JSON.`;
 
+  const memoryBlock =
+    args.userMemories && args.userMemories.length > 0
+      ? (args.lang === 'he' ? '\n\nמה שאתה זוכר על המשתמש:\n' : '\n\nWhat you remember about the user:\n') +
+        args.userMemories.slice(0, 20).map((m) => `- ${m}`).join('\n')
+      : '';
+
   const messages: AiChatMessage[] = [
     { role: 'system', content: baseSys + '\n\n' + taskInstructions },
     {
@@ -556,7 +633,8 @@ No text outside JSON.`;
           ? args.lang === 'he'
             ? 'אין עדיין תהליכים פעילים.'
             : 'No active processes yet.'
-          : corpus),
+          : corpus) +
+        memoryBlock,
     },
   ];
 

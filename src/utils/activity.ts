@@ -77,6 +77,8 @@ export function activityKindMeta(
       return { emoji: '↻', label: pick(lang, 'Updated', 'עודכן'), color: '#10B981' };
     case 'reminder':
       return { emoji: '⏰', label: pick(lang, 'Reminder', 'תזכורת'), color: '#F97316' };
+    case 'draft':
+      return { emoji: '✍️', label: pick(lang, 'Draft', 'טיוטה'), color: '#6366F1' };
     default:
       return { emoji: '•', label: pick(lang, 'Update', 'עדכון'), color: '#94A3B8' };
   }

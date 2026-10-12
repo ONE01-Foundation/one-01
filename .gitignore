@@ -38,3 +38,6 @@ yarn-error.*
 # build bundle + local tooling
 dist-deploy/
 .claude/
+
+# JetBrains IDE
+.idea/

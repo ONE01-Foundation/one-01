@@ -32,6 +32,8 @@ import {
   Keyboard,
   Share,
   StatusBar,
+  AppState,
+  Alert,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -39,6 +41,7 @@ import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useAnimatedRef,
+  useAnimatedReaction,
   useAnimatedKeyboard,
   interpolate,
   Extrapolation,
@@ -49,6 +52,8 @@ import Animated, {
   withSpring,
   withDelay,
   Easing,
+  FadeIn,
+  FadeInDown,
   type SharedValue,
 } from 'react-native-reanimated';
 
@@ -62,19 +67,35 @@ import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, s
 import { Orb } from '../../components/mvp/Orb';
 import { UnitCard } from '../../components/mvp/UnitCard';
 import { InputBar } from '../../components/mvp/InputBar';
-import { ArrowDownIcon, PlusThinIcon, StackedCardsIcon, GhostModeIcon, MicIcon, MicOffIcon, CameraIcon, SpeakerIcon, PersonIcon, BriefcaseIcon, HouseIcon, PlusIcon } from '../../components/mvp/icons';
+import { ArrowDownIcon, PlusThinIcon, StackedCardsIcon, GhostModeIcon, MicIcon, MicOffIcon, CameraIcon, SpeakerIcon, PersonIcon, BriefcaseIcon, HouseIcon, PlusIcon, CloseIcon } from '../../components/mvp/icons';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
 import { useThemeStore } from '../../stores/themeStore';
 import { useT, useLanguage } from '../../i18n/useT';
 import { localizedGreeting, translate } from '../../i18n/strings';
-import { useActiveIdentity, useActiveUnits, useMvpStore } from '../../stores/mvpStore';
+import { useActiveIdentity, useActiveUnits, useMvpStore, disclosureForIdentity, type ChatWidget } from '../../stores/mvpStore';
+import { ChatProcessCard } from '../../components/mvp/ChatProcessCard';
+import { ChatQuizCard } from '../../components/mvp/ChatQuizCard';
+import { ChatBookingCard } from '../../components/mvp/ChatBookingCard';
+import { ChatFormCard } from '../../components/mvp/ChatFormCard';
+import { quizForText, buildQuizRun } from '../../data/mvp/quizBank';
+import { bookingForText, buildBookingRun } from '../../data/mvp/booking';
+import { formForText, buildFormRun } from '../../data/mvp/forms';
+import { toolEnabled } from '../../data/mvp/tools';
+import { PullUpSheet } from '../../components/mvp/PullUpSheet';
 import { ONBOARDING_EXAMPLE_UNITS } from '../../data/mvp/onboardingExamples';
 import { personalityPrompt } from '../../data/mvp/agentAppearance';
 import { generateOneReply } from '../../utils/mvpChatReply';
+import { extractRememberFact } from '../../utils/rememberIntent';
+import { rtlText, rtlRow } from '../../utils/rtl';
+import { sortByAttention } from '../../core/mvp/attentionScore';
 import { haptic } from '../../utils/haptics';
 import { desireToUnit } from '../../utils/mvpInferUnit';
 import { invokeOneIntent, invokeAttentionLines } from '../../services/aiChat';
+import { openDisclosureStrings } from '../../data/mvp/disclosure';
+import { oneHomeMessages } from '../../utils/oneOpener';
 import { unitFromIntent, findSimilarUnit, buildProcessOpener } from '../../utils/intentToUnit';
+import { matchMetricIndex, completeStepsFromUpdates } from '../../utils/metricMatch';
+import { localOneIntent, cleanProcessTitle, metricQuestion } from '../../utils/localIntent';
 import {
   DIRECTORY,
   findAnyBusiness,
@@ -97,7 +118,7 @@ import {
   HOME_BROADCAST_CLOSING_HOLD_MS,
 } from '../../data/mvp/broadcasts';
 import { timeAwareLines, timeBucket, timeGreeting } from '../../data/mvp/oneClock';
-import { enrichUnitFromArchetype } from '../../data/mvp/unitArchetype';
+import { enrichUnitFromArchetype, generateRichUnit, detectArchetypeStrict } from '../../data/mvp/unitArchetype';
 
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
@@ -130,16 +151,16 @@ const INPUT_BAR_H = 86;
  */
 const TITLE_BAR_H = 78;              // small Orb + identity below it
 const HERO_REST_H = SCREEN_H;        // hero spacer fills the screen at rest
-const SNAP_OPEN = SCREEN_H - TITLE_BAR_H - 50;  // pull this far for full open
+const SNAP_OPEN = SCREEN_H - TITLE_BAR_H - 12;  // pull this far for full open
 /** Resting agent face on Home. Splash dot uses the same value so the
  *  hand-off is seamless (splash dot grows to this size and lands here).
- *  Pulled in one notch (88 → 84) per latest design — slightly smaller orb
- *  reads cleaner against the broadcast text. */
-const HOME_ORB_SIZE = 84;
+ *  Nudged up a touch (84 → 92) — the resting face carries a bit more presence
+ *  as the home's focal point, still calm against the broadcast text. */
+const HOME_ORB_SIZE = 100;
 /** Vertical position of the resting hero. Sits ABOVE screen center so the
  *  broadcast text reads in the upper third — leaves room for the input dock
  *  and feels less crowded against the bottom bar. */
-const HERO_CENTER_TOP = Math.round(SCREEN_H * 0.26);
+const HERO_CENTER_TOP = Math.round(SCREEN_H * 0.085);
 
 /** Home → Global transition. Pulling DOWN past the top (negative overscroll)
  *  scrubs this 0→1: ONE slides back to screen-centre, CLOSES its eyes (so only
@@ -147,8 +168,11 @@ const HERO_CENTER_TOP = Math.round(SCREEN_H * 0.26);
  *  "ONE folds into a dot and dives into the world" hand-off into ONE01 Global.
  *  GLOBAL_PULL_RANGE is the overscroll distance (px) for a full 0→1 sweep;
  *  GLOBAL_OPEN_THRESHOLD (released-at offset) is where Global actually opens. */
-const GLOBAL_PULL_RANGE = 88;
-const GLOBAL_OPEN_THRESHOLD = 48;
+// Opening Global takes a DELIBERATE, STRONG pull — a long overscroll with a
+// far release point — so light back-scrolling (reading earlier chat) never
+// trips it by accident.
+const GLOBAL_PULL_RANGE = 170;
+const GLOBAL_OPEN_THRESHOLD = 125;
 /** How far the orb travels DOWN to re-centre during the pull. Lands its centre
  *  near mid-screen (0.46·H reads better than dead-centre against the bottom). */
 const PULL_CENTER_DELTA = Math.max(
@@ -160,16 +184,70 @@ const PULL_CENTER_DELTA = Math.max(
 // the resting Home agent (its centre matches), just a touch larger — and the
 // user can fling it to any screen corner (WhatsApp-style PiP).
 const CALL_ORB_SIZE = 104;          // a little bigger than the Home orb (84)
-// paddingTop that lines the call orb's CENTRE up with the Home orb's centre.
-// The draggable wrap is (CALL_ORB_SIZE + 20) tall (room for the ring), so the
-// orb centre sits half that below paddingTop.
-const CALL_ORB_TOP =
-  HERO_CENTER_TOP + HOME_ORB_SIZE / 2 - (CALL_ORB_SIZE + 20) / 2;
+// The call orb sits EXACTLY where the home orb is (centre matched), just a
+// touch bigger + a live ring — so home → call is a seamless transition, not a
+// jump. paddingTop of the (CALL_ORB_SIZE + 20)-tall wrap that centres it there.
+const CALL_ORB_TOP = HERO_CENTER_TOP + HOME_ORB_SIZE / 2 - (CALL_ORB_SIZE + 20) / 2;
 const CALL_ORB_EDGE_MARGIN = 18;    // gap from the screen edge at a corner
 // When the user scrolls into the processes list DURING a call, the orb glides
 // UP toward the top (re-centred + smaller) so it never sits over the cards.
 // This is how far up it travels from its resting centre.
 const CALL_TOP_DELTA = -(CALL_ORB_TOP - 14);
+
+/**
+ * Convert 1–999 to a Hebrew-numeral (gematria) string with geresh/gershayim —
+ * e.g. 13 → "י״ג", 787 → "תשפ״ז", 5 → "ה׳". We do this by hand because the
+ * device's ICU renders the Hebrew CALENDAR but NOT the Hebrew numbering system
+ * (`-nu-hebr`), so it falls back to Latin digits ("13 בתשרי 5787"). For the
+ * civil YEAR we pass year % 1000 (the millennium is dropped by convention:
+ * 5787 → תשפ״ז).
+ */
+function hebrewGematria(num: number): string {
+  const ones = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'];
+  const tens = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
+  const hundreds = ['', 'ק', 'ר', 'ש', 'ת', 'תק', 'תר', 'תש', 'תת', 'תתק'];
+  let n = Math.floor(num) % 1000;
+  if (n <= 0) return '';
+  let out = hundreds[Math.floor(n / 100)];
+  n %= 100;
+  // 15 / 16 use ט״ו / ט״ז (never י-ה / י-ו — those spell parts of the Name).
+  if (n === 15) out += 'טו';
+  else if (n === 16) out += 'טז';
+  else {
+    out += tens[Math.floor(n / 10)];
+    out += ones[n % 10];
+  }
+  if (out.length === 1) return out + '׳'; // geresh on a single letter
+  return out.slice(0, -1) + '״' + out.slice(-1); // gershayim before the last
+}
+
+/** Compact "time ago" for the timeline ledger. */
+function relTimeShort(ts: number, he: boolean): string {
+  const diff = Math.max(0, Date.now() - ts);
+  const m = Math.round(diff / 60000);
+  if (m < 1) return he ? 'עכשיו' : 'now';
+  if (m < 60) return he ? `לפני ${m} ד׳` : `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return he ? `לפני ${h} ש׳` : `${h}h ago`;
+  const d = Math.round(h / 24);
+  if (d < 7) return he ? `לפני ${d} י׳` : `${d}d ago`;
+  const w = Math.round(d / 7);
+  return he ? `לפני ${w} שב׳` : `${w}w ago`;
+}
+
+/** Day-section label for the timeline (today / yesterday / date). */
+function dayLabel(ts: number, he: boolean): string {
+  const d = new Date(ts);
+  const now = new Date();
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((startOf(now) - startOf(d)) / 86400000);
+  if (diff <= 0) return he ? 'היום' : 'Today';
+  if (diff === 1) return he ? 'אתמול' : 'Yesterday';
+  return d.toLocaleDateString(he ? 'he-IL' : 'en-US', { day: 'numeric', month: 'long' });
+}
+
+/** Distance from the timeline's leading edge to the vertical axis line. */
+const TL_NODE_X = 34;
 
 /** Per-card geometry used by the stacked-deck animation. */
 const CARD_H_EST = 180;
@@ -217,6 +295,8 @@ interface HomeScreenProps {
   onCreateProcess?: () => void;
   /** Tap the "Sign in" CTA shown under the input bar when not signed in. */
   onSignIn?: () => void;
+  /** Tap the "Upgrade" line under the input → opens plans (Settings). */
+  onUpgrade?: () => void;
   /**
    * Fires when ONE creates a new process FROM the home chat (intent.kind
    * === 'create_process'). The host closes the chat overlay and opens the
@@ -244,16 +324,36 @@ interface HomeScreenProps {
    *  global / quick-actions / sign-in / …). ONE never dozes off while a sheet is
    *  up — the doze countdown only runs on a truly bare Home. */
   anySheetOpen?: boolean;
+  /** Reports the live voice-call state up to the navigator, so a sheet opened
+   *  over Home during a call (e.g. ONE's profile) can show the call ring on its
+   *  own orb. Home keeps owning the call; this only mirrors the flag up. */
+  onCallActiveChange?: (active: boolean) => void;
   /** Live animated index of the ONE profile sheet (-1 closed … 1 full).
    *  Drives the home orb's collapse/return IN SYNC with the sheet slide —
    *  so dragging the sheet down brings the orb back in real time, not on a
    *  fixed timer. Falls back to `profileOpen` when not provided. */
   profileSheetIndex?: SharedValue<number>;
+  /** Live animated index of the sign-in sheet (-1 closed … 0 open). Drives
+   *  the home orb + connect line drop IN SYNC with the sheet slide, so they
+   *  rise back with the close drag instead of on a delayed timer. Falls back
+   *  to the `signInOpen` boolean when not provided. */
+  signInSheetIndex?: SharedValue<number>;
   /** Open ONE01 Global — the world of processes (official ONEs, public
    *  processes, templates, insights, signals). Entry pill at the top. */
   onOpenGlobal?: () => void;
+  /** True while ONE01 Global is open over Home. Keeps the input dock + upgrade
+   *  line faded out (they fade during the pull) until Global is exited. */
+  globalOpen?: boolean;
+  /** Live animated index of the Global sheet (-1 closed … 0 open). Drives the
+   *  input dock + upgrade line fade IN SYNC with the Global close drag, so they
+   *  return the instant Global slides away — no delay. Falls back to `globalOpen`. */
+  globalSheetIndex?: SharedValue<number>;
   /** Open a business's ONE profile sheet (from a chat "open <business>"). */
   onOpenBusiness?: (id: string) => void;
+  /** Bumped counter — each increment opens the Timeline (the "past"). The
+   *  timeline lives here (it reads the home's cross-profile history), but it's
+   *  triggered from ONE's profile menu, so the navigator signals it via this. */
+  openTimelineSignal?: number;
 }
 
 /**
@@ -294,7 +394,7 @@ function StackedCard({
   unit: import('../../core/mvp/types').Unit;
   index: number;
   total: number;
-  scrollY: Animated.SharedValue<number>;
+  scrollY: SharedValue<number>;
   onPress: () => void;
   onLongPress?: () => void;
   onDelete?: () => void;
@@ -464,6 +564,12 @@ interface InlineMessage {
   /** Wall-clock ms when the message was sent. Stamped at create-time so the
    *  displayed time doesn't shift on re-renders. */
   ts: number;
+  /** When present, ONE sent an interactive WIDGET (e.g. the process it just
+   *  opened) rather than a plain text bubble. */
+  widget?: ChatWidget;
+  /** The process this turn is about — stamped when a turn creates/updates a
+   *  unit, so a process's bubbles can fold into its drawer. */
+  unitId?: string;
 }
 
 const HOME_CHAT_TYPING_MS = 850;
@@ -500,15 +606,21 @@ export function HomeScreen({
   onLongPressOrb,
   onCreateProcess,
   onSignIn,
+  onUpgrade,
   onCreatedFromChat,
   signInOpen = false,
   profileOpen = false,
   quickActionsOpen = false,
   unitOpen = false,
   anySheetOpen = false,
+  onCallActiveChange,
   profileSheetIndex,
+  signInSheetIndex,
   onOpenGlobal,
+  globalOpen = false,
+  globalSheetIndex,
   onOpenBusiness,
+  openTimelineSignal,
 }: HomeScreenProps) {
   const { colors, theme } = useThemeStore();
   const t = useT();
@@ -530,6 +642,17 @@ export function HomeScreen({
   // home itself does the introduction now. Returning / signed-in users get
   // the time-aware greeting + identity-driven lines.
   const hasOnboarded = useMvpStore((s) => s.hasCompletedOnboarding);
+  const userName = useMvpStore((s) => s.name);
+  const setUserName = useMvpStore((s) => s.setName);
+  // Conversational onboarding on the classic home: ONE introduces itself and
+  // walks you through small steps IN the conversation — asks your name, then
+  // what to start on — not a fat setup card. 'name' → 'go'.
+  const [onboardStep, setOnboardStep] = useState<'name' | 'go'>('name');
+  useEffect(() => {
+    // Start at 'name' for a fresh visitor; if a name is already known (returning
+    // mid-onboarding), skip straight to inviting the first thing.
+    if (!hasOnboarded) setOnboardStep(useMvpStore.getState().name.trim() ? 'go' : 'name');
+  }, [hasOnboarded]);
 
   // ── Due reminders ──────────────────────────────────────────────────────
   // A reminder ONE set is only useful if it comes BACK to you when its time
@@ -541,6 +664,107 @@ export function HomeScreen({
     const id = setInterval(() => setNowTick(Date.now()), 30000);
     return () => clearInterval(id);
   }, []);
+  // Onboarding invite — one example (emoji + short label) that cycles through
+  // the kinds of things ONE can take on, so the intro reads alive.
+  const [exampleRot, setExampleRot] = useState(0);
+  useEffect(() => {
+    if (hasOnboarded) return;
+    const id = setInterval(() => setExampleRot((n) => n + 1), 2600);
+    return () => clearInterval(id);
+  }, [hasOnboarded]);
+  const onboardExamples =
+    lang === 'he'
+      ? [
+          { emoji: '🚗', label: 'רישיון נהיגה' },
+          { emoji: '🏋️', label: 'אימון כושר' },
+          { emoji: '✈️', label: 'טיול לחו״ל' },
+          { emoji: '🏠', label: 'מעבר דירה' },
+          { emoji: '🩺', label: 'תור לרופא' },
+          { emoji: '💰', label: 'ניהול תקציב' },
+        ]
+      : [
+          { emoji: '🚗', label: 'a license' },
+          { emoji: '🏋️', label: 'training' },
+          { emoji: '✈️', label: 'a trip abroad' },
+          { emoji: '🏠', label: 'a move' },
+          { emoji: '🩺', label: 'a doctor visit' },
+          { emoji: '💰', label: 'a budget' },
+        ];
+  const onboardExample = onboardExamples[exampleRot % onboardExamples.length];
+
+  // Onboarding HEADLINE — NOT a per-second carousel. It settles: the timed
+  // greeting → "I'm ONE" and STAYS there. Only when the home sits IDLE for a
+  // while does it offer a hint (scroll to Global / to processes), and never a
+  // hint for something the user has already done (ONE knows they know).
+  const [headlineStage, setHeadlineStage] = useState<'greeting' | 'identity' | 'hint'>('greeting');
+  const [hintRot, setHintRot] = useState(0);
+  const seenGlobalRef = useRef(false);
+  const seenProcessesRef = useRef(false);
+  const lastInteractRef = useRef(Date.now());
+  const noteInteract = useCallback(() => {
+    lastInteractRef.current = Date.now();
+  }, []);
+  // While the connect sheet is open, the headline above it cycles through the
+  // reasons to sign in (see connectReasons).
+  const [connectRot, setConnectRot] = useState(0);
+  useEffect(() => {
+    if (!signInOpen) {
+      setConnectRot(0);
+      return;
+    }
+    const id = setInterval(() => setConnectRot((n) => n + 1), 3200);
+    return () => clearInterval(id);
+  }, [signInOpen]);
+  // Idle → surface an unseen hint for a beat, then settle back to identity.
+  useEffect(() => {
+    if (hasOnboarded) return;
+    const id = setInterval(() => {
+      setHeadlineStage((prev) => {
+        if (prev === 'hint') return 'identity';
+        if (prev === 'identity') {
+          const idle = Date.now() - lastInteractRef.current;
+          const hasHint = !seenGlobalRef.current || !seenProcessesRef.current;
+          // Long idle only — never interrupt someone mid-read with a hint.
+          if (idle > 24000 && hasHint) {
+            setHintRot((n) => n + 1);
+            return 'hint';
+          }
+        }
+        return prev;
+      });
+    }, 5000);
+    return () => clearInterval(id);
+  }, [hasOnboarded]);
+  // Rotates the opening greeting line — but NOT on a fast ticking clock (that
+  // read as "changing every second"). It advances only when something actually
+  // HAPPENED: the app was brought back to the foreground, or the home sat idle
+  // for a good while (the idle bump is armed in handleHomeTouch, below). The line
+  // crossfades on change (see the hero render).
+  const [greetingRot, setGreetingRot] = useState(0);
+  const bumpGreeting = useCallback(() => setGreetingRot((n) => n + 1), []);
+  // Returning to the app should NOT re-load ONE's message each time (minimize /
+  // window switch / foreground). If ONE already spoke, it's simply there. We
+  // only refresh the opener when the calendar DAY has changed since last active.
+  const lastActiveDayRef = useRef(new Date().toISOString().slice(0, 10));
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') return;
+      const today = new Date().toISOString().slice(0, 10);
+      if (today !== lastActiveDayRef.current) {
+        lastActiveDayRef.current = today;
+        bumpGreeting();
+      }
+    });
+    return () => sub.remove();
+  }, [bumpGreeting]);
+  // Onboarding headline: greeting → identity on each fresh landing (greetingRot
+  // bumps on events). Declared here, after greetingRot exists.
+  useEffect(() => {
+    if (hasOnboarded) return;
+    setHeadlineStage('greeting');
+    const t = setTimeout(() => setHeadlineStage('identity'), 2600);
+    return () => clearTimeout(t);
+  }, [hasOnboarded, greetingRot]);
   const dueReminders = React.useMemo(() => {
     if (!hasOnboarded) return [] as Array<{ unit: Unit; reminder: UnitReminder }>;
     const out: Array<{ unit: Unit; reminder: UnitReminder }> = [];
@@ -561,6 +785,155 @@ export function HomeScreen({
   // actual units.
   const units = hasOnboarded ? realUnits : ONBOARDING_EXAMPLE_UNITS;
 
+  // Cards grouped into collapsible PROFILE drawers (personal / business /
+  // family). Each identity that has cards becomes a drawer the user can fold
+  // or expand. `allProfileUnits` is every identity's units (not just the
+  // active one) so all profiles are reachable from the list.
+  const allProfileUnits = useMvpStore((s) => s.units);
+  const cardGroups = React.useMemo(() => {
+    const lastTouched = (items: Unit[]) =>
+      items.reduce(
+        (max, u) => Math.max(max, new Date(u.lastUpdatedAt).getTime() || 0),
+        0,
+      );
+    return identities
+      .map((idn) => ({
+        idn,
+        items: sortByAttention(
+          // Completed processes drop OUT of the home list — they live on in
+          // ONE's profile / the timeline, but the working list stays to what's
+          // still open. (They were lingering with a ✓ "done" card.)
+          allProfileUnits.filter((u) => u.identityId === idn.id && u.status !== 'completed'),
+        ),
+      }))
+      // Every profile shows as a drawer — INCLUDING a freshly added, still-empty
+      // one (it was being filtered out, so a new space never appeared). Empty
+      // groups have lastTouched 0, so they sort to the bottom.
+      .sort((a, b) => lastTouched(b.items) - lastTouched(a.items));
+  }, [identities, allProfileUnits]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  // ── Timeline (the "past") ──────────────────────────────────────────────
+  // Pulling the hero DOWN at the top reveals a chronological ledger of ONE's
+  // updates across every process — the intent→reality history.
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const timelineScrollRef = useRef<ScrollView>(null);
+  // Opened from ONE's profile menu: the navigator bumps `openTimelineSignal`
+  // (after closing the profile), and we raise the timeline drawer. Skip the
+  // first render (0 / undefined) so it only reacts to real bumps.
+  const timelineSignalRef = useRef(openTimelineSignal);
+  useEffect(() => {
+    if (openTimelineSignal !== timelineSignalRef.current) {
+      timelineSignalRef.current = openTimelineSignal;
+      setTimelineOpen(true);
+    }
+  }, [openTimelineSignal]);
+  // ── Timeline as a TOP DRAWER ──
+  // Pulling the home DOWN opens it: it comes DOWN from the top, and closes back
+  // UP (returning where it came from). The inner list scrolls FREELY (no gesture
+  // wraps it — a Pan there was swallowing the scroll). Content reads from the TOP
+  // (oldest first); flinging UP past the bottom (overscroll) closes it, or the
+  // chevron. `tlDragY`: 0 = open, -SCREEN_H = off (above).
+  const tlDragY = useSharedValue(-SCREEN_H);
+  const closeTimeline = useCallback(() => setTimelineOpen(false), []);
+  // Comes DOWN from the top into place whenever the timeline opens.
+  useEffect(() => {
+    if (timelineOpen) {
+      tlDragY.value = -SCREEN_H;
+      tlDragY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
+    }
+  }, [timelineOpen, tlDragY]);
+  // Animate the overlay UP and off, then unmount — shared by the overscroll fling
+  // and the dismiss chevron.
+  const dismissTimeline = useCallback(() => {
+    tlDragY.value = withTiming(
+      -SCREEN_H,
+      { duration: 240, easing: Easing.in(Easing.cubic) },
+      (fin) => {
+        if (fin) runOnJS(closeTimeline)();
+      },
+    );
+  }, [tlDragY, closeTimeline]);
+  const timelineDragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: tlDragY.value }],
+  }));
+  const timelineEntries = React.useMemo(() => {
+    type Entry = { id: string; unitId: string; emoji: string; title: string; text: string; ts: number };
+    const out: Entry[] = [];
+    for (const u of allProfileUnits) {
+      for (const h of u.history ?? []) {
+        const ts = new Date(h.createdAt).getTime();
+        if (Number.isNaN(ts)) continue;
+        out.push({ id: `${u.id}_${h.id}`, unitId: u.id, emoji: u.emoji, title: u.title, text: h.title, ts });
+      }
+      // The process's own birth is the first ledger beat.
+      const cts = new Date(u.createdAt).getTime();
+      if (!Number.isNaN(cts)) {
+        out.push({
+          id: `${u.id}_born`,
+          unitId: u.id,
+          emoji: u.emoji,
+          title: u.title,
+          text: lang === 'he' ? 'התהליך נוצר' : 'Process created',
+          ts: cts,
+        });
+      }
+    }
+    // Keep the 40 most-recent beats, then order OLDEST → NEWEST so the list
+    // reads like a chat: today sits at the BOTTOM (nearest the reader) and
+    // scrolling UP travels back in time.
+    return out
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 40)
+      .reverse();
+  }, [allProfileUnits, lang]);
+  const toggleGroup = useCallback((id: string) => {
+    haptic.tap();
+    setCollapsedGroups((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }, []);
+  // Long-press a space header → confirm, then delete the space and every process
+  // in it. Never the last space (there must always be one). Done via setState so
+  // the persisted store file isn't touched.
+  const promptDeleteSpace = useCallback(
+    (id: string, name: string) => {
+      const he = lang === 'he';
+      const store = useMvpStore.getState();
+      if (store.identities.length <= 1) return; // keep at least one space
+      haptic.press();
+      Alert.alert(
+        he ? `למחוק את "${name}"?` : `Delete "${name}"?`,
+        he
+          ? 'כל התהליכים במרחב הזה יימחקו. אי אפשר לשחזר.'
+          : 'Every process in this space will be removed. This cannot be undone.',
+        [
+          { text: he ? 'ביטול' : 'Cancel', style: 'cancel' as const },
+          {
+            text: he ? 'מחק מרחב' : 'Delete space',
+            style: 'destructive' as const,
+            onPress: () => {
+              const s = useMvpStore.getState();
+              const remaining = s.identities.filter((i) => i.id !== id);
+              useMvpStore.setState({
+                identities: remaining,
+                units: s.units.filter((u) => u.identityId !== id),
+                activeIdentityId:
+                  s.activeIdentityId === id ? remaining[0]?.id ?? null : s.activeIdentityId,
+              });
+            },
+          },
+        ],
+      );
+    },
+    [lang],
+  );
+
   // Display name shown in the identity row below the orb. Before the user
   // has signed in / introduced themselves, default to "ONE" — using the
   // seeded "Ariel" mock name would look like ONE already knows them.
@@ -574,6 +947,34 @@ export function HomeScreen({
   // cycles through suggestions instead of the ambient broadcast loop, and
   // the message bubbles render above the input bar.
   const [inputFocused, setInputFocused] = useState(false);
+  // Live mirror for worklet-free callbacks (scrollToLatest reads it from
+  // onLayout without a stale closure).
+  const inputFocusedRef = useRef(false);
+  useEffect(() => { inputFocusedRef.current = inputFocused; }, [inputFocused]);
+  // Processes pull-up sheet: opened by the up-chevron above the input, closed by
+  // dragging it down or tapping the scrim. Hidden (height 0) when closed.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // The process the conversation is currently ABOUT (last one ONE touched in
+  // chat) — threaded to ONE as the active context so follow-ups keep filling it.
+  const [activeChatUnitId, setActiveChatUnitId] = useState<string | null>(null);
+  const activeChatUnitIdRef = useRef<string | null>(null);
+  useEffect(() => { activeChatUnitIdRef.current = activeChatUnitId; }, [activeChatUnitId]);
+  // The metric ONE is currently asking the user to fill (so the next answer
+  // lands on it, and ONE asks the next empty one). Drives the "build the process
+  // through the conversation" loop. A ref so sendChat reads it without re-create.
+  const pendingFillRef = useRef<{ unitId: string; metricLabel: string } | null>(null);
+  // Processes whose chat bubbles are FOLDED into their drawer — "collapse" on a
+  // process card hides that process's back-and-forth, leaving the clean card.
+  const [foldedProcessIds, setFoldedProcessIds] = useState<Set<string>>(() => new Set());
+  const toggleFoldProcess = useCallback((unitId: string) => {
+    haptic.tap();
+    setFoldedProcessIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(unitId)) next.delete(unitId);
+      else next.add(unitId);
+      return next;
+    });
+  }, []);
   // Holds the chat OPEN across a keyboard dismiss that isn't a real "close" —
   // notably pressing + (which dismisses the keyboard before opening Quick
   // Actions). Without this, the blur drops `inputFocused` and an empty chat
@@ -589,6 +990,11 @@ export function HomeScreen({
   // Chat explicitly CLOSED via the X. Closing KEEPS the persisted homeChat
   // (the X used to wipe it) — the history lives on for ONE's memory.
   const [chatDismissed, setChatDismissed] = useState(false);
+  // Once you engage the chat it STAYS open (showing the full continuous thread,
+  // scrollable back to earlier conversations) until you dismiss it with the X —
+  // it no longer resets to a fresh session each time or closes the moment the
+  // keyboard drops. Set on focus, cleared on dismiss.
+  const [chatOpen, setChatOpen] = useState(false);
   // Session boundary: each time the chat OPENS we mark the current homeChat
   // length, and the visible conversation is only the messages AFTER that mark.
   // So opening the chat always starts FRESH (empty), while the prior turns
@@ -627,17 +1033,38 @@ export function HomeScreen({
   // The CURRENT conversation = messages added since this session opened. The
   // earlier messages remain in homeChat (history) but aren't shown as the
   // active chat, so every open reads as a clean, new conversation.
-  const sessionMessages = useMemo(
-    () => chatMessages.slice(sessionStartCount),
-    [chatMessages, sessionStartCount],
+  // The chat shows the FULL continuous thread — no per-open "session" slice, so
+  // you always continue from where you were and can scroll back to earlier
+  // conversations. (Kept the name `sessionMessages` to avoid churn; it's now the
+  // whole homeChat.)
+  const sessionMessages = chatMessages;
+  // A folded process hides its back-and-forth bubbles, leaving just its drawer
+  // (the widget) as the folded representation.
+  const visibleMessages = useMemo(
+    () => sessionMessages.filter((m) => !(m.unitId && !m.widget && foldedProcessIds.has(m.unitId))),
+    [sessionMessages, foldedProcessIds],
   );
+  // Index (in the VISIBLE list) of the NEWEST process drawer — only that one
+  // opens expanded (you just acted on it), older drawers mount collapsed so the
+  // thread stays tidy. Each drawer keeps its own state after mount.
+  let lastProcessWidgetIdx = -1;
+  for (let i = visibleMessages.length - 1; i >= 0; i--) {
+    if (visibleMessages[i].widget?.kind === 'process') {
+      lastProcessWidgetIdx = i;
+      break;
+    }
+  }
   const [chatTyping, setChatTyping] = useState(false);
   // Status caption shown UNDER the small Orb during a turn — "Thinking…",
   // "Searching memory…", "Updating process…" — replaces the broadcast text
   // once the user has sent a message. null = no caption (resting between
   // turns). Lifecycle is driven by sendChat below.
   const [chatStatus, setChatStatus] = useState<string | null>(null);
-  const chatScrollRef = useRef<ScrollView>(null);
+  // Bottom edge (Y within the scroll content) of the inline conversation
+  // thread, captured on layout. The thread now lives INSIDE the one home scroll
+  // (not a separate overlay), so to pin to the newest turn we scroll the MAIN
+  // scroll to just past this.
+  const threadBottomRef = useRef(0);
 
   // ── Voice: TAP the mic = start a call, HOLD = record ──────────────────
   // Call mode: ONE goes "live" — the orb becomes a draggable in-call bubble
@@ -689,6 +1116,11 @@ export function HomeScreen({
     // a temporal-dead-zone reference here.)
     callFromChatRef.current = chatActiveRef.current;
     Keyboard.dismiss();
+    // Do NOT jump back home — a call starts IN PLACE (wherever you are, even
+    // scrolled into the processes), like ONE joining you where you're looking (a
+    // "shared screen"). The dock is screen-pinned so it stays reachable.
+    // A call means ONE is awake — never leave the dock dimmed by a pending doze.
+    setOrbAsleep(false);
     setMuted(false);
     setCameraOn(false);
     setSpeakerOn(true);
@@ -759,10 +1191,33 @@ export function HomeScreen({
   }, [audioRecorder]);
 
   const chatActive =
-    !chatDismissed && (inputFocused || sessionMessages.length > 0 || chatHeldOpen);
+    !chatDismissed && (inputFocused || chatHeldOpen || (chatOpen && chatMessages.length > 0));
   // Keep a live mirror so callbacks defined earlier in render (startCall) can
   // read the current chat state without a temporal-dead-zone reference.
   chatActiveRef.current = chatActive;
+
+  // Continuous thread: the home IS the chat scroll. Keep the newest turn in
+  // view, but ONLY scroll when the thread is actually taller than the space
+  // above the input (and the keyboard, when open). A short thread that already
+  // fits stays pinned at the TOP under the orb — never scrolled down into empty
+  // space. You scroll UP for earlier conversation.
+  // Bring the newest turn (incl. a just-added process widget) to just above the
+  // input + keyboard. Empty thread → target 0, so it stays pinned at the top.
+  // Called both when the message count changes AND from the thread's onLayout,
+  // because the widget's height lands in `threadBottomRef` only after layout —
+  // scrolling on the count change alone left the newest card under the keyboard.
+  const scrollToLatest = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      const kb = inputFocusedRef.current ? SCREEN_H * 0.42 : 0;
+      const available = SCREEN_H - insets.top - INPUT_BAR_H - 48 - kb;
+      const target = Math.max(0, threadBottomRef.current - available);
+      scrollRef.current?.scrollTo({ y: target, animated });
+    });
+  }, [insets.top]);
+  useEffect(() => {
+    if (!chatActive && chatMessages.length === 0) return;
+    scrollToLatest();
+  }, [chatActive, chatMessages.length, inputFocused, insets.top, scrollToLatest]);
 
   // Each time chat activates from a fresh state, bump a counter so the
   // broadcast navigator picks a new opening suggestion on each entry.
@@ -784,19 +1239,31 @@ export function HomeScreen({
     // needed once the user is actually in the field again.
     setChatHeldOpen(false);
     // Reopening the chat clears the dismissed flag so the persisted history
-    // becomes visible again.
+    // becomes visible again, and keeps the chat open (full thread) until the X.
     setChatDismissed(false);
-    // If the user tapped the input while scrolled DOWN on the process list,
-    // snap the surface back to the top. The chat belongs in the hero
-    // context — agent + broadcast centered, exactly like tapping the input
-    // from the home rest state. Without this the keyboard opened against the
-    // collapsed top-bar (tiny orb up top, no broadcast), which read as broken.
-    // scrollRef is a stable useAnimatedRef, so empty deps are correct; it is
-    // declared below but only read when this fires (post-mount), never at
-    // render time.
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-  }, []);
+    setChatOpen(true);
+    // Bring the newest turn into focus above the keyboard. On an EMPTY thread
+    // this resolves to the top (hero context — agent + broadcast centered, like
+    // tapping the input at rest); with a conversation it scrolls so the last
+    // bubble / process widget sits just above the keyboard instead of hiding
+    // under it.
+    scrollToLatest();
+  }, [scrollToLatest]);
   const handleInputBlur = useCallback(() => setInputFocused(false), []);
+
+  // Safety: when the keyboard fully hides, the TextInput can stay "focused" in
+  // RN state on some dismiss paths (system / gesture), which left Home stuck in
+  // the half-open compose state (orb lowered, single prompt, no keyboard). If
+  // we're not mid-conversation and not bridging to Quick Actions / a unit,
+  // force focus off so Home returns cleanly to rest — one consistent close.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      if (!chatHeldOpen && sessionMessages.length === 0 && !unitOpen && !quickActionsOpen) {
+        setInputFocused(false);
+      }
+    });
+    return () => sub.remove();
+  }, [chatHeldOpen, sessionMessages.length, unitOpen, quickActionsOpen]);
 
   // When Quick Actions (+) closes, bring the keyboard back IF the user had
   // opened it from chat with the keyboard up. Tracks the previous open-state so
@@ -850,6 +1317,7 @@ export function HomeScreen({
     // conversation history (the X used to clear it). Just mark it dismissed so
     // the home returns to rest; the messages persist for next time.
     setChatDismissed(true);
+    setChatOpen(false);
     setChatTyping(false);
     setChatStatus(null);
     setInputFocused(false);
@@ -911,9 +1379,171 @@ export function HomeScreen({
   const sendChat = useCallback((raw: string) => {
     const value = raw.trim();
     if (!value) return;
+    // Discovery-conversation onboarding: NO name-first step. ONE opens by asking
+    // what you want it to manage/represent; your FIRST real answer completes
+    // onboarding and flows straight through the normal pipeline below (opens the
+    // process / sets up what's needed). The name + preferences are learned as we
+    // go, never as a blocking step.
+    if (!useMvpStore.getState().hasCompletedOnboarding) {
+      useMvpStore.getState().markOnboardingComplete();
+    }
     const now = Date.now();
     const userMsg: InlineMessage = { id: `u${now}`, from: 'user', text: value, ts: now };
     setChatMessages((m) => [...m, userMsg]);
+
+    // TOOL — deploy a QUIZ. When the user asks to practice / be tested and ONE
+    // has a quiz for the topic (the active process, or the message itself), ONE
+    // drops a live quiz widget into the thread; its score flows back onto the
+    // process metric when finished. Client-side, so it works with or without AI.
+    if (
+      toolEnabled(useMvpStore.getState().enabledTools, 'quiz') &&
+      /מבחן|תרגול|תרגל|בחן אותי|תבחן|שאלות תרגול|quiz|test me|practice|מבחן אמריקאי/i.test(value)
+    ) {
+      const qActiveUnits = units.filter((u) => u.identityId === identity?.id);
+      const qActiveId = activeChatUnitIdRef.current;
+      const qActiveU = qActiveId ? qActiveUnits.find((u) => u.id === qActiveId) : undefined;
+      let def = qActiveU ? quizForText(qActiveU.title) : null;
+      let qUnit = def ? qActiveU : undefined;
+      if (!def) {
+        def = quizForText(value);
+        if (def) qUnit = qActiveU;
+      }
+      if (!def) {
+        for (const u of qActiveUnits) {
+          const d = quizForText(u.title);
+          if (d) { def = d; qUnit = u; break; }
+        }
+      }
+      if (def) {
+        const qHe = /[֐-׿]/.test(value) || lang === 'he';
+        const run = buildQuizRun(def, qUnit?.id, qHe ? 'he' : 'en');
+        useMvpStore.getState().startQuizRun(run);
+        if (qUnit) setActiveChatUnitId(qUnit.id);
+        const ots = now + 1;
+        const intro = qHe
+          ? `יאללה — ${run.title} קצר, נראה איפה אתה עומד 👇`
+          : `Let's go — a quick ${run.title}, see where you stand 👇`;
+        setChatMessages((m) => [
+          ...m,
+          { id: `o${ots}`, from: 'one' as const, text: intro, ts: ots, ...(qUnit ? { unitId: qUnit.id } : {}) },
+          { id: `w${ots + 1}`, from: 'one' as const, text: '', ts: ots + 2, widget: { kind: 'quiz', runId: run.id }, ...(qUnit ? { unitId: qUnit.id } : {}) },
+        ]);
+        return;
+      }
+      // No quiz for this topic → fall through; ONE replies normally.
+    }
+
+    // TOOL — deploy a BOOKING. When the user asks ONE to set up a time /
+    // appointment, ONE drops a live booking widget with concrete slots; the
+    // confirmed slot flows back onto the process as a timeline entry. Client-side.
+    if (toolEnabled(useMvpStore.getState().enabledTools, 'booking') && bookingForText(value)) {
+      const bHe = /[֐-׿]/.test(value) || lang === 'he';
+      const bActiveId = activeChatUnitIdRef.current;
+      const bUnit = bActiveId ? units.find((u) => u.id === bActiveId && u.identityId === identity?.id) : undefined;
+      const provider = bUnit?.people?.[0]?.name;
+      const run = buildBookingRun({
+        unitId: bUnit?.id,
+        title: bHe ? 'קביעת תור' : 'Booking',
+        provider,
+        lang: bHe ? 'he' : 'en',
+      });
+      useMvpStore.getState().startBookingRun(run);
+      if (bUnit) setActiveChatUnitId(bUnit.id);
+      const bts = now + 1;
+      const intro = bHe
+        ? 'בטח — הנה כמה זמנים פנויים, בחר מה שנוח 👇'
+        : 'Sure — here are a few open times, pick what works 👇';
+      setChatMessages((m) => [
+        ...m,
+        { id: `o${bts}`, from: 'one' as const, text: intro, ts: bts, ...(bUnit ? { unitId: bUnit.id } : {}) },
+        { id: `w${bts + 1}`, from: 'one' as const, text: '', ts: bts + 2, widget: { kind: 'booking', runId: run.id }, ...(bUnit ? { unitId: bUnit.id } : {}) },
+      ]);
+      return;
+    }
+
+    // TOOL — deploy a FORM. When the user asks ONE to collect structured details
+    // (contact info, address, "fill in details"), ONE drops a form widget; on
+    // submit the values save into disclosure + a process note. Client-side.
+    if (toolEnabled(useMvpStore.getState().enabledTools, 'forms')) {
+      const fDef = formForText(value);
+      if (fDef) {
+        const fHe = /[֐-׿]/.test(value) || lang === 'he';
+        const fActiveId = activeChatUnitIdRef.current;
+        const fUnit = fActiveId ? units.find((u) => u.id === fActiveId && u.identityId === identity?.id) : undefined;
+        const run = buildFormRun(fDef, fUnit?.id, fHe ? 'he' : 'en');
+        useMvpStore.getState().startFormRun(run);
+        if (fUnit) setActiveChatUnitId(fUnit.id);
+        const fts = now + 1;
+        const intro = fHe ? 'בטח — מלא את הפרטים ואשמור 👇' : 'Sure — fill these in and I\'ll keep them 👇';
+        setChatMessages((m) => [
+          ...m,
+          { id: `o${fts}`, from: 'one' as const, text: intro, ts: fts, ...(fUnit ? { unitId: fUnit.id } : {}) },
+          { id: `w${fts + 1}`, from: 'one' as const, text: '', ts: fts + 2, widget: { kind: 'form', runId: run.id }, ...(fUnit ? { unitId: fUnit.id } : {}) },
+        ]);
+        return;
+      }
+    }
+
+    // BUILD-THROUGH-CONVERSATION: if ONE just asked the user to fill a metric,
+    // treat a short answer as that value — fill it, acknowledge, ask the next
+    // empty one (or wrap up). Deterministic, so the process visibly fills itself
+    // turn by turn (works with or without the AI). A clearly-new intent (starts
+    // with a want/command) instead cancels the fill and flows on normally.
+    const pf = pendingFillRef.current;
+    if (pf) {
+      // Language of the PROCESS (its metric label), not the answer — "12" is
+      // language-neutral but a Hebrew process should still get a Hebrew reply.
+      const fillHe = /[֐-׿]/.test(pf.metricLabel) || /[֐-׿]/.test(value) || lang === 'he';
+      const isNewIntent = /^(אני\s+רוצה|אני\s+צריך|תכתוב|כתוב|נסח|תשלח|שלח|תזכיר|i\s+want|i\s+need|write|draft|send|remind)/i.test(value);
+      const target = units.find((u) => u.id === pf.unitId);
+      if (target && !isNewIntent && value.length <= 40) {
+        const nowIso = new Date().toISOString();
+        const nextMetrics = (target.metrics ?? []).map((m) =>
+          m.label === pf.metricLabel ? { ...m, value: value.trim() } : m,
+        );
+        updateUnit(target.id, {
+          metrics: nextMetrics,
+          unreadUpdates: (target.unreadUpdates ?? 0) + 1,
+          lastUpdatedAt: nowIso,
+          updatedAt: nowIso,
+        });
+        useMvpStore.getState().updateHomeChatMessage(userMsg.id, { unitId: target.id });
+        const nextEmpty = nextMetrics.find((m) => !m.value || m.value === '');
+        pendingFillRef.current = nextEmpty ? { unitId: target.id, metricLabel: nextEmpty.label } : null;
+        setActiveChatUnitId(target.id);
+        const ots = now + 1;
+        const ack = nextEmpty
+          ? (fillHe ? `נרשם ✓ ${metricQuestion(nextEmpty.label, true)}` : `Got it ✓ ${metricQuestion(nextEmpty.label, false)}`)
+          : (fillHe ? 'נרשם ✓ יש לנו תמונה — נמשיך מכאן מתי שתרצה.' : "Got it ✓ We've got the picture — carry on whenever you like.");
+        setChatMessages((m) => [
+          ...m,
+          { id: `o${ots}`, from: 'one' as const, text: ack, ts: ots, unitId: target.id },
+          { id: `w${ots + 1}`, from: 'one' as const, text: '', ts: ots + 2, widget: { kind: 'process', unitId: target.id }, unitId: target.id },
+        ]);
+        return;
+      }
+      // Not an answer → drop the fill and continue as a normal message.
+      pendingFillRef.current = null;
+    }
+
+    // "Remember that…" → ONE stores it in his memory of you and confirms, no AI
+    // round-trip. (The saved facts live in the ONE profile → "What ONE remembers".)
+    const rememberFact = extractRememberFact(value);
+    if (rememberFact) {
+      useMvpStore.getState().addMemory(rememberFact);
+      const ots = now + 1;
+      setChatMessages((m) => [
+        ...m,
+        {
+          id: `o${ots}`,
+          from: 'one',
+          text: lang === 'he' ? `שמרתי לזיכרון 🧠 — ${rememberFact}` : `Got it 🧠 — I'll remember: ${rememberFact}`,
+          ts: ots,
+        },
+      ]);
+      return;
+    }
+
     setChatTyping(true);
 
     // Business-aware: if the user names a business that has its own ONE, my ONE
@@ -1017,6 +1647,17 @@ export function HomeScreen({
       clearTimeout(t1);
       clearTimeout(t2);
       let reply: string;
+      // Set when this turn opened a NEW process — ONE then sends it as a widget
+      // CARD in the thread (the conversation stays the center; you open it when
+      // you want) instead of jumping you into it.
+      let createdUnitId: string | null = null;
+      // A process ONE UPDATED (not created) this turn — it gets its own drawer
+      // in the thread too, so "update the Cyprus trip date" brings up the
+      // Cyprus drawer right there in the conversation.
+      let updatedUnitId: string | null = null;
+      // An interactive tool widget ONE chose to deploy this turn (deploy_tool).
+      let toolWidget: ChatWidget | null = null;
+      let toolWidgetUnitId: string | null = null;
       try {
         // Structured intent path — let ONE classify what the user just
         // said: chat, create_process, decision, embedded task, missing
@@ -1037,15 +1678,34 @@ export function HomeScreen({
         // surprise (you don't want a fitness reminder landing in your
         // business account).
         const activeUnits = units.filter((u) => u.identityId === identity?.id);
+        // The process the conversation is currently building — so ONE keeps
+        // filling IT (update/task/reminder/draft) instead of spawning duplicates.
+        const activeU = activeChatUnitIdRef.current
+          ? activeUnits.find((u) => u.id === activeChatUnitIdRef.current)
+          : undefined;
         const intent = await invokeOneIntent(value, {
           identityName: identity?.name,
           unitsCount: units.length,
           voiceStyle: personalityPrompt(useMvpStore.getState().agentPersonality, lang),
+          activeUnit: activeU
+            ? {
+                title: activeU.title,
+                emoji: activeU.emoji,
+                broadcast: activeU.latestBroadcastText?.[0],
+                metricLabels: (activeU.metrics ?? []).map((m) => m.label),
+                openSteps: (activeU.nextSteps ?? []).filter((s) => !s.done).map((s) => s.title),
+                progress: activeU.nextSteps?.length
+                  ? `${activeU.nextSteps.filter((s) => s.done).length}/${activeU.nextSteps.length} steps`
+                  : undefined,
+              }
+            : undefined,
           history: chatMessages.slice(-6).map((m) => ({
             role: m.from === 'one' ? ('assistant' as const) : ('user' as const),
             content: m.text,
           })),
           memory: memory.length > 0 ? memory : undefined,
+          userMemories: useMvpStore.getState().memories.map((m) => m.text),
+          userDisclosure: openDisclosureStrings(disclosureForIdentity(useMvpStore.getState().activeIdentityId), lang === 'he'),
           existingUnits: activeUnits.slice(0, 12).map((u) => ({
             title: u.title,
             emoji: u.emoji,
@@ -1096,9 +1756,10 @@ export function HomeScreen({
             // new process never opens as a bare title.
             const base =
               unitFromIntent(intent, identity?.id ?? '', lang) ??
-              desireToUnit(value, identity?.id ?? null);
+              desireToUnit(value, identity?.id ?? undefined);
             const created = enrichUnitFromArchetype(base, value, lang);
             addUnit(created);
+            createdUnitId = created.id;
             // Intent → reality: a process was just born. Mark it with a
             // success tap so the moment is felt, not just seen.
             haptic.success();
@@ -1134,20 +1795,10 @@ export function HomeScreen({
             } catch (e) {
               console.warn('[HomeScreen] failed to seed unit chat:', e);
             }
-            // Hand off to the host: close the chat overlay and open the
-            // new unit so the next turn happens INSIDE the process. We
-            // wait a beat so the reply bubble is visible before handoff.
-            // Also clear the home chat — the conversation now lives
-            // inside the unit, showing it twice would confuse.
-            if (onCreatedFromChat) {
-              setTimeout(() => {
-                // Mark this as a create-from-chat handoff so closing the unit
-                // lands the user on the processes list, not back in the chat.
-                justCreatedFromChatRef.current = true;
-                onCreatedFromChat(created.id);
-                useMvpStore.getState().clearHomeChat?.();
-              }, 700);
-            }
+            // The conversation stays the center: ONE sends the new process as a
+            // WIDGET CARD in the thread (added after the reply, below) rather
+            // than jumping the user into it. They open it from the card when
+            // they want. The unit chat was seeded above so it has context.
           }
         } else if (intent.kind === 'extract_task' && intent.task) {
           const hint = intent.task.processHint?.toLowerCase() ?? '';
@@ -1267,24 +1918,365 @@ export function HomeScreen({
               kind: 'capture',
             });
           }
+        } else if (intent.kind === 'update_process') {
+          // ONE said it updated something inside an existing process. The
+          // intent has no structured payload, so route to the best-matching
+          // active process and make the change VISIBLE everywhere: the actual
+          // METRIC value inside the unit, the card line, the unit's own chat,
+          // the timeline + an unread — otherwise ONE claims "updated" but the
+          // data never changes ("I don't see the update" bug).
+          const tokenize = (s: string) =>
+            (s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => w.length > 1);
+          // Route to the RIGHT process. First the shared fuzzy matcher; if that
+          // is unsure, pick the unit whose TITLE tokens are most covered by what
+          // the user said (+ ONE's reply, which usually names the process). We
+          // do NOT fall back to "the first unit" — mis-routing "update the
+          // Cyprus trip date" onto the weight process is worse than doing
+          // nothing, so an unclear update just replies without touching data.
+          const matchTokens = new Set(tokenize(`${value} ${intent.reply ?? ''}`));
+          const similar = findSimilarUnit(value, activeUnits, identity?.id);
+          let target = similar
+            ? activeUnits.find((u) => u.id === similar.id)
+            : undefined;
+          if (!target) {
+            let best: Unit | undefined;
+            let bestCov = 0;
+            for (const u of activeUnits) {
+              const tt = tokenize(u.title);
+              if (tt.length === 0) continue;
+              const cov = tt.filter((tkn) => matchTokens.has(tkn)).length / tt.length;
+              if (cov > bestCov) {
+                bestCov = cov;
+                best = u;
+              }
+            }
+            if (bestCov >= 0.5) target = best;
+          }
+          if (target) {
+            updatedUnitId = target.id;
+            const nowIso = new Date().toISOString();
+            const line = (intent.reply || value).replace(/\s+/g, ' ').trim().slice(0, 120);
+
+            // Prefer the AI's STRUCTURED updates (label → value): match each to
+            // an existing metric (Hebrew-aware fuzzy), set its value, append an
+            // unmatched one (≤6), and check off any open step the value answers
+            // — same precise handling as inside the process sheet, so a
+            // multi-value update from Home isn't lossy. Fall back to the
+            // single-number heuristic only when the model gave no structured
+            // updates (tokens matched against each metric label, with a
+            // goal/target boost so "update my weight GOAL to 72" lands right).
+            let metricsNext = target.metrics;
+            let nextStepsNext = target.nextSteps;
+            let stepsCompleted: string[] = [];
+            if (intent.updates?.length) {
+              const updated = [...(target.metrics ?? [])];
+              for (const u of intent.updates.slice(0, 3)) {
+                const idx = matchMetricIndex(updated, u.metricLabel);
+                if (idx >= 0) {
+                  updated[idx] = { ...updated[idx], value: u.value, unit: u.unit ?? updated[idx].unit };
+                } else if (updated.length < 6) {
+                  updated.push({
+                    id: `m_${Date.now()}_${updated.length}`,
+                    label: u.metricLabel.trim(),
+                    value: u.value,
+                    unit: u.unit?.trim() || undefined,
+                  });
+                }
+              }
+              metricsNext = updated;
+              const res = completeStepsFromUpdates(target.nextSteps, intent.updates);
+              nextStepsNext = res.steps;
+              stepsCompleted = res.completed;
+            } else {
+              const numMatch = value.match(/(\d[\d,.]*)/);
+              const GOAL = ['יעד', 'מטרה', 'target', 'goal'];
+              if (numMatch && target.metrics && target.metrics.length > 0) {
+                const valTokens = tokenize(value);
+                const valGoal = GOAL.some((g) => valTokens.includes(g));
+                let bestIdx = -1;
+                let bestScore = 0;
+                target.metrics.forEach((m, i) => {
+                  const lblTokens = tokenize(m.label);
+                  let score = lblTokens.filter((tkn) => valTokens.includes(tkn)).length;
+                  const lblGoal = GOAL.some((g) => lblTokens.includes(g));
+                  if (valGoal && lblGoal) score += 2;
+                  if (valGoal && !lblGoal) score -= 0.5;
+                  if (score > bestScore) {
+                    bestScore = score;
+                    bestIdx = i;
+                  }
+                });
+                if (bestIdx < 0 && target.metrics.length === 1) bestIdx = 0;
+                if (bestIdx >= 0) {
+                  const num = numMatch[1];
+                  metricsNext = target.metrics.map((m, i) =>
+                    i === bestIdx ? { ...m, value: num } : m,
+                  );
+                }
+              }
+            }
+
+            updateUnit(target.id, {
+              metrics: metricsNext,
+              ...(stepsCompleted.length ? { nextSteps: nextStepsNext } : null),
+              latestBroadcastText: [line, target.latestBroadcastText?.[1]] as [string, string?],
+              history: [
+                ...(target.history ?? []),
+                { id: `h_${Date.now()}`, title: line, createdAt: nowIso },
+              ],
+              unreadUpdates: (target.unreadUpdates ?? 0) + 1,
+              lastUpdatedAt: nowIso,
+              updatedAt: nowIso,
+            });
+            // Mirror the exchange into the unit's OWN chat so opening the
+            // process shows the conversation that changed it.
+            const uts = Date.now();
+            useMvpStore.getState().appendUnitChat?.(target.id, {
+              id: `u_${uts}`,
+              from: 'user',
+              text: value,
+              ts: uts,
+            });
+            useMvpStore.getState().appendUnitChat?.(target.id, {
+              id: `o_${uts + 1}`,
+              from: 'one',
+              text: intent.reply || line,
+              ts: uts + 1,
+            });
+            useMvpStore.getState().pushUnitNotification({
+              unitId: target.id,
+              text: line,
+              emoji: target.emoji,
+              kind: 'event',
+            });
+          }
+        } else if (intent.kind === 'draft_message' && intent.draft?.body) {
+          // ONE composed the actual outward message. Make "I drafted it" TRUE:
+          // drop it into a process as an editable, sendable draft (the intent →
+          // reality bridge). Route to the best-matching process; if none fits,
+          // spin up a lightweight process so the draft always has a home.
+          const draftObj = {
+            id: `dr_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
+            channel: intent.draft.channel ?? ('note' as const),
+            to: intent.draft.to?.trim() || undefined,
+            subject: intent.draft.subject?.trim() || undefined,
+            body: intent.draft.body.trim(),
+            status: 'draft' as const,
+            createdAt: new Date().toISOString(),
+          };
+          const hint = intent.draft.processHint?.toLowerCase() ?? '';
+          const similar = findSimilarUnit(`${intent.draft.processHint ?? ''} ${value}`, activeUnits, identity?.id);
+          let target = similar ? activeUnits.find((u) => u.id === similar.id) : undefined;
+          if (!target && hint) {
+            target = activeUnits.find(
+              (u) => u.title.toLowerCase().includes(hint) || hint.includes(u.title.toLowerCase()),
+            );
+          }
+          if (target) {
+            useMvpStore.getState().addDraft(target.id, draftObj, lang);
+            updatedUnitId = target.id;
+            useMvpStore.getState().pushUnitNotification({
+              unitId: target.id,
+              text: draftObj.to ? `Draft ready → ${draftObj.to}` : 'Draft ready to review',
+              emoji: target.emoji,
+              kind: 'event',
+            });
+          } else {
+            const created = enrichUnitFromArchetype(
+              desireToUnit(value, identity?.id ?? undefined),
+              value,
+              lang,
+            );
+            addUnit(created);
+            useMvpStore.getState().addDraft(created.id, draftObj, lang);
+            createdUnitId = created.id;
+          }
+        } else if (intent.kind === 'deploy_tool' && intent.tool) {
+          // ONE chose to drop an interactive tool into the thread. Build the
+          // matching widget (tied to the active process when there is one) —
+          // same widgets the local keyword path deploys, reached via the AI.
+          const tHe = /[֐-׿]/.test(value) || lang === 'he';
+          const tUnit = activeChatUnitIdRef.current
+            ? activeUnits.find((u) => u.id === activeChatUnitIdRef.current)
+            : undefined;
+          const topic = intent.tool.topic ?? value;
+          if (intent.tool.kind === 'quiz') {
+            const def = quizForText(topic) ?? (tUnit ? quizForText(tUnit.title) : null) ?? quizForText(value);
+            if (def) {
+              const run = buildQuizRun(def, tUnit?.id, tHe ? 'he' : 'en');
+              useMvpStore.getState().startQuizRun(run);
+              toolWidget = { kind: 'quiz', runId: run.id };
+              toolWidgetUnitId = tUnit?.id ?? null;
+            }
+          } else if (intent.tool.kind === 'booking') {
+            const run = buildBookingRun({ unitId: tUnit?.id, title: tHe ? 'קביעת תור' : 'Booking', provider: tUnit?.people?.[0]?.name, lang: tHe ? 'he' : 'en' });
+            useMvpStore.getState().startBookingRun(run);
+            toolWidget = { kind: 'booking', runId: run.id };
+            toolWidgetUnitId = tUnit?.id ?? null;
+          } else if (intent.tool.kind === 'form') {
+            const def = formForText(topic) ?? formForText(value) ?? formForText('טופס');
+            if (def) {
+              const run = buildFormRun(def, tUnit?.id, tHe ? 'he' : 'en');
+              useMvpStore.getState().startFormRun(run);
+              toolWidget = { kind: 'form', runId: run.id };
+              toolWidgetUnitId = tUnit?.id ?? null;
+            }
+          }
         }
       } catch (err) {
         // Network / parse failure → plain-text reply + the old regex
         // path so substantial intentions still become units. Log so
         // we can tell from Expo Go's console whether the AI is reaching
         // the function at all (this used to swallow silently).
-        console.warn('[HomeScreen sendChat] invokeOneIntent failed:', err);
-        const looksLikeIntention =
-          value.length > 25 &&
-          /(i want|i need|gain|finish|build|move|plan|launch|book|prepare)/i.test(value);
-        if (looksLikeIntention) {
-          const unit = enrichUnitFromArchetype(
-            desireToUnit(value, identity?.id ?? null),
-            value,
-            lang,
-          );
-          addUnit(unit);
-          reply = `Added ${unit.emoji} ${unit.title} as a process. Want to open it?`;
+        console.warn('[HomeScreen sendChat] invokeOneIntent failed; using local intent:', err);
+        // OFFLINE BRAIN: the AI is unreachable (no network / not signed in /
+        // blocked edge function). Classify the message locally and ACT, so the
+        // conversation still GENERATES real things — a process, a draft, a
+        // reminder — instead of a dead reply. Hebrew + English.
+        const activeUnits = units.filter((u) => u.identityId === identity?.id);
+        // Content-aware language: a Hebrew message gets a Hebrew process + reply
+        // even if the app's UI language is English (and vice-versa) — the process
+        // IS the user's words. (The AI path already does this via pickOneSystemPrompt.)
+        const contentHe = /[֐-׿]/.test(value);
+        const cLang: 'he' | 'en' = contentHe ? 'he' : 'en';
+        const li = localOneIntent(value, { lang: cLang });
+        if (li.kind === 'create_process') {
+          // A recognised domain (fitness / license / moving / learning /
+          // business / travel) → the FULLY-BILINGUAL archetype so steps+metrics
+          // read in the message's language. Otherwise the generic desire→unit
+          // path (enriched) for anything unrecognised.
+          const archKey = detectArchetypeStrict(value);
+          const enriched = archKey
+            ? generateRichUnit(value, identity?.id ?? 'identity_ariel', cLang)
+            : enrichUnitFromArchetype(
+                desireToUnit(value, identity?.id ?? undefined),
+                value,
+                cLang,
+              );
+          // A short NAME, not the whole sentence, as the process title. Build a
+          // new object (the enriched unit may be frozen — don't mutate it).
+          // ZERO-PROGRESS start: the archetype is born "rich" with sample
+          // progress (checked steps, 18/28, "theory passed") — misleading for a
+          // brand-new intent. Keep the PLAN (step titles, metric labels +
+          // realistic baselines) but reset the done-state so the user fills it
+          // through the conversation (matches "build it together").
+          const created = {
+            ...enriched,
+            title: cleanProcessTitle(value, contentHe),
+            nextSteps: (enriched.nextSteps ?? []).map((s) => ({ ...s, done: false })),
+            progress: enriched.progress ? { ...enriched.progress, current: 0 } : enriched.progress,
+            latestBroadcastText: [contentHe ? 'בדיוק התחלנו.' : 'Just getting started.', undefined] as [string, string?],
+            broadcast: [],
+            // Keep the metric LABELS (what ONE will track) but clear the sample
+            // VALUES — a fraction resets to 0/N, everything else empties, so
+            // nothing claims progress the user hasn't made. ONE fills them
+            // through the conversation.
+            metrics: (enriched.metrics ?? []).map((m) => {
+              const frac = String(m.value ?? '').match(/^(\d+)\s*\/\s*(\d+)$/);
+              return { ...m, value: frac ? `0/${frac[2]}` : '', trend: undefined };
+            }),
+            history: [],
+            decisions: [],
+            reminders: [],
+            timeline: [],
+            unreadUpdates: 0,
+          };
+          addUnit(created);
+          createdUnitId = created.id;
+          haptic.success();
+          useMvpStore.getState().pushUnitNotification({
+            unitId: created.id,
+            text: `New process: ${created.title}`,
+            emoji: created.emoji,
+            kind: 'created',
+          });
+          try {
+            const store = useMvpStore.getState();
+            const seedTs = Date.now();
+            store.appendUnitChat?.(created.id, { id: `u_seed_${seedTs}`, from: 'user', text: value, ts: seedTs });
+            store.appendUnitChat?.(created.id, { id: `o_seed_${seedTs + 1}`, from: 'one', text: buildProcessOpener(created, lang), ts: seedTs + 1 });
+          } catch (e) {
+            console.warn('[HomeScreen] seed unit chat (local) failed:', e);
+          }
+          // Invite the conversation to CONTINUE (don't just drop a card) and
+          // show ONE already filled a first step — we build the process together.
+          // Start building it together: ask for the first empty metric, so the
+          // next answer fills it and ONE asks the next (the fill loop above).
+          const firstEmptyMetric = (created.metrics ?? []).find((m) => !m.value || m.value === '');
+          if (firstEmptyMetric) {
+            pendingFillRef.current = { unitId: created.id, metricLabel: firstEmptyMetric.label };
+          }
+          const firstStep = created.nextSteps?.[0]?.title;
+          reply = contentHe
+            ? `פתחתי את ${created.emoji} ${created.title} 👇${firstEmptyMetric ? ` בוא נמלא אותו יחד — ${metricQuestion(firstEmptyMetric.label, true)}` : firstStep ? ` התחלתי עם "${firstStep}". נתחיל מזה?` : ' מאיפה נתחיל?'}`
+            : `Opened ${created.emoji} ${created.title} 👇${firstEmptyMetric ? ` Let's fill it in together — ${metricQuestion(firstEmptyMetric.label, false)}` : firstStep ? ` I started with "${firstStep}". Begin there?` : ' Where shall we start?'}`;
+        } else if (li.kind === 'draft_message' && li.draft?.body) {
+          const draftObj = {
+            id: `dr_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
+            channel: li.draft.channel ?? ('note' as const),
+            to: li.draft.to?.trim() || undefined,
+            subject: li.draft.subject?.trim() || undefined,
+            body: li.draft.body.trim(),
+            status: 'draft' as const,
+            createdAt: new Date().toISOString(),
+          };
+          const similar = findSimilarUnit(value, activeUnits, identity?.id);
+          const target = similar ? activeUnits.find((u) => u.id === similar.id) : undefined;
+          if (target) {
+            useMvpStore.getState().addDraft(target.id, draftObj, cLang);
+            updatedUnitId = target.id;
+          } else {
+            // No matching process → a CLEAN message-holder (not an archetype
+            // process with unrelated steps). It just carries the draft.
+            const base = desireToUnit(value, identity?.id ?? undefined);
+            const created = {
+              ...base,
+              title: draftObj.to
+                ? (contentHe ? `הודעה ל${draftObj.to}` : `Message to ${draftObj.to}`)
+                : (contentHe ? 'הודעה' : 'Message'),
+              emoji: draftObj.channel === 'email' ? '✉️' : '💬',
+              nextSteps: [],
+              metrics: [],
+              quickActions: [],
+              insights: [],
+            };
+            addUnit(created);
+            useMvpStore.getState().addDraft(created.id, draftObj, cLang);
+            createdUnitId = created.id;
+          }
+          reply = li.reply;
+        } else if (li.kind === 'add_reminder' && li.reminder) {
+          // Land the reminder on the best process, or a light new one, so it's
+          // real and visible (not just an acknowledgement).
+          const similar = findSimilarUnit(`${li.reminder.text} ${value}`, activeUnits, identity?.id);
+          let target = similar ? activeUnits.find((u) => u.id === similar.id) : undefined;
+          if (!target) {
+            target = enrichUnitFromArchetype(desireToUnit(value, identity?.id ?? undefined), value, cLang);
+            addUnit(target);
+            createdUnitId = target.id;
+          } else {
+            updatedUnitId = target.id;
+          }
+          const nowIso = new Date().toISOString();
+          updateUnit(target.id, {
+            reminders: [
+              ...(target.reminders ?? []),
+              {
+                id: `r_${Date.now()}`,
+                text: li.reminder.text,
+                dueLabel: li.reminder.when,
+                dueAt: resolveReminderDue(li.reminder.when, Date.now()),
+                done: false,
+                createdAt: nowIso,
+              },
+            ],
+            unreadUpdates: (target.unreadUpdates ?? 0) + 1,
+            lastUpdatedAt: nowIso,
+            updatedAt: nowIso,
+          });
+          reply = li.reminder.when
+            ? (contentHe ? `קבעתי תזכורת: ${li.reminder.text} · ${li.reminder.when} 🔔` : `Reminder set: ${li.reminder.text} · ${li.reminder.when} 🔔`)
+            : li.reply;
         } else {
           reply = await generateOneReply(value, {
             identityName: identity?.name,
@@ -1296,9 +2288,52 @@ export function HomeScreen({
       setChatTyping(false);
       setChatStatus(null);
       const replyTs = Date.now();
-      setChatMessages((m) => [...m, { id: `o${replyTs}`, from: 'one', text: reply, ts: replyTs }]);
+      const widgetUnitId = createdUnitId ?? updatedUnitId;
+      // A tool widget deployed this turn (deploy_tool) that is tied to a process
+      // but didn't create/update one → still move the conversation into it.
+      if (!widgetUnitId && toolWidgetUnitId) {
+        setActiveChatUnitId(toolWidgetUnitId);
+        useMvpStore.getState().updateHomeChatMessage(userMsg.id, { unitId: toolWidgetUnitId });
+      }
+      // This turn is ABOUT a process → remember it, so the next turns continue
+      // in its context (fed to ONE) and the whole thread can fold into its card.
+      if (widgetUnitId) {
+        // Self-organizing timeline: moving the conversation to a NEW process
+        // auto-folds the one we're leaving into its card, and un-folds the one
+        // we're now on — so the thread stays the active conversation + tidy
+        // cards for the rest. (The user can still fold/unfold any by hand.)
+        const prevActive = activeChatUnitIdRef.current;
+        setFoldedProcessIds((prev) => {
+          if (prevActive === widgetUnitId && !prev.has(widgetUnitId)) return prev;
+          const n = new Set(prev);
+          if (prevActive && prevActive !== widgetUnitId) n.add(prevActive);
+          n.delete(widgetUnitId);
+          return n;
+        });
+        setActiveChatUnitId(widgetUnitId);
+        // Stamp the ALREADY-SENT user message in place (setChatMessages only
+        // appends; it can't edit an existing one) so the whole turn — question,
+        // reply, and card — folds together into the process.
+        useMvpStore.getState().updateHomeChatMessage(userMsg.id, { unitId: widgetUnitId });
+      }
+      setChatMessages((m) => {
+        const next = [
+          ...m,
+          { id: `o${replyTs}`, from: 'one' as const, text: reply, ts: replyTs, ...(widgetUnitId ? { unitId: widgetUnitId } : {}) },
+        ];
+        // ONE sends the process it just opened OR updated as an interactive
+        // drawer in-thread — you keep working it in the same conversation.
+        if (widgetUnitId) {
+          next.push({ id: `w${replyTs}`, from: 'one' as const, text: '', ts: replyTs + 1, widget: { kind: 'process', unitId: widgetUnitId }, unitId: widgetUnitId });
+        }
+        // A tool widget ONE chose to deploy (deploy_tool) — drop it in-thread.
+        if (toolWidget) {
+          next.push({ id: `wt${replyTs}`, from: 'one' as const, text: '', ts: replyTs + 2, widget: toolWidget, ...(toolWidgetUnitId ? { unitId: toolWidgetUnitId } : {}) });
+        }
+        return next;
+      });
     }, HOME_CHAT_TYPING_MS);
-  }, [addUnit, chatMessages, identity?.id, identity?.name, units, updateUnit, t, onCreatedFromChat]);
+  }, [addUnit, chatMessages, identity?.id, identity?.name, units, updateUnit, t, onCreatedFromChat, onboardStep, setUserName]);
 
   const handleSendChat = useCallback(() => {
     const v = chatText.trim();
@@ -1361,6 +2396,7 @@ export function HomeScreen({
         const lines = await invokeAttentionLines({
           identityName: identity?.name,
           lang,
+          userMemories: useMvpStore.getState().memories.map((m) => m.text),
           units: units.slice(0, 8).map((u) => ({
             title: u.title,
             emoji: u.emoji,
@@ -1503,14 +2539,121 @@ export function HomeScreen({
 
   // Sign-in sheet open → broadcast reads as the sign-in headline so the
   // home surface frames the sheet. Takes priority over chat prompt / loop.
-  const welcomeBackLine = lang === 'he' ? 'ברוך שובך.' : 'Welcome back.';
+  // Neutral — the sign-in sheet is used both to CONNECT for the first time and
+  // to return, so "welcome back" would be wrong for a first-timer. "Let's
+  // connect" fits both (signing in with a provider IS creating the account).
+  // The sign-in headline (shown above the connect sheet) ROTATES through
+  // reasons to connect — signing in with a provider IS the account, so the copy
+  // sells WHY: save your ONE, use it on every device, never lose anything.
+  const connectReasons =
+    lang === 'he'
+      ? ['בוא נתחבר.', 'כדי לשמור את ONE שלך.', 'כדי להשתמש בכל המכשירים.', 'כדי שלא תאבד כלום.', 'כדי שאהיה איתך בכל מקום.']
+      : ["Let's connect.", 'To save your ONE.', 'To use it on every device.', 'So you never lose a thing.', "So I'm with you everywhere."];
+  const welcomeBackLine = connectReasons[connectRot % connectReasons.length];
   const displayedBroadcast = signInOpen
     ? welcomeBackLine
     : isComposingFirst
       ? (ghostMode ? ghostPrompt : chatPrompt)
       : broadcast;
-  const broadcastShouldHide =
-    chatActive && (sessionMessages.length > 0 || chatText.trim().length > 0);
+  // The resting OPENER (greeting + ONE's proactive bubbles under the orb) is
+  // ONE speaking first — shown only while there's NO conversation yet. The
+  // moment a thread exists it steps aside for the inline chat (which lives in
+  // the same home scroll), so at rest you see the CONVERSATION, not a separate
+  // broadcast line. One continuous surface, no mode switch.
+  const broadcastShouldHide = sessionMessages.length > 0;
+
+  // ONE's own clock/status — date + live time. Shown in the hero sequence at
+  // rest AND kept under the collapsed orb in the cards view (the system status
+  // bar is hidden at the resting home).
+  const heroStatus = React.useMemo(() => {
+    const now = new Date(nowTick);
+    const time = now.toLocaleTimeString(lang === 'he' ? 'he-IL' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    if (lang !== 'he') {
+      const g = now.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'long' });
+      return `${g} · ${time}`;
+    }
+    // The weekday ALWAYS stays (short, e.g. "יום ה׳"); the DATE beside it
+    // alternates Hebrew ↔ civil on EVENTS (greetingRot) — once when you land,
+    // then when ONE refreshes the home — NOT a per-second loop.
+    const wd = ['יום א׳', 'יום ב׳', 'יום ג׳', 'יום ד׳', 'יום ה׳', 'יום ו׳', 'שבת'][now.getDay()];
+    const gregDate = now.toLocaleDateString('he-IL', { day: 'numeric', month: 'long' });
+    // Hebrew (Jewish-calendar) date in gematria letters — built by hand because
+    // the device's ICU has the calendar but not `-nu-hebr` (renders Latin
+    // digits). Guarded; falls back to the civil date if the calendar is missing.
+    let hebrewDate = '';
+    try {
+      const parts = new Intl.DateTimeFormat('he-IL-u-ca-hebrew', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).formatToParts(now);
+      hebrewDate = parts
+        .map((p) => {
+          // If the device already rendered Hebrew numerals (parseInt → NaN),
+          // keep its value; otherwise convert the Latin digits to gematria.
+          if (p.type === 'day') {
+            const d = parseInt(p.value, 10);
+            return Number.isNaN(d) ? p.value : hebrewGematria(d);
+          }
+          if (p.type === 'year') {
+            const y = parseInt(p.value, 10);
+            return Number.isNaN(y) ? p.value : hebrewGematria(y % 1000);
+          }
+          return p.value;
+        })
+        .join('');
+    } catch {
+      hebrewDate = '';
+    }
+    const useHebrew = hebrewDate && greetingRot % 2 === 0;
+    return `${wd} · ${useHebrew ? hebrewDate : gregDate} · ${time}`;
+  }, [lang, nowTick, greetingRot]);
+
+  // ONE's resting message is composed synchronously from the real process state
+  // (see heroLines below) — instant and persistent, so it's "simply there" when
+  // you return rather than re-loading. No per-foreground AI fetch / typing swap.
+
+  // Rest-state hero copy — ONE talking to you, like a message from a contact
+  // who's always around. NOT a passive dashboard ("you have 4 processes") and
+  // NOT a list of chips that duplicate the cards below. ONE reads across your
+  // processes and, in his OWN voice, tells you what's worth knowing right now:
+  // what's waiting, what moved, what he'd do next — proactive, personal, present.
+  const heroLines = React.useMemo<{ text: string; kind: 'greeting' | 'date' | 'beat' | 'prompt' | 'heading' | 'typing' | 'status' }[]>(() => {
+    if (!hasOnboarded) {
+      // First run — a DISCOVERY CONVERSATION (not a form, not "what's your
+      // name"). ONE introduces itself by VALUE and asks what you want it to
+      // manage / represent. Your first answer flows straight through (sendChat
+      // completes onboarding + opens the process).
+      const he = lang === 'he';
+      return [
+        { text: he ? 'היי 👋 אני וואן — הנציג הדיגיטלי שלך.' : "Hi 👋 I'm ONE — your digital representative.", kind: 'beat' as const },
+        {
+          text: he
+            ? 'אני מנהל בשבילך תהליכים ומייצג אותך מול העולם — חושף רק מה שתרשה.'
+            : 'I run your processes and represent you to the world — sharing only what you allow.',
+          kind: 'beat' as const,
+        },
+        { text: he ? 'מה בא לך שאנהל או אייצג בשבילך?' : 'What would you like me to manage or represent for you?', kind: 'beat' as const },
+      ];
+    }
+    const he = lang === 'he';
+    const greeting = timeGreeting(lang, nowTick, identity?.name, greetingRot);
+
+    // A LIGHT opener (not crowded): the greeting + the one move worth surfacing,
+    // as ONE's chat bubbles. The bubbles ARE the status — no separate status
+    // line. Never a flat echo of the cards below.
+    const messages = oneHomeMessages(allProfileUnits, he, nowTick, greetingRot);
+    const action = messages[messages.length - 1];
+
+    return [
+      { text: greeting, kind: 'beat' as const },
+      ...(action && action !== greeting ? [{ text: action, kind: 'beat' as const }] : []),
+    ].filter((l) => !!l.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasOnboarded, onboardStep, userName, lang, identity?.id, identity?.name, allProfileUnits, nowTick, heroStatus, greetingRot, headlineStage, hintRot]);
 
   // Broadcast interaction:
   //   • Tap — cycle to the next broadcast line.
@@ -1521,7 +2664,12 @@ export function HomeScreen({
   const onBroadcastTap = useCallback(() => {
     wakeChevron();
     nextBroadcast();
-  }, [nextBroadcast, wakeChevron]);
+    // `wakeChevron` is a STABLE useCallback declared further down; referencing it
+    // in the deps array here reads it during render (before its declaration) and
+    // throws a TDZ ReferenceError — fatal on web/React-19, latent on native. The
+    // closure call above is fine, so we just omit it from the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextBroadcast]);
 
   const onBroadcastLongPress = useCallback(() => {
     if (recording) return;
@@ -1610,6 +2758,29 @@ export function HomeScreen({
   const ORB_FROM_CENTER_OFFSET = Math.round(
     SCREEN_H / 2 - insets.top - HERO_CENTER_TOP - HOME_ORB_SIZE / 2,
   );
+  // ── Idle-rest ("sleep") geometry ───────────────────────────────────────
+  // When ONE goes idle it no longer shrinks to a bare dot. Instead the FIGURE
+  // (eyes open) and the input capsule gather into one calm CENTRED PAIR — the
+  // orb just above the composer, like being handed the mic. These are the
+  // offsets that bring them together: the orb rises a touch above dead-centre
+  // and the input lifts up from the bottom to sit just beneath it.
+  const SLEEP_PAIR_GAP = 36; // gap between the orb's bottom and the input's top
+  const SLEEP_ORB_RAISE = Math.round((SLEEP_PAIR_GAP + INPUT_BAR_H) / 2);
+  const SLEEP_INPUT_LIFT = Math.max(
+    0,
+    Math.round(
+      SCREEN_H -
+        insets.bottom -
+        INPUT_BAR_H -
+        (SCREEN_H / 2 - SLEEP_ORB_RAISE + HOME_ORB_SIZE / 2 + SLEEP_PAIR_GAP),
+    ),
+  );
+  // 1 only when the orb is the big CENTRED figure (empty / fresh home) — the
+  // sleep pair-centering (lifting the input up to the figure) is allowed then.
+  // 0 once a conversation exists: the orb is a compact TOP header, so the input
+  // must stay at the bottom (lifting it to centre would float it away from the
+  // header). Declared up here so inputMountStyle below can read it.
+  const sleepCenterOK = useSharedValue(1);
   const orbMountY = useSharedValue(ORB_FROM_CENTER_OFFSET);
   // Smaller travel for the secondary elements so the entry reads as a
   // single settle, not separate slides. Broadcast row and input dock
@@ -1624,6 +2795,25 @@ export function HomeScreen({
   // the initial synchronous updater run. The withTiming driver + eye/lid
   // derivations live further below, keyed on `orbAsleep`.
   const sleepSV = useSharedValue(1);
+  // When the sign-in sheet opens over Home, the orb + "let's connect" line
+  // glide DOWN a touch — so they sit centred in the space ABOVE the sheet
+  // instead of stranded up top. We read the sheet's LIVE animated index
+  // (-1 closed … 0 open) so the orb drops on the way in AND rises back in
+  // sync with the close drag — no fixed timer, so there's no lag before the
+  // orb returns when the sheet slides down. Worklets map the index to a 0→1
+  // drop fraction via interpolate(signInIdx, [-1, 0], [0, 1]).
+  //
+  // Fallback: when no shared index is wired, drive a local one off the
+  // `signInOpen` boolean so it still degrades to a quick timer.
+  const fallbackSignInIndex = useSharedValue(-1);
+  useEffect(() => {
+    if (signInSheetIndex) return; // real index in control — skip the fallback
+    fallbackSignInIndex.value = withTiming(signInOpen ? 0 : -1, {
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [signInOpen, signInSheetIndex, fallbackSignInIndex]);
+  const signInIdx = signInSheetIndex ?? fallbackSignInIndex;
   // Companion to sleepSV for the CHROME around the orb (broadcast line, input
   // dock, chevron). On falling asleep this drops FAST (everything around ONE
   // clears quickly) while sleepSV eases the orb itself down slowly — so ONE
@@ -1635,6 +2825,10 @@ export function HomeScreen({
   // in sync with the broadcast + input dock arriving (see the reveal timer in
   // the mount effect below).
   const [statusBarHidden, setStatusBarHidden] = useState(true);
+  // TRUE once the user has scrolled into the cards list. Drives the system
+  // status bar: hidden at the resting home (ONE shows its own clock in the
+  // date line), visible once you're in the cards.
+  const [inCards, setInCards] = useState(false);
 
   // Eyes start closed (opacity 0) — the agent is just a dot at first.
   const eyesOpacityMount = useSharedValue(0);
@@ -1748,15 +2942,33 @@ export function HomeScreen({
     opacity: elementsMountOpacity.value,
     transform: [{ translateY: elementsMountY.value }],
   }));
-  const inputMountStyle = useAnimatedStyle(() => ({
-    // Mount cascade opacity, folded with the idle-sleep fade. Uses the FAST
-    // chrome value (sleepChromeSV) — the dock clears quickly as ONE dozes, well
-    // before the orb finishes its slow glide to centre. Only ever leaves 1 while
-    // Home is truly at rest (no chat / call / sheet), so it never touches the
-    // dock during a conversation.
-    opacity: inputMountOpacity.value * sleepChromeSV.value,
-    transform: [{ translateY: inputMountY.value }],
-  }));
+  // 1 during a voice call (fades in over 200ms), 0 otherwise. Declared HERE —
+  // above inputMountStyle — so that worklet can read it (a SharedValue must be
+  // declared above the worklet that reads it). The driving effect lives below.
+  const callHideSV = useSharedValue(0);
+  // INSTANT (non-animated) call flag — 1 the moment a call is active. Used to
+  // hard-force the dock fully opaque during a call; the animated callHideSV was
+  // leaving the call controls semi-transparent (the idle/mount fade dimming the
+  // shared dock container), so this bypasses any fade math entirely.
+  const callActiveSV = useSharedValue(0);
+  const inputMountStyle = useAnimatedStyle(() => {
+    // During a CALL the dock is ALWAYS fully solid — no idle/mount fade touches
+    // it. (Hard override, not a blend, so it can't end up semi-transparent.)
+    if (callActiveSV.value > 0.5) {
+      return { opacity: 1, transform: [{ translateY: inputMountY.value }] };
+    }
+    // Idle rest: the input STAYS present (no sleep fade) and RISES up to sit
+    // just beneath the centred figure — ONE + composer as one calm centred
+    // pair, not a lone dot. (sleepSV: 1 awake → 0 idle, so (1-sleepSV) ramps
+    // the lift in.) Only for the empty home (sleepCenterOK) — with a
+    // conversation the orb is a top header, so the input stays put. Only the
+    // mount cascade still fades the opacity.
+    const sleepLift = (1 - sleepSV.value) * SLEEP_INPUT_LIFT * sleepCenterOK.value;
+    return {
+      opacity: inputMountOpacity.value,
+      transform: [{ translateY: inputMountY.value - sleepLift }],
+    };
+  });
   // Tracks whether the list is currently snapped OPEN (processes) vs at rest,
   // so onMomentumScrollEnd fires the detent haptic only on a real transition.
   const atProcessesRef = useRef(false);
@@ -1770,6 +2982,16 @@ export function HomeScreen({
     },
   });
 
+  // System status bar follows the scroll ITSELF (during the drag, animated) —
+  // hidden at the resting home, fading in as soon as the user scrolls up toward
+  // the cards, and back out on the way home. Not tied to a settle point.
+  useAnimatedReaction(
+    () => scrollY.value > 40,
+    (isIn, was) => {
+      if (isIn !== was) runOnJS(setInCards)(isIn);
+    },
+  );
+
   // Home → Global pull. Negative overscroll (drag DOWN past the top) scrubs
   // 0→1; clamps to 0 the instant the list is scrolled the normal way (positive
   // offset) so it ONLY ever engages from the resting top. Drives the orb
@@ -1782,6 +3004,30 @@ export function HomeScreen({
       [1, 0],
       Extrapolation.CLAMP,
     );
+  });
+  // Holds the "hidden" state WHILE Global is open, so the input dock + upgrade
+  // line (which fade out during the pull via globalPull) don't snap back while
+  // Global is up — and come BACK in sync with the close drag, via the Global
+  // sheet's LIVE animated index (-1 closed … 0 open). Reading the live index
+  // (not the globalOpen boolean, which only flips AFTER the sheet finishes
+  // closing) is what removes the delay before the input returns to the bottom.
+  // Falls back to a boolean-timed index when none is wired.
+  const fallbackGlobalIndex = useSharedValue(-1);
+  useEffect(() => {
+    if (globalSheetIndex) return;
+    fallbackGlobalIndex.value = withTiming(globalOpen ? 0 : -1, { duration: 280, easing: Easing.out(Easing.cubic) });
+  }, [globalOpen, globalSheetIndex, fallbackGlobalIndex]);
+  const globalIdx = globalSheetIndex ?? fallbackGlobalIndex;
+  // The single Home→Global transition progress (0 = home at rest, 1 = fully in
+  // Global). It takes the MAX of the live pull (finger-tracked open gesture) and
+  // the open-sheet state (from the sheet's live index), so the orb stays DIVED
+  // into the world the whole time Global is open and only rises back in sync
+  // with the close drag — the orb never snaps back to its home spot while Global
+  // is still up (mirrors the profile sheet's finger-tracked exit/entry).
+  const globalProgress = useDerivedValue(() => {
+    'worklet';
+    const openP = interpolate(globalIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP);
+    return Math.max(globalPull.value, openP);
   });
   // Idle-sleep driver: after a long, untouched rest on Home, ONE "falls
   // asleep". Drooping to sleep is slow and heavy; waking is quick and alert.
@@ -1801,25 +3047,45 @@ export function HomeScreen({
     });
   }, [orbAsleep, sleepSV, sleepChromeSV]);
 
+  // Pair-centering in sleep is only for the empty home (centred figure). Once a
+  // conversation exists the orb is a top header, so keep the input at the
+  // bottom on idle instead of floating it to the middle.
+  useEffect(() => {
+    sleepCenterOK.value = sessionMessages.length > 0 ? 0 : 1;
+  }, [sessionMessages.length, sleepCenterOK]);
+
+  // ONE's soft, slowly-rotating invite shown INSIDE the composer while it rests
+  // (idle/asleep) — ONE speaking in its own voice, with a blinking caret, so the
+  // box isn't a dead placeholder but ONE quietly here for you.
+  const IDLE_LINES = lang === 'he'
+    ? ['אני כאן אם צריך', 'על מה נדבר?', 'משהו שבא לך לקדם?', 'דבר איתי מתי שתרצה', 'אני ער — רק תגיד']
+    : ["I'm here if you need me", 'What should we talk about?', 'Anything on your mind?', 'Talk to me anytime'];
+  const [idleLineIdx, setIdleLineIdx] = useState(0);
+  useEffect(() => {
+    if (!orbAsleep) return;
+    const id = setInterval(() => setIdleLineIdx((i) => i + 1), 3500);
+    return () => clearInterval(id);
+  }, [orbAsleep]);
+  const idleLine = orbAsleep ? IDLE_LINES[idleLineIdx % IDLE_LINES.length] : undefined;
+
   // The hero's eyes fade in on the splash → home handoff (eyesOpacityMount) and
-  // stay open at rest. Pulling toward Global — AND falling asleep — fades the
-  // eyes fully out so ONE returns to the bare-dot splash state (the lids also
-  // drop via heroEyeOpen below, so it reads as shutting its eyes as it dissolves).
+  // stay open at rest. Pulling toward Global fades the eyes fully out (ONE
+  // returns to the bare-dot splash state as it dives into the world). Idle rest
+  // no longer shuts them — ONE stays a FIGURE (eyes open) and simply gathers to
+  // the centred pair, so sleepSV is intentionally NOT a factor here.
   const heroEyesOpacity = useDerivedValue(() => {
     'worklet';
-    const fade = interpolate(globalPull.value, [0, 0.4], [0, 1], Extrapolation.CLAMP);
-    return eyesOpacityMount.value * (1 - fade) * sleepSV.value;
+    const fade = interpolate(globalProgress.value, [0, 0.4], [0, 1], Extrapolation.CLAMP);
+    return eyesOpacityMount.value * (1 - fade);
   });
 
-  // Combined lid openness for the hero Orb's `eyeOpen`:
-  //   • Global pull closes the lids EARLY (fully shut by ~40% of the sweep) so
-  //     the orb is a bare dot by the time Global opens.
-  //   • Sleep closes them when idle.
-  // Multiplied, so whichever is smaller wins — either effect can shut the eyes.
+  // Combined lid openness for the hero Orb's `eyeOpen`: Global pull closes the
+  // lids EARLY (fully shut by ~40% of the sweep) so the orb is a bare dot by the
+  // time Global opens. Idle rest keeps them OPEN (ONE stays the figure).
   const heroEyeOpen = useDerivedValue(() => {
     'worklet';
-    const pullClose = interpolate(globalPull.value, [0, 0.4], [0, 1], Extrapolation.CLAMP);
-    return (1 - pullClose) * sleepSV.value;
+    const pullClose = interpolate(globalProgress.value, [0, 0.4], [0, 1], Extrapolation.CLAMP);
+    return (1 - pullClose);
   });
 
   // Subtle crossfade when the broadcast line changes — fade out / fade in.
@@ -1925,6 +3191,32 @@ export function HomeScreen({
     });
   }, [chatActive, chatActiveSV]);
 
+  // Keyboard-open signal (the TextInput is focused). The header orb SHRINKS
+  // only while the keyboard is up — when it closes the orb eases back to its
+  // bigger resting size. 1 = keyboard up, 0 = closed.
+  const kbOpenSV = useSharedValue(0);
+  useEffect(() => {
+    kbOpenSV.value = withTiming(inputFocused ? 1 : 0, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [inputFocused, kbOpenSV]);
+
+  // 0 closed → 1 open for the processes pull-up sheet; drives the backdrop that
+  // dims the chat behind the sheet while it's open.
+  const sheetProgress = useSharedValue(0);
+  const sheetScrimStyle = useAnimatedStyle(() => ({
+    opacity: sheetProgress.value * 0.34,
+  }));
+  // The up-chevron that opens the processes sheet — fades out as the user
+  // scrolls into the cards, while the keyboard is up, and as the sheet opens.
+  const processesChevronStyle = useAnimatedStyle(() => ({
+    opacity:
+      interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP) *
+      (1 - kbOpenSV.value) *
+      (1 - sheetProgress.value),
+  }));
+
   // Ghost (temporary-chat) mode visibly changes ONE: the face fades back to a
   // quieter, "incognito" presence so the user can SEE they're off the record.
   const ghostSV = useSharedValue(ghostMode ? 1 : 0);
@@ -1949,20 +3241,18 @@ export function HomeScreen({
     return scroll - chatActiveSV.value * 0.35;
   });
 
-  // Track "chat has at least one message" on the worklet thread so we can
-  // collapse the hero only AFTER the conversation has actually started — not
-  // the moment the input gains focus. Per the latest mockup: chat-just-opened
-  // keeps the big Orb + CTA line, sending the first message is what shrinks
-  // the face up to the header.
-  // Gated on chatActive (not just message count) so that when the chat is
-  // DISMISSED — history kept — the hero un-collapses back to the big resting orb.
+  // Track "there's a conversation" on the worklet thread. The MOMENT a thread
+  // exists (at rest too, not only while focused) the big centred orb shrinks up
+  // into a COMPACT HEADER at the top, so the conversation reads from just under
+  // it — the chat sits HIGH on the page, never pushed down toward the bottom by
+  // a big orb. The big resting orb is for the empty / fresh home only.
   const hasChatMessagesSV = useSharedValue(0);
   useEffect(() => {
-    hasChatMessagesSV.value = withTiming(chatActive && sessionMessages.length > 0 ? 1 : 0, {
+    hasChatMessagesSV.value = withTiming(sessionMessages.length > 0 ? 1 : 0, {
       duration: 320,
       easing: Easing.out(Easing.cubic),
     });
-  }, [chatActive, sessionMessages.length, hasChatMessagesSV]);
+  }, [sessionMessages.length, hasChatMessagesSV]);
 
   // Collapse fraction: 0 = resting hero (big centred Orb + broadcast),
   // 1 = compact header (small Orb up top + identity name). Driven by EITHER
@@ -1972,8 +3262,12 @@ export function HomeScreen({
   // touch for the keyboard.
   const collapseFrac = useDerivedValue(() => {
     'worklet';
-    const scrollFrac = Math.max(0, Math.min(1, scrollY.value / SNAP_OPEN));
-    return Math.max(scrollFrac, hasChatMessagesSV.value);
+    // Collapse is driven by SCROLL ONLY. The chat behaves EXACTLY like the empty
+    // home: the orb is big at rest (whether or not a conversation exists) and
+    // only shrinks to the compact header as you scroll down. Nothing about
+    // "having a thread" collapses it — that's what made the chat look different
+    // from the home. The orb shrinks a touch on keyboard-open via kbOpenSV.
+    return Math.max(0, Math.min(1, scrollY.value / SNAP_OPEN));
   });
 
   // Lift the hero (orb + CTA) when chat opens so the keyboard doesn't
@@ -1982,7 +3276,11 @@ export function HomeScreen({
   // room without colliding with the keyboard.
   const chatOpenLiftSV = useDerivedValue(() => {
     'worklet';
-    return chatActiveSV.value * (1 - hasChatMessagesSV.value) * -80;
+    // Keyboard open (composing, with OR without a thread): the orb + bubbles ease
+    // UP a little to leave room above the keyboard — it's the same page, just
+    // lifting. Driven by the keyboard (kbOpenSV), so the chat behaves exactly
+    // like the empty home: same lift whether or not a conversation exists.
+    return kbOpenSV.value * -34;
   });
 
   /*
@@ -2039,23 +3337,74 @@ export function HomeScreen({
   // rides up to KB_GAP above the keyboard when it opens. On iOS the SafeAreaView
   // already provides the bottom inset, so we only apply the keyboard slide.
   const inputDockStyle = useAnimatedStyle(() => {
+    // Idle-rest lift (0 while awake, and 0 once a conversation exists) — carried
+    // in BOTH dock transforms so the input rises to the centred pair no matter
+    // which style wins the flatten.
+    const sleepLift = (1 - sleepSV.value) * SLEEP_INPUT_LIFT * sleepCenterOK.value;
     if (isAndroid) {
       const kb = keyboardHeight.value;
       const lift = kb > 1 ? kb + KB_GAP : insetsBottom;
-      return { transform: [{ translateY: -lift }] };
+      return { transform: [{ translateY: -lift - sleepLift }] };
     }
-    return { transform: [{ translateY: inputKeyboardLift.value }] };
+    return { transform: [{ translateY: inputKeyboardLift.value - sleepLift }] };
   });
 
-  // Messages area sits ABOVE the input — its bottom edge tracks the dock so
-  // bubbles never hide under the keyboard. Mirrors the dock lift per platform.
-  const messagesAreaStyle = useAnimatedStyle(() => {
-    if (isAndroid) {
-      const kb = keyboardHeight.value;
-      const lift = kb > 1 ? kb + KB_GAP : insetsBottom;
-      return { bottom: INPUT_BAR_H + 8 + lift };
-    }
-    return { bottom: INPUT_BAR_H + 8 - inputKeyboardLift.value };
+  // A bottom gradient fade that RIDES UP with the keyboard (like the home's
+  // bottom EdgeBar, but above the keyboard) so the chat fades softly behind the
+  // input instead of cutting off hard against the keyboard. Only while the
+  // keyboard is up.
+  const kbBottomFadeStyle = useAnimatedStyle(() => {
+    const kb = isAndroid
+      ? (keyboardHeight.value > 1 ? keyboardHeight.value : 0)
+      : Math.max(0, -inputKeyboardLift.value);
+    return { opacity: kbOpenSV.value, transform: [{ translateY: -kb }] };
+  });
+
+  // Input capsule GROWS at the resting hero and SHRINKS back to normal as the
+  // user scrolls down into the cards (and whenever a chat is active). Gives the
+  // composer presence as "now" without crowding the list.
+  const inputScaleStyle = useAnimatedStyle(() => {
+    const p = interpolate(
+      scrollY.value,
+      [0, SNAP_OPEN * 0.5],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    // The capsule keeps its size (no shrink) — it only DROPS to the bottom as
+    // the user scrolls into the cards (its small rest-lift returns to 0).
+    const lift = (1 - p) * (1 - chatActiveSV.value) * -8;
+    return { transform: [{ translateY: lift }] };
+  });
+
+  // The right call button is LARGER at the resting Home (a prominent invitation
+  // to talk to ONE). It stays LARGE everywhere — at rest, in the processes
+  // list, AND while composing (keyboard open): ONE's voice is always one big
+  // tap away, and the button doesn't shrink when the keyboard opens.
+  const voiceBtnScaleStyle = useAnimatedStyle(() => {
+    return { transform: [{ scale: 1.2 }] };
+  });
+
+  // Rest-only chrome (the upgrade line): fades AND collapses to zero height as
+  // the user scrolls toward the cards, so it stops holding the input up — the
+  // capsule then drops flush to the very bottom.
+  const restChromeStyle = useAnimatedStyle(() => {
+    const p = interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP);
+    // Collapse + fade the upgrade line while the keyboard is up, and ease it
+    // smoothly back in when the keyboard closes (kbOpenSV ramps over ~220ms) —
+    // no abrupt pop under the input.
+    const kb = 1 - kbOpenSV.value;
+    return { opacity: p * kb, height: p * kb * 30, marginTop: p * kb * 8 };
+  });
+
+  // Fades the input dock + upgrade line out with the SAME Global transition
+  // progress as the orb (globalProgress), so input + figure move together.
+  const globalHideStyle = useAnimatedStyle(() => ({ opacity: 1 - globalProgress.value }));
+  // The upgrade line already fades + collapses as the user scrolls DOWN into the
+  // cards (restChrome). Fold the Global fade in by MULTIPLYING, so both gestures
+  // work without one clobbering the other's opacity.
+  const homeUpgradeStyle = useAnimatedStyle(() => {
+    const scrollP = interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP);
+    return { opacity: scrollP * (1 - globalProgress.value), height: scrollP * 30, marginTop: scrollP * 8 };
   });
 
   /*
@@ -2080,16 +3429,21 @@ export function HomeScreen({
   // clearly distinct from the full-screen scroll content below, and so the
   // chat header buttons (X / ⋮) at y=12 don't crowd the orb beneath them.
   const HERO_OPEN_ORB_TOP = 12;
-  const HERO_OPEN_ORB_SCALE = 52 / HOME_ORB_SIZE;     // chat-mode orb sized to match the X/⋮ buttons (52 ≈ 48px buttons)
+  const HERO_OPEN_ORB_SCALE = 52 / HOME_ORB_SIZE;     // chat-mode orb WHILE TYPING (keyboard up) — matches the X/⋮ buttons
+  // Chat header at REST (keyboard closed): the orb is noticeably BIGGER — it
+  // steps back to a compact size only when you open the keyboard to type.
+  const HERO_HEADER_REST_SCALE = 82 / HOME_ORB_SIZE;
   // In the PROCESSES LIST (scroll collapse) the head reads bigger than in chat —
   // it's the agent presiding over the list, not a compact chat avatar.
   const HERO_PROCESSES_ORB_SCALE = 66 / HOME_ORB_SIZE;
-  // How much the hero shrinks when the profile opens — a small recede-to-a-dot,
-  // not a vanish (it stays visible with its eyes shut).
-  const PROFILE_ORB_SHRINK = 0.72;
-  // How much the bare dot GROWS as ONE falls asleep — ends ~18% bigger than the
-  // resting hero, a calm splash-like dot at screen centre.
-  const SLEEP_ORB_GROW = 0.18;
+  // How much the hero shrinks as the profile opens — it dives DOWN to screen
+  // centre while shrinking, so it reads as ONE gliding into its profile (and
+  // rising back out on close). Shrinks to ~half, not a vanish.
+  const PROFILE_ORB_SHRINK = 0.52;
+  // Idle rest keeps ONE as the FIGURE, and it SHRINKS a touch so it reads as a
+  // calm resting face that sits clearly ABOVE the composer (never touching it),
+  // not a big orb crowding the box.
+  const SLEEP_ORB_GROW = -0.18;
   // Sits just below the collapsed processes-list Orb (66px tall from top 12 →
   // visual bottom ~87). 90 hugs the face closely without tucking under it —
   // 100 read as floating too far below the head.
@@ -2099,10 +3453,28 @@ export function HomeScreen({
   // UI thread because a static `opacity: 0` after an animated style loses — the
   // orb's own worklet keeps re-writing opacity each frame, so the face peeked
   // through ("another agent below"). Multiplying inside the worklets wins.
-  const callHideSV = useSharedValue(0);
+  // (callHideSV is declared higher up, above inputMountStyle, so that worklet can
+  // read it too.)
   useEffect(() => {
-    callHideSV.value = withTiming(callActive ? 1 : 0, { duration: 200 });
-  }, [callActive, callHideSV]);
+    // Snappy hero↔call crossfade (the call orb's opacity is callHideSV too), so
+    // the swap is quick and the two orbs don't co-exist as solids on the list.
+    callHideSV.value = withTiming(callActive ? 1 : 0, { duration: 130 });
+    // Instant flag (no timing) — the dock's hard "solid during call" override.
+    callActiveSV.value = callActive ? 1 : 0;
+    // Force BOTH inputs to the dock's opacity fully OPEN during a call, at the JS
+    // level, so it can NEVER be dimmed regardless of home state or a stale
+    // worklet: sleepChromeSV (idle-doze fade) AND inputMountOpacity (mount
+    // cascade). dock opacity = inputMountOpacity × sleepChromeSV = 1 × 1 = 1.
+    if (callActive) {
+      sleepChromeSV.value = 1;
+      inputMountOpacity.value = 1;
+    }
+  }, [callActive, callHideSV, callActiveSV, sleepChromeSV, inputMountOpacity]);
+  // Mirror the call flag up to the navigator (so a sheet over Home can wear the
+  // call ring). Home still owns the call itself.
+  useEffect(() => {
+    onCallActiveChange?.(callActive);
+  }, [callActive, onCallActiveChange]);
 
   const heroOrbStyle = useAnimatedStyle(() => {
     const f = collapseFrac.value;
@@ -2110,10 +3482,10 @@ export function HomeScreen({
     // Mount "pop in" scale (0 → 1) composes with the collapse scale so
     // the orb starts INVISIBLE on first paint, grows in at centre, and
     // only then begins the cascade to its Home position.
-    // The collapsed orb is BIGGER in the processes list (scroll collapse) than
-    // in chat, where it matches the X/⋮ buttons. Chat wins when messages exist.
-    const collapsedTarget =
-      hasChatMessagesSV.value > 0.5 ? HERO_OPEN_ORB_SCALE : HERO_PROCESSES_ORB_SCALE;
+    // Scrolling down collapses the orb to the processes-list header size — same
+    // as the empty home. (No separate "chat header" size: the chat uses the
+    // identical big-orb-at-rest treatment as the home.)
+    const collapsedTarget = HERO_PROCESSES_ORB_SCALE;
     const collapseScale = 1 - f * (1 - collapsedTarget);
     // Profile hand-off: the orb no longer VANISHES — it stays put, shuts its
     // eyes (→ bare black dot, via heroEye*Final) AND shrinks a little, so it
@@ -2121,13 +3493,19 @@ export function HomeScreen({
     // closed, 1 once the profile is open; the scale eases to PROFILE_ORB_SHRINK.
     const pc = interpolate(profileIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP);
     const profileScale = 1 - pc * (1 - PROFILE_ORB_SHRINK);
+    // …and it GLIDES DOWN to screen centre as it shrinks — the same rest→centre
+    // delta the sleep drop uses, so the orb dives into its profile and rises
+    // back out on close. Gated by (1 - f): only the resting hero travels.
+    const profileDrop = pc * ORB_FROM_CENTER_OFFSET * (1 - f);
     // Global pull: glide DOWN to mid-screen and shrink ~40% toward a bare dot.
-    const gp = globalPull.value;
-    // Falling asleep: the bare dot glides DOWN to screen centre — the exact
-    // splash position (ORB_FROM_CENTER_OFFSET is the rest→centre delta the mount
-    // rise uses in reverse). Gated by (1 - f) so it only travels from the RESTING
-    // hero, never while collapsed/scrolled into the processes list.
-    const sleepDrop = (1 - sleepSV.value) * ORB_FROM_CENTER_OFFSET * (1 - f);
+    const gp = globalProgress.value;
+    // Idle rest: the figure glides DOWN toward screen centre, but stops a touch
+    // ABOVE it (minus SLEEP_ORB_RAISE) so that it + the input lifting up from the
+    // bottom land as one pair centred together (figure over composer). Gated by
+    // (1 - f) so it only travels from the RESTING hero, never while scrolled into
+    // the processes list.
+    const sleepDrop =
+      (1 - sleepSV.value) * (ORB_FROM_CENTER_OFFSET - SLEEP_ORB_RAISE) * (1 - f);
     // As it settles asleep in the centre, the bare black dot swells a touch —
     // ending a bit BIGGER than the resting hero, like the splash dot. Gated by
     // (1 - f) so only the resting hero grows.
@@ -2142,9 +3520,22 @@ export function HomeScreen({
             orbMountY.value +
             chatOpenLiftSV.value +
             gp * PULL_CENTER_DELTA +
-            sleepDrop,
+            sleepDrop +
+            profileDrop +
+            interpolate(signInIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP) * 130,
         },
-        { scale: collapseScale * orbEnterScale.value * (1 - 0.4 * gp) * profileScale * sleepGrow },
+        {
+          scale:
+            collapseScale *
+            orbEnterScale.value *
+            (1 - 0.4 * gp) *
+            profileScale *
+            sleepGrow *
+            // Shrink a touch while the KEYBOARD is up (kbOpenSV) so the figure
+            // steps back and makes room — same in the empty home and in chat;
+            // it eases back to full size when the keyboard closes.
+            (1 - kbOpenSV.value * 0.22),
+        },
       ],
     };
   });
@@ -2159,7 +3550,10 @@ export function HomeScreen({
             ty +
             heroKeyboardLift.value +
             orbMountY.value +
-            chatOpenLiftSV.value,
+            chatOpenLiftSV.value +
+            // Move down with the orb when the sign-in sheet is open — tracked
+            // to the sheet's live index so it rises back in sync on close.
+            interpolate(signInIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP) * 130,
         },
       ],
     };
@@ -2195,7 +3589,7 @@ export function HomeScreen({
         1 - profileHide,
         // 5) pulling DOWN toward Global — the text vanishes EARLY (gone by ~40%
         //    of the sweep) so it's already cleared by the time Global opens.
-        1 - interpolate(globalPull.value, [0, 0.4], [0, 1], Extrapolation.CLAMP),
+        1 - interpolate(globalProgress.value, [0, 0.4], [0, 1], Extrapolation.CLAMP),
         // 6) in a call — the broadcast line goes away with the home face.
         1 - callHideSV.value,
         // 7) ONE fell asleep — the surroundings clear FAST (sleepChromeSV), so
@@ -2206,6 +3600,12 @@ export function HomeScreen({
     };
   });
 
+  // The inline conversation thread fades out as ONE goes idle (same fast
+  // sleepChromeSV as the opener), leaving just the centred figure + composer.
+  const threadSleepFadeStyle = useAnimatedStyle(() => ({
+    opacity: sleepChromeSV.value,
+  }));
+
   const identityCrossfadeStyle = useAnimatedStyle(() => ({
     // Identity row fades in over the SECOND half of collapse — only when
     // not in chat (in chat we show the X+⋮ header instead, so this stays
@@ -2213,7 +3613,7 @@ export function HomeScreen({
     opacity:
       interpolate(collapseFrac.value, [0.5, 1], [0, 1], Extrapolation.CLAMP) *
       (1 - chatActiveSV.value) *
-      (1 - globalPull.value) *
+      (1 - globalProgress.value) *
       (1 - callHideSV.value),
   }));
 
@@ -2261,6 +3661,9 @@ export function HomeScreen({
   // overlay sheet is up (a process card, profile, settings, global, +, …).
   const homeAtRest = !chatActive && !callActive && !anySheetOpen;
   const scheduleSleep = useCallback(() => {
+    // Idle "sleep" is a native-only flourish; on web its transform-heavy
+    // centre-drop mis-renders (orb vanishes), so skip it in the browser.
+    if (Platform.OS === 'web') return;
     if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
     sleepTimerRef.current = setTimeout(() => {
       // If ONE dozed off while scrolled into the processes list, glide back to
@@ -2277,17 +3680,26 @@ export function HomeScreen({
   // the doze countdown), AND resumes the broadcast if it has gone quiet after
   // its round — "the moment there's action on the screen, ONE speaks again".
   const handleHomeTouch = useCallback(() => {
+    noteInteract(); // resets the onboarding-hint idle timer
     revealChevrons();
     if (!chatActive && !callActive && !anySheetOpen) {
       resumeBroadcast();
+      // Waking after a long idle doze counts as "coming back" → a fresh opener.
+      if (orbAsleep) bumpGreeting();
       setOrbAsleep(false);
       scheduleSleep();
     }
-  }, [revealChevrons, resumeBroadcast, chatActive, callActive, anySheetOpen, scheduleSleep]);
+  }, [noteInteract, revealChevrons, resumeBroadcast, chatActive, callActive, anySheetOpen, scheduleSleep, orbAsleep, bumpGreeting]);
 
   // Start the doze countdown when Home settles at rest; cancel + wake the
-  // instant any overlay (chat / call / sheet) takes over.
+  // instant any overlay (chat / call / sheet) takes over. Returning to a bare
+  // home (a chat / call / sheet just closed) also refreshes the opening line —
+  // an actual state change, not a ticking clock. `prevHomeRestRef` keeps it to
+  // the false→true transition (never on the initial mount).
+  const prevHomeRestRef = useRef(true);
   useEffect(() => {
+    if (homeAtRest && !prevHomeRestRef.current) bumpGreeting();
+    prevHomeRestRef.current = homeAtRest;
     if (!homeAtRest) {
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
       setOrbAsleep(false);
@@ -2297,7 +3709,7 @@ export function HomeScreen({
     return () => {
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
     };
-  }, [homeAtRest, scheduleSleep]);
+  }, [homeAtRest, scheduleSleep, bumpGreeting]);
 
   // The first reveal waits out the splash; later entrances show immediately.
   const didFirstChevronWakeRef = useRef(false);
@@ -2334,7 +3746,7 @@ export function HomeScreen({
     opacity:
       upChevronOpacity.value *
       interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP) *
-      (1 - globalPull.value),
+      (1 - globalProgress.value),
   }));
 
   // Cards fade behind the chat overlay when chat is active. Reads as the
@@ -2343,13 +3755,6 @@ export function HomeScreen({
   // cards return to full opacity AS the chat leaves, not after a hard cut.
   const cardsBehindChatStyle = useAnimatedStyle(() => ({
     opacity: 1 - chatActiveSV.value * (1 - chatExitProgress.value) * 0.8,
-  }));
-
-  // Chat overlay + header close = pure FADE, no slide. The chat leaves by
-  // dissolving in place (same for the X button and the pull-down dismiss), so
-  // both close paths read identically and there's no off-screen travel.
-  const chatExitTranslateStyle = useAnimatedStyle(() => ({
-    opacity: 1 - chatExitProgress.value,
   }));
 
   // Chat header (X + ghost) — fades in with the chat and fades out on close.
@@ -2373,6 +3778,12 @@ export function HomeScreen({
   // Subtle green ring HUGGING the orb edge — the "you're connected" signal.
   // Barely moves: a very gentle 1 → 1.04 breath so it reads alive, not busy.
   const callRingPulse = useSharedValue(1);
+  // Small autonomous "I'm here" drift of the call orb — NOT a mechanical circle
+  // loop, but occasional gentle shifts to the side with pauses between, so it
+  // reads alive rather than stuck. X and Y run independent, differently-timed
+  // sequences so the motion never looks like a repeating pattern.
+  const callDriftX = useSharedValue(0);
+  const callDriftY = useSharedValue(0);
   useEffect(() => {
     if (callActive) {
       callOrbX.value = 0;
@@ -2390,10 +3801,37 @@ export function HomeScreen({
         -1,
         true,
       );
+      // Occasional gentle shifts with pauses between — not a constant loop.
+      // Different offsets/durations/pauses per axis → organic wander.
+      const ease = Easing.inOut(Easing.quad);
+      callDriftX.value = 0;
+      callDriftX.value = withRepeat(
+        withSequence(
+          withDelay(2200, withTiming(7, { duration: 1500, easing: ease })),
+          withDelay(2600, withTiming(-6, { duration: 1700, easing: ease })),
+          withDelay(1900, withTiming(3, { duration: 1400, easing: ease })),
+          withDelay(3000, withTiming(0, { duration: 1600, easing: ease })),
+        ),
+        -1,
+        false,
+      );
+      callDriftY.value = 0;
+      callDriftY.value = withRepeat(
+        withSequence(
+          withDelay(3400, withTiming(-5, { duration: 1600, easing: ease })),
+          withDelay(2100, withTiming(4, { duration: 1500, easing: ease })),
+          withDelay(3200, withTiming(-2, { duration: 1400, easing: ease })),
+          withDelay(2400, withTiming(0, { duration: 1600, easing: ease })),
+        ),
+        -1,
+        false,
+      );
     } else {
       callRingPulse.value = 1;
+      callDriftX.value = 0;
+      callDriftY.value = 0;
     }
-  }, [callActive, callOrbX, callOrbY, callOrbScale, callRingPulse]);
+  }, [callActive, callOrbX, callOrbY, callOrbScale, callRingPulse, callDriftX, callDriftY]);
 
   // Drag bounds. The orb rests where the Home agent sits (centre matched), and
   // can travel out to any screen corner. `half` is the ring footprint so the
@@ -2441,16 +3879,36 @@ export function HomeScreen({
         }),
     [callOrbX, callOrbY, callOrbStartX, callOrbStartY, callSnapX, callMinY, callMaxY],
   );
+  // Computed IN-render (not a module const) so Fast Refresh actually applies
+  // the position: the call orb sits at the home orb's spot (top), and the
+  // scroll-glide delta is relative to that.
+  const callOrbTop = HERO_CENTER_TOP + HOME_ORB_SIZE / 2 - (CALL_ORB_SIZE + 20) / 2;
+  const callTopDelta = -(callOrbTop - 14);
   const callOrbStyle = useAnimatedStyle(() => {
-    // Scrolling into the processes list re-centres the orb (drag offset eases
-    // back to 0) and glides it UP + a touch smaller, so it docks at the top out
-    // of the way. Scroll back down and it returns to where it was.
+    // FIXED in place like the home orb — no free drag (the orb must not move
+    // from its spot, and can't be dragged). The only motion is the shared home
+    // behaviour: scrolling into the processes list glides it UP + a touch
+    // smaller so it docks at the top, and scrolling back returns it.
     const sp = interpolate(scrollY.value, [0, SNAP_OPEN * 0.5], [0, 1], Extrapolation.CLAMP);
+    // Autonomous "I'm here" drift — occasional gentle shifts (callDriftX/Y run
+    // eased sequences with pauses), fading out as the orb docks up on scroll.
+    const f = 1 - sp;
+    // Profile hand-off DURING a call — the SAME dive as the resting hero: the
+    // call orb glides DOWN to screen centre + shrinks + fades as ONE's profile
+    // rises over it, and rises back out on close (finger-tracked via profileIdx).
+    const pc = interpolate(profileIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP);
+    const profileDrop = pc * ORB_FROM_CENTER_OFFSET * f;
+    const profileScale = 1 - pc * (1 - PROFILE_ORB_SHRINK);
     return {
+      // CROSSFADE with the hero orb: the call orb fades IN (callHideSV 0→1) at
+      // the exact rate the hero orb fades OUT (opacity 1 − callHideSV), so the
+      // two never both read as solid at once — no "double orb" on call start,
+      // even in the collapsed list where their heights differ.
+      opacity: callHideSV.value * (1 - pc),
       transform: [
-        { translateX: callOrbX.value * (1 - sp) },
-        { translateY: callOrbY.value * (1 - sp) + sp * CALL_TOP_DELTA },
-        { scale: callOrbScale.value * (1 - 0.22 * sp) },
+        { translateX: callDriftX.value * f * (1 - pc) },
+        { translateY: sp * callTopDelta + callDriftY.value * f + profileDrop },
+        { scale: callOrbScale.value * (1 - 0.22 * sp) * profileScale },
       ],
     };
   });
@@ -2458,17 +3916,227 @@ export function HomeScreen({
   const callRingStyle = useAnimatedStyle(() => ({
     transform: [{ scale: callRingPulse.value }],
   }));
+  // The call's "on what shall we talk" line behaves like the home broadcast:
+  // it sits at the top under the orb and FADES + glides up as the user scrolls
+  // into the cards (so it never overlaps them), reappearing on scroll back.
+  const callTalkStyle = useAnimatedStyle(() => {
+    const sp = interpolate(scrollY.value, [0, SNAP_OPEN * 0.4], [0, 1], Extrapolation.CLAMP);
+    // Fade the call line out too as the profile rises over the call (pc 0→1).
+    const pc = interpolate(profileIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP);
+    return {
+      opacity: (1 - sp) * (1 - pc),
+      transform: [{ translateY: sp * callTopDelta }],
+    };
+  });
+
+  // The call dock, rendered at the TOP LEVEL (a sibling of the whole home tree),
+  // so NOTHING in the home layout can ever cover or dim it — the source of the
+  // stubborn "faded call bar from home". Plain opacity (no inputMountStyle), so
+  // the idle-doze / mount fades that live in the home tree can't touch it. The
+  // bottom fade sits before it (below it) to blur the cards.
+  const callDockNode = (
+    <>
+      <EdgeBars top={false} bottomHeight={150} style={styles.callBottomFade} />
+      {/* bottom: insets.bottom — the home dock gets this from sitting inside the
+          SafeAreaView's padded content; this dock is a direct child, so it must
+          add the safe-area inset itself (otherwise it sat flush at the very
+          bottom, ignoring the home-indicator gap). */}
+      <Animated.View style={[styles.inputDock, styles.dockOnTop, { bottom: insets.bottom }, inputDockStyle]}>
+        {/* Same inputNarrow + inputScaleStyle wrapper as the home dock, so the
+            capsule's width, side margins and vertical rest-lift (-8) match it
+            exactly. */}
+        <Animated.View style={[styles.inputNarrow, inputScaleStyle]}>
+          <InputBar
+            value=""
+            onChangeText={() => {}}
+            callMode
+            onEndCall={endCall}
+            onPressPlus={onCreateProcess}
+            focusSignal={chatReturnFocus}
+            voiceBtnStyle={voiceBtnScaleStyle as never}
+            callControls={
+              <>
+                <Pressable
+                  onPress={() => { haptic.select(); setSpeakerOn((v) => !v); }}
+                  style={[styles.callCtrlBtn, { backgroundColor: speakerOn ? colors.text : colors.callCtrlRest }]}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: speakerOn }}
+                  accessibilityLabel="Speaker"
+                >
+                  <View style={{ opacity: speakerOn ? 1 : 0.45 }}>
+                    <SpeakerIcon size={26} color={speakerOn ? colors.surface : colors.text} />
+                  </View>
+                </Pressable>
+                <Pressable
+                  onPress={() => { haptic.select(); setMuted((v) => !v); }}
+                  style={[styles.callCtrlBtn, { backgroundColor: muted ? '#EF4444' : colors.callCtrlRest }]}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: muted }}
+                  accessibilityLabel="Mute"
+                >
+                  <View style={{ opacity: muted ? 1 : 0.45 }}>
+                    {muted ? (
+                      <MicOffIcon size={26} color="#FFFFFF" />
+                    ) : (
+                      <MicIcon size={26} color={colors.text} />
+                    )}
+                  </View>
+                </Pressable>
+                <Pressable
+                  onPress={() => { haptic.select(); setCameraOn((v) => !v); }}
+                  style={[styles.callCtrlBtn, { backgroundColor: cameraOn ? colors.text : colors.callCtrlRest }]}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: cameraOn }}
+                  accessibilityLabel="Camera"
+                >
+                  <View style={{ opacity: cameraOn ? 1 : 0.45 }}>
+                    <CameraIcon size={26} color={cameraOn ? colors.surface : colors.text} />
+                  </View>
+                </Pressable>
+              </>
+            }
+          />
+        </Animated.View>
+        {onUpgrade && (
+          <AnimatedPressable
+            onPress={onUpgrade}
+            hitSlop={8}
+            style={[styles.upgradeRow, restChromeStyle]}
+            accessibilityRole="button"
+            accessibilityLabel={lang === 'he' ? 'שדרוג' : 'Upgrade'}
+          >
+            <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
+              {lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '}
+            </Text>
+            <Text style={[styles.upgradeLink, { color: colors.text }]}>
+              {lang === 'he' ? 'שדרוג' : 'Upgrade'}
+            </Text>
+          </AnimatedPressable>
+        )}
+      </Animated.View>
+    </>
+  );
+
+  // Spaces / processes — rendered inside the pull-up sheet (below), not in the
+  // chat scroll. Same content as before, just relocated. Only when onboarded.
+  const processesContent =
+    cardGroups.length === 0 ? (
+      <View style={styles.emptyCardsState}>
+        <StackedCardsIcon size={36} color={colors.textSecondary} />
+        <Text style={[styles.emptyCardsLine, { color: colors.textSecondary }]}>
+          {lang === 'he'
+            ? 'עדיין אין כאן תהליכים.\nספרו לי על משהו שתרצו לקדם.'
+            : 'Nothing here yet.\nTell me something you want to move forward.'}
+        </Text>
+      </View>
+    ) : (
+      <>
+        {cardGroups.map(({ idn, items }) => {
+          const collapsed = collapsedGroups.has(idn.id);
+          const ProfileIcon =
+            idn.type === 'business'
+              ? BriefcaseIcon
+              : idn.type === 'family'
+                ? HouseIcon
+                : PersonIcon;
+          return (
+            <View key={idn.id} style={styles.drawer}>
+              <Pressable
+                onPress={() => toggleGroup(idn.id)}
+                onLongPress={() => promptDeleteSpace(idn.id, idn.name)}
+                delayLongPress={450}
+                style={[styles.drawerHeader, { direction: lang === 'he' ? 'rtl' : 'ltr' }]}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: !collapsed }}
+                accessibilityLabel={idn.name}
+              >
+                <ProfileIcon size={17} color={colors.text} />
+                <Text style={[styles.drawerTitle, { color: colors.text }]} numberOfLines={1}>
+                  {idn.name || (lang === 'he' ? 'אישי' : 'Personal')}
+                </Text>
+                <View style={[styles.drawerCountPill, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.drawerCount, { color: colors.textSecondary }]}>
+                    {items.length}
+                  </Text>
+                </View>
+                <View style={styles.flex1} />
+                <View
+                  style={{
+                    transform: [
+                      { rotate: collapsed ? (lang === 'he' ? '90deg' : '-90deg') : '0deg' },
+                    ],
+                  }}
+                >
+                  <ArrowDownIcon size={20} color={colors.textSecondary} />
+                </View>
+              </Pressable>
+              {!collapsed && (
+                <View style={styles.drawerBody}>
+                  {items.length === 0 && (
+                    <Text style={[styles.drawerEmptyHint, { color: colors.textSecondary }, rtlText(lang)]}>
+                      {lang === 'he' ? 'עדיין אין תהליכים במרחב הזה.' : 'No processes in this space yet.'}
+                    </Text>
+                  )}
+                  {items.map((u, ci) => (
+                    <Animated.View key={u.id} entering={FadeIn.duration(240).delay(ci * 40)}>
+                      <UnitCard
+                        unit={u}
+                        onPress={() => onTapUnit(u.id)}
+                        onLongPress={() => onLongPressUnit?.(u.id)}
+                        onDelete={() => removeUnit(u.id)}
+                        onPin={() =>
+                          updateUnit(u.id, { unreadUpdates: (u.unreadUpdates ?? 0) + 1 })
+                        }
+                        onShare={() => {
+                          const summary = [
+                            `${u.emoji} ${u.title}`,
+                            u.latestBroadcastText?.[0] ?? '',
+                            lang === 'he' ? '\nנשלח מ-ONE' : '\nShared from ONE',
+                          ]
+                            .filter(Boolean)
+                            .join('\n');
+                          Share.share({ message: summary }).catch(() => {});
+                        }}
+                      />
+                    </Animated.View>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
+        <Pressable
+          onPress={() => { haptic.tap(); onTapHeader?.(); }}
+          style={[styles.addSpaceBtn, { borderColor: colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel={lang === 'he' ? 'מרחב חדש' : 'New space'}
+        >
+          <PlusIcon size={16} color={colors.textSecondary} />
+          <Text style={[styles.addSpaceText, { color: colors.textSecondary }]}>
+            {lang === 'he' ? 'מרחב חדש' : 'New space'}
+          </Text>
+        </Pressable>
+      </>
+    );
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Hidden through the mount cascade (clean, chrome-free intro), then
           fades in as the broadcast + input dock arrive. Bar contents follow
           the theme so the clock stays legible in light AND dark. */}
-      <StatusBar
-        hidden={statusBarHidden || orbAsleep}
-        animated
-        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-      />
+      {/* Home owns the status bar ONLY while no unit sheet is open. When a unit
+          sheet opens, THIS one unmounts and the sheet's own <StatusBar> becomes
+          the SOLE controller — so there are never two StatusBars fighting (that
+          competition was the white-clock "flick" on open). No system clock bar at
+          the resting home (ONE shows its own time in the hero's date line); it
+          appears only in the cards list or while writing. */}
+      {!unitOpen && (
+        <StatusBar
+          hidden={statusBarHidden || (!inCards && !chatActive)}
+          animated
+          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        />
+      )}
       {/* Tap the very top (status-bar strip) to REPLAY the opening splash.
           Reaches up into the safe-area inset so the clock row itself is the
           target. Not rendered while chatting / on a call, so it can never fire
@@ -2506,27 +4174,22 @@ export function HomeScreen({
               style={styles.flex1}
               onScroll={scrollHandler}
               // Starting a drag is a touch — gently reveal the arrows.
-              onScrollBeginDrag={revealChevrons}
-              // Pull DOWN past the top (overscroll bounce) → ONE01 Global.
-              // By release the orb has already folded toward a centred dot and
-              // the text has faded (see globalPull), so opening Global reads as
-              // ONE diving into the world rather than a hard cut.
-              onScrollEndDrag={(e) => {
-                if (
-                  !chatActive &&
-                  onOpenGlobal &&
-                  e.nativeEvent.contentOffset.y <= -GLOBAL_OPEN_THRESHOLD
-                ) {
-                  // ONE diving into the world — a firm press marks the crossing.
-                  haptic.press();
-                  onOpenGlobal();
-                }
+              onScrollBeginDrag={() => {
+                noteInteract();
+                revealChevrons();
               }}
+              // The UP axis (overscroll past the top) is CANCELLED — no Global,
+              // no mode switch. The home reads as one calm continuous thread:
+              // scrolling up just bounces. Global is a deliberate tap on the
+              // up-chevron above the orb (user: "just cancel the up-scroll; the
+              // down-scroll to processes is good"). Down-scroll → processes is
+              // untouched.
               // A light tick each time the list SNAPS between the resting hero
               // and the open processes list (in either direction), so the
               // detent change is felt, not just seen.
               onMomentumScrollEnd={(e) => {
                 const open = e.nativeEvent.contentOffset.y > SNAP_OPEN * 0.5;
+                if (open) seenProcessesRef.current = true; // learned it
                 if (open !== atProcessesRef.current) {
                   atProcessesRef.current = open;
                   haptic.select();
@@ -2534,15 +4197,24 @@ export function HomeScreen({
               }}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
-              snapToOffsets={[0, SNAP_OPEN]}
+              // Drag the conversation to lower the keyboard — no X / close
+              // button; the keyboard just opens and closes on the same page.
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+              // The chat scroll is now pure conversation (processes live in the
+              // pull-up sheet), so there's no cards detent — free-scroll the
+              // thread (up for history).
               snapToEnd={false}
               decelerationRate="normal"
-              // While chat is open the processes list shouldn't scroll —
-              // any vertical drag belongs to the chat messages. Locks the
-              // underlying cards scroll until the user closes the chat.
-              scrollEnabled={!chatActive}
+              // The conversation is inline scroll content now, so the list must
+              // stay scrollable while composing — you scroll UP through the
+              // thread with the keyboard open. (It used to lock here because the
+              // chat was a separate overlay that owned the drag.)
+              scrollEnabled
               contentContainerStyle={{
-                paddingBottom: INPUT_BAR_H + 12,
+                // Clear the input dock AND the collapsed processes-sheet peek
+                // (~46) so the last bubble can scroll above both.
+                paddingBottom: INPUT_BAR_H + 58,
               }}
             >
               {/* Hero spacer — the Orb + broadcast are rendered as an overlay
@@ -2551,86 +4223,140 @@ export function HomeScreen({
                   that cycles the broadcast (user request: "tapping anywhere
                   on Home advances the line"). The orb, broadcast text, and
                   cards each capture their own taps before this catches. */}
-              <Pressable
-                style={{ height: HERO_REST_H }}
-                onPress={onBroadcastTap}
-                onLongPress={onBroadcastLongPress}
-                onPressOut={onBroadcastRelease}
-                delayLongPress={450}
-                accessibilityLabel="Next broadcast. Hold to answer by voice."
-              />
-
-              {/* Cards — real scroll children, but each one is translated by
-                  scrollY so they start as a tight stack and SPREAD apart as
-                  the user pulls up. Past SNAP_OPEN they're in natural list
-                  positions and scroll freely. Fades down when chat is active
-                  so the chat reads as its own surface. */}
-              <Animated.View style={[styles.cardsList, cardsBehindChatStyle]}>
-                {units.length === 0 ? (
-                  // Empty-processes state lives HERE — inside the cards
-                  // scroll surface, NOT on the resting hero screen. The user
-                  // pulls up to where cards would be and finds a quiet,
-                  // ONE-voiced line inviting them to start something, rather
-                  // than a generic "no items" card. Centered in the surface.
-                  <View style={styles.emptyCardsState}>
-                    <StackedCardsIcon size={36} color={colors.textSecondary} />
-                    <Text style={[styles.emptyCardsLine, { color: colors.textSecondary }]}>
-                      {lang === 'he'
-                        ? 'עדיין אין כאן תהליכים.\nספרו לי על משהו שתרצו לקדם.'
-                        : 'Nothing here yet.\nTell me something you want to move forward.'}
-                    </Text>
-                  </View>
-                ) : (
-                  units.map((u, i) => (
-                  <StackedCard
-                    key={u.id}
-                    unit={u}
-                    index={i}
-                    total={units.length}
-                    scrollY={scrollY}
-                    onPress={() => {
-                      // Onboarding example cards don't open a real unit
-                      // sheet (no underlying data). Tapping one nudges
-                      // the user toward sign-in instead.
-                      if (!hasOnboarded) {
-                        onSignIn?.();
-                        return;
+              {/* Hero region — fills the screen at rest (minHeight) so the cards
+                  stay below the fold and the fusion geometry is preserved. The
+                  Orb + greeting are absolute overlays ABOVE this. It holds the
+                  big tap target AND the inline CONVERSATION THREAD, so the home
+                  is literally ONE scroll: orb → conversation → cards. No
+                  separate chat window, no mode switch — focusing the input just
+                  raises the keyboard over the same page. */}
+              <View style={{ minHeight: HERO_REST_H }}>
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={onBroadcastTap}
+                  onLongPress={onBroadcastLongPress}
+                  onPressOut={onBroadcastRelease}
+                  delayLongPress={450}
+                  accessibilityLabel="Next broadcast. Hold to answer by voice."
+                />
+                {sessionMessages.length > 0 && (
+                  <Animated.View
+                    style={[styles.threadInline, threadSleepFadeStyle]}
+                    onLayout={(e) => {
+                      threadBottomRef.current =
+                        e.nativeEvent.layout.y + e.nativeEvent.layout.height;
+                      // The thread grew (new bubble / process widget) — pull it
+                      // up above the keyboard now that its real height is known.
+                      if (chatActiveRef.current) scrollToLatest();
+                    }}
+                  >
+                    {visibleMessages.map((m, idx) => {
+                      // Timestamp under the LAST message in a close-in-time run
+                      // from one speaker — keeps the thread from stamp-soup.
+                      const next = visibleMessages[idx + 1];
+                      const showStamp =
+                        !next ||
+                        next.from !== m.from ||
+                        next.ts - m.ts > 5 * 60 * 1000;
+                      // A WIDGET ONE sent (e.g. the process it opened) — a live
+                      // card inline in the thread, tap to open. Carries the
+                      // fold control for this process's conversation bubbles.
+                      if (m.widget?.kind === 'quiz') {
+                        return (
+                          <View key={m.id} style={styles.chatWidgetWrap}>
+                            <ChatQuizCard runId={m.widget.runId} />
+                          </View>
+                        );
                       }
-                      onTapUnit(u.id);
-                    }}
-                    onLongPress={
-                      hasOnboarded ? () => onLongPressUnit?.(u.id) : undefined
-                    }
-                    onDelete={() => removeUnit(u.id)}
-                    onPin={() =>
-                      updateUnit(u.id, {
-                        // Pin lifts attention by marking an unread update;
-                        // a real pin flag can land later.
-                        unreadUpdates: (u.unreadUpdates ?? 0) + 1,
-                      })
-                    }
-                    onShare={() => {
-                      // Open the OS share sheet with a short, human summary
-                      // of the process. Best-effort: a thrown share (user
-                      // cancels, or no share UI on the platform) is swallowed
-                      // so a cancel never surfaces as an error.
-                      const summary = [
-                        `${u.emoji} ${u.title}`,
-                        u.latestBroadcastText?.[0] ?? '',
-                        lang === 'he' ? '\nנשלח מ-ONE' : '\nShared from ONE',
-                      ]
-                        .filter(Boolean)
-                        .join('\n');
-                      Share.share({ message: summary }).catch(() => {});
-                    }}
-                    // Onboarding cards are illustrative; the pin/share/delete
-                    // actions don't apply. Disable the swipe gesture so the
-                    // user gets a clean tap-only interaction.
-                    swipeDisabled={!hasOnboarded}
-                  />
-                  ))
+                      if (m.widget?.kind === 'booking') {
+                        return (
+                          <View key={m.id} style={styles.chatWidgetWrap}>
+                            <ChatBookingCard runId={m.widget.runId} />
+                          </View>
+                        );
+                      }
+                      if (m.widget?.kind === 'form') {
+                        return (
+                          <View key={m.id} style={styles.chatWidgetWrap}>
+                            <ChatFormCard runId={m.widget.runId} />
+                          </View>
+                        );
+                      }
+                      if (m.widget?.kind === 'process') {
+                        const uId = m.widget.unitId;
+                        const convoCount = sessionMessages.filter(
+                          (x) => x.unitId === uId && !x.widget,
+                        ).length;
+                        return (
+                          <View key={m.id} style={styles.chatWidgetWrap}>
+                            <ChatProcessCard
+                              unitId={uId}
+                              onOpen={onTapUnit}
+                              defaultExpanded={idx === lastProcessWidgetIdx}
+                              folded={foldedProcessIds.has(uId)}
+                              convoCount={convoCount}
+                              onToggleFold={() => toggleFoldProcess(uId)}
+                            />
+                          </View>
+                        );
+                      }
+                      // ONE and the user share ONE bubble language (styles
+                      // .hlBubble) — the same bubble ONE uses in its opener — so
+                      // the thread reads as one continuous conversation.
+                      const isOne = m.from === 'one';
+                      return (
+                        <View key={m.id} style={styles.bubbleWrap}>
+                          <View
+                            style={[
+                              styles.hlBubble,
+                              styles.threadBubble,
+                              isOne
+                                ? { backgroundColor: colors.surface, alignSelf: 'flex-start', borderBottomStartRadius: 6 }
+                                : { backgroundColor: colors.circle, alignSelf: 'flex-end', borderBottomEndRadius: 6 },
+                            ]}
+                          >
+                            <Text
+                              selectable
+                              style={[
+                                styles.hlBubbleText,
+                                { color: isOne ? colors.text : colors.circleEye },
+                                rtlText(lang),
+                              ]}
+                            >
+                              {m.text}
+                            </Text>
+                          </View>
+                          {showStamp && (
+                            <Text
+                              style={[
+                                styles.bubbleStamp,
+                                { color: colors.textSecondary, alignSelf: isOne ? 'flex-start' : 'flex-end' },
+                              ]}
+                            >
+                              {formatBubbleTime(m.ts)}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                    {chatTyping && (
+                      <View
+                        style={[
+                          styles.hlBubble,
+                          styles.threadBubble,
+                          { backgroundColor: colors.surface, alignSelf: 'flex-start', borderBottomStartRadius: 6 },
+                        ]}
+                      >
+                        <TypingIndicator />
+                      </View>
+                    )}
+                  </Animated.View>
                 )}
-              </Animated.View>
+              </View>
+
+              {/* Processes/spaces no longer live in the chat scroll — they're in
+                  the pull-up sheet below (see <PullUpSheet>). The chat scroll is
+                  now pure conversation. */}
             </Animated.ScrollView>
             </GestureDetector>
 
@@ -2647,7 +4373,30 @@ export function HomeScreen({
                 bubbles (top bar covers first bubbles; bottom bar covered
                 the lower ones until we hid it). Returning to home brings
                 them back. */}
-            <EdgeBars top={!chatActive} bottom={!chatActive} />
+            <EdgeBars
+              // Gradient fades stay ON in chat too (user: "gradient top+bottom
+              // like at home, under the keyboard and the figure") — the thread
+              // fades behind the orb header at the top and behind the input /
+              // keyboard at the bottom. Top stays on during a call as well; the
+              // bottom fade is off during a call (the call dock renders its own).
+              top
+              bottom={!callActive}
+              // Fade ends around the orb's bottom edge — covers behind the orb
+              // without dimming the first drawer below it.
+              topHeight={HERO_CENTER_TOP + HOME_ORB_SIZE - 16}
+            />
+
+            {/* A SECOND bottom fade that rides up with the keyboard, so the
+                thread fades behind the input above the keyboard (not a hard cut).
+                Invisible while the keyboard is down. */}
+            {!callActive && (
+              <Animated.View
+                pointerEvents="none"
+                style={[StyleSheet.absoluteFill, styles.kbFadeHost, kbBottomFadeStyle]}
+              >
+                <EdgeBars top={false} bottom bottomHeight={150} />
+              </Animated.View>
+            )}
 
             {/* ── Fused hero: ONE element that flies to the top.
                 Orb (animated container) and text area (animated container)
@@ -2670,12 +4419,12 @@ export function HomeScreen({
                 // Exact mirror of the bottom chevron: same size (26), same icon
                 // flipped 180° (points up), positioned symmetric ABOVE the orb
                 // by the same ~161px the bottom one sits below its centre.
-                style={[styles.globalChevron, { top: HERO_CENTER_TOP - 132 }, upChevronStyle]}
+                style={[styles.globalChevron, { top: Math.max(insets.top - 18, 4) }, upChevronStyle]}
               >
                 {/* Tap the up arrow → ONE01 Global (same destination as the
                     pull-down gesture). */}
                 <Pressable
-                  onPress={() => { haptic.press(); onOpenGlobal(); }}
+                  onPress={() => { haptic.press(); seenGlobalRef.current = true; onOpenGlobal(); }}
                   hitSlop={18}
                   accessibilityRole="button"
                   accessibilityLabel="Open ONE01 Global"
@@ -2697,7 +4446,7 @@ export function HomeScreen({
                 orbTapScale.value = withSpring(1, { damping: 10, stiffness: 220 });
               }}
               delayLongPress={450}
-              hitSlop={24}
+              hitSlop={6}
               pointerEvents={callActive ? 'none' : 'auto'}
               style={[
                 styles.heroOrb,
@@ -2720,6 +4469,11 @@ export function HomeScreen({
                   eyesOpacityAnim={heroEyesOpacityFinal}
                   eyeOpen={heroEyeOpenFinal}
                   outline={ghostMode}
+                  alive={!callActive}
+                  // Before the user connects, ONE wears the DEFAULT face — a
+                  // custom skin belongs to a specific account, so it shouldn't
+                  // linger into onboarding after a sign-out.
+                  skinOverride={!hasOnboarded ? 'classic' : undefined}
                   noShadow
                 />
               </Animated.View>
@@ -2746,45 +4500,135 @@ export function HomeScreen({
                 style={[styles.heroTextLayer, broadcastCrossfadeStyle]}
                 pointerEvents="box-none"
               >
-                <GestureDetector gesture={broadcastGesture}>
-                  <Animated.View style={broadcastLineStyle}>
-                    {/* In ghost mode the broadcast text dims with the orb (same
-                        animated value). Nested opacity compounds with the
-                        line-crossfade above, so the rotation still fades cleanly. */}
-                    <Animated.View style={orbGhostStyle}>
-                      <Text
-                        style={[styles.broadcast, { color: colors.text }]}
-                        numberOfLines={2}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${chatActive ? 'Prompt' : 'Broadcast'}: ${displayedBroadcast}. Tap or swipe to navigate.`}
-                      >
-                        {displayedBroadcast}
-                      </Text>
-                    </Animated.View>
-                  </Animated.View>
-                </GestureDetector>
-                {units.length > 0 && !chatActive && (
-                  <Animated.View
-                    pointerEvents="box-none"
-                    style={[styles.chevronWrap, chevronStyle]}
-                  >
-                    {/* Tap the down arrow → open the processes list (snap the
-                        cards up into view). */}
-                    <Pressable
-                      onPress={() => {
-                        haptic.tap();
-                        revealChevrons();
-                        scrollRef.current?.scrollTo({ y: SNAP_OPEN, animated: true });
-                      }}
-                      hitSlop={18}
-                      accessibilityRole="button"
-                      accessibilityLabel="Show processes"
-                    >
-                      <ArrowDownIcon size={26} color={colors.textSecondary} />
-                    </Pressable>
+                {signInOpen ? (
+                  // Sign-in sheet open → the sheet carries the message; no line
+                  // behind it (keep the area clean under the orb).
+                  null
+                ) : (
+                  // At rest AND while composing: ONE's update SEQUENCE as a
+                  // STATIC block — no tap-to-cycle, no per-line crossfade (those
+                  // read as a carousel flickering on the same text). It just
+                  // fades with the whole layer as the user pulls to the cards.
+                  <Animated.View style={orbGhostStyle} pointerEvents="none">
+                    <View style={styles.heroLines}>
+                      {heroLines.map((ln, i) => {
+                        const isGreeting = ln.kind === 'greeting';
+                        // Greeting, date AND the status line rotate — key them by
+                        // TEXT so they remount and FadeIn crossfades the swap (the
+                        // status changes as ONE's state changes).
+                        const rotates = isGreeting || ln.kind === 'date' || ln.kind === 'status';
+                        // ONE's MESSAGE BODY (the sentences + prompt) cascades in
+                        // when the message refreshes (greetingRot bumps on events)
+                        // or on mount — so it reads as ONE actively sending it,
+                        // line by line, not a static block. Keyed by greetingRot
+                        // so it re-plays on a refresh, but NOT on the 30s clock.
+                        const isBody = ln.kind === 'beat' || ln.kind === 'prompt';
+                        // ONE's message is a CHAT BUBBLE (ONE texting you), on
+                        // ONE's side (start/left) under the centered greeting —
+                        // both at rest AND during onboarding (ONE's intro reads
+                        // as a first message, on the calm classic layout).
+                        if (ln.kind === 'beat') {
+                          return (
+                            <Animated.View
+                              key={`beat-${greetingRot}-${i}`}
+                              // Cascade in at rest. But NOT while composing — a
+                              // reanimated entering can get interrupted by the
+                              // keyboard's layout shift and stick at low opacity
+                              // ("the chat looks transparent"). While the keyboard
+                              // is up the bubbles render solid, instantly.
+                              entering={chatActive ? undefined : FadeInDown.duration(420).delay(120 + i * 140)}
+                              style={[
+                                styles.hlBubble,
+                                { backgroundColor: colors.surface, alignSelf: 'flex-start' },
+                                { borderBottomStartRadius: 6 },
+                              ]}
+                            >
+                              <Text
+                                style={[styles.hlBubbleText, { color: colors.text }, rtlText(lang)]}
+                                numberOfLines={6}
+                              >
+                                {ln.text}
+                              </Text>
+                            </Animated.View>
+                          );
+                        }
+                        return (
+                          <Animated.Text
+                            key={
+                              rotates
+                                ? `${ln.kind}-${ln.text}`
+                                : isBody
+                                  ? `${ln.kind}-${greetingRot}-${i}`
+                                  : `${i}-${ln.kind}`
+                            }
+                            entering={
+                              // No entering while composing — avoids the
+                              // keyboard-shift interrupting it and leaving the
+                              // line stuck semi-transparent.
+                              chatActive
+                                ? undefined
+                                : rotates
+                                  ? FadeIn.duration(500)
+                                  : isBody
+                                    ? FadeInDown.duration(420).delay(120 + i * 90)
+                                    : undefined
+                            }
+                            numberOfLines={ln.kind === 'heading' ? 1 : undefined}
+                            style={[
+                              ln.kind === 'greeting'
+                                ? styles.hlGreeting
+                                : ln.kind === 'status'
+                                  ? styles.hlStatus
+                                  : ln.kind === 'date'
+                                    ? styles.hlDate
+                                    : ln.kind === 'prompt'
+                                      ? styles.hlPrompt
+                                      : ln.kind === 'heading'
+                                        ? styles.hlHeading
+                                        : styles.hlBeat,
+                              {
+                                // Only the greeting reads at full strength; the
+                                // date + prompt are softer — they sit gently under
+                                // the bold opener.
+                                color:
+                                  ln.kind === 'greeting' ? colors.text : colors.textSecondary,
+                              },
+                              // Greeting + status read as a CENTERED header block;
+                              // the prompt below aligns by reading direction
+                              // (device-safe Yoga direction, not textAlign).
+                              ln.kind === 'greeting' || ln.kind === 'date' || ln.kind === 'status'
+                                ? { textAlign: 'center', writingDirection: lang === 'he' ? 'rtl' : 'ltr' }
+                                : rtlText(lang),
+                            ]}
+                          >
+                            {ln.text}
+                          </Animated.Text>
+                        );
+                      })}
+
+                      {/* Onboarding — the two REPRESENTATION directions as a
+                          calm example line (consumer / provider), so you see
+                          both paths without a form or a hard fork. */}
+                      {!hasOnboarded && !chatActive && (
+                        <Text
+                          style={[styles.hlBeat, styles.hlInvite, { color: colors.textSecondary }, rtlText(lang)]}
+                          numberOfLines={2}
+                        >
+                          {lang === 'he'
+                            ? 'למשל: "נהל לי את התהליכים" · או "ענה ללקוחות שלי במקומי"'
+                            : 'e.g. "manage my processes" · or "answer my customers for me"'}
+                        </Text>
+                      )}
+                    </View>
                   </Animated.View>
                 )}
+                {/* The open-processes chevron moved to just above the input
+                    dock (see below), so it sits where the user reaches. */}
               </Animated.View>
+
+              {/* No status under the orb in the cards view — the phone's clock
+                  bar shows there and each card carries its own time, so ONE's
+                  clock stays with the resting home only. */}
 
               {/* Layer A2 (above broadcast): tiny grey status caption shown
                   during a chat turn. Per the latest mockup: "חושב…" /
@@ -2801,214 +4645,58 @@ export function HomeScreen({
                 </View>
               )}
 
-              {/* Layer B: identity row (fades in as user pulls). When there
-                  are multiple identities the row is a Pressable that opens
-                  the identity switcher; with a single identity the chevron
-                  is omitted and the row is rendered as a plain View so the
-                  user can't tap into a dead affordance. */}
-              <Animated.View
-                pointerEvents="box-none"
-                style={[styles.heroTextLayer, styles.identityRow, identityCrossfadeStyle]}
-              >
-                <View style={styles.profilePills}>
-                  {identities.map((idn) => {
-                    const active = idn.id === activeIdentityId;
-                    const ProfileIcon =
-                      idn.type === 'business' ? BriefcaseIcon : idn.type === 'family' ? HouseIcon : PersonIcon;
-                    return (
-                      <Pressable
-                        key={idn.id}
-                        onPress={() => { haptic.press(); setActiveIdentity(idn.id); }}
-                        onLongPress={() => { haptic.press(); onLongPressOrb && onLongPressOrb(); }}
-                        delayLongPress={450}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        accessibilityLabel={idn.name}
-                        style={[
-                          styles.profilePill,
-                          active ? styles.profilePillActive : styles.profilePillBall,
-                          { backgroundColor: active ? colors.text : colors.surface },
-                        ]}
-                      >
-                        <ProfileIcon size={15} color={active ? colors.surface : colors.textSecondary} />
-                        {active && (
-                          <Text
-                            style={[styles.profilePillText, { color: colors.surface }]}
-                            numberOfLines={1}
-                          >
-                            {idn.name}
-                          </Text>
-                        )}
-                      </Pressable>
-                    );
-                  })}
-                  {/* Add / manage profiles — opens the identity manager. */}
-                  <Pressable
-                    onPress={() => onTapHeader && onTapHeader()}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add profile"
-                    style={[styles.profilePillAdd, { backgroundColor: colors.surface }]}
-                  >
-                    <PlusIcon size={15} color={colors.textSecondary} />
-                  </Pressable>
-                </View>
-              </Animated.View>
+              {/* Profile pills removed — profiles now live as collapsible
+                  drawers in the cards list. Switching / adding identities is
+                  reachable via the ONE profile (tap the orb). */}
             </Animated.View>
 
-            {/* Chat header — X (close) on one side, ghost-mode toggle opposite.
-                Appears as soon as the chat opens (keyboard up), not only after
-                the first message. */}
-            {chatActive && (
-              <Animated.View
-                pointerEvents="box-none"
-                // Hebrew: X left / ghost right. English: X right / ghost left.
-                // The row order is [X, ghost]; `direction` flips which edge each
-                // lands on, per language (he → ltr, en → rtl).
-                style={[
-                  styles.chatHeader,
-                  { direction: lang === 'he' ? 'ltr' : 'rtl' },
-                  chatHeaderStyle,
-                ]}
-              >
-                {/* Close = the same brand "+" as the input bar, rotated 45° so
-                    it reads as an ×. Sits quietly at low opacity, like the
-                    chevron arrows. */}
-                <Pressable
-                  onPress={dismissChatAnimated}
-                  hitSlop={14}
-                  style={[styles.chatHeaderBtn, { opacity: 0.35 }]}
-                  accessibilityLabel="Close conversation"
-                >
-                  <View style={styles.closeAsPlus}>
-                    <PlusThinIcon size={26} color={colors.text} />
-                  </View>
-                </Pressable>
-                {/* Ghost matches that low opacity when OFF, and goes to FULL
-                    opacity when ON — the opacity itself signals the state. */}
-                <Pressable
-                  onPress={() => { haptic.select(); setGhostMode((g) => !g); }}
-                  hitSlop={14}
-                  style={[styles.chatHeaderBtn, { opacity: ghostMode ? 1 : 0.35 }]}
-                  accessibilityRole="switch"
-                  accessibilityState={{ checked: ghostMode }}
-                  accessibilityLabel={ghostMode ? 'Ghost mode on' : 'Ghost mode off'}
-                >
-                  <GhostModeIcon size={26} color={colors.text} />
-                </Pressable>
-              </Animated.View>
-            )}
+            {/* No chat header / X. The home IS the chat — there's no separate
+                chat window to close. Opening the keyboard just raises it on the
+                same page; closing it (drag the thread, or the keyboard's own
+                dismiss) lowers it. Nothing to "return home" from. */}
 
-            {/* Message overlay — only renders once the user has actually
-                sent something. Floats above the cards / hero spacer, sits
-                above the input bar. Travels up with the keyboard so bubbles
-                never hide under it. */}
-            {chatActive && sessionMessages.length > 0 && (
-              <Animated.View
-                pointerEvents="box-none"
-                style={[styles.messagesOverlay, messagesAreaStyle, chatExitTranslateStyle]}
-              >
-                <ScrollView
-                  ref={chatScrollRef}
-                  style={styles.flex1}
-                  contentContainerStyle={styles.messagesContent}
-                  keyboardShouldPersistTaps="handled"
-                  // Drag the message list down to dismiss the keyboard
-                  // without losing chat context (taps in the input area
-                  // re-open it).
-                  keyboardDismissMode="on-drag"
-                  onScrollEndDrag={(e) => {
-                    if (e.nativeEvent.contentOffset.y < -80) dismissChatAnimated();
-                  }}
-                >
-                  {sessionMessages.map((m, idx) => {
-                    // Show timestamp under the LAST message in a run of
-                    // close-in-time messages from the same speaker. Keeps the
-                    // chat from looking like a stamp soup.
-                    const next = sessionMessages[idx + 1];
-                    const showStamp =
-                      !next ||
-                      next.from !== m.from ||
-                      next.ts - m.ts > 5 * 60 * 1000;
-                    // ONE messages render FLAT on the page (no bubble) —
-                    // like ChatGPT / Claude. Selectable so the user can
-                    // copy fragments. User messages keep their bubble so
-                    // the conversation still reads as a back-and-forth.
-                    if (m.from === 'one') {
-                      return (
-                        <View key={m.id} style={styles.oneFlatWrap}>
-                          <Text
-                            selectable
-                            style={[styles.oneFlatText, { color: colors.text }]}
-                          >
-                            {m.text}
-                          </Text>
-                          {showStamp && (
-                            <Text
-                              style={[
-                                styles.bubbleStamp,
-                                styles.bubbleStampOne,
-                                { color: colors.textSecondary },
-                              ]}
-                            >
-                              {formatBubbleTime(m.ts)}
-                            </Text>
-                          )}
-                        </View>
-                      );
-                    }
-                    return (
-                      <View key={m.id} style={styles.bubbleWrap}>
-                        <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
-                          <View
-                            style={[
-                              styles.bubble,
-                              styles.userBubble,
-                              { backgroundColor: colors.circle },
-                            ]}
-                          >
-                            <Text
-                              selectable
-                              style={[styles.bubbleText, { color: colors.circleEye }]}
-                            >
-                              {m.text}
-                            </Text>
-                          </View>
-                        </View>
-                        {showStamp && (
-                          <Text
-                            style={[
-                              styles.bubbleStamp,
-                              styles.bubbleStampUser,
-                              { color: colors.textSecondary },
-                            ]}
-                          >
-                            {formatBubbleTime(m.ts)}
-                          </Text>
-                        )}
-                      </View>
-                    );
-                  })}
-                  {chatTyping && (
-                    <View style={[styles.bubbleRow, styles.bubbleRowOne]}>
-                      <View style={[styles.bubbleAvatar, { backgroundColor: colors.circle }]} />
-                      <TypingIndicator />
-                    </View>
-                  )}
-                </ScrollView>
-              </Animated.View>
-            )}
+            {/* The conversation thread is no longer a floating overlay — it's
+                inline scroll content in the hero region above (one home scroll:
+                orb → conversation → cards). Nothing renders here. */}
 
-            {/* In-call floating orb. It sits exactly where the Home agent was
-                (just a touch larger) wrapped in a softly-pulsing GREEN RING —
-                the "live" signal. Drag it freely; a real throw flings it to a
-                corner and snaps. Only intercepts touches on the orb itself so
-                the rest of the screen stays scrollable. */}
+            {/* In-call floating orb + call line. Kept mounted while ONE's
+                profile opens over the home so it can DIVE to centre + fade as
+                the profile takes over (and rise back out on close), instead of
+                a hard cut — the call "moves into" the profile, whose own orb
+                then wears the green ring. Its opacity is driven to 0 by pc. */}
             {callActive && (
-              <View pointerEvents="box-none" style={styles.callLayer}>
-                <GestureDetector gesture={callOrbGesture}>
-                  <Animated.View style={[styles.callOrbWrap, callOrbStyle]}>
+              <>
+                {/* ONE's call talk — BELOW the orb, exactly where the home hero
+                    text sits, so the call reads as the home with a live ring. */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={[styles.callTalk, { top: HERO_CENTER_TOP + HOME_ORB_SIZE + 34 }, callTalkStyle]}
+                >
+                  <Text
+                    // Same style as the broadcast's first (greeting) line —
+                    // hlGreeting, centred — so the call reads as the home speaking.
+                    style={[
+                      styles.hlGreeting,
+                      { color: colors.text, textAlign: 'center', writingDirection: lang === 'he' ? 'rtl' : 'ltr' },
+                    ]}
+                  >
+                    {lang === 'he'
+                      ? 'היי, אני כאן. על מה נדבר?'
+                      : "Hey, I'm here. What should we talk about?"}
+                  </Text>
+                </Animated.View>
+                {/* box-none: the layer passes touches through (so cards behind
+                    stay scrollable), but the orb itself captures its tap. */}
+                <View pointerEvents="box-none" style={styles.callLayer}>
+                  {/* Orb wrap pinned with an EXPLICIT absolute top (same recipe
+                      as callTalk, which lands correctly). Tapping it opens ONE's
+                      profile — the same as tapping the home face. */}
+                  <AnimatedPressable
+                    onPress={() => onTapOrb && onTapOrb()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open ONE profile"
+                    style={[styles.callOrbWrap, styles.callOrbPinned, { top: callOrbTop }, callOrbStyle]}
+                  >
                     <Orb size={CALL_ORB_SIZE} noShadow />
                     {/* Subtle green ring hugging the orb's edge — the "live"
                         signal. Barely breathes (callRingStyle). */}
@@ -3016,9 +4704,9 @@ export function HomeScreen({
                       pointerEvents="none"
                       style={[styles.callRing, callRingStyle]}
                     />
-                  </Animated.View>
-                </GestureDetector>
-              </View>
+                  </AnimatedPressable>
+                </View>
+              </>
             )}
           </View>
 
@@ -3079,11 +4767,61 @@ export function HomeScreen({
           </View>
         )}
 
-        {/* Input bar — same instance whether or not chat is active. Tapping
-            it focuses the TextInput which opens the keyboard, and `onFocus`
-            flips chatActive on. Manual translateY lift keeps it above the
-            keyboard reliably (KAV.padding was inconsistent). */}
+        {/* Spaces / processes — a bottom sheet opened by the up-chevron above the
+            input. Closed it's hidden (no bar); open, a WHITE sheet slides up from
+            the bottom and the chat behind dims. Tap the scrim or drag down to
+            close. Only once onboarded; hidden during a call. */}
+        {hasOnboarded && !callActive && (
+          <AnimatedPressable
+            // Full-screen dim behind the sheet; tap it to close. The open sheet
+            // (zIndex above the dock) covers the input, so the dim only ever
+            // shows over the chat ABOVE the sheet.
+            pointerEvents={sheetOpen ? 'auto' : 'none'}
+            onPress={() => setSheetOpen(false)}
+            style={[styles.sheetScrim, sheetScrimStyle]}
+          />
+        )}
+        {hasOnboarded && !callActive && (
+          <PullUpSheet
+            open={sheetOpen}
+            onClose={() => setSheetOpen(false)}
+            expandedHeight={Math.round(SCREEN_H * 0.62)}
+            // Slides up from the very bottom of the screen (inside the
+            // SafeAreaView, so bottom:0 already clears the home indicator).
+            bottomOffset={0}
+            progress={sheetProgress}
+          >
+            {processesContent}
+          </PullUpSheet>
+        )}
+
+        {/* Up-chevron above the input → opens the processes sheet from the
+            bottom. box-none so only the small arrow captures taps; it fades out
+            on scroll, while typing, and as the sheet opens. */}
+        {hasOnboarded && !callActive && (
+          <Animated.View
+            pointerEvents="box-none"
+            style={[styles.processesChevron, { bottom: INPUT_BAR_H + insets.bottom + 36 }, processesChevronStyle]}
+          >
+            <Pressable
+              onPress={() => { haptic.press(); Keyboard.dismiss(); setSheetOpen(true); }}
+              hitSlop={18}
+              disabled={sheetOpen}
+              accessibilityRole="button"
+              accessibilityLabel={lang === 'he' ? 'פתח תהליכים ומרחבים' : 'Open processes'}
+              style={styles.flipUp}
+            >
+              <ArrowDownIcon size={24} color={colors.textSecondary} />
+            </Pressable>
+          </Animated.View>
+        )}
+
+        {/* Home / chat input dock. During a CALL this does NOT render — the call
+            dock is rendered separately at the TOP LEVEL (callDockNode) so no home
+            layer can cover or dim it. */}
+        {!callActive && (
         <Animated.View
+          // Flush at the very bottom (the processes sheet slides up OVER it).
           style={[styles.inputDock, inputDockStyle, inputMountStyle]}
           // While ONE sleeps the dock is faded away; let the first tap fall
           // through to the passive wake handler instead of focusing the input,
@@ -3091,11 +4829,14 @@ export function HomeScreen({
           pointerEvents={orbAsleep ? 'none' : 'auto'}
         >
           {callActive ? (
-            // During a call the dock keeps the EXACT home shape — same capsule,
-            // + inside on the left — with speaker / mute / camera toggles in the
-            // middle and a red hang-up (✕) on the right. Bigger buttons + more
-            // spacing than before; mute glows RED when engaged, speaker/camera
-            // fill dark with a white glyph when on.
+            <>
+            {/* During a call the dock keeps the EXACT home shape — same capsule,
+                + inside on the left — with speaker / mute / camera toggles in the
+                middle and a red hang-up on the right, and the upgrade line still
+                beneath it, so it matches the home dock. Wrapped in the SAME
+                inputNarrow + inputScaleStyle as the home dock so the capsule's
+                width, side margins and vertical position are IDENTICAL. */}
+            <Animated.View style={[styles.inputNarrow, inputScaleStyle]}>
             <InputBar
               value=""
               onChangeText={() => {}}
@@ -3109,6 +4850,7 @@ export function HomeScreen({
               // in chat. In call mode there's no TextInput, so this is a no-op
               // here; it just prevents the spurious re-trigger on the way out.
               focusSignal={chatReturnFocus}
+              voiceBtnStyle={voiceBtnScaleStyle as never}
               callControls={
                 <>
                   {/* State is unmistakable in BOTH themes:
@@ -3165,18 +4907,40 @@ export function HomeScreen({
                 </>
               }
             />
+            </Animated.View>
+            {onUpgrade && (
+              // Same style as the home upgrade row (upgradeRow + restChromeStyle)
+              // so its size, margins and position match exactly.
+              <AnimatedPressable
+                onPress={onUpgrade}
+                hitSlop={8}
+                style={[styles.upgradeRow, restChromeStyle]}
+                accessibilityRole="button"
+                accessibilityLabel={lang === 'he' ? 'שדרוג' : 'Upgrade'}
+              >
+                <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
+                  {lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '}
+                </Text>
+                <Text style={[styles.upgradeLink, { color: colors.text }]}>
+                  {lang === 'he' ? 'שדרוג' : 'Upgrade'}
+                </Text>
+              </AnimatedPressable>
+            )}
+            </>
           ) : (
             <>
+              {/* (The old "show processes" chevron is gone — processes now live
+                  in the pull-up sheet, reached by its own grabber above.) */}
+              <Animated.View style={[styles.inputNarrow, inputScaleStyle, globalHideStyle]}>
               <InputBar
                 value={chatText}
                 onChangeText={setChatText}
                 placeholder={
-                  // When the keyboard is open (chat active), drop the
-                  // placeholder entirely — the CTA already shows ABOVE the input
-                  // as the broadcast text, so repeating it inside the field is
-                  // redundant noise. Empty placeholder = just a blinking cursor,
-                  // matching the latest mockup.
-                  chatActive ? '' : t('home_input_placeholder_rest')
+                  // Normally the resting field is just a blinking caret. During
+                  // ONBOARDING it invites the first thing to manage/represent.
+                  !hasOnboarded && !chatActive
+                    ? lang === 'he' ? 'ספר לי…' : 'Tell me…'
+                    : ''
                 }
                 onSubmit={handleSendChat}
                 onFocus={handleInputFocus}
@@ -3203,37 +4967,172 @@ export function HomeScreen({
                 onRecordStart={startRecording}
                 onRecordEnd={stopRecording}
                 recording={recording}
-                // Keyboard closed → + lives inside the capsule.
-                // Keyboard open (chat active) → + lifts OUT as its own pill.
-                compact={chatActive}
+                // Bigger call button at rest, easing back to normal as the cards
+                // come up (and never enlarged while composing). Cast: reanimated's
+                // animated-style handle vs StyleProp typing (same quirk as the
+                // project's other reanimated types).
+                voiceBtnStyle={voiceBtnScaleStyle as never}
+                // Keep it the SAME box as the resting home — it just rises with
+                // the keyboard, no shape change (the + stays inside the capsule).
+                compact={false}
+                // While ONE rests (idle/asleep) the box carries ONE's soft
+                // rotating invite + a blinking caret, in its own voice.
+                idleLine={idleLine}
               />
-              {/* Sign-in CTA. Shown only when the user hasn't completed
-                  onboarding / signed in. Sits as a small row directly under
-                  the capsule — discreet but always reachable. Reads as a
-                  prompt + link, not a bare command: "Already have ONE?
-                  Sign in." Hidden while chat is active (the keyboard would
-                  hide the row anyway). */}
-              {!hasOnboarded && !chatActive && onSignIn && (
-                <View style={styles.signInRow}>
-                  <Text style={[styles.signInPrompt, { color: colors.textSecondary }]}>
-                    {lang === 'he' ? 'כבר יש לך ONE?' : 'Already have ONE?'}
+              </Animated.View>
+              {/* One line under the input, in the SAME prominent spot:
+                  • signed in  → "Want more from ONE? Upgrade" (plans panel).
+                  • not yet     → "Already have ONE? Sign in" (connect first).
+                  Hidden while chatting. */}
+              {!chatActive && (hasOnboarded ? onUpgrade : onSignIn) && (
+                <AnimatedPressable
+                  onPress={() => (hasOnboarded ? onUpgrade?.() : onSignIn?.())}
+                  hitSlop={8}
+                  style={[styles.upgradeRow, homeUpgradeStyle]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    hasOnboarded
+                      ? lang === 'he' ? 'שדרוג' : 'Upgrade'
+                      : lang === 'he' ? 'התחברות' : 'Sign in'
+                  }
+                >
+                  <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
+                    {hasOnboarded
+                      ? lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '
+                      : lang === 'he' ? 'כבר יש לך ONE? ' : 'Already have ONE? '}
                   </Text>
-                  <Pressable
-                    onPress={onSignIn}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel={lang === 'he' ? 'התחברות' : 'Sign in'}
-                  >
-                    <Text style={[styles.signInLink, { color: colors.text }]}>
-                      {lang === 'he' ? 'התחבר' : 'Sign in'}
-                    </Text>
-                  </Pressable>
-                </View>
+                  <Text style={[styles.upgradeLink, { color: colors.text }]}>
+                    {hasOnboarded
+                      ? lang === 'he' ? 'שדרוג' : 'Upgrade'
+                      : lang === 'he' ? 'התחבר' : 'Sign in'}
+                  </Text>
+                </AnimatedPressable>
               )}
             </>
           )}
         </Animated.View>
+        )}
       </View>
+
+      {/* Call dock — rendered at the TOP LEVEL (sibling of the home tree) so no
+          home layer can cover/dim it. Only while a call is active. */}
+      {callActive && callDockNode}
+
+      {/* ── Timeline (the "past") — pull the hero DOWN to open. A vertical
+          AXIS with nodes + time-section pills; pull down again to close (no
+          modal window). ────────────────────────────────────────────────── */}
+      {timelineOpen && (
+        <Animated.View
+          // Rises up into place on open (tlDragY: SCREEN_H → 0). Dismissed by
+          // DRAGGING it back DOWN with the finger (timelineDragGesture) — a sheet
+          // gesture, the reverse of the rise, not a canned slide.
+          style={[
+            styles.timelineOverlay,
+            { backgroundColor: colors.background, paddingTop: insets.top },
+            timelineDragStyle,
+          ]}
+        >
+          <ScrollView
+            ref={timelineScrollRef}
+            contentContainerStyle={styles.timelineContent}
+            showsVerticalScrollIndicator={false}
+            // Bounce enabled (both edges, even when short) so flinging UP past the
+            // bottom overscrolls — that's the close gesture.
+            alwaysBounceVertical
+            // Released after flinging UP past the bottom (today) → close, like
+            // pushing the drawer back up. A downward drag just scrolls to older.
+            onScrollEndDrag={(e) => {
+              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+              const pastBottom =
+                contentOffset.y - Math.max(0, contentSize.height - layoutMeasurement.height);
+              if (pastBottom > 80) dismissTimeline();
+            }}
+          >
+            {timelineEntries.length === 0 ? (
+              <Text style={[styles.timelineEmpty, { color: colors.textSecondary }, rtlText(lang)]}>
+                {lang === 'he'
+                  ? 'עדיין אין עדכונים. כל מה ש‑ONE יעשה יופיע כאן.'
+                  : "No updates yet. Everything ONE does will show up here."}
+              </Text>
+            ) : (
+              <View style={styles.tlAxisWrap}>
+                {/* The axis line runs down the leading edge; nodes sit on it. */}
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.tlLine,
+                    { backgroundColor: colors.border },
+                    lang === 'he' ? { right: TL_NODE_X } : { left: TL_NODE_X },
+                  ]}
+                />
+                {(() => {
+                  let lastDay = '';
+                  const nodes: React.ReactNode[] = [];
+                  timelineEntries.forEach((en) => {
+                    const dl = dayLabel(en.ts, lang === 'he');
+                    if (dl !== lastDay) {
+                      lastDay = dl;
+                      nodes.push(
+                        <View key={`d_${en.id}`} style={[styles.tlPillRow, { alignItems: 'center' }]}>
+                          <View style={[styles.tlPill, { backgroundColor: colors.surface }]}>
+                            <Text style={[styles.tlPillText, { color: colors.textSecondary }]}>{dl}</Text>
+                          </View>
+                        </View>,
+                      );
+                    }
+                    nodes.push(
+                      <Pressable
+                        key={en.id}
+                        onPress={() => {
+                          setTimelineOpen(false);
+                          onTapUnit(en.unitId);
+                        }}
+                        style={[
+                          styles.tlNodeRow,
+                          lang === 'he' ? { paddingRight: TL_NODE_X + 22 } : { paddingLeft: TL_NODE_X + 22 },
+                        ]}
+                      >
+                        {/* Node = the process's emoji, centred on the axis line. */}
+                        <View
+                          style={[
+                            styles.tlNode,
+                            { backgroundColor: colors.background, borderColor: colors.border },
+                            lang === 'he' ? { right: TL_NODE_X - 15 } : { left: TL_NODE_X - 15 },
+                          ]}
+                        >
+                          <Text style={styles.tlNodeEmoji}>{en.emoji}</Text>
+                        </View>
+                        <Text style={[styles.tlText, { color: colors.text }, rtlText(lang)]} numberOfLines={2}>
+                          {en.text}
+                        </Text>
+                        <Text style={[styles.tlMeta, { color: colors.textSecondary }, rtlText(lang)]} numberOfLines={1}>
+                          {en.title} · {relTimeShort(en.ts, lang === 'he')}
+                        </Text>
+                      </Pressable>,
+                    );
+                  });
+                  return nodes;
+                })()}
+              </View>
+            )}
+          </ScrollView>
+          {/* Soft dissolve at the top edge. */}
+          <EdgeBars bottom={false} topHeight={insets.top + 70} />
+          {/* Dismiss affordance — an UP chevron (fling the timeline up to close,
+              like pushing a drawer back up, or tap here). */}
+          <Pressable
+            onPress={dismissTimeline}
+            hitSlop={20}
+            style={[styles.timelineDismiss, { bottom: insets.bottom + 14 }]}
+            accessibilityRole="button"
+            accessibilityLabel={lang === 'he' ? 'חזרה' : 'Back'}
+          >
+            <View style={styles.flipUp}>
+              <ArrowDownIcon size={26} color={colors.textSecondary} />
+            </View>
+          </Pressable>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -3288,97 +5187,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // ── Chat message overlay — fills the chat area from just under the
-  // chat header down to just above the input. Top pulled up so the chat
-  // surface spreads further on the screen (user said the chat wasn't
-  // filling enough space). Small orb sits at y=28-76 horizontally centred;
-  // bubbles render with maxWidth 82% on left/right so the visual overlap
-  // with the centred orb is minimal.
-  messagesOverlay: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    // bottom is set inline so it can be lifted above the input dock.
-    // Bumped down so the first message clears the open-state orb (top
-    // ~18, size 52) + the identity row beneath it. Previously messages
-    // started at y=80, exactly where the heroText container sits — the
-    // hero's container (zIndex 20) ended up rendering ABOVE the messages
-    // (zIndex 5) and intercepting layout space even with its broadcast
-    // crossfaded to opacity 0, which is why the chat read as blank.
-    top: 110,
-    // ABOVE the hero text container (zIndex 20) and EdgeBars (15) so the
-    // chat reads above whatever sits in the bar zone. The orb / X / ⋮
-    // stay above this at their own higher zIndex.
-    zIndex: 25,
-  },
-  messagesContent: {
-    // Bubbles anchored to the TOP of the chat area at all times. New
-    // messages append below; the auto-scroll-to-end was removed so the
-    // chat doesn't jump to the bottom when the keyboard opens and shrinks
-    // the viewport.
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    paddingTop: 8,
-    paddingBottom: 4,
-    gap: 8,
-  },
+  // ── Inline conversation thread (lives in the ONE home scroll). ──────────
   // Wraps a bubble + (optionally) its trailing timestamp so the gap between
   // messages stays tight and the stamp travels with the bubble it belongs to.
   bubbleWrap: { gap: 2 },
-  // Row wrapping ONE's avatar dot + bubble. User messages get no avatar
-  // (their "voice" is in the message position, right-aligned).
-  bubbleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  bubbleRowOne: { justifyContent: 'flex-start' },
-  bubbleRowUser: { justifyContent: 'flex-end' },
-  bubbleAvatar: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    marginBottom: 4,
-    opacity: 0.85,
-  },
   bubbleStamp: {
     fontSize: 11,
     opacity: 0.7,
     paddingHorizontal: 4,
   },
-  bubbleStampOne: { alignSelf: 'flex-start', paddingLeft: 28 },
-  bubbleStampUser: { alignSelf: 'flex-end' },
-  bubble: {
-    maxWidth: '82%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 22,
-  },
-  oneBubble: { borderTopLeftRadius: 6 },
-  userBubble: { borderTopRightRadius: 6 },
-  bubbleText: { fontSize: 16, lineHeight: 22 },
-  /**
-   * Flat ONE message — no bubble, no background. Reads like a
-   * ChatGPT/Claude assistant reply rendered directly on the page.
-   * Slightly bigger line-height than the user bubble for readability
-   * over multi-line content.
-   */
-  oneFlatWrap: {
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-    gap: 2,
-  },
-  oneFlatText: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
+  chatWidgetWrap: { marginVertical: 8 },
 
   // Fused-hero layout: Orb container + text container, both absolute and
   // animated by scrollY. No separate top header — the hero IS the header.
   heroOrb: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    // A fixed-width box centred on screen (not full-width) so the profile-open
+    // tap target hugs the orb instead of spanning the whole row.
+    left: '50%',
+    marginLeft: -(HOME_ORB_SIZE / 2 + 14),
+    width: HOME_ORB_SIZE + 28,
     alignItems: 'center',
     // Above heroText so its tap area always wins on iOS and Android.
     zIndex: 50,
@@ -3424,6 +5252,107 @@ const styles = StyleSheet.create({
     height: 60,
     textAlignVertical: 'center',
   },
+  // Rest-state "update" sequence on the background — a clean typographic
+  // hierarchy: a calm greeting, a muted date, the content beats, a soft prompt.
+  // Explicit full-SCREEN width + centred, so the block spans edge-to-edge (the
+  // flex-stretch chain inside the centred hero container wouldn't) and the RTL
+  // text lands right against the right margin.
+  heroLines: {
+    width: SCREEN_W,
+    alignSelf: 'center',
+    paddingHorizontal: 18,
+  },
+  // Greeting — the calm HEADER line, clearly the largest so it leads the block
+  // (the beats below must read as subordinate content, not headlines).
+  hlGreeting: {
+    fontSize: 23,
+    lineHeight: 30,
+    fontWeight: '600',
+    marginBottom: 3,
+  },
+  // Date — quiet subtitle under the greeting, with a gap before the content.
+  hlDate: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '500',
+    marginBottom: 20,
+  },
+  // ONE's live STATUS — the small, quiet presence line directly under the orb
+  // (second line). Sits above ONE's message bubbles with a little breathing room.
+  hlStatus: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    marginBottom: 16,
+  },
+  // Attention beats — the CONTENT. Distinctly smaller than the greeting so the
+  // hierarchy reads header → content (they were nearly the same size, so the
+  // wrapping beats visually dominated the header).
+  hlBeat: {
+    fontSize: 15.5,
+    lineHeight: 22,
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  // ONE's message rendered as a chat bubble (onboarded resting home) — reads
+  // like a text from ONE rather than a flat dashboard line. Sits under the
+  // centered greeting, aligned to ONE's side.
+  hlBubble: {
+    maxWidth: '90%',
+    paddingVertical: 11,
+    paddingHorizontal: 15,
+    borderRadius: 18,
+    marginTop: 14,
+  },
+  // Same bubble as the opener, but in the CHAT THREAD: no top margin (the
+  // scroll content's `gap` already spaces turns) and a touch narrower so the
+  // back-and-forth reads as a conversation.
+  threadBubble: { marginTop: 0, maxWidth: '84%' },
+  // Inline conversation thread — real content INSIDE the one home scroll. A
+  // conversation collapses the orb to a COMPACT top header, so this clears just
+  // that (~92) and the chat reads from HIGH on the page, flowing downward: orb
+  // header → these bubbles → cards. No overlay, never pinned to the bottom.
+  threadInline: {
+    // Starts right where the resting opener sits (just under the big orb,
+    // ≈ HERO_CENTER_TOP + orb), so the empty home → chat transition keeps the
+    // bubbles in the SAME place — same page, not a new layer.
+    paddingTop: 176,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  hlBubbleText: {
+    fontSize: 15.5,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  // The cycling example word inside ONE's onboarding invite line.
+  hlExampleWord: { fontWeight: '700' },
+  // The emoji in that example — enlarged so it reads as a real icon.
+  hlExampleEmoji: { fontSize: 22 },
+  // The invite line sits a touch below ONE's description.
+  hlInvite: { marginTop: 6 },
+  // Extra breathing room between the onboarding HEADLINE and the description.
+  hlOnboardGap: { marginTop: 18 },
+  // Section divider inside the long briefing (e.g. "— What matters now —").
+  // Muted + spaced so it reads as a quiet chapter marker between beat groups.
+  hlHeading: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    opacity: 0.75,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  // Prompt — a soft, open-ended closer (sits below the attached chips).
+  hlPrompt: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '400',
+    marginTop: 14,
+  },
 
   // ── ONE01 Global "up" chevron (top) ─────────────────────────────────────
   globalChevron: {
@@ -3441,21 +5370,87 @@ const styles = StyleSheet.create({
   // Full-bleed layer that only captures touches on the orb itself (box-none),
   // so the user can still scroll / navigate behind the call.
   callLayer: {
-    ...StyleSheet.absoluteFillObject,
+    // Explicit absolute fill — NOT `...StyleSheet.absoluteFillObject`, whose
+    // type is missing here and which, if it resolves to undefined at runtime,
+    // strips the absolute positioning and drops this layer to the BOTTOM of the
+    // flex column (the "call orb stuck at the bottom" bug).
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
+    // Top-anchored at the home orb's position (paddingTop set inline), so the
+    // call face appears exactly where the home face was.
     justifyContent: 'flex-start',
-    // The call face sits EXACTLY where the resting Home agent is (centre
-    // matched), so starting a call reads as the same face waking into a call,
-    // not a new orb appearing at the top.
-    paddingTop: CALL_ORB_TOP,
     zIndex: 60,
   },
+  // ── Timeline overlay (the past) ─────────────────────────────────────────
+  timelineOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 80,
+  },
+  // TOP-anchored — reads from just under the top bar downward (oldest first,
+  // today at the bottom of the list), filling from the top with any empty room
+  // BELOW. Bottom padding clears the dismiss chevron.
+  timelineContent: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 72,
+  },
+  timelineDismiss: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    opacity: 0.7,
+  },
+  timelineEmpty: { fontSize: 15, lineHeight: 22, opacity: 0.85, paddingVertical: 20, textAlign: 'center' },
+  // Axis
+  tlAxisWrap: { position: 'relative', paddingTop: 4 },
+  tlLine: { position: 'absolute', top: 6, bottom: 6, width: 2, borderRadius: 1, opacity: 0.7 },
+  tlPillRow: { paddingVertical: 8 },
+  tlPill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
+  tlPillText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  tlNodeRow: { position: 'relative', paddingVertical: 12 },
+  tlNode: {
+    position: 'absolute',
+    top: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tlNodeEmoji: { fontSize: 15 },
+  tlText: { fontSize: 15, fontWeight: '500', lineHeight: 20 },
+  tlMeta: { fontSize: 12.5, marginTop: 2 },
+  // ONE's call talk — flat, to the side, like the home hero text.
+  callTalk: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    paddingHorizontal: 22,
+    zIndex: 61,
+  },
+  callTalkText: { fontSize: 20, lineHeight: 28, fontWeight: '600' },
   // Fixed square so the green ring can pulse around the centred face.
   callOrbWrap: {
     width: CALL_ORB_SIZE + 20,
     height: CALL_ORB_SIZE + 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Pins the call orb at an explicit top (set inline), horizontally centred —
+  // so it can't drop to the bottom of the flex column.
+  callOrbPinned: {
+    position: 'absolute',
+    alignSelf: 'center',
   },
   // Live-call green ring — hugs the orb's edge (the wrap is CALL_ORB_SIZE + 20,
   // orb centred, so a 10px inset puts the ring exactly on the orb's rim). Subtle
@@ -3528,13 +5523,48 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.85,
   },
+  // ── Profile drawers (collapsible per-profile groups in the cards list) ──
+  drawer: { marginBottom: 6 },
+  drawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  drawerTitle: { fontSize: 16, fontWeight: '700' },
+  drawerCountPill: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerCount: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  drawerBody: { gap: 10, paddingBottom: 6 },
+  drawerEmptyHint: { fontSize: 14, lineHeight: 20, opacity: 0.7, paddingVertical: 6, paddingHorizontal: 4 },
+  // "New space" button below the last drawer — a quiet dashed affordance.
+  addSpaceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+  },
+  addSpaceText: { fontSize: 14, fontWeight: '600' },
   cardsList: {
     paddingHorizontal: 14,
     gap: 10,
-    // Clearance below the collapsed header (small Orb + identity name) so the
-    // first card doesn't crowd the name or tuck under the top edge at the open
-    // snap. The first card lands ~(SCREEN_H - SNAP_OPEN + paddingTop) down.
-    paddingTop: 24,
+    // Clearance below the collapsed orb so the first drawer sits a touch LOWER
+    // at the open snap — it was landing crammed right under the head. Enough
+    // breathing room that the list reads as starting below ONE, not glued to it.
+    paddingTop: 34,
     // Extra breathing room so the last card doesn't touch the input bar.
     paddingBottom: 18,
     // CRITICAL: with only 2-3 cards the natural list height is shorter than
@@ -3617,6 +5647,52 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  // Open-processes chevron, centred well above the input capsule so there's a
+  // clear gap and no overlap.
+  dockChevron: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 22,
+  },
+  // Upgrade line under the input ("Want more? · Upgrade"). Height + marginTop
+  // are animated (restChromeStyle) so it collapses on scroll; overflow hidden
+  // clips the text as it shrinks.
+  upgradeRow: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    overflow: 'hidden',
+  },
+  upgradePrompt: { fontSize: 13, fontWeight: '400' },
+  upgradeLink: { fontSize: 13, fontWeight: '700' },
+  // Tiny horizontal inset only — the capsule reads at a comfortable width.
+  inputNarrow: { paddingHorizontal: 3 },
+  // Dims the chat behind the processes sheet while it's open. Sits below the
+  // sheet (31) and above the chat/EdgeBars (15). Tappable to close when open.
+  sheetScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000',
+    zIndex: 27,
+  },
+  // The keyboard-lifted bottom fade — above the chat bubbles (0-5) and the
+  // static EdgeBars (15), below the input dock (30).
+  kbFadeHost: { zIndex: 16 },
+  // The up-chevron strip above the input dock (full width for centering; only
+  // the arrow inside captures taps). Below the sheet (31) so the open sheet
+  // covers it.
+  processesChevron: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 29,
+  },
   inputDock: {
     position: 'absolute',
     // Flush against the safe-area bottom — sits as low as we can go without
@@ -3630,6 +5706,15 @@ const styles = StyleSheet.create({
     // get masked by the bottom gradient as cards/bubbles scroll behind.
     zIndex: 30,
   },
+  // Static full-opacity for the dock during a call — used INSTEAD of the animated
+  // inputMountStyle so nothing can dim the call controls.
+  dockSolid: { opacity: 1 },
+  // Lift the dock ABOVE every home/call layer during a call so it's never
+  // covered (or dimmed) by the receding home chrome or the scrolled card list.
+  dockOnTop: { zIndex: 95 },
+  // Call-mode bottom fade — a sibling of the dock, ABOVE the cards (z 90) but
+  // BELOW the dock (z 95), so it blurs the cards without washing the dock.
+  callBottomFade: { zIndex: 90 },
 
   // ── Due-reminders strip (sits just above the input at rest). ────────────
   dueWrap: {

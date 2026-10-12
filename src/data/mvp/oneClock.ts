@@ -162,11 +162,15 @@ export function timeGreeting(
   lang: AppLanguage,
   now: number | Date = Date.now(),
   identityName?: string,
+  // Rotation offset — advance it (e.g. on a timer) to cycle through the
+  // part-of-day variants WITHIN a session, so the opening line changes from time
+  // to time, not only day-to-day. 0 keeps the stable day-seeded pick.
+  rotate = 0,
 ): string {
   const part = partOfDay((now instanceof Date ? now : new Date(now)).getHours());
   const variants = (lang === 'he' ? HE_GREETINGS : EN_GREETINGS)[part];
   const namePart = identityName ? `, ${identityName}` : '';
-  return pickByDay(variants, now).replace('{name}', namePart);
+  return pickByDay(variants, now, rotate).replace('{name}', namePart);
 }
 
 /**

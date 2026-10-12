@@ -25,6 +25,18 @@ export function VoiceIcon({ size = 22, color = '#fff' }: IconProps) {
   );
 }
 
+/** Phone handset — the "call ONE" glyph in the input dock (Winkx phone-call). */
+export function PhoneIcon({ size = 22, color = '#fff' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 513.64 513.64" fill="none">
+      <Path
+        d="M499.66,376.96l-71.68-71.68c-25.6-25.6-69.12-15.359-79.36,17.92c-7.68,23.041-33.28,35.841-56.32,30.72c-51.2-12.8-120.32-79.36-133.12-133.12c-7.68-23.041,7.68-48.641,30.72-56.32c33.28-10.24,43.52-53.76,17.92-79.36l-71.68-71.68c-20.48-17.92-51.2-17.92-69.12,0l-48.64,48.64c-48.64,51.2,5.12,186.88,125.44,307.2c120.32,120.32,256,176.641,307.2,125.44l48.64-48.64C517.581,425.6,517.581,394.88,499.66,376.96z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
 /** Microphone — call-mode "mic on" glyph. */
 export function MicIcon({ size = 24, color = '#fff' }: IconProps) {
   return (
@@ -373,6 +385,118 @@ export function UsersIcon({ size = 14, color = '#000' }: IconProps) {
       <Path d="M2.8 19.5c0-3.2 2.8-5 6.2-5s6.2 1.8 6.2 5Z" fill={color} />
       <Circle cx="17.4" cy="8.6" r="2.5" fill={color} opacity={0.85} />
       <Path d="M15.6 14.4c2.9.15 5.6 1.7 5.6 4.9" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" opacity={0.85} />
+    </Svg>
+  );
+}
+
+/** Pencil — edit. */
+export function PencilIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M14.5 5.8 18.2 9.5 8.8 18.9l-4.3 1 1-4.3Z" stroke={color} strokeWidth={1.9} fill="none" strokeLinejoin="round" />
+      <Path d="M13.4 6.9 17.1 10.6" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      <Path d="M15.7 4.6a1.6 1.6 0 0 1 2.3 0l1.4 1.4a1.6 1.6 0 0 1 0 2.3l-1 1-3.7-3.7Z" fill={color} />
+    </Svg>
+  );
+}
+
+/** Gear — settings. */
+export function GearIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="3.1" stroke={color} strokeWidth={1.9} fill="none" />
+      <Path d="M12 2.6v3M12 18.4v3M21.4 12h-3M5.6 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4 5.3 5.3" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Chain link — connections & sources. */
+export function LinkIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9.5 14.5a3.5 3.5 0 0 1 0-5l2.5-2.5a3.5 3.5 0 0 1 5 5l-1.3 1.3" stroke={color} strokeWidth={1.9} fill="none" strokeLinecap="round" />
+      <Path d="M14.5 9.5a3.5 3.5 0 0 1 0 5L12 17a3.5 3.5 0 0 1-5-5l1.3-1.3" stroke={color} strokeWidth={1.9} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Star — plan / subscription. */
+export function StarIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 3.2 14.6 8.5l5.9.85-4.25 4.15 1 5.9L12 16.6l-5.25 2.8 1-5.9L3.5 9.35l5.9-.85Z" fill={color} />
+    </Svg>
+  );
+}
+
+/** Sliders — customize / tune. */
+export function SlidersIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M5 6h14M5 12h14M5 18h14" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      <Circle cx="9" cy="6" r="2.4" fill={color} />
+      <Circle cx="15" cy="12" r="2.4" fill={color} />
+      <Circle cx="8" cy="18" r="2.4" fill={color} />
+    </Svg>
+  );
+}
+
+/** Heart — the Health category. */
+export function HeartIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 20.3 4.4 12.6a4.6 4.6 0 0 1 6.5-6.5l1.1 1.1 1.1-1.1a4.6 4.6 0 1 1 6.5 6.5Z" fill={color} />
+    </Svg>
+  );
+}
+
+/** Book — the Learning category. */
+export function BookIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 4h11a1 1 0 0 1 1 1v13H8a2 2 0 0 0-2 2Z" stroke={color} strokeWidth={1.9} fill="none" strokeLinejoin="round" />
+      <Path d="M6 20a2 2 0 0 1 2-2h10" stroke={color} strokeWidth={1.9} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Paper plane — the Travel category. */
+export function PlaneIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M21 3.5 10.5 14" stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M21 3.5 14.5 21l-4-6.5-6.5-4z" stroke={color} strokeWidth={1.9} fill="none" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** Document — the Bureaucracy category. */
+export function DocIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M7 3.5h6l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" stroke={color} strokeWidth={1.9} fill="none" strokeLinejoin="round" />
+      <Path d="M13 3.5V8h4" stroke={color} strokeWidth={1.9} fill="none" strokeLinejoin="round" />
+      <Path d="M9 12.5h6M9 15.8h6" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Clock — the timeline / the "past". */
+export function ClockIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={1.9} fill="none" />
+      <Path d="M12 7.2V12l3.4 2" stroke={color} strokeWidth={1.9} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** Check inside a circle — a "verified" badge. */
+export function VerifiedIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="10" fill={color} />
+      <Path d="M7.5 12.4 10.6 15.4 16.5 9" stroke="#FFFFFF" strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }

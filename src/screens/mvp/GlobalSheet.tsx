@@ -1,13 +1,16 @@
 /**
- * GlobalSheet — ONE01 Global. The world OUTSIDE the user.
+ * GlobalSheet — ONE01 Global. The world OUTSIDE the user, as a live MARKETPLACE
+ * OF WANTS.
  *
- * Not a content feed: a PROCESS NETWORK. Official ONEs, public processes you
- * can join, templates you can create from, aggregate insights, and (for a
- * business identity) market signals. Every action routes through the real
- * process engine — "Create" / "Join" actually mints a rich process; "Ask" /
- * "Connect" hands the intent to ONE.
+ * Top: a never-ending loop of the wants moving through the world right now
+ * (the front card drops away and the next rises). Then a category filter and
+ * topic hashtags. Scroll down for the durable sources, organised as collapsible
+ * "drawers" by world — Business, Processes, Templates, Insights — plus, for a
+ * business identity, the owner's own business ONE at the top.
  *
- * Identity-aware: same world, filtered by who the user is operating as.
+ * Every action routes through the real process engine: "Start" mints a rich
+ * process; "Respond" / "Explore" hands the intent to ONE. Identity-aware: same
+ * world, filtered by who the user is operating as.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,55 +19,84 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  TextInput,
   ScrollView,
   Alert,
+  Platform,
+  Keyboard,
+  type KeyboardEvent,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   Easing,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { BottomSheet } from '../../components/mvp/BottomSheet';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
 import { CardLoop } from '../../components/mvp/CardLoop';
-import { CloseIcon, SearchIcon, FilterIcon } from '../../components/mvp/icons';
+import { InputBar } from '../../components/mvp/InputBar';
+import { CloseIcon, ArrowDownIcon, HeartIcon, BookIcon, HouseIcon, PlaneIcon, BriefcaseIcon, DocIcon, PlusIcon } from '../../components/mvp/icons';
+import { Orb } from '../../components/mvp/Orb';
+
+/** Per-"world" accent colour + icon for the circular category selector. 'all'
+ *  is ONE itself (rendered as the orb), so it isn't in this map. */
+const WORLD_META: Partial<Record<CategoryKey, { color: string; Icon: (p: { size?: number; color?: string }) => React.ReactElement }>> = {
+  health: { color: '#34D399', Icon: HeartIcon },
+  learning: { color: '#A78BFA', Icon: BookIcon },
+  home: { color: '#60A5FA', Icon: HouseIcon },
+  travel: { color: '#38BDF8', Icon: PlaneIcon },
+  business: { color: '#FBBF24', Icon: BriefcaseIcon },
+  bureaucracy: { color: '#94A3B8', Icon: DocIcon },
+};
 import { useThemeStore } from '../../stores/themeStore';
 import type { ThemeColors } from '../../utils/theme';
 import { useLanguage } from '../../i18n/useT';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
 import { useMvpStore, useActiveIdentity } from '../../stores/mvpStore';
-import { buildGlobalFeed } from '../../data/mvp/global';
+import { buildGlobalFeed, type CategoryKey } from '../../data/mvp/global';
 import { generateRichUnitByKey, type ArchetypeKey } from '../../data/mvp/unitArchetype';
 
 interface GlobalSheetProps {
   visible: boolean;
   onClose: () => void;
+  /** Live animated index (-1 closed … 0 open), written as the sheet slides so
+   *  Home can fade its input dock back in sync with the close drag. */
+  animatedIndex?: SharedValue<number>;
 }
 
-// One unified card in the Global loop — every feed kind maps to this shape.
+// One unified card in the top wants-loop.
 interface LoopCard {
   id: string;
   emoji: string;
   kind: string;
-  badge?: string;
-  title: string;
-  sub?: string;
   meta?: string;
-  extra?: string;
+  title: string;
   actionLabel: string;
   onAction: () => void;
 }
 
-const LOOP_CARD_H = 320;
+const LOOP_CARD_H = 300;
 
-export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
+// Short, clean unit titles per archetype — so "Start this" mints a process with
+// a real name rather than the whole want sentence.
+const ARCHETYPE_TITLE: Record<ArchetypeKey, [string, string]> = {
+  fitness: ['Weight gain', 'עלייה במשקל'],
+  license: ['Driving license', 'רישיון נהיגה'],
+  moving: ['Move apartment', 'מעבר דירה'],
+  learning: ['Learning', 'לימודים'],
+  business: ['My business', 'העסק שלי'],
+  travel: ['Plan a trip', 'תכנון טיול'],
+};
+
+export function GlobalSheet({ visible, onClose, animatedIndex }: GlobalSheetProps) {
   const { colors } = useThemeStore();
   const lang = useLanguage();
   const he = lang === 'he';
+  const insets = useSafeAreaInsets();
   const identity = useActiveIdentity();
   const activeIdentityId = useMvpStore((s) => s.activeIdentityId);
   const addUnit = useMvpStore((s) => s.addUnit);
@@ -72,49 +104,78 @@ export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
 
   const feed = useMemo(() => buildGlobalFeed(lang, identity?.type), [lang, identity?.type]);
 
-  // Rotating world-level broadcast — now the big centred headline of the sheet.
-  const [bIndex, setBIndex] = useState(0);
-  useEffect(() => {
-    if (!visible) return;
-    setBIndex(0);
-    const id = setInterval(
-      () => setBIndex((i) => (i + 1) % Math.max(1, feed.broadcasts.length)),
-      5000,
-    );
-    return () => clearInterval(id);
-  }, [visible, feed.broadcasts.length]);
-  // Fade the headline on each rotation so it reads as ONE speaking, not flipping.
-  const bOpacity = useSharedValue(1);
-  const bStyle = useAnimatedStyle(() => ({ opacity: bOpacity.value }));
-  useEffect(() => {
-    bOpacity.value = 0;
-    bOpacity.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
-  }, [bIndex, bOpacity]);
-
-  // ONE credits wallet — placeholder balance until a real credits system lands.
   const credits = 1240;
+  const rtl = rtlText(lang);
 
-  // A scrollable "data bar" of world-level stats — mirrors the unit's metrics
-  // row (swipe sideways for more). Counts come from the UNFILTERED feed.
-  const globalStats: { label: string; value: string }[] = [
-    { label: he ? 'קרדיטים' : 'Credits', value: credits.toLocaleString() },
-    { label: he ? 'ONE רשמיים' : 'Official ONEs', value: String(feed.officials.length) },
-    { label: he ? 'ציבוריים' : 'Public', value: String(feed.publicProcesses.length) },
-    { label: he ? 'תבניות' : 'Templates', value: String(feed.templates.length) },
-    { label: he ? 'תובנות' : 'Insights', value: String(feed.insights.length) },
-  ];
-
+  // Filters — category chip + free-text (tapped hashtag).
+  const [selectedCat, setSelectedCat] = useState<CategoryKey>('all');
   const [query, setQuery] = useState('');
+  // The floating "talk to ONE" input at the sheet's bottom.
+  const [input, setInput] = useState('');
+  // Collapsible "drawer" worlds — all open by default so scrolling reveals content.
+  const [openDrawers, setOpenDrawers] = useState<Record<string, boolean>>({
+    business: true,
+    processes: true,
+    templates: true,
+    insights: true,
+  });
   const q = query.trim().toLowerCase();
-  const match = useCallback((...parts: string[]) => !q || parts.some((p) => p.toLowerCase().includes(q)), [q]);
+  const match = useCallback(
+    (...parts: string[]) => !q || parts.some((p) => p.toLowerCase().includes(q)),
+    [q],
+  );
+  const inCat = useCallback(
+    // Fitness folds into Health — selecting Health also shows fitness items.
+    (c: CategoryKey) =>
+      selectedCat === 'all' ||
+      c === selectedCat ||
+      (selectedCat === 'health' && c === 'fitness'),
+    [selectedCat],
+  );
 
-  const officials = feed.officials.filter((o) => match(o.name, o.category));
-  const publicProcesses = feed.publicProcesses.filter((p) => match(p.title, p.by));
-  const templates = feed.templates.filter((t) => match(t.title, ...t.steps));
-  const insights = feed.insights.filter((i) => match(i.title, ...i.points));
-  const signals = feed.signals.filter((s) => match(s.text));
+  // Reset filters + input each time the sheet opens.
+  useEffect(() => {
+    if (visible) {
+      setSelectedCat('all');
+      setQuery('');
+      setInput('');
+      setOpenDrawers({ business: true, processes: true, templates: true, insights: true });
+    }
+  }, [visible]);
 
-  // Create a real, rich process from a Global card and drop it on Home.
+  // Floating-dock keyboard lift — translate the bottom input up by the keyboard
+  // height so it stays reachable while typing (same pattern as the other sheets).
+  const dockLift = useSharedValue(0);
+  useEffect(() => {
+    const showEv = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEv = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = (e: KeyboardEvent) => {
+      dockLift.value = withTiming(-(e.endCoordinates?.height ?? 0), {
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+      });
+    };
+    const onHide = () => {
+      dockLift.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.cubic) });
+    };
+    const a = Keyboard.addListener(showEv, onShow);
+    const b = Keyboard.addListener(hideEv, onHide);
+    return () => {
+      a.remove();
+      b.remove();
+    };
+  }, [dockLift]);
+  const dockStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dockLift.value }] }));
+
+  // ── Filtered datasets ────────────────────────────────────────────────────
+  const wants = feed.wants.filter((w) => inCat(w.category) && match(w.text));
+  const officials = feed.officials.filter((o) => inCat(o.cat) && match(o.name, o.category));
+  const publicProcesses = feed.publicProcesses.filter((p) => inCat(p.cat) && match(p.title, p.by));
+  const templates = feed.templates.filter((t) => inCat(t.cat) && match(t.title, ...t.steps));
+  const insights = feed.insights.filter((i) => inCat(i.cat) && match(i.title, ...i.points));
+  const signals = feed.signals.filter((s) => inCat(s.cat) && match(s.text));
+
+  // ── Actions ──────────────────────────────────────────────────────────────
   const createFromArchetype = useCallback(
     (key: ArchetypeKey, title: string) => {
       const unit = generateRichUnitByKey(key, activeIdentityId, lang, Date.now(), title);
@@ -128,7 +189,6 @@ export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
     [activeIdentityId, lang, addUnit, onClose, he],
   );
 
-  // Hand an intent to ONE — lands back on Home with ONE answering.
   const askOne = useCallback(
     (prompt: string) => {
       setPendingHomeInput(prompt);
@@ -137,119 +197,109 @@ export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
     [setPendingHomeInput, onClose],
   );
 
-  const rtl = rtlText(lang);
+  // Floating input → hand the user's own want to ONE (lands on Home, ONE answers).
+  const submitInput = useCallback(() => {
+    const text = input.trim();
+    if (!text) return;
+    Keyboard.dismiss();
+    setInput('');
+    askOne(text);
+  }, [input, askOne]);
 
-  // Flatten the (filtered) feed into one ordered stream of cards for the loop —
-  // highest value first: signals → officials → public → templates → insights.
-  const loopCards: LoopCard[] = useMemo(() => {
-    const out: LoopCard[] = [];
-    signals.forEach((s) =>
-      out.push({
-        id: s.id,
-        emoji: s.emoji,
-        kind: he ? 'אות שוק' : 'Signal',
-        title: s.text,
-        actionLabel: he ? 'בדוק' : 'Explore',
-        onAction: () => askOne(s.text),
+  // ── The wants loop (top banner) ────────────────────────────────────────────
+  const loopCards: LoopCard[] = useMemo(
+    () =>
+      wants.map((w) => {
+        const catLabel = feed.categories.find((c) => c.key === w.category)?.label ?? '';
+        return {
+          id: w.id,
+          emoji: w.emoji,
+          kind: catLabel,
+          meta: w.meta,
+          title: w.text,
+          actionLabel: w.archetype
+            ? he
+              ? 'התחל גם'
+              : 'Start this'
+            : he
+              ? 'בדוק'
+              : 'Explore',
+          onAction: () =>
+            w.archetype
+              ? createFromArchetype(w.archetype, ARCHETYPE_TITLE[w.archetype][he ? 1 : 0])
+              : askOne(w.text),
+        };
       }),
-    );
-    officials.forEach((o) =>
-      out.push({
-        id: o.id,
-        emoji: o.emoji,
-        kind: he ? 'ONE רשמי' : 'Official ONE',
-        badge: he ? 'רשמי' : 'Official',
-        title: o.name,
-        sub: o.category,
-        meta: o.status,
-        actionLabel: he ? 'הזמנה' : 'Book',
-        onAction: () => askOne(he ? `קבע תור ב-${o.name}` : `Book an appointment at ${o.name}`),
-      }),
-    );
-    publicProcesses.forEach((p) =>
-      out.push({
-        id: p.id,
-        emoji: p.emoji,
-        kind: he ? 'תהליך ציבורי' : 'Public process',
-        title: p.title,
-        sub: `${he ? 'מאת' : 'By'} ${p.by}`,
-        meta: p.meta,
-        actionLabel: he ? 'הצטרף' : 'Join',
-        onAction: () => createFromArchetype(p.archetype, p.title),
-      }),
-    );
-    templates.forEach((tpl) =>
-      out.push({
-        id: tpl.id,
-        emoji: tpl.emoji,
-        kind: he ? 'תבנית' : 'Template',
-        title: tpl.title,
-        sub: he
-          ? `בשימוש ${tpl.usedBy.toLocaleString()} אנשים`
-          : `Used by ${tpl.usedBy.toLocaleString()} people`,
-        extra: tpl.steps.join('  ·  '),
-        actionLabel: he ? 'צור תהליך' : 'Create process',
-        onAction: () => createFromArchetype(tpl.archetype, tpl.title),
-      }),
-    );
-    insights.forEach((ins) =>
-      out.push({
-        id: ins.id,
-        emoji: ins.emoji,
-        kind: he ? 'תובנה' : 'Insight',
-        title: ins.title,
-        extra: ins.points.map((pt, i) => `${i + 1}. ${pt}`).join('\n'),
-        actionLabel: he ? 'צור מזה' : 'Create from this',
-        onAction: () => createFromArchetype(ins.archetype, ins.title),
-      }),
-    );
-    return out;
-  }, [signals, officials, publicProcesses, templates, insights, he, askOne, createFromArchetype]);
+    [wants, feed.categories, he, createFromArchetype, askOne],
+  );
+
+  // ── Drawers (collapsible worlds) ──────────────────────────────────────────
+  const toggleDrawer = useCallback((key: string) => {
+    haptic.select();
+    setOpenDrawers((d) => ({ ...d, [key]: !d[key] }));
+  }, []);
+
+  // Owner's own business ONE — surfaces for a business identity.
+  const showOwnBusiness =
+    identity?.type === 'business' && (selectedCat === 'all' || selectedCat === 'business');
+
+  const stripTag = (tag: string) => tag.replace(/^#/, '').replace(/[_-]/g, ' ').trim();
+  const hashtags = feed.hashtagsByCategory[selectedCat] ?? [];
 
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      // Single snap — no half-card detent. A downward drag closes it in one
-      // motion (there's no lower snap to catch on). Close also via the X or a
-      // backdrop tap.
+      animatedIndex={animatedIndex}
       snapPoints={['92%']}
       enableContentPan={true}
       bypassDefaultView={true}
-      // Fire the close haptic the instant the drag passes the dismiss point —
-      // synced to the gesture, not delayed to the end of the slide.
       onDragDismissCross={() => haptic.press()}
-      // Screen-pinned bottom fade so content scrolls into a soft bar at the
-      // sheet's bottom edge (matches the profile / unit sheets). In the overlay
-      // (not content) so it sits at the sheet bottom rather than gorhom's
-      // content bottom.
-      overlay={<EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />}
+      overlay={
+        <>
+          {/* Screen-pinned bottom fade — content scrolls into it, BEHIND the
+              floating input dock (zIndex 10). */}
+          <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />
+          {/* Floating "talk to ONE" input, pinned to the sheet bottom. Lifts with
+              the keyboard; fades with the sheet on close (overlay wrapper fade). */}
+          <Animated.View
+            style={[styles.inputDock, { paddingBottom: Math.max(insets.bottom, 12) }, dockStyle]}
+            pointerEvents="box-none"
+          >
+            {/* Same wrapper + margins as the home dock so the capsule reads
+                identical (size / position). No placeholder — just the resting
+                caret, like home. */}
+            <View style={styles.inputNarrow}>
+              <InputBar
+                value={input}
+                onChangeText={setInput}
+                onSubmit={submitInput}
+                onPressVoice={submitInput}
+                bordered
+                elevated
+              />
+            </View>
+          </Animated.View>
+        </>
+      }
       sheetStyle={styles.sheet}
     >
-      {/* Soft top gradient behind the header — content scrolls UNDER it, same
-          treatment as the process sheet. The header (zIndex 20) stays crisp
-          above it. */}
       <EdgeBars bottom={false} topHeight={112} topLinear />
+
       {/* Sticky header — credits wallet (left) + close (right). */}
       <View style={styles.topHeader} pointerEvents="box-none">
         <Pressable
           onPress={() =>
             Alert.alert(
               he ? 'הארנק שלך' : 'Your wallet',
-              he
-                ? `יש לך ${credits.toLocaleString()} קרדיטים של ONE.`
-                : `You have ${credits.toLocaleString()} ONE credits.`,
+              he ? `יש לך ${credits.toLocaleString()} קרדיטים של ONE.` : `You have ${credits.toLocaleString()} ONE credits.`,
             )
           }
           style={[styles.walletPill, { backgroundColor: colors.surface }]}
           accessibilityLabel={he ? 'ארנק קרדיטים' : 'Credits wallet'}
         >
-          {/* ONE's mark — a small black dot, ALWAYS to the left of the amount
-              (the pill row is hard-LTR so it never flips in Hebrew). */}
           <View style={[styles.walletDot, { backgroundColor: colors.text }]} />
-          <Text style={[styles.walletAmount, { color: colors.text }]}>
-            {credits.toLocaleString()}
-          </Text>
+          <Text style={[styles.walletAmount, { color: colors.text }]}>{credits.toLocaleString()}</Text>
         </Pressable>
         <Pressable
           onPress={onClose}
@@ -267,63 +317,7 @@ export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Hero — just ONE's big, centred world broadcast. */}
-        <View style={styles.hero}>
-          <Animated.Text
-            style={[styles.heroBroadcast, { color: colors.text }, bStyle]}
-            numberOfLines={3}
-          >
-            {feed.broadcasts[bIndex]}
-          </Animated.Text>
-        </View>
-
-        {/* World data bar — swipe sideways for more (mirrors the unit metrics). */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.statsScroll}
-          contentContainerStyle={styles.statsContent}
-        >
-          {globalStats.map((s) => (
-            <View key={s.label} style={styles.statCell}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-                {s.label.toUpperCase()}
-              </Text>
-              <Text style={[styles.statValue, { color: colors.text }]}>{s.value}</Text>
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* Search ONE — a capsule like the input bar, with a filter button. */}
-        <View style={[styles.searchRow, { backgroundColor: colors.surface }, rtlRow(lang)]}>
-          <SearchIcon size={20} color={colors.textSecondary} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder={he ? 'חיפוש ב-ONE' : 'Search ONE'}
-            placeholderTextColor={colors.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.searchInput, { color: colors.text }, rtlText(lang)]}
-          />
-          <Pressable
-            onPress={() =>
-              Alert.alert(
-                he ? 'סינון' : 'Filters',
-                he ? 'סינון תוצאות — בקרוב.' : 'Filter results — coming soon.',
-              )
-            }
-            hitSlop={8}
-            style={styles.filterBtn}
-            accessibilityLabel={he ? 'סינון' : 'Filter'}
-          >
-            <FilterIcon size={20} color={colors.text} />
-          </Pressable>
-        </View>
-
-        {/* The world as a never-ending loop: the front card drops down and
-            cycles to the back, the next rises into place. Auto-rotates like a
-            news feed; each card's action fires without skipping it. */}
+        {/* 1) LIVE WANTS — the loop, first, breathing space below the header. */}
         {loopCards.length > 0 ? (
           <CardLoop
             items={loopCards}
@@ -334,31 +328,16 @@ export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
                   <View style={styles.loopBadge}>
                     <Text style={styles.loopBadgeText}>{c.kind}</Text>
                   </View>
-                  {c.badge ? (
-                    <View style={[styles.verifiedTag, { backgroundColor: colors.text }]}>
-                      <Text style={[styles.verifiedText, { color: colors.background }]}>{c.badge}</Text>
-                    </View>
+                  {c.meta ? (
+                    <Text style={[styles.loopMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {c.meta}
+                    </Text>
                   ) : null}
                 </View>
                 <Text style={styles.loopEmoji}>{c.emoji}</Text>
-                <Text style={[styles.loopTitle, { color: colors.text }, rtl]} numberOfLines={2}>
+                <Text style={[styles.loopTitle, { color: colors.text }, rtl]} numberOfLines={4}>
                   {c.title}
                 </Text>
-                {c.sub ? (
-                  <Text style={[styles.cardSub, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
-                    {c.sub}
-                  </Text>
-                ) : null}
-                {c.meta ? (
-                  <Text style={[styles.cardMeta, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
-                    {c.meta}
-                  </Text>
-                ) : null}
-                {c.extra ? (
-                  <Text style={[styles.steps, { color: colors.textSecondary }, rtl]} numberOfLines={3}>
-                    {c.extra}
-                  </Text>
-                ) : null}
                 <View style={styles.flex1} />
                 <View style={[styles.actionRow, rtlRow(lang)]}>
                   <PillAction colors={colors} primary onPress={c.onAction}>
@@ -369,16 +348,333 @@ export function GlobalSheet({ visible, onClose }: GlobalSheetProps) {
             )}
           />
         ) : (
-          <Text style={[styles.emptyText, { color: colors.textSecondary }, rtl]}>
-            {he ? 'אין תוצאות' : 'No results'}
-          </Text>
+          <View style={[styles.loopEmpty, { height: LOOP_CARD_H }]}>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }, rtl]}>
+              {he ? 'אין רצונות בקטגוריה הזו כרגע' : 'No live wants in this category right now'}
+            </Text>
+          </View>
         )}
+
+        {/* Everything below the loop sits on an OPAQUE band (page colour) so the
+            front card, as it drops away, slides BEHIND this content and vanishes
+            — it never runs over the chips / drawers. Shadows stay intact (unlike
+            an overflow mask). */}
+        <View style={[styles.belowLoop, { backgroundColor: colors.background }]}>
+        {/* 2) "Worlds" — the categories as circular, colour-coded icons with a
+            label beneath (ONE leads, shown as its orb). A "+" trails to add a
+            world. Selecting one filters the feed below. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipsScroll}
+          contentContainerStyle={styles.worldsContent}
+        >
+          {feed.categories.map((cat) => {
+            const active = selectedCat === cat.key;
+            const meta = WORLD_META[cat.key];
+            return (
+              <Pressable
+                key={cat.key}
+                onPress={() => {
+                  haptic.select();
+                  setSelectedCat(cat.key);
+                }}
+                style={styles.world}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={cat.label}
+              >
+                <View
+                  style={[
+                    styles.worldCircle,
+                    { backgroundColor: colors.circle },
+                    active && { borderWidth: 2.5, borderColor: meta?.color ?? colors.text },
+                  ]}
+                >
+                  {cat.key === 'all' ? (
+                    // ONE itself — the orb fills the circle (its eyes ARE the mark).
+                    <Orb size={58} noBlink noShadow />
+                  ) : meta ? (
+                    // The category's icon sits where ONE's eyes would be — big,
+                    // nudged up to the eye line — so the circle reads as ONE
+                    // "wearing" that world, not a small glyph in a dot.
+                    <View style={styles.worldIconEye}>
+                      <meta.Icon size={30} color={meta.color} />
+                    </View>
+                  ) : null}
+                </View>
+                <Text
+                  style={[
+                    styles.worldLabel,
+                    { color: active ? colors.text : colors.textSecondary },
+                    active && styles.worldLabelActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {cat.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {/* Add a world (coming soon). */}
+          <Pressable
+            onPress={() =>
+              Alert.alert(he ? 'הוספת עולם' : 'Add a world', he ? 'עוד רגע — היכולת הזו בדרך.' : 'Coming soon.')
+            }
+            style={styles.world}
+            accessibilityRole="button"
+            accessibilityLabel={he ? 'הוסף עולם' : 'Add a world'}
+          >
+            <View style={[styles.worldCircle, styles.worldAdd, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <PlusIcon size={24} color={colors.text} />
+            </View>
+          </Pressable>
+        </ScrollView>
+
+        {/* 3) Topic hashtags for the selected category. */}
+        {hashtags.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.tagsScroll}
+            contentContainerStyle={styles.tagsContent}
+          >
+            {hashtags.map((tag) => {
+              const active = q.length > 0 && stripTag(tag).toLowerCase() === q;
+              return (
+                <Pressable
+                  key={tag}
+                  onPress={() => {
+                    haptic.select();
+                    setQuery(active ? '' : stripTag(tag));
+                  }}
+                  style={[styles.tag, active && { backgroundColor: colors.circle, borderColor: colors.circle }]}
+                >
+                  <Text
+                    style={[
+                      styles.tagText,
+                      { color: active ? colors.circleEye : colors.textSecondary },
+                    ]}
+                  >
+                    {tag}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {/* 4) Drawers — the durable sources, by world. */}
+        {showOwnBusiness ? (
+          <View style={[styles.ownerCard, { backgroundColor: colors.text }]}>
+            <View style={[styles.ownerRow, rtlRow(lang)]}>
+              <Text style={styles.ownerEmoji}>💼</Text>
+              <View style={styles.flex1}>
+                <Text style={[styles.ownerName, { color: colors.background }, rtl]} numberOfLines={1}>
+                  {identity?.name}
+                </Text>
+                <Text style={[styles.ownerSub, { color: colors.background }, rtl]} numberOfLines={1}>
+                  {he ? 'ה-ONE העסקי שלך · בעלים' : 'Your business ONE · Owner'}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => askOne(he ? 'הצג לי את לוח הבקרה של העסק שלי' : 'Show me my business dashboard')}
+                style={[styles.ownerBtn, { backgroundColor: colors.background }]}
+              >
+                <Text style={[styles.ownerBtnText, { color: colors.text }]}>{he ? 'נהל' : 'Manage'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        <Drawer
+          colors={colors}
+          lang={lang}
+          emoji="💼"
+          title={he ? 'עסקים' : 'Business'}
+          count={officials.length + signals.length}
+          open={openDrawers.business}
+          onToggle={() => toggleDrawer('business')}
+        >
+          {officials.map((o) => (
+            <DrawerRow
+              key={o.id}
+              colors={colors}
+              lang={lang}
+              emoji={o.emoji}
+              title={o.name}
+              sub={`${o.category} · ${o.status}`}
+              actionLabel={he ? 'הזמנה' : 'Book'}
+              onAction={() => askOne(he ? `קבע תור ב-${o.name}` : `Book an appointment at ${o.name}`)}
+            />
+          ))}
+          {signals.map((s) => (
+            <DrawerRow
+              key={s.id}
+              colors={colors}
+              lang={lang}
+              emoji={s.emoji}
+              title={s.text}
+              actionLabel={he ? 'בדוק' : 'Explore'}
+              onAction={() => askOne(s.text)}
+            />
+          ))}
+        </Drawer>
+
+        <Drawer
+          colors={colors}
+          lang={lang}
+          emoji="🔄"
+          title={he ? 'תהליכים' : 'Processes'}
+          count={publicProcesses.length}
+          open={openDrawers.processes}
+          onToggle={() => toggleDrawer('processes')}
+        >
+          {publicProcesses.map((p) => (
+            <DrawerRow
+              key={p.id}
+              colors={colors}
+              lang={lang}
+              emoji={p.emoji}
+              title={p.title}
+              sub={`${he ? 'מאת' : 'By'} ${p.by} · ${p.meta}`}
+              actionLabel={he ? 'הצטרף' : 'Join'}
+              onAction={() => createFromArchetype(p.archetype, p.title)}
+            />
+          ))}
+        </Drawer>
+
+        <Drawer
+          colors={colors}
+          lang={lang}
+          emoji="📋"
+          title={he ? 'תבניות' : 'Templates'}
+          count={templates.length}
+          open={openDrawers.templates}
+          onToggle={() => toggleDrawer('templates')}
+        >
+          {templates.map((tpl) => (
+            <DrawerRow
+              key={tpl.id}
+              colors={colors}
+              lang={lang}
+              emoji={tpl.emoji}
+              title={tpl.title}
+              sub={
+                (he ? `בשימוש ${tpl.usedBy.toLocaleString()} אנשים` : `Used by ${tpl.usedBy.toLocaleString()} people`) +
+                ` · ${tpl.steps.join(' · ')}`
+              }
+              actionLabel={he ? 'צור תהליך' : 'Create'}
+              onAction={() => createFromArchetype(tpl.archetype, tpl.title)}
+            />
+          ))}
+        </Drawer>
+
+        <Drawer
+          colors={colors}
+          lang={lang}
+          emoji="💡"
+          title={he ? 'תובנות' : 'Insights'}
+          count={insights.length}
+          open={openDrawers.insights}
+          onToggle={() => toggleDrawer('insights')}
+        >
+          {insights.map((ins) => (
+            <DrawerRow
+              key={ins.id}
+              colors={colors}
+              lang={lang}
+              emoji={ins.emoji}
+              title={ins.title}
+              sub={ins.points.join(' · ')}
+              actionLabel={he ? 'צור מזה' : 'Create'}
+              onAction={() => createFromArchetype(ins.archetype, ins.title)}
+            />
+          ))}
+        </Drawer>
+        </View>
       </BottomSheetScrollView>
     </BottomSheet>
   );
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────
+
+function Drawer({
+  colors,
+  lang,
+  emoji,
+  title,
+  count,
+  open,
+  onToggle,
+  children,
+}: {
+  colors: ThemeColors;
+  lang: string;
+  emoji: string;
+  title: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  // Hide a world entirely when the active filter empties it.
+  if (count === 0) return null;
+  return (
+    <View style={styles.drawer}>
+      <Pressable onPress={onToggle} style={[styles.drawerHeader, rtlRow(lang)]}>
+        <Text style={styles.drawerEmoji}>{emoji}</Text>
+        <Text style={[styles.drawerTitle, { color: colors.text }, rtlText(lang)]}>{title}</Text>
+        <View style={[styles.drawerCount, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.drawerCountText, { color: colors.textSecondary }]}>{count}</Text>
+        </View>
+        <View style={styles.flex1} />
+        <View style={[styles.chevron, open && styles.chevronOpen]}>
+          <ArrowDownIcon size={18} color={colors.textSecondary} />
+        </View>
+      </Pressable>
+      {open ? <View style={styles.drawerBody}>{children}</View> : null}
+    </View>
+  );
+}
+
+function DrawerRow({
+  colors,
+  lang,
+  emoji,
+  title,
+  sub,
+  actionLabel,
+  onAction,
+}: {
+  colors: ThemeColors;
+  lang: string;
+  emoji: string;
+  title: string;
+  sub?: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <View style={[styles.drawerRow, { backgroundColor: colors.surface }, rtlRow(lang)]}>
+      <Text style={styles.drawerRowEmoji}>{emoji}</Text>
+      <View style={styles.flex1}>
+        <Text style={[styles.drawerRowTitle, { color: colors.text }, rtlText(lang)]} numberOfLines={2}>
+          {title}
+        </Text>
+        {sub ? (
+          <Text style={[styles.drawerRowSub, { color: colors.textSecondary }, rtlText(lang)]} numberOfLines={2}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
+      <PillAction colors={colors} primary onPress={onAction}>
+        {actionLabel}
+      </PillAction>
+    </View>
+  );
+}
 
 function PillAction({
   children,
@@ -403,9 +699,7 @@ function PillAction({
       ]}
       accessibilityRole="button"
     >
-      <Text style={[styles.pillActionText, { color: primary ? colors.circleEye : colors.text }]}>
-        {children}
-      </Text>
+      <Text style={[styles.pillActionText, { color: primary ? colors.circleEye : colors.text }]}>{children}</Text>
     </Pressable>
   );
 }
@@ -413,14 +707,8 @@ function PillAction({
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   sheet: {},
-  rtl: { textAlign: 'right', writingDirection: 'rtl' },
-  rowReverse: { flexDirection: 'row-reverse' },
 
-  // Shared header metrics across the Global / Settings / ONE-profile sheets so
-  // the close button + header height sit identically when switching between them.
-  // ABSOLUTE overlay (like the process sheet) so content scrolls fully UNDER it
-  // and fades out cleanly into the top gradient — no rough clip at a header seam.
-  // zIndex 20 keeps the header crisp ABOVE the EdgeBars top gradient (zIndex 15).
+  // Header (shared metrics with the other sheets).
   topHeader: {
     position: 'absolute',
     top: 0,
@@ -434,18 +722,11 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     zIndex: 20,
   },
-  // Credits wallet — an input-like capsule on the left of the header. Hard-LTR
-  // (never row-reverse) so the ONE dot stays to the LEFT of the amount even in
-  // Hebrew. Carries the same shadow weight as the close button so the two read
-  // as a balanced pair across the header.
   walletPill: {
-    // Hard LTR so the ONE dot stays to the LEFT of the amount even in Hebrew —
-    // `direction` is immune to the engine's RTL flipping.
     direction: 'ltr',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    // Match the X button's height (44) so the two header pills read as a pair.
     height: 44,
     paddingHorizontal: 16,
     borderRadius: 22,
@@ -470,63 +751,59 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
-  // paddingTop clears the absolute header so the first row starts just below it.
-  content: { paddingHorizontal: 22, paddingTop: 70, paddingBottom: 48, gap: 14 },
+  // paddingTop clears the absolute header AND gives the banner room to breathe
+  // below the credits / close row. paddingBottom clears the floating input dock.
+  content: { paddingHorizontal: 22, paddingTop: 84, paddingBottom: 132, gap: 14 },
 
-  // Hero — ONE's big centred world broadcast (the headline of the sheet).
-  hero: { alignItems: 'center', paddingTop: 4, paddingBottom: 8, paddingHorizontal: 6 },
-  // Matches Home's broadcast size/weight so the two read as the same voice.
-  heroBroadcast: {
-    fontSize: 22,
-    fontWeight: '500',
-    lineHeight: 30,
-    textAlign: 'center',
-  },
+  // Opaque band that everything below the loop sits on — the dropping front card
+  // slides behind it and disappears (page colour → seamless, no visible seam).
+  belowLoop: { gap: 14 },
 
-  // Horizontal "data bar" of world stats (same cell shape as the unit metrics).
-  statsScroll: { marginTop: 2 },
-  statsContent: { paddingHorizontal: 4, gap: 22 },
-  statCell: { alignItems: 'center', gap: 5, minWidth: 78 },
-  statLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  statValue: { fontSize: 22, fontWeight: '700' },
-
-  // Search — a capsule like the input bar: search icon, field, filter button.
-  searchRow: {
-    flexDirection: 'row',
+  // "Worlds" — circular, colour-coded category selector.
+  chipsScroll: { marginTop: 2 },
+  worldsContent: { paddingHorizontal: 2, gap: 16, paddingVertical: 4, alignItems: 'flex-start' },
+  world: { width: 66, alignItems: 'center', gap: 7 },
+  worldCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     alignItems: 'center',
-    gap: 10,
-    height: 52,
-    borderRadius: 26,
-    paddingHorizontal: 16,
+    justifyContent: 'center',
   },
-  searchInput: { flex: 1, fontSize: 16, paddingVertical: 0 },
-  filterBtn: { padding: 4 },
+  worldAdd: { borderWidth: StyleSheet.hairlineWidth },
+  // Lifts the category icon to the orb's eye line (eyes sit just above centre).
+  worldIconEye: { transform: [{ translateY: -2 }] },
+  worldLabel: { fontSize: 12.5, fontWeight: '600', textAlign: 'center' },
+  worldLabelActive: { fontWeight: '800' },
 
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    opacity: 0.9,
-    marginTop: 8,
+  // Topic hashtags.
+  tagsScroll: {},
+  tagsContent: { paddingHorizontal: 2, gap: 8, paddingVertical: 2 },
+  tag: {
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
   },
+  tagText: { fontSize: 13, fontWeight: '600' },
 
-  card: {
-    borderRadius: 18,
-    padding: 14,
-    gap: 10,
+  // Floating "talk to ONE" input — pinned to the sheet's bottom, above the
+  // bottom gradient (zIndex 10 > EdgeBars zIndex 5).
+  inputDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
   },
-  cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  cardEmoji: { fontSize: 26 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardTitle: { fontSize: 16, fontWeight: '700', flexShrink: 1 },
-  cardSub: { fontSize: 13, marginTop: 2 },
-  cardMeta: { fontSize: 13, marginTop: 1 },
-  verifiedTag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  verifiedText: { fontSize: 10, fontWeight: '700' },
+  // Matches the home dock's inner wrapper so the capsule's width + side margins
+  // line up exactly (3 here + the InputBar's own 18 = the home inset).
+  inputNarrow: { paddingHorizontal: 3 },
 
-  steps: { fontSize: 13, lineHeight: 19 },
-  insightPoint: { fontSize: 14, fontWeight: '500', marginTop: 2 },
-
+  // Actions.
   actionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   pillAction: {
     paddingHorizontal: 16,
@@ -537,16 +814,7 @@ const styles = StyleSheet.create({
   },
   pillActionText: { fontSize: 14, fontWeight: '600' },
 
-  signalCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 16,
-    padding: 14,
-  },
-  signalText: { flex: 1, fontSize: 14, fontWeight: '500', lineHeight: 20 },
-
-  // ── Global loop card ──────────────────────────────────────────────────
+  // ── Wants loop card ──────────────────────────────────────────────────────
   loopCard: {
     flex: 1,
     borderRadius: 24,
@@ -557,7 +825,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
   },
-  loopBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  loopBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   loopBadge: {
     backgroundColor: '#34D8A0',
     paddingHorizontal: 12,
@@ -565,7 +833,39 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   loopBadgeText: { fontSize: 12, fontWeight: '800', color: '#062018', letterSpacing: 0.3 },
-  loopEmoji: { fontSize: 40, marginTop: 18 },
-  loopTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3, marginTop: 8, lineHeight: 30 },
-  emptyText: { fontSize: 15, textAlign: 'center', marginTop: 40 },
+  loopMeta: { fontSize: 12, fontWeight: '600' },
+  loopEmoji: { fontSize: 40, marginTop: 16 },
+  loopTitle: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3, marginTop: 8, lineHeight: 30 },
+  loopEmpty: { alignItems: 'center', justifyContent: 'center' },
+  emptyText: { fontSize: 15, textAlign: 'center' },
+
+  // ── Drawers ────────────────────────────────────────────────────────────────
+  drawer: { marginTop: 6 },
+  drawerHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  drawerEmoji: { fontSize: 18 },
+  drawerTitle: { fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
+  drawerCount: { minWidth: 24, height: 22, borderRadius: 11, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center' },
+  drawerCountText: { fontSize: 12, fontWeight: '700' },
+  chevron: { transform: [{ rotate: '0deg' }] },
+  chevronOpen: { transform: [{ rotate: '180deg' }] },
+  drawerBody: { gap: 8, marginTop: 2 },
+  drawerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 18,
+    padding: 14,
+  },
+  drawerRowEmoji: { fontSize: 26 },
+  drawerRowTitle: { fontSize: 15, fontWeight: '700', lineHeight: 20 },
+  drawerRowSub: { fontSize: 12, marginTop: 2, lineHeight: 17 },
+
+  // ── Owner's own business ONE ───────────────────────────────────────────────
+  ownerCard: { borderRadius: 20, padding: 16, marginTop: 6 },
+  ownerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  ownerEmoji: { fontSize: 30 },
+  ownerName: { fontSize: 17, fontWeight: '800' },
+  ownerSub: { fontSize: 12, marginTop: 2, opacity: 0.75 },
+  ownerBtn: { paddingHorizontal: 16, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  ownerBtnText: { fontSize: 14, fontWeight: '700' },
 });

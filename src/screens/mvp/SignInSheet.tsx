@@ -27,6 +27,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import type { SharedValue } from 'react-native-reanimated';
 import { BottomSheet } from '../../components/mvp/BottomSheet';
 import {
   CloseIcon,
@@ -43,6 +44,9 @@ interface SignInSheetProps {
   onClose: () => void;
   /** Called after a successful sign-in via any provider. */
   onSignedIn: () => void;
+  /** Live animated index (-1 closed … 0 open), written as the sheet slides so
+   *  Home can drop/return the orb in sync with the drag. */
+  animatedIndex?: SharedValue<number>;
 }
 
 // Single-detent sheet — content is short enough that scroll/expand isn't
@@ -50,9 +54,10 @@ interface SignInSheetProps {
 // without stretching toward the orb above. The Home Orb + "Welcome
 // back." broadcast remain visible above the sheet at their default
 // resting positions.
-const SNAP_POINTS = ['42%'];
+// With dynamic sizing the sheet fits its CONTENT; this is just the max cap.
+const SNAP_POINTS = ['90%'];
 
-export function SignInSheet({ visible, onClose, onSignedIn }: SignInSheetProps) {
+export function SignInSheet({ visible, onClose, onSignedIn, animatedIndex }: SignInSheetProps) {
   const { colors } = useThemeStore();
   const lang = useLanguage();
   const he = lang === 'he';
@@ -76,9 +81,7 @@ export function SignInSheet({ visible, onClose, onSignedIn }: SignInSheetProps) 
   const showSoonAlert = (label: string) => {
     Alert.alert(
       label,
-      he
-        ? 'בקרוב — בינתיים נסה Email או התחל עם ONE.'
-        : 'Coming soon — try Email or Start with ONE for now.',
+      he ? 'בקרוב — בינתיים אפשר להתחבר עם Email.' : 'Coming soon — you can continue with Email for now.',
     );
   };
 
@@ -155,41 +158,14 @@ export function SignInSheet({ visible, onClose, onSignedIn }: SignInSheetProps) 
     onClose();
   };
 
-  const handleAnonymous = async () => {
-    const client = supabaseService.getClient();
-    if (!client) {
-      // Truly offline / unconfigured — let them in locally only. This
-      // is the explicit "no backend" path, NOT a silent failure.
-      onSignedIn();
-      return;
-    }
-    setBusy(true);
-    const { error } = await client.auth.signInAnonymously();
-    setBusy(false);
-    if (error) {
-      // Don't fake success here. If we flip hasCompletedOnboarding
-      // without a session, every AI call silently falls back to mocks
-      // and the user can't tell why ONE sounds canned. Surface it.
-      const isDisabled = /anonymous.*disabled/i.test(error.message);
-      Alert.alert(
-        he ? 'התחברות נכשלה' : 'Sign-in failed',
-        isDisabled
-          ? he
-            ? 'Anonymous Sign-Ins מושבת בדאשבורד של Supabase. הפעל אותו ב-Auth → Providers → Anonymous, או השתמש ב-Email.'
-            : 'Anonymous Sign-Ins is disabled in your Supabase dashboard. Enable it under Auth → Providers → Anonymous, or use Email.'
-          : error.message,
-      );
-      return;
-    }
-    // Auth listener in OneContext will pull profile / hydrate.
-    onSignedIn();
-  };
-
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
+      animatedIndex={animatedIndex}
       snapPoints={SNAP_POINTS}
+      // Size the sheet to its content — no empty space, no touching the edge.
+      enableDynamicSizing
       // Content-pan ON so swiping DOWN anywhere in the sheet body
       // dismisses it (not just the X). There's no scroll view inside so
       // the gesture can only mean "close the sheet" — no conflict.
@@ -301,23 +277,24 @@ export function SignInSheet({ visible, onClose, onSignedIn }: SignInSheetProps) 
           </View>
         )}
 
-        {/* Footer: try without an account → anonymous sign-in (or local
-            fall-back). The Supabase auth listener in OneContext will
-            hydrate the store after the session lands. */}
+        {/* Footer: a plain terms line — signing in with any provider IS the
+            account, so there's no separate "sign up". Connecting = agreeing. */}
         {mode === 'picker' && (
-          <Pressable
-            onPress={handleAnonymous}
-            hitSlop={10}
-            style={styles.footer}
-            disabled={busy}
-          >
+          <View style={styles.footer}>
+            {/* Line 1: the intro. Line 2: both links together. */}
             <Text style={[styles.footerPrompt, { color: colors.textSecondary }]}>
-              {he ? 'אין לך עדיין חשבון? ' : "Don't have an account? "}
+              {he ? 'בהתחברות אתה מאשר את' : 'By continuing you agree to our'}
+            </Text>
+            <Text style={[styles.footerPrompt, { color: colors.textSecondary }]}>
               <Text style={[styles.footerLink, { color: colors.text }]}>
-                {he ? 'התחל עם ONE' : 'Start with ONE'}
+                {he ? 'תנאי השימוש' : 'Terms'}
+              </Text>
+              {he ? ' ו' : ' & '}
+              <Text style={[styles.footerLink, { color: colors.text }]}>
+                {he ? 'מדיניות הפרטיות' : 'Privacy Policy'}
               </Text>
             </Text>
-          </Pressable>
+          </View>
         )}
       </View>
     </BottomSheet>
@@ -365,10 +342,11 @@ function ProviderButton({ kind, icon, label, onPress, colors, disabled }: Provid
 const styles = StyleSheet.create({
   sheet: {},
   body: {
-    flex: 1,
+    // No flex — the sheet is dynamically sized to this content's height.
     paddingHorizontal: 22,
-    paddingTop: 4,
-    paddingBottom: 22,
+    paddingTop: 10,
+    // Bottom clearance so the terms line sits comfortably above the edge.
+    paddingBottom: 32,
   },
   header: {
     flexDirection: 'row',
@@ -435,9 +413,10 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: 'center',
-    paddingVertical: 16,
-    marginTop: 'auto',
+    // Fixed gap from the last button (content-sized sheet, so no 'auto' push).
+    marginTop: 22,
+    paddingHorizontal: 16,
   },
-  footerPrompt: { fontSize: 14 },
+  footerPrompt: { fontSize: 13, lineHeight: 19, textAlign: 'center' },
   footerLink: { fontWeight: '700' },
 });

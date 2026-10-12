@@ -22,6 +22,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
+  Image,
   Text,
   StyleSheet,
   Pressable,
@@ -30,10 +31,15 @@ import {
   Platform,
   Alert,
   AppState,
+  Share,
+  TextInput,
+  StatusBar,
   type KeyboardEvent,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -42,6 +48,7 @@ import Animated, {
   interpolate,
   Extrapolation,
   withTiming,
+  withRepeat,
   Easing,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,22 +57,35 @@ import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
 import { personalityPrompt } from '../../data/mvp/agentAppearance';
 import { useThemeStore } from '../../stores/themeStore';
-import { useMvpStore } from '../../stores/mvpStore';
+import { useMvpStore, disclosureForIdentity, type ChatWidget } from '../../stores/mvpStore';
+import { ChatQuizCard } from '../../components/mvp/ChatQuizCard';
+import { ChatBookingCard } from '../../components/mvp/ChatBookingCard';
+import { ChatFormCard } from '../../components/mvp/ChatFormCard';
+import { quizForText, buildQuizRun } from '../../data/mvp/quizBank';
+import { bookingForText, buildBookingRun } from '../../data/mvp/booking';
+import { formForText, buildFormRun } from '../../data/mvp/forms';
+import { startToolRun, quizAvailableFor, type ToolKind } from '../../data/mvp/deployTool';
+import { toolEnabled } from '../../data/mvp/tools';
 import { useLanguage } from '../../i18n/useT';
 import { rtlText, rtlRow } from '../../utils/rtl';
+import { extractRememberFact } from '../../utils/rememberIntent';
 import { unitStatusLine, isSeedBroadcast } from '../../utils/unitStatusLine';
-import type { Unit, UnitMetric, UnitQuickAction, UnitPerson, UnitReminder, UnitStep } from '../../core/mvp/types';
+import type { Unit, UnitMetric, UnitQuickAction, UnitPerson, UnitReminder, UnitStep, UnitDraft } from '../../core/mvp/types';
+import type { ThemeColors } from '../../utils/theme';
 import { SNOOZE_OPTIONS, snoozeOptionLabel, snoozeTarget } from '../../utils/snooze';
 import { TAG_COLORS } from '../../core/mvp/types';
 import { BottomSheet } from '../../components/mvp/BottomSheet';
 import { Orb } from '../../components/mvp/Orb';
 import { generateUnitReply } from '../../utils/mvpChatReply';
 import { invokeOneIntent } from '../../services/aiChat';
+import { openDisclosureStrings, disclosureLabel, DEFAULT_DISCLOSURE } from '../../data/mvp/disclosure';
 import { unitFromIntent, findSimilarUnit } from '../../utils/intentToUnit';
 import { resolveReminderDue } from '../../utils/reminderTime';
 import { TypingIndicator } from '../../components/mvp/TypingIndicator';
-import { CloseIcon, ArrowDownIcon, MenuIcon } from '../../components/mvp/icons';
+import { CloseIcon, MenuIcon, SpeakerIcon, MicIcon, MicOffIcon, CameraIcon } from '../../components/mvp/icons';
 import { InputBar } from '../../components/mvp/InputBar';
+import { InlinePrompt, type InlinePromptConfig } from '../../components/mvp/InlinePrompt';
+import { SharedProcessPreview } from '../../components/mvp/SharedProcessPreview';
 import { ActionMenu, type ActionMenuItem } from '../../components/mvp/ActionMenu';
 import { relativeWhen, activityKindMeta } from '../../utils/activity';
 import { analyzeUnit } from '../../utils/processIntelligence';
@@ -152,6 +172,10 @@ interface UnitProfileSheetProps {
   /** Force-open straight into CHAT (with the keyboard up) regardless of the
    *  unread/recency heuristic — set when the user LONG-PRESSED the card. */
   forceChat?: boolean;
+  /** True while a voice call is active. The backdrop then goes LIGHTER so the
+   *  live call orb (floating on Home above this sheet) stays visible — the call
+   *  "comes with you" into the process. */
+  callActive?: boolean;
 }
 
 interface ChatMessage {
@@ -160,6 +184,11 @@ interface ChatMessage {
   text: string;
   /** Wall-clock ms — present because chat messages live in the store now. */
   ts?: number;
+  /** Optional attached image (local URI) — a file answer, not just text. */
+  imageUri?: string;
+  /** An interactive tool widget ONE deployed in THIS process's chat (e.g. a
+   *  quiz). Same channel the Home chat uses. */
+  widget?: ChatWidget;
 }
 
 const TYPING_DELAY_MS = 900;
@@ -244,8 +273,41 @@ function completeStepsFromUpdates(
   return { steps: next, completed };
 }
 
-export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewProcess, forceChat }: UnitProfileSheetProps) {
-  const { colors } = useThemeStore();
+// ── Drafts: ONE's outward artifacts (the "intent → reality" bridge) ──────────
+const DRAFT_CHANNEL_META: Record<
+  UnitDraft['channel'],
+  { emoji: string; he: string; en: string }
+> = {
+  whatsapp: { emoji: '💬', he: 'וואטסאפ', en: 'WhatsApp' },
+  email: { emoji: '✉️', he: 'מייל', en: 'Email' },
+  sms: { emoji: '📱', he: 'SMS', en: 'SMS' },
+  call: { emoji: '📞', he: 'שיחה', en: 'Call' },
+  form: { emoji: '📝', he: 'טופס', en: 'Form' },
+  note: { emoji: '📄', he: 'הערה', en: 'Note' },
+};
+
+/** Offline/fallback draft — a plausible outreach built from the process's own
+ *  people + open steps, so "Draft a message" always produces something real to
+ *  edit even when the AI is unreachable. */
+function buildLocalDraft(unit: Unit, userName: string | undefined, lang: 'en' | 'he'): UnitDraft {
+  const he = lang === 'he';
+  const to = unit.people?.[0]?.name;
+  const openStep = (unit.nextSteps ?? []).find((s) => !s.done)?.title;
+  const body = he
+    ? `שלום${to ? ` ${to}` : ''},\n${userName ? `מדבר ${userName}` : 'פונה אליך'} בנוגע ל${unit.title}.\n${openStep ? `רציתי להתקדם עם: ${openStep}.` : 'רציתי להתקדם בתהליך.'}\nאפשר לתאם? תודה.`
+    : `Hi${to ? ` ${to}` : ''},\n${userName ? `${userName} here` : 'Reaching out'} about ${unit.title}.\n${openStep ? `I'd like to move forward with: ${openStep}.` : "I'd like to move this forward."}\nCan we set it up? Thanks.`;
+  return {
+    id: `dr_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
+    channel: 'whatsapp',
+    to,
+    body,
+    status: 'draft',
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewProcess, forceChat, callActive = false }: UnitProfileSheetProps) {
+  const { colors, theme } = useThemeStore();
   const lang = useLanguage();
   const he = lang === 'he';
   const insets = useSafeAreaInsets();
@@ -280,6 +342,28 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
   const [profileFull, setProfileFull] = useState(false);
   // The + quick-actions panel — rendered inline OVER the card (see overlay).
   const [quickOpen, setQuickOpen] = useState(false);
+  // Cross-platform text prompt (replaces iOS-only Alert.prompt) — rides the
+  // overlay slot, see render below.
+  const [promptConfig, setPromptConfig] = useState<InlinePromptConfig | null>(null);
+  // "What the other side sees" preview (shared/public processes) — overlay slot.
+  const [previewOpen, setPreviewOpen] = useState(false);
+  // In-process voice call — a self-contained call mode inside this sheet (the
+  // top-level home call dock is behind this Modal, so it can't reach here). The
+  // orb call-presence shows at the top and the dock switches to call controls.
+  const [inCall, setInCall] = useState(false);
+  const [speakerOn, setSpeakerOn] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  // The green call ring around the presence orb — a gentle live breath.
+  const callRingPulse = useSharedValue(1);
+  useEffect(() => {
+    if (inCall) {
+      callRingPulse.value = withRepeat(withTiming(1.05, { duration: 1400, easing: Easing.inOut(Easing.quad) }), -1, true);
+    } else {
+      callRingPulse.value = 1;
+    }
+  }, [inCall, callRingPulse]);
+  const callRingStyle = useAnimatedStyle(() => ({ transform: [{ scale: callRingPulse.value }] }));
   const [text, setText] = useState('');
   // Bumped whenever the sheet opens DIRECTLY into chat mode (a fresh
   // create hand-off, or re-opening a process we were just talking to) —
@@ -340,11 +424,13 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     const onShow = (e: KeyboardEvent) => {
       const h = e.endCoordinates?.height ?? 0;
       // The dock already rests `dockBottom` above the screen bottom, so lift it
-      // by (keyboard − that gap) to land its bottom edge ON the keyboard top.
+      // by (keyboard − that gap) PLUS a small breathing gap so it floats a touch
+      // ABOVE the keyboard top (matching the home dock), not glued to it.
       // `Math.max(0, …)` guards a hardware / floating keyboard that reports a
       // height SMALLER than the resting gap — without it the lift would go
       // POSITIVE and shove the dock down off the bottom edge.
-      dockLift.value = withTiming(-Math.max(0, h - dockBottom), {
+      const KB_GAP = 14;
+      dockLift.value = withTiming(-Math.max(0, h - dockBottom + KB_GAP), {
         duration: 240,
         easing: Easing.out(Easing.cubic),
       });
@@ -470,36 +556,55 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     },
   );
 
+  // Status-bar clock colour, tied to the SNAP so it turns over DURING the close
+  // slide (not on a delayed onClose flip). The clock stays VISIBLE the whole
+  // time — only its colour changes:
+  //   • sheet open at any snap (index > −0.5) → the dark backdrop is behind the
+  //     clock → WHITE clock.
+  //   • closing (index drops past −0.5) → the backdrop has faded enough that the
+  //     light home shows through → BLACK clock. It has flipped BEFORE the sheet
+  //     unmounts, so when the card is gone the clock is ALREADY black (matching
+  //     the black clock of the cards list behind it) — no delayed white→black.
+  const [clockDark, setClockDark] = useState(false);
+  useAnimatedReaction(
+    () => sheetIndex.value < -0.5,
+    (dark, prev) => {
+      'worklet';
+      if (prev == null || dark === prev) return;
+      runOnJS(setClockDark)(dark);
+    },
+  );
+
   // Compact sticky title — once the big centred title scrolls up under the
   // header, a small "emoji + title" fades into the bar centre, between the ⋮
   // and the X. Driven by a PLAIN JS onScroll callback: gorhom wraps it in
   // runOnJS internally, so (unlike a worklet handler — which broke the scroll
   // bridge before) it composes cleanly with gorhom's own gesture bookkeeping.
   const COMPACT_TITLE_THRESHOLD = 54;
+  // Track the live scroll offset in a shared value; the compact bar title is a
+  // CONTINUOUS function of it (interpolated below). At the top (y=0 — or when the
+  // content isn't scrollable and onScroll never fires, so the value stays 0) it's
+  // GUARANTEED hidden. That kills the "title shown twice" overlap: the small bar
+  // title only fades in AFTER the big centred title has scrolled up under the
+  // header, and it tracks the finger during the scroll.
   const compactTitleSV = useSharedValue(0);
-  const compactShownRef = useRef(false);
-  const setCompactShown = useCallback(
-    (shouldShow: boolean) => {
-      if (shouldShow === compactShownRef.current) return;
-      compactShownRef.current = shouldShow;
-      compactTitleSV.value = withTiming(shouldShow ? 1 : 0, {
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-      });
+  const handleProfileScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      compactTitleSV.value = e?.nativeEvent?.contentOffset?.y ?? 0;
     },
     [compactTitleSV],
   );
-  const handleProfileScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = e?.nativeEvent?.contentOffset?.y ?? 0;
-      setCompactShown(y > COMPACT_TITLE_THRESHOLD);
-    },
-    [setCompactShown],
-  );
-  const compactTitleStyle = useAnimatedStyle(() => ({
-    opacity: compactTitleSV.value,
-    transform: [{ translateY: (1 - compactTitleSV.value) * 6 }],
-  }));
+  const compactTitleStyle = useAnimatedStyle(() => {
+    // Fade in only once the big title has cleared the header — a clean handoff,
+    // never both titles visible at once.
+    const op = interpolate(
+      compactTitleSV.value,
+      [COMPACT_TITLE_THRESHOLD, COMPACT_TITLE_THRESHOLD + 34],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    return { opacity: op, transform: [{ translateY: (1 - op) * 6 }] };
+  });
 
   // Floating input dock. It now renders in the sheet's OVERLAY slot — a sibling
   // pinned to the SCREEN bottom, NOT inside gorhom's max-snap-sized content — so
@@ -533,8 +638,9 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
   // double up otherwise.
   useEffect(() => {
     if (mode !== 'profile') {
-      compactShownRef.current = false;
-      compactTitleSV.value = withTiming(0, { duration: 120 });
+      // Chat mode renders its own header title; keep the scroll-driven bar title
+      // collapsed so they never double up.
+      compactTitleSV.value = 0;
     }
   }, [mode, compactTitleSV]);
 
@@ -547,7 +653,6 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
       setMode('profile');
       setText('');
       setIsTyping(false);
-      compactShownRef.current = false;
       compactTitleSV.value = 0;
       // This component never unmounts (unitId just toggles), so a prior
       // chat could leave the dock lifted onto a keyboard that hid without
@@ -556,6 +661,15 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
       dockLift.value = 0;
       setKeyboardHeight(0);
       setProfileFull(false);
+      // End any in-process call when the sheet closes.
+      setInCall(false);
+      // Reset the clock to WHITE now that the sheet is GONE (no StatusBar is
+      // rendered while unitId is null, so this is invisible). This is what kills
+      // the reopen "flick": without it clockDark stays TRUE from the close, so
+      // the NEXT open's first frame renders dark-content and then animates to
+      // light — a visible flip even in dark mode (where the clock is white
+      // anyway). Resetting here means the next open starts already-white.
+      setClockDark(false);
       return;
     }
     // Fresh open: start the dock at rest. If we land in chat mode the
@@ -563,6 +677,11 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     dockLift.value = 0;
     setKeyboardHeight(0);
     setProfileFull(false);
+    // Reset the clock to WHITE for the open. The close turns clockDark → true
+    // (white→black during the slide) and that value PERSISTS on this
+    // never-unmounting component — so without this reset the NEXT open would
+    // start BLACK and then flip to white mid-open (the status-bar "flick").
+    setClockDark(false);
     // Profile by default; chat for unseen updates / a fresh conversation — OR
     // when the user long-pressed the card (forceChat).
     const openChat = forceChat || computeOpenInChat(unitId);
@@ -583,13 +702,36 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     chatRef.current?.scrollToEnd({ animated: true });
   }, [messages, isTyping]);
 
+  // Which tools are enabled — so the chat can surface tool starters (making the
+  // toolbox discoverable: a tap sends the phrase through the normal pipeline,
+  // which the deploy intercepts turn into a live widget).
+  const enabledTools = useMvpStore((s) => s.enabledTools);
+
   // Contextual conversation starters for the chat — rebuilt only when the
-  // process or language changes (Date.now() is read once per rebuild; the
-  // chips don't need to tick every second).
-  const chatSuggestions = useMemo(
-    () => (unit ? buildChatSuggestions(unit, lang, Date.now()) : []),
-    [unit, lang],
-  );
+  // process / language / tools change (Date.now() is read once per rebuild; the
+  // chips don't need to tick every second). Tool starters lead (they're the
+  // actionable "ONE can DO this" chips), then the contextual ones.
+  const chatSuggestions = useMemo(() => {
+    if (!unit) return [];
+    const he = lang === 'he';
+    const tools: string[] = [];
+    if (toolEnabled(enabledTools, 'booking')) tools.push(he ? 'לקבוע תור' : 'Book a time');
+    if (toolEnabled(enabledTools, 'forms')) tools.push(he ? 'מלא פרטי קשר' : 'Collect contact details');
+    if (toolEnabled(enabledTools, 'quiz') && quizForText(unit.title)) tools.push(he ? 'תן לי תרגול' : 'Quiz me');
+    return [...tools, ...buildChatSuggestions(unit, lang, Date.now())].slice(0, 5);
+  }, [unit, lang, enabledTools]);
+
+  // Tool launchers for the "+" panel — always reachable (unlike the chat chips,
+  // which fade after a few messages). Booking + form are generic; quiz shows
+  // only when one fits this process.
+  const launcherTools = useMemo(() => {
+    const he = lang === 'he';
+    const out: Array<{ kind: ToolKind; emoji: string; label: string }> = [];
+    if (toolEnabled(enabledTools, 'booking')) out.push({ kind: 'booking', emoji: '📅', label: he ? 'תור' : 'Booking' });
+    if (toolEnabled(enabledTools, 'forms')) out.push({ kind: 'form', emoji: '📝', label: he ? 'טופס' : 'Form' });
+    if (toolEnabled(enabledTools, 'quiz') && quizAvailableFor(unit?.title)) out.push({ kind: 'quiz', emoji: '🧠', label: he ? 'תרגול' : 'Quiz' });
+    return out;
+  }, [unit?.title, lang, enabledTools]);
 
   // Decide the OPEN detent SYNCHRONOUSLY the first render a unit appears.
   // Deriving it from `mode` state was a frame too late — the sheet had already
@@ -604,9 +746,53 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     openInChatRef.current = false;
   }
 
+  // Draft-compose state — declared BEFORE the `!unit` early return so its hook
+  // slot is stable across the closed→open transition (else "rendered more hooks
+  // than during the previous render"). `composeDraft` below reads it.
+  const [isDrafting, setIsDrafting] = useState(false);
+
   if (!unit) return null;
 
   const handleSend = () => submit(text);
+  // Start / end the in-process voice call. Dismiss the keyboard so the call
+  // controls + orb presence read cleanly.
+  const startUnitCall = () => {
+    haptic.tap();
+    Keyboard.dismiss();
+    setInCall(true);
+  };
+  const endUnitCall = () => {
+    haptic.tap();
+    setInCall(false);
+    setMuted(false);
+    setCameraOn(false);
+    setSpeakerOn(true);
+  };
+  // Answering with a FILE (photo) — the file IS the reply. Record it as the
+  // user's message (with any typed caption), then ONE acknowledges and keeps
+  // working. No vision model here, so it confirms + continues rather than
+  // "reading" the image.
+  const handleAttachImage = (uri: string) => {
+    if (!unitId) return;
+    haptic.tap();
+    setQuickOpen(false);
+    if (mode !== 'chat') setMode('chat');
+    const caption = text.trim();
+    setText('');
+    const ts = Date.now();
+    setMessages((m) => [
+      ...m,
+      { id: `u${ts}`, from: 'user', text: caption, imageUri: uri, ts },
+      {
+        id: `o${ts + 1}`,
+        from: 'one',
+        text: he
+          ? 'קיבלתי את הקובץ 📎 — צירפתי אותו לתהליך וממשיך מכאן.'
+          : 'Got the file 📎 — added it to the process and continuing from here.',
+        ts: ts + 1,
+      },
+    ]);
+  };
   // Core send — takes the raw text so BOTH the input bar and the tappable
   // suggestion chips can drive a turn through the exact same AI pipeline.
   const submit = (raw: string) => {
@@ -614,7 +800,83 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     if (!v || !unit) return;
     haptic.tap();
     setText('');
-    setMessages((m) => [...m, { id: `u${Date.now()}`, from: 'user', text: v }]);
+    const uts = Date.now();
+    setMessages((m) => [...m, { id: `u${uts}`, from: 'user', text: v }]);
+
+    // TOOL — deploy a QUIZ for THIS process when asked to practice / be tested
+    // and ONE has a quiz for it. The widget renders in this process's chat and
+    // its score flows onto the process metric. Client-side, no AI round-trip.
+    if (
+      toolEnabled(useMvpStore.getState().enabledTools, 'quiz') &&
+      /מבחן|תרגול|תרגל|בחן אותי|תבחן|quiz|test me|practice/i.test(v)
+    ) {
+      const def = quizForText(unit.title) ?? quizForText(v);
+      if (def) {
+        const qHe = /[֐-׿]/.test(v) || he;
+        const run = buildQuizRun(def, unit.id, qHe ? 'he' : 'en');
+        useMvpStore.getState().startQuizRun(run);
+        setMessages((m) => [
+          ...m,
+          { id: `o${uts + 1}`, from: 'one', text: qHe ? `יאללה — ${run.title} קצר 👇` : `Let's go — a quick ${run.title} 👇`, ts: uts + 1 },
+          { id: `w${uts + 2}`, from: 'one', text: '', ts: uts + 2, widget: { kind: 'quiz', runId: run.id } },
+        ]);
+        return;
+      }
+    }
+
+    // TOOL — deploy a BOOKING for THIS process: offer concrete slots with its
+    // provider; the confirmed slot lands on the process timeline. Client-side.
+    if (toolEnabled(useMvpStore.getState().enabledTools, 'booking') && bookingForText(v)) {
+      const bHe = /[֐-׿]/.test(v) || he;
+      const run = buildBookingRun({
+        unitId: unit.id,
+        title: bHe ? 'קביעת תור' : 'Booking',
+        provider: unit.people?.[0]?.name,
+        lang: bHe ? 'he' : 'en',
+      });
+      useMvpStore.getState().startBookingRun(run);
+      setMessages((m) => [
+        ...m,
+        { id: `o${uts + 1}`, from: 'one', text: bHe ? 'בטח — הנה כמה זמנים פנויים 👇' : 'Sure — a few open times 👇', ts: uts + 1 },
+        { id: `w${uts + 2}`, from: 'one', text: '', ts: uts + 2, widget: { kind: 'booking', runId: run.id } },
+      ]);
+      return;
+    }
+
+    // TOOL — deploy a FORM for THIS process: collect structured details; on
+    // submit they save into disclosure + a note on this process. Client-side.
+    if (toolEnabled(useMvpStore.getState().enabledTools, 'forms')) {
+      const fDef = formForText(v);
+      if (fDef) {
+        const fHe = /[֐-׿]/.test(v) || he;
+        const run = buildFormRun(fDef, unit.id, fHe ? 'he' : 'en');
+        useMvpStore.getState().startFormRun(run);
+        setMessages((m) => [
+          ...m,
+          { id: `o${uts + 1}`, from: 'one', text: fHe ? 'בטח — מלא את הפרטים ואשמור 👇' : 'Sure — fill these in 👇', ts: uts + 1 },
+          { id: `w${uts + 2}`, from: 'one', text: '', ts: uts + 2, widget: { kind: 'form', runId: run.id } },
+        ]);
+        return;
+      }
+    }
+
+    // "Remember that…" → ONE saves it to his memory of you and confirms; no AI
+    // turn. (Seen later in the ONE profile → "What ONE remembers".)
+    const rememberFact = extractRememberFact(v);
+    if (rememberFact) {
+      useMvpStore.getState().addMemory(rememberFact);
+      setMessages((m) => [
+        ...m,
+        {
+          id: `o${uts + 1}`,
+          from: 'one',
+          text: he ? `שמרתי לזיכרון 🧠 — ${rememberFact}` : `Got it 🧠 — I'll remember: ${rememberFact}`,
+          ts: uts + 1,
+        },
+      ]);
+      return;
+    }
+
     setIsTyping(true);
     const history = messages.map((m) => ({
       role: m.from === 'one' ? ('assistant' as const) : ('user' as const),
@@ -622,6 +884,8 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     }));
     setTimeout(async () => {
       let reply: string;
+      // An interactive tool widget ONE chose to deploy this turn (deploy_tool).
+      let toolWidget: ChatWidget | null = null;
       try {
         // existingUnits gives ONE awareness of every sibling process
         // under this identity, so a mention like "I also need to renew
@@ -636,6 +900,8 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
         const intent = await invokeOneIntent(v, {
           history,
           voiceStyle: personalityPrompt(useMvpStore.getState().agentPersonality, lang),
+          userMemories: useMvpStore.getState().memories.map((m) => m.text),
+          userDisclosure: openDisclosureStrings(disclosureForIdentity(unit.identityId), lang === 'he'),
           activeUnit: {
             title: unit.title,
             emoji: unit.emoji,
@@ -834,17 +1100,118 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
             emoji: unit.emoji,
             kind: 'update',
           });
+        } else if (intent.kind === 'draft_message' && intent.draft?.body) {
+          // ONE composed the actual outward message. Drop it into the process
+          // as an editable, sendable artifact — the intent → reality bridge.
+          store.addDraft(
+            unit.id,
+            {
+              id: `dr_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
+              channel: intent.draft.channel ?? 'note',
+              to: intent.draft.to?.trim() || undefined,
+              subject: intent.draft.subject?.trim() || undefined,
+              body: intent.draft.body.trim(),
+              status: 'draft',
+              createdAt: new Date().toISOString(),
+            },
+            lang,
+          );
+        } else if (intent.kind === 'deploy_tool' && intent.tool) {
+          // ONE chose to drop an interactive tool into THIS process's chat.
+          const tHe = /[֐-׿]/.test(v) || he;
+          const topic = intent.tool.topic ?? v;
+          if (intent.tool.kind === 'quiz') {
+            const def = quizForText(topic) ?? quizForText(unit.title) ?? quizForText(v);
+            if (def) {
+              const run = buildQuizRun(def, unit.id, tHe ? 'he' : 'en');
+              useMvpStore.getState().startQuizRun(run);
+              toolWidget = { kind: 'quiz', runId: run.id };
+            }
+          } else if (intent.tool.kind === 'booking') {
+            const run = buildBookingRun({ unitId: unit.id, title: tHe ? 'קביעת תור' : 'Booking', provider: unit.people?.[0]?.name, lang: tHe ? 'he' : 'en' });
+            useMvpStore.getState().startBookingRun(run);
+            toolWidget = { kind: 'booking', runId: run.id };
+          } else if (intent.tool.kind === 'form') {
+            const def = formForText(topic) ?? formForText(v) ?? formForText('טופס');
+            if (def) {
+              const run = buildFormRun(def, unit.id, tHe ? 'he' : 'en');
+              useMvpStore.getState().startFormRun(run);
+              toolWidget = { kind: 'form', runId: run.id };
+            }
+          }
         }
       } catch (err) {
         console.warn('[UnitProfileSheet] invokeOneIntent failed:', err);
         reply = await generateUnitReply(v, { unit, lang }, history);
       }
       setIsTyping(false);
-      setMessages((m) => [
-        ...m,
-        { id: `o${Date.now()}`, from: 'one', text: reply },
-      ]);
+      const rts = Date.now();
+      setMessages((m) => {
+        const next: ChatMessage[] = [...m, { id: `o${rts}`, from: 'one', text: reply }];
+        if (toolWidget) next.push({ id: `wt${rts}`, from: 'one', text: '', widget: toolWidget });
+        return next;
+      });
     }, TYPING_DELAY_MS);
+  };
+
+  // "Ask ONE to draft a message" — ONE composes the actual next outreach for
+  // this process (aware of its people + open steps) and drops it in as an
+  // editable, sendable draft. Deterministic: on any AI failure it falls back to
+  // a local template so a draft always appears. Plain function (NOT a hook) so
+  // it can live below the `if (!unit) return null` guard; the `isDrafting` state
+  // it reads is declared above that guard.
+  const composeDraft = async () => {
+    if (!unit || isDrafting) return;
+    haptic.tap();
+    setIsDrafting(true);
+    const store = useMvpStore.getState();
+    const cur = store.units.find((u) => u.id === unit.id) ?? unit;
+    const people = (cur.people ?? []).map((p) => p.name).filter(Boolean);
+    const openSteps = (cur.nextSteps ?? []).filter((s) => !s.done).map((s) => s.title);
+    const prompt = he
+      ? `נסח את ההודעה הבאה שכדאי לשלוח עכשיו כדי לקדם את "${cur.title}". כתוב טקסט מלא ומוכן לשליחה, בעברית.${people.length ? ` אנשים בתהליך: ${people.join(', ')}.` : ''}`
+      : `Draft the next message worth sending now to move "${cur.title}" forward. Write the full text, ready to send.${people.length ? ` People in this process: ${people.join(', ')}.` : ''}`;
+    try {
+      const intent = await invokeOneIntent(prompt, {
+        voiceStyle: personalityPrompt(store.agentPersonality, lang),
+        userMemories: store.memories.map((m) => m.text),
+        userDisclosure: openDisclosureStrings(disclosureForIdentity(cur.identityId), lang === 'he'),
+        activeUnit: {
+          title: cur.title,
+          emoji: cur.emoji,
+          broadcast: cur.latestBroadcastText[0],
+          openSteps,
+          metricsSummary:
+            (cur.metrics ?? [])
+              .slice(0, 5)
+              .map((m) => `${m.label}: ${m.value}${m.unit ? ` ${m.unit}` : ''}`)
+              .join(' · ') || undefined,
+        },
+      });
+      if (intent.kind === 'draft_message' && intent.draft?.body) {
+        store.addDraft(
+          cur.id,
+          {
+            id: `dr_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
+            channel: intent.draft.channel ?? 'note',
+            to: intent.draft.to?.trim() || undefined,
+            subject: intent.draft.subject?.trim() || undefined,
+            body: intent.draft.body.trim(),
+            status: 'draft',
+            createdAt: new Date().toISOString(),
+          },
+          lang,
+        );
+      } else {
+        store.addDraft(cur.id, buildLocalDraft(cur, store.name, lang), lang);
+      }
+    } catch (e) {
+      console.warn('[composeDraft] failed, using local draft:', e);
+      const st = useMvpStore.getState();
+      st.addDraft(unit.id, buildLocalDraft(cur, st.name, lang), lang);
+    } finally {
+      setIsDrafting(false);
+    }
   };
 
   // Share this process WITH ANOTHER ONE — add them as a collaborator on the
@@ -881,18 +1248,38 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
         kind: 'update',
       });
     };
-    if (Platform.OS === 'ios') {
-      // iOS: prompt for the ONE's name / @handle.
-      Alert.prompt(
-        'Share with a ONE',
-        "Name or @handle of the ONE you want on this process.",
-        (input) => apply(input ?? ''),
-        'plain-text',
-      );
-    } else {
-      // Android has no Alert.prompt — share with a generic collaborator for now.
-      apply('A ONE');
-    }
+    setPromptConfig({
+      title: he ? 'שיתוף עם ONE' : 'Share with a ONE',
+      message: he ? 'שם או @כינוי של ה-ONE שתרצה בתהליך הזה.' : 'Name or @handle of the ONE you want on this process.',
+      placeholder: he ? 'שם או @כינוי' : 'Name or @handle',
+      onSubmit: (v) => apply(v),
+    });
+  };
+
+  // Deploy a tool from the "+" launcher — build it (tied to this process) and
+  // drop it into the chat, switching to the chat view so it's visible.
+  const deployToolFromLauncher = (kind: ToolKind) => {
+    if (!unit) return;
+    const topic = kind === 'quiz' ? unit.title : kind === 'form' ? (he ? 'פרטי קשר' : 'contact details') : undefined;
+    const widget = startToolRun(kind, {
+      unitId: unit.id,
+      unitTitle: unit.title,
+      provider: unit.people?.[0]?.name,
+      topic,
+      lang: he ? 'he' : 'en',
+    });
+    if (!widget) return;
+    setMode('chat');
+    const intro =
+      kind === 'booking' ? (he ? 'בטח — הנה כמה זמנים פנויים 👇' : 'Sure — a few open times 👇')
+      : kind === 'form' ? (he ? 'בטח — מלא את הפרטים 👇' : 'Sure — fill these in 👇')
+      : (he ? 'יאללה — תרגול קצר 👇' : 'Let’s practice 👇');
+    const ts = Date.now();
+    setMessages((m) => [
+      ...m,
+      { id: `ol${ts}`, from: 'one', text: intro },
+      { id: `wl${ts}`, from: 'one', text: '', widget },
+    ]);
   };
 
   // The floating input dock. Rendered into the sheet's OVERLAY slot (a sibling
@@ -906,9 +1293,51 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
       <InputBar
         value={text}
         onChangeText={setText}
-        placeholder={mode === 'chat' ? 'Add an update…' : 'Talk to this process…'}
+        placeholder={mode === 'chat' ? (he ? 'כתוב עדכון…' : 'Add an update…') : (he ? 'דבר עם התהליך…' : 'Talk to this process…')}
         onSubmit={handleSend}
         onPressVoice={handleSend}
+        // Empty green button → start an in-process voice call with ONE.
+        onStartCall={startUnitCall}
+        // Call mode: the dock becomes speaker / mute / camera + a red hang-up.
+        callMode={inCall}
+        onEndCall={endUnitCall}
+        callControls={
+          <>
+            <Pressable
+              onPress={() => { haptic.select(); setSpeakerOn((v) => !v); }}
+              style={[styles.callCtrlBtn, { backgroundColor: speakerOn ? colors.text : colors.surface }]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: speakerOn }}
+              accessibilityLabel="Speaker"
+            >
+              <View style={{ opacity: speakerOn ? 1 : 0.45 }}>
+                <SpeakerIcon size={24} color={speakerOn ? colors.surface : colors.text} />
+              </View>
+            </Pressable>
+            <Pressable
+              onPress={() => { haptic.select(); setMuted((v) => !v); }}
+              style={[styles.callCtrlBtn, { backgroundColor: muted ? '#EF4444' : colors.surface }]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: muted }}
+              accessibilityLabel="Mute"
+            >
+              <View style={{ opacity: muted ? 1 : 0.45 }}>
+                {muted ? <MicOffIcon size={24} color="#FFFFFF" /> : <MicIcon size={24} color={colors.text} />}
+              </View>
+            </Pressable>
+            <Pressable
+              onPress={() => { haptic.select(); setCameraOn((v) => !v); }}
+              style={[styles.callCtrlBtn, { backgroundColor: cameraOn ? colors.text : colors.surface }]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: cameraOn }}
+              accessibilityLabel="Camera"
+            >
+              <View style={{ opacity: cameraOn ? 1 : 0.45 }}>
+                <CameraIcon size={24} color={cameraOn ? colors.surface : colors.text} />
+              </View>
+            </Pressable>
+          </>
+        }
         // The + opens the quick-actions panel — rendered INLINE, over the card
         // (no second Modal), so it lands on top of the process instead of
         // closing it. Drop the keyboard first so the panel reads cleanly.
@@ -935,6 +1364,22 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
       />
     </Animated.View>
   );
+
+  // Call presence — ONE's orb (with a live green ring) shown at the top of the
+  // sheet whenever a call is active, so "the figure is always there during a
+  // call". Non-interactive: the process behind stays reachable, and the call
+  // controls live in the dock below.
+  const callPresenceNode = inCall ? (
+    <View pointerEvents="none" style={[styles.callPresence, { bottom: dockBottom + 104 }]}>
+      <View style={styles.callOrbWrap}>
+        <Orb size={88} noBlink noShadow mouth />
+        <Animated.View style={[styles.callRing, callRingStyle]} />
+      </View>
+      <Text style={[styles.callPresenceText, { color: colors.text }]} numberOfLines={1}>
+        {(he ? 'בשיחה · ' : 'On a call · ') + unit.title}
+      </Text>
+    </View>
+  ) : null;
 
   // ⋮ action menu — localized items, shown by the ActionMenu dropdown below.
   // (menuOpen state is declared with the other hooks at the top — declaring it
@@ -974,6 +1419,14 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     : [];
 
   return (
+    <>
+    {/* Snap-driven status-bar clock — always VISIBLE while the sheet is open:
+        white over the dark backdrop, flipping to black DURING the close slide
+        (see clockDark) so it's black before the card is gone. Mounted after
+        Home's StatusBar, so while the sheet is open this one wins. In DARK mode
+        the home behind is dark, so the clock is white ALWAYS — never dark-content
+        (a black clock there would be invisible AND caused a needless flip). */}
+    <StatusBar animated hidden={false} barStyle={clockDark && theme === 'light' ? 'dark-content' : 'light-content'} />
     <BottomSheet
       visible={!!unitId}
       onClose={onClose}
@@ -985,7 +1438,12 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
       //     the user closes via the handle drag or the X button. This
       //     separation was the user's explicit request — long-content
       //     processes (lots of text) need uninterrupted scroll.
-      snapPoints={['72%', '92%']}
+      snapPoints={['81%', '93%']}
+      // Strong black dim behind the sheet so it reads as a floating card over a
+      // fully receded home. DURING A CALL it goes lighter so the live call orb
+      // floating on Home above the sheet stays visible — the call "comes with
+      // you" into the process instead of vanishing behind a black scrim.
+      backdropOpacity={callActive ? 0.45 : 0.82}
       // When we land straight in chat (handoff from the home conversation, or
       // re-opening a process we were just talking to) open FULLY at the high
       // snap — the user is mid-conversation and wants the whole surface, not a
@@ -1010,10 +1468,6 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
       // the gesture first and snaps the sheet down. Rendering the scroll
       // view directly as gorhom's child fixes the "bounces back" report.
       bypassDefaultView={true}
-      // Opening a process from the list reads as the card lifting out of a
-      // dimmed page — a stronger backdrop than the default so the home behind
-      // recedes clearly.
-      backdropOpacity={0.55}
       animatedIndex={sheetIndex}
       sheetStyle={[styles.sheet]}
       // Floating input + the inline + panel — both pinned to the SCREEN as
@@ -1028,6 +1482,7 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
               (zIndex 30). In the overlay (not content) so it doesn't hang
               off-screen at the low snap the way a content-anchored bar does. */}
           <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />
+          {callPresenceNode}
           {inputDockNode}
           <UnitQuickActionsPanel
             visible={quickOpen}
@@ -1036,7 +1491,38 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
               setQuickOpen(false);
               onNewProcess?.();
             }}
+            onAttachImage={handleAttachImage}
+            tools={launcherTools}
+            onDeployTool={(kind) => { setQuickOpen(false); deployToolFromLauncher(kind); }}
           />
+          <InlinePrompt
+            config={promptConfig}
+            onClose={() => setPromptConfig(null)}
+            colors={colors}
+            lang={lang}
+          />
+          {previewOpen && (() => {
+            const policy = disclosureForIdentity(unit.identityId);
+            const openFacts = openDisclosureStrings(policy, he);
+            const hiddenCount = policy.filter((d) => !!d.value?.trim() && d.tier !== 'open').length;
+            const nameFact = policy.find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim());
+            return (
+              <SharedProcessPreview
+                visible
+                emoji={unit.emoji}
+                title={unit.title}
+                status={unitStatusLine(unit, he)}
+                providerName={unit.people?.[0]?.name}
+                sharedByName={nameFact?.value?.trim()}
+                openFacts={openFacts}
+                hiddenCount={hiddenCount}
+                draftBody={unit.drafts?.[0]?.body}
+                onClose={() => setPreviewOpen(false)}
+                colors={colors}
+                lang={lang}
+              />
+            );
+          })()}
         </>
       }
     >
@@ -1125,6 +1611,9 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
             onOpenIdentitySwitch={onOpenIdentitySwitch}
             onScroll={handleProfileScroll}
             onShareWithOne={shareWithOne}
+            onComposeDraft={composeDraft}
+            onPreview={() => setPreviewOpen(true)}
+            isDrafting={isDrafting}
             doubleTap={doubleTap}
             onTapQuickAction={(label) => {
               // Provider side: confirming an incoming booking request resolves it
@@ -1187,6 +1676,7 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
         {/* ⋮ dropdown — floats over the sheet, anchored under the button. */}
         <ActionMenu visible={menuOpen} onClose={() => setMenuOpen(false)} items={unitMenuItems} top={58} />
     </BottomSheet>
+    </>
   );
 }
 
@@ -1202,10 +1692,13 @@ function ProfileView({
   onTapQuickAction,
   onScroll,
   onShareWithOne,
+  onComposeDraft,
+  onPreview,
+  isDrafting,
   doubleTap,
 }: {
   unit: Unit;
-  colors: ReturnType<typeof useThemeStore>['colors'];
+  colors: ThemeColors;
   lang: 'en' | 'he';
   identityName: string | null;
   showIdentityChevron: boolean;
@@ -1213,6 +1706,9 @@ function ProfileView({
   onTapQuickAction?: (label: string) => void;
   onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
   onShareWithOne?: () => void;
+  onComposeDraft?: () => void;
+  onPreview?: () => void;
+  isDrafting?: boolean;
   doubleTap: ReturnType<typeof Gesture.Tap>;
 }) {
   const accent = unit.color ?? (unit.tagIds[0] && TAG_COLORS[unit.tagIds[0]]) ?? '#10B981';
@@ -1315,6 +1811,28 @@ function ProfileView({
     }
     return out.length ? out : [unitStatusLine(unit, lang === 'he') ?? ''];
   }, [unit, lang]);
+
+  // Unified activity feed — Decisions, Timeline and History used to be three
+  // separate logs of "what happened in this process". We fold them into one
+  // chronological stream so the profile reads as a single story: decisions keep
+  // a badge + their rationale, auto-logged timeline entries keep their kind
+  // colour, and plain history lines fall in by date.
+  const activity = useMemo(() => {
+    type Entry = { id: string; title: string; subtitle?: string; iso: string; ts: number; color: string; badge?: string };
+    const out: Entry[] = [];
+    for (const d of unit.decisions ?? []) {
+      out.push({ id: `dec_${d.id}`, title: d.text, subtitle: d.rationale, iso: d.createdAt, ts: Date.parse(d.createdAt) || 0, color: accent, badge: he ? 'החלטה' : 'Decision' });
+    }
+    for (const t of unit.timeline ?? []) {
+      const meta = t.kind ? activityKindMeta(t.kind, lang) : null;
+      out.push({ id: `tl_${t.id}`, title: t.title, subtitle: t.subtitle, iso: t.date, ts: Date.parse(t.date) || 0, color: meta?.color ?? accent });
+    }
+    for (const h of unit.history ?? []) {
+      out.push({ id: `hs_${h.id}`, title: h.title, subtitle: h.description, iso: h.createdAt, ts: Date.parse(h.createdAt) || 0, color: colors.textSecondary });
+    }
+    // Newest first — a glance shows the latest move.
+    return out.sort((a, b) => b.ts - a.ts);
+  }, [unit.decisions, unit.timeline, unit.history, he, lang, accent, colors.textSecondary]);
 
   const [lineIdx, setLineIdx] = useState(0);
   const lineOpacity = useSharedValue(1);
@@ -1496,6 +2014,41 @@ function ProfileView({
         </Section>
       )}
 
+      {/* Drafts — ONE's outward artifacts: the ACTUAL next message to send.
+          The intent → reality bridge. Always shows the compose affordance so
+          "let ONE write it" is one tap away, with any drafts listed above. */}
+      <Section title="Drafts" colors={colors}>
+        {(unit.drafts ?? []).map((d) => (
+          <DraftCard
+            key={d.id}
+            draft={d}
+            unitId={unit.id}
+            colors={colors}
+            lang={lang}
+            accent={accent}
+          />
+        ))}
+        <Pressable
+          onPress={onComposeDraft}
+          disabled={isDrafting}
+          style={({ pressed }) => [
+            styles.composeBtn,
+            { borderColor: colors.border, opacity: pressed || isDrafting ? 0.7 : 1 },
+          ]}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.composeBtnText, { color: colors.text }, rtlText(lang)]}>
+            {isDrafting
+              ? he
+                ? 'ONE מנסח…'
+                : 'ONE is drafting…'
+              : he
+                ? '✍️  בקש מ-ONE לנסח הודעה'
+                : '✍️  Ask ONE to draft a message'}
+          </Text>
+        </Pressable>
+      </Section>
+
       {/* Reminders — things ONE holds in front of you. ONE writes here on
           intent.kind === 'add_reminder'. Tap to mark done. */}
       {unit.reminders && unit.reminders.length > 0 && (
@@ -1618,40 +2171,49 @@ function ProfileView({
         </Section>
       )}
 
-      {/* Decisions — durable record of what the user decided. ONE writes
-          here whenever intent.kind === 'decision'. Newest at the top so a
-          quick glance shows the most recent call without scrolling. */}
-      {unit.decisions && unit.decisions.length > 0 && (
-        <Section title="Decisions" colors={colors}>
-          {[...unit.decisions].reverse().map((d) => (
-            <View
-              key={d.id}
-              style={[
-                styles.decisionRow,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <View style={[styles.decisionDot, { backgroundColor: accent }]} />
-              <View style={styles.flex1}>
-                <Text style={[styles.body, { color: colors.text }]}>{d.text}</Text>
-                {!!d.rationale && (
-                  <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
-                    {d.rationale}
-                  </Text>
-                )}
-                <Text
-                  style={[styles.decisionTs, { color: colors.textSecondary }]}
-                >
-                  {formatDecisionDate(d.createdAt)}
-                </Text>
+      {/* Activity — one chronological stream that folds together what used to be
+          three separate logs (Decisions, Timeline, History). Decisions carry a
+          badge + their rationale; auto-logged entries keep their kind colour.
+          A single empty state stands in until the process starts moving. */}
+      <Section title="Activity" colors={colors}>
+        {activity.length === 0 ? (
+          <Text style={[styles.empty, { color: colors.textSecondary }, rtlText(lang)]}>
+            {he
+              ? 'פעילות תופיע כאן ככל שהתהליך מתקדם.'
+              : 'Activity will appear here as the process moves forward.'}
+          </Text>
+        ) : (
+          activity.map((a) => {
+            const when = relativeWhen(a.iso, Date.now(), lang);
+            const sub = [a.subtitle, when].filter(Boolean).join(' · ');
+            return (
+              <View key={a.id} style={styles.timelineRow}>
+                <View style={[styles.timelineDot, { backgroundColor: a.color }]} />
+                <View style={styles.flex1}>
+                  <View style={[styles.activityTitleRow, rtlRow(lang)]}>
+                    {!!a.badge && (
+                      <Text style={[styles.activityBadge, { color: accent, borderColor: accent }]}>
+                        {a.badge}
+                      </Text>
+                    )}
+                    <Text style={[styles.body, { color: colors.text, flex: 1 }, rtlText(lang)]}>
+                      {a.title}
+                    </Text>
+                  </View>
+                  {!!sub && (
+                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }, rtlText(lang)]}>
+                      {sub}
+                    </Text>
+                  )}
+                </View>
               </View>
-            </View>
-          ))}
-        </Section>
-      )}
+            );
+          })
+        )}
+      </Section>
 
-      {/* Assets */}
-      {unit.assets && unit.assets.length > 0 ? (
+      {/* Assets — only when the process actually has files attached. */}
+      {unit.assets && unit.assets.length > 0 && (
         <Section title="Assets" colors={colors}>
           {unit.assets.map((a) => (
             <View
@@ -1663,83 +2225,63 @@ function ProfileView({
             </View>
           ))}
         </Section>
-      ) : (
-        <Section title="Assets" colors={colors}>
-          <Text style={[styles.empty, { color: colors.textSecondary }, rtlText(lang)]}>
-            {he ? 'אין קבצים עדיין.' : 'No files yet.'}
-          </Text>
-        </Section>
       )}
 
-      {/* Timeline */}
-      {unit.timeline && unit.timeline.length > 0 ? (
-        <Section title="Timeline" colors={colors}>
-          {unit.timeline.map((t) => {
-            const when = relativeWhen(t.date, Date.now(), lang);
-            const meta = t.kind ? activityKindMeta(t.kind, lang) : null;
-            const sub = [t.subtitle, when].filter(Boolean).join(' · ');
-            return (
-              <View key={t.id} style={styles.timelineRow}>
-                <View
-                  style={[styles.timelineDot, { backgroundColor: meta?.color ?? accent }]}
-                />
-                <View style={styles.flex1}>
-                  <Text style={[styles.body, { color: colors.text }]}>{t.title}</Text>
-                  {!!sub && (
-                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
-                      {sub}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </Section>
-      ) : (
-        <Section title="Timeline" colors={colors}>
-          <Text style={[styles.empty, { color: colors.textSecondary }, rtlText(lang)]}>
-            {he
-              ? 'פעילות תופיע כאן ככל שהתהליך מתקדם.'
-              : 'Activity will appear here as the process moves forward.'}
-          </Text>
-        </Section>
-      )}
-
-      {/* History */}
-      {unit.history && unit.history.length > 0 ? (
-        <Section title="History" colors={colors}>
-          {unit.history.map((h) => (
-            <Text
-              key={h.id}
-              style={[styles.body, { color: colors.text, marginBottom: 4 }]}
-            >
-              • {h.title}
-            </Text>
-          ))}
-        </Section>
-      ) : (
-        <Section title="History" colors={colors}>
-          <Text style={[styles.empty, { color: colors.textSecondary }, rtlText(lang)]}>
-            {he ? 'אין היסטוריה עדיין.' : 'No history yet.'}
-          </Text>
-        </Section>
-      )}
-
-      {/* Settings (in-process) */}
+      {/* Settings (in-process). Visibility is editable — it decides how far ONE
+          may take this process: private to you, shared with the people you
+          added, or public to anyone with the link. Tap the pill to cycle. */}
       <Section title="Process Settings" colors={colors}>
-        <View style={styles.settingsRow}>
-          <Text style={[styles.body, { color: colors.text }]}>Name</Text>
-          <Text style={[styles.body, { color: colors.textSecondary }]}>{unit.title}</Text>
+        <View style={[styles.settingsRow, rtlRow(lang)]}>
+          <Text style={[styles.body, { color: colors.text }, rtlText(lang)]}>{he ? 'שם' : 'Name'}</Text>
+          <Text style={[styles.body, { color: colors.textSecondary }, rtlText(lang)]}>{unit.title}</Text>
         </View>
-        <View style={styles.settingsRow}>
-          <Text style={[styles.body, { color: colors.text }]}>Visibility</Text>
-          <Text style={[styles.body, { color: colors.textSecondary }]}>
-            {unit.visibility ?? 'private'}
-          </Text>
-        </View>
-        <View style={styles.settingsRow}>
-          <Text style={[styles.body, { color: colors.text }]}>Identity</Text>
-          <Text style={[styles.body, { color: colors.textSecondary }]}>{unit.identityId.replace('identity_', '')}</Text>
+        {(() => {
+          const vis = unit.visibility ?? 'private';
+          const visMeta: Record<string, { label: string; hint: string; color: string }> = {
+            private: { label: he ? 'פרטי' : 'Private', hint: he ? 'רק אתה רואה את התהליך.' : 'Only you can see this process.', color: colors.textSecondary },
+            shared: { label: he ? 'משותף' : 'Shared', hint: he ? 'משותף עם מי שצירפת.' : 'Shared with people you added.', color: '#F59E0B' },
+            public: { label: he ? 'ציבורי' : 'Public', hint: he ? 'גלוי לכל מי שיש לו קישור.' : 'Visible to anyone with the link.', color: '#10B981' },
+          };
+          const meta = visMeta[vis];
+          const cycle = () => {
+            haptic.select();
+            const order = ['private', 'shared', 'public'] as const;
+            const next = order[(order.indexOf(vis as typeof order[number]) + 1) % order.length];
+            useMvpStore.getState().updateUnit(unit.id, { visibility: next });
+          };
+          return (
+            <>
+              <View style={[styles.settingsRow, rtlRow(lang)]}>
+                <Text style={[styles.body, { color: colors.text }, rtlText(lang)]}>{he ? 'נראות' : 'Visibility'}</Text>
+                <Pressable
+                  onPress={cycle}
+                  style={[styles.visPill, { borderColor: meta.color }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${he ? 'נראות' : 'Visibility'}: ${meta.label}`}
+                >
+                  <View style={[styles.visDot, { backgroundColor: meta.color }]} />
+                  <Text style={[styles.visPillText, { color: meta.color }]}>{meta.label}</Text>
+                </Pressable>
+              </View>
+              <Text style={[styles.settingsHint, { color: colors.textSecondary }, rtlText(lang)]}>{meta.hint}</Text>
+              {vis !== 'private' && (
+                <Pressable
+                  onPress={() => { haptic.tap(); onPreview?.(); }}
+                  style={({ pressed }) => [styles.previewRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }, rtlRow(lang)]}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.previewRowText, { color: colors.text }, rtlText(lang)]}>
+                    {he ? '👁 מה שהצד השני רואה' : '👁 What the other side sees'}
+                  </Text>
+                  <Text style={[styles.previewRowChev, { color: colors.textSecondary }]}>{he ? '‹' : '›'}</Text>
+                </Pressable>
+              )}
+            </>
+          );
+        })()}
+        <View style={[styles.settingsRow, rtlRow(lang)]}>
+          <Text style={[styles.body, { color: colors.text }, rtlText(lang)]}>{he ? 'זהות' : 'Identity'}</Text>
+          <Text style={[styles.body, { color: colors.textSecondary }, rtlText(lang)]}>{unit.identityId.replace('identity_', '')}</Text>
         </View>
       </Section>
     </BottomSheetScrollView>
@@ -1759,10 +2301,16 @@ function UnitQuickActionsPanel({
   visible,
   onClose,
   onNewProcess,
+  onAttachImage,
+  tools = [],
+  onDeployTool,
 }: {
   visible: boolean;
   onClose: () => void;
   onNewProcess: () => void;
+  onAttachImage: (uri: string) => void;
+  tools?: Array<{ kind: ToolKind; emoji: string; label: string }>;
+  onDeployTool?: (kind: ToolKind) => void;
 }) {
   const { colors } = useThemeStore();
   const lang = useLanguage();
@@ -1782,12 +2330,41 @@ function UnitQuickActionsPanel({
   const stub = (label: string) =>
     Alert.alert(label, he ? 'עוד רגע — היכולת הזו בדרך.' : 'Coming soon.');
 
-  const tiles: Array<{ id: string; emoji: string; label: string }> = [
-    { id: 'photo', emoji: '🖼', label: he ? 'תמונה' : 'Photo' },
-    { id: 'camera', emoji: '📷', label: he ? 'מצלמה' : 'Camera' },
-    { id: 'document', emoji: '📄', label: he ? 'מסמך' : 'Document' },
-    { id: 'voice', emoji: '🎙', label: he ? 'הקלטה' : 'Voice' },
-    { id: 'scan', emoji: '🔎', label: he ? 'סריקה' : 'Scan' },
+  // Pick a photo (library) or shoot one (camera) and hand its URI back so the
+  // user can answer the process with a FILE, not only text/voice.
+  const pickImage = async (source: 'photo' | 'camera') => {
+    try {
+      const perm =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          he ? 'צריך הרשאה' : 'Permission needed',
+          he ? 'כדי לצרף קובץ צריך לאשר גישה.' : 'Please allow access to attach a file.',
+        );
+        return;
+      }
+      const res =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({ quality: 0.85 })
+          : await ImagePicker.launchImageLibraryAsync({ quality: 0.85 });
+      const uri = !res.canceled ? res.assets?.[0]?.uri : undefined;
+      if (uri) {
+        onClose();
+        onAttachImage(uri);
+      }
+    } catch {
+      Alert.alert(he ? 'משהו השתבש' : 'Something went wrong');
+    }
+  };
+
+  const tiles: Array<{ id: string; emoji: string; label: string; onPress: () => void }> = [
+    { id: 'photo', emoji: '🖼', label: he ? 'תמונה' : 'Photo', onPress: () => pickImage('photo') },
+    { id: 'camera', emoji: '📷', label: he ? 'מצלמה' : 'Camera', onPress: () => pickImage('camera') },
+    { id: 'document', emoji: '📄', label: he ? 'מסמך' : 'Document', onPress: () => pickImage('photo') },
+    { id: 'voice', emoji: '🎙', label: he ? 'הקלטה' : 'Voice', onPress: () => stub(he ? 'הקלטה' : 'Voice') },
+    { id: 'scan', emoji: '🔎', label: he ? 'סריקה' : 'Scan', onPress: () => pickImage('camera') },
   ];
 
   return (
@@ -1823,7 +2400,7 @@ function UnitQuickActionsPanel({
           {tiles.map((tile) => (
             <Pressable
               key={tile.id}
-              onPress={() => stub(tile.label)}
+              onPress={tile.onPress}
               style={({ pressed }) => [
                 styles.qaTile,
                 { backgroundColor: colors.surface, opacity: pressed ? 0.8 : 1 },
@@ -1838,6 +2415,36 @@ function UnitQuickActionsPanel({
             </Pressable>
           ))}
         </ScrollView>
+        {tools.length > 0 && onDeployTool && (
+          <>
+            <Text style={[styles.qaTitle, { color: colors.textSecondary }, rtlText(lang)]}>
+              {he ? 'כלים של ONE' : "ONE’s tools"}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.qaTilesRow}
+            >
+              {tools.map((t) => (
+                <Pressable
+                  key={t.kind}
+                  onPress={() => onDeployTool(t.kind)}
+                  style={({ pressed }) => [
+                    styles.qaTile,
+                    { backgroundColor: colors.surface, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.label}
+                >
+                  <Text style={styles.qaTileEmoji}>{t.emoji}</Text>
+                  <Text style={[styles.qaTileLabel, { color: colors.text }]} numberOfLines={1}>
+                    {t.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        )}
         <Pressable
           onPress={onNewProcess}
           style={({ pressed }) => [
@@ -1868,31 +2475,13 @@ function iconForAssetType(t: string): string {
   }
 }
 
-/**
- * Decisions show a short relative-when label ("today", "yesterday",
- * "3d ago") instead of a full timestamp. The exact wall-clock time isn't
- * useful — what matters is *recency* relative to other decisions in the
- * list. Falls through to an ISO date for anything older than a week so
- * the column stays scannable.
- */
-function formatDecisionDate(iso: string): string {
-  const created = new Date(iso).getTime();
-  if (Number.isNaN(created)) return '';
-  const diffMs = Date.now() - created;
-  const day = 24 * 60 * 60 * 1000;
-  if (diffMs < day) return 'today';
-  if (diffMs < 2 * day) return 'yesterday';
-  if (diffMs < 7 * day) return `${Math.floor(diffMs / day)}d ago`;
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
 function MetricCell({
   metric,
   colors,
   wide,
 }: {
   metric: UnitMetric;
-  colors: ReturnType<typeof useThemeStore>['colors'];
+  colors: ThemeColors;
   wide?: boolean;
 }) {
   return (
@@ -1914,7 +2503,7 @@ function QuickActionPill({
   onPress,
 }: {
   action: UnitQuickAction;
-  colors: ReturnType<typeof useThemeStore>['colors'];
+  colors: ThemeColors;
   onPress?: () => void;
 }) {
   return (
@@ -1952,10 +2541,10 @@ function ChatView({
   doubleTap,
 }: {
   unit: Unit;
-  colors: ReturnType<typeof useThemeStore>['colors'];
+  colors: ThemeColors;
   messages: ChatMessage[];
   isTyping: boolean;
-  chatRef: React.RefObject<ScrollView>;
+  chatRef: React.RefObject<ScrollView | null>;
   /** Keyboard height — added to the scroll content's bottom padding so the
    *  last message stays above the keyboard. */
   bottomInset: number;
@@ -2029,6 +2618,29 @@ function ChatView({
         ) : (
           <>
             {messages.map((m) => {
+              // A TOOL widget ONE deployed in this process (e.g. a quiz) — the
+              // same interactive card as the Home chat, here inside the process.
+              if (m.widget?.kind === 'quiz') {
+                return (
+                  <View key={m.id} style={styles.unitWidgetWrap}>
+                    <ChatQuizCard runId={m.widget.runId} />
+                  </View>
+                );
+              }
+              if (m.widget?.kind === 'booking') {
+                return (
+                  <View key={m.id} style={styles.unitWidgetWrap}>
+                    <ChatBookingCard runId={m.widget.runId} />
+                  </View>
+                );
+              }
+              if (m.widget?.kind === 'form') {
+                return (
+                  <View key={m.id} style={styles.unitWidgetWrap}>
+                    <ChatFormCard runId={m.widget.runId} />
+                  </View>
+                );
+              }
               // ONE messages render FLAT — no bubble, no background —
               // matching the home chat redesign. Selectable so the user
               // can copy fragments. User messages keep their bubble so
@@ -2046,23 +2658,30 @@ function ChatView({
                 );
               }
               return (
-                <View
-                  key={m.id}
-                  style={[
-                    styles.bubble,
-                    styles.userBubble,
-                    // User bubble hugs the reading side: right in Hebrew, left
-                    // in English.
-                    { alignSelf: he ? 'flex-end' : 'flex-start' },
-                    { backgroundColor: colors.circle },
-                  ]}
-                >
-                  <Text
-                    selectable
-                    style={[styles.bubbleText, { color: colors.circleEye }, rtlText(lang)]}
+                // Wrap in an explicit LTR row (like the working Home chat) so
+                // justify-flex-end DETERMINISTICALLY lands the user bubble on the
+                // visual RIGHT — regardless of the device's RTL engine state,
+                // which was flipping a bare alignSelf:'flex-end' to the left.
+                <View key={m.id} style={styles.userBubbleRow}>
+                  <View
+                    style={[styles.bubble, styles.userBubble, { backgroundColor: colors.circle }]}
                   >
-                    {m.text}
-                  </Text>
+                    {m.imageUri ? (
+                      <Image
+                        source={{ uri: m.imageUri }}
+                        style={[styles.bubbleImage, m.text ? { marginBottom: 6 } : null]}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+                    {m.text ? (
+                      <Text
+                        selectable
+                        style={[styles.bubbleText, { color: colors.circleEye }, rtlText(lang)]}
+                      >
+                        {m.text}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
               );
             })}
@@ -2082,16 +2701,269 @@ function ChatView({
 // label and still render right in Hebrew.
 const SECTION_TITLE_HE: Record<string, string> = {
   'Next Steps': 'צעדים הבאים',
+  Drafts: 'טיוטות',
   Reminders: 'תזכורות',
   People: 'אנשים',
   'People · Shared': 'אנשים · משותף',
   Insights: 'תובנות',
-  Decisions: 'החלטות',
+  Activity: 'פעילות',
   Assets: 'קבצים',
-  Timeline: 'ציר זמן',
-  History: 'היסטוריה',
   'Process Settings': 'הגדרות תהליך',
 };
+
+function DraftCard({
+  draft,
+  unitId,
+  colors,
+  lang,
+  accent,
+}: {
+  draft: UnitDraft;
+  unitId: string;
+  colors: ThemeColors;
+  lang: 'en' | 'he';
+  accent: string;
+}) {
+  const he = lang === 'he';
+  const meta = DRAFT_CHANNEL_META[draft.channel] ?? DRAFT_CHANNEL_META.note;
+  const sent = draft.status === 'sent';
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState(draft.body);
+  const updateDraft = useMvpStore((s) => s.updateDraft);
+  const markDraftSent = useMvpStore((s) => s.markDraftSent);
+  const removeDraft = useMvpStore((s) => s.removeDraft);
+
+  // Selective disclosure AT THE MOMENT ONE ACTS — the keystone that makes ONE a
+  // permissioned representative, not an impersonator. 'open' fields are always
+  // included; 'ask' fields are opt-in per outreach; 'private' never shows.
+  // Per-space: the disclosure policy of the SPACE this process belongs to.
+  const disclosure = useMvpStore((s) => {
+    const u = s.units.find((x) => x.id === unitId);
+    return (u && s.disclosure[u.identityId]) || DEFAULT_DISCLOSURE;
+  });
+  // Memories carry the same tier scale (see the unified "What ONE knows about
+  // you" section). An 'open' memory is offered here too, an 'ask' memory is
+  // opt-in, a 'private' one (the default) never surfaces — so by default no
+  // memory leaks into an outward message.
+  const memories = useMvpStore((s) => s.memories);
+  const sharedIds = draft.sharedFields ?? [];
+  const openShare = disclosure.filter((d) => d.tier === 'open' && d.value && d.value.trim());
+  const askShare = disclosure.filter((d) => d.tier === 'ask' && d.value && d.value.trim());
+  const openMemShare = memories.filter((m) => m.tier === 'open' && m.text.trim());
+  const askMemShare = memories.filter((m) => m.tier === 'ask' && m.text.trim());
+  const hasPrivate =
+    disclosure.some((d) => d.tier === 'private' && d.value && d.value.trim()) ||
+    memories.some((m) => (m.tier ?? 'private') === 'private' && m.text.trim());
+  const showDisclosure =
+    openShare.length > 0 || askShare.length > 0 || openMemShare.length > 0 || askMemShare.length > 0;
+  const toggleShare = (id: string) => {
+    haptic.select();
+    const next = sharedIds.includes(id) ? sharedIds.filter((x) => x !== id) : [...sharedIds, id];
+    updateDraft(unitId, draft.id, { sharedFields: next });
+  };
+  const memChipLabel = (text: string) => (text.trim().length > 22 ? `${text.trim().slice(0, 22)}…` : text.trim());
+
+  // The ACTUAL permissioned payload: the message body + the facts ONE is allowed
+  // to attach — every 'open' fact (field or memory) plus the 'ask' ones the user
+  // toggled on. 'private' never leaves. This is what makes the "ONE shares:"
+  // strip real: sending / copying carries exactly these facts, nothing more.
+  const sharedFacts = [...openShare, ...askShare.filter((d) => sharedIds.includes(d.id))];
+  const sharedMems = [...openMemShare, ...askMemShare.filter((m) => sharedIds.includes(m.id))];
+  const anythingShared = sharedFacts.length > 0 || sharedMems.length > 0;
+  const buildOutgoing = (): string => {
+    const base = draft.subject ? `${draft.subject}\n\n${draft.body}` : draft.body;
+    if (!anythingShared) return base;
+    const header = he ? 'פרטים שוואן מצרף בשמך:' : 'Details ONE is sharing on your behalf:';
+    const lines = [
+      ...sharedFacts.map((d) => `• ${disclosureLabel(d, he)}: ${d.value}`),
+      ...sharedMems.map((m) => `• ${m.text.trim()}`),
+    ].join('\n');
+    return `${base}\n\n—\n${header}\n${lines}`;
+  };
+
+  // Keep the edit buffer in sync when the draft changes upstream (not editing).
+  useEffect(() => {
+    if (!editing) setBody(draft.body);
+  }, [draft.body, editing]);
+
+  const saveEdit = () => {
+    haptic.select();
+    updateDraft(unitId, draft.id, { body: body.trim() || draft.body });
+    setEditing(false);
+    Keyboard.dismiss();
+  };
+  const copy = async () => {
+    haptic.select();
+    await Clipboard.setStringAsync(buildOutgoing());
+    Alert.alert(
+      he ? 'הועתק' : 'Copied',
+      anythingShared
+        ? he ? 'ההודעה + הפרטים שאישרת הועתקו ללוח.' : 'Message + the details you approved were copied.'
+        : he ? 'ההודעה הועתקה ללוח.' : 'Message copied to clipboard.',
+    );
+  };
+  const send = async () => {
+    haptic.tap();
+    try {
+      const res = await Share.share({ message: buildOutgoing() });
+      if (res.action === Share.sharedAction) markDraftSent(unitId, draft.id, lang);
+    } catch {
+      /* user dismissed the share sheet */
+    }
+  };
+  const discard = () => {
+    Alert.alert(he ? 'למחוק טיוטה?' : 'Discard draft?', undefined, [
+      { text: he ? 'ביטול' : 'Cancel', style: 'cancel' },
+      {
+        text: he ? 'מחק' : 'Discard',
+        style: 'destructive',
+        onPress: () => removeDraft(unitId, draft.id),
+      },
+    ]);
+  };
+
+  return (
+    <View
+      style={[
+        styles.draftCard,
+        { backgroundColor: colors.surface, borderColor: sent ? colors.border : accent },
+      ]}
+    >
+      <View style={[styles.draftHead, rtlRow(lang)]}>
+        <View style={[styles.draftChannelTag, { backgroundColor: colors.background }]}>
+          <Text style={styles.draftChannelEmoji}>{meta.emoji}</Text>
+          <Text style={[styles.draftChannelText, { color: colors.textSecondary }]} numberOfLines={1}>
+            {he ? meta.he : meta.en}
+            {draft.to ? ` · ${draft.to}` : ''}
+          </Text>
+        </View>
+        <View style={styles.flex1} />
+        {sent ? (
+          <Text style={[styles.draftSentTag, { color: accent }]}>{he ? '✓ נשלח' : '✓ Sent'}</Text>
+        ) : (
+          <Pressable onPress={discard} hitSlop={12}>
+            <Text style={[styles.draftDiscard, { color: colors.textSecondary }]}>✕</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {editing ? (
+        <TextInput
+          value={body}
+          onChangeText={setBody}
+          multiline
+          autoFocus
+          style={[styles.draftBodyInput, { color: colors.text, borderColor: colors.border }, rtlText(lang)]}
+        />
+      ) : (
+        <Text selectable style={[styles.draftBody, { color: colors.text }, rtlText(lang)]}>
+          {draft.body}
+        </Text>
+      )}
+
+      {showDisclosure && (
+        <View style={[styles.discStrip, { borderTopColor: colors.border }]}>
+          <Text style={[styles.discStripLabel, { color: colors.textSecondary }, rtlText(lang)]}>
+            {he ? 'וואן משתף:' : 'ONE shares:'}
+          </Text>
+          <View style={[styles.discStripChips, rtlRow(lang)]}>
+            {openShare.map((d) => (
+              <View
+                key={d.id}
+                style={[styles.discStripChip, { borderColor: '#10B981', backgroundColor: colors.background }]}
+              >
+                <View style={[styles.discStripDot, { backgroundColor: '#10B981' }]} />
+                <Text style={[styles.discStripChipText, { color: '#10B981' }]}>{disclosureLabel(d, he)}</Text>
+              </View>
+            ))}
+            {askShare.map((d) => {
+              const on = sharedIds.includes(d.id);
+              const color = on ? '#10B981' : '#F59E0B';
+              return (
+                <Pressable
+                  key={d.id}
+                  onPress={sent ? undefined : () => toggleShare(d.id)}
+                  disabled={sent}
+                  style={[styles.discStripChip, { borderColor: color, backgroundColor: colors.background, opacity: sent && !on ? 0.5 : 1 }]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={disclosureLabel(d, he)}
+                >
+                  <View style={[styles.discStripDot, { backgroundColor: color }]} />
+                  <Text style={[styles.discStripChipText, { color }]}>
+                    {disclosureLabel(d, he)}{on ? '' : ' +'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {openMemShare.map((m) => (
+              <View
+                key={m.id}
+                style={[styles.discStripChip, { borderColor: '#10B981', backgroundColor: colors.background }]}
+              >
+                <View style={[styles.discStripDot, { backgroundColor: '#10B981' }]} />
+                <Text style={[styles.discStripChipText, { color: '#10B981' }]}>{memChipLabel(m.text)}</Text>
+              </View>
+            ))}
+            {askMemShare.map((m) => {
+              const on = sharedIds.includes(m.id);
+              const color = on ? '#10B981' : '#F59E0B';
+              return (
+                <Pressable
+                  key={m.id}
+                  onPress={sent ? undefined : () => toggleShare(m.id)}
+                  disabled={sent}
+                  style={[styles.discStripChip, { borderColor: color, backgroundColor: colors.background, opacity: sent && !on ? 0.5 : 1 }]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={memChipLabel(m.text)}
+                >
+                  <View style={[styles.discStripDot, { backgroundColor: color }]} />
+                  <Text style={[styles.discStripChipText, { color }]}>
+                    {memChipLabel(m.text)}{on ? '' : ' +'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {hasPrivate && (
+            <Text style={[styles.discStripNote, { color: colors.textSecondary }, rtlText(lang)]}>
+              {he ? 'פרטים פרטיים נשמרים אצלך.' : 'Private details stay with you.'}
+            </Text>
+          )}
+        </View>
+      )}
+
+      <View style={[styles.draftActions, rtlRow(lang)]}>
+        {editing ? (
+          <Pressable onPress={saveEdit} style={[styles.draftAction, { backgroundColor: accent }]}>
+            <Text style={[styles.draftActionText, { color: colors.background }]}>
+              {he ? 'שמור' : 'Save'}
+            </Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => setEditing(true)}
+            style={[styles.draftAction, { borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}
+          >
+            <Text style={[styles.draftActionText, { color: colors.text }]}>{he ? 'ערוך' : 'Edit'}</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={copy}
+          style={[styles.draftAction, { borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}
+        >
+          <Text style={[styles.draftActionText, { color: colors.text }]}>{he ? 'העתק' : 'Copy'}</Text>
+        </Pressable>
+        <Pressable onPress={send} style={[styles.draftAction, { backgroundColor: colors.text }]}>
+          <Text style={[styles.draftActionText, { color: colors.background }]}>
+            {sent ? (he ? 'שלח שוב' : 'Send again') : he ? 'שלח' : 'Send'}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 function Section({
   title,
@@ -2099,7 +2971,7 @@ function Section({
   children,
 }: {
   title: string;
-  colors: ReturnType<typeof useThemeStore>['colors'];
+  colors: ThemeColors;
   children: React.ReactNode;
 }) {
   const lang = useLanguage();
@@ -2118,16 +2990,6 @@ function Section({
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   sheet: {},
-  grabberRow: {
-    paddingTop: 10,
-    paddingBottom: 6,
-    alignItems: 'center',
-  },
-  grabber: {
-    width: 40,
-    height: 5,
-    borderRadius: 2.5,
-  },
 
   // Profile
   profileContent: {
@@ -2366,6 +3228,74 @@ const styles = StyleSheet.create({
   body: { fontSize: 14, lineHeight: 20 },
   empty: { fontSize: 13 },
 
+  // ── Drafts (ONE's outward artifacts) ──────────────────────────────────────
+  composeBtn: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  composeBtnText: { fontSize: 15, fontWeight: '600' },
+  draftCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 10,
+    gap: 10,
+  },
+  draftHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  draftChannelTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 13,
+    maxWidth: '82%',
+  },
+  draftChannelEmoji: { fontSize: 13 },
+  draftChannelText: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
+  draftSentTag: { fontSize: 12, fontWeight: '700' },
+  draftDiscard: { fontSize: 15, fontWeight: '600', paddingHorizontal: 4 },
+  draftBody: { fontSize: 14, lineHeight: 21 },
+  draftBodyInput: {
+    fontSize: 14,
+    lineHeight: 21,
+    minHeight: 96,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: 10,
+    textAlignVertical: 'top',
+  },
+  // Selective-disclosure strip inside a draft card — what ONE will share.
+  discStrip: { paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 7 },
+  discStripLabel: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.3 },
+  discStripChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  discStripChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  discStripDot: { width: 6, height: 6, borderRadius: 3 },
+  discStripChipText: { fontSize: 12, fontWeight: '600' },
+  discStripNote: { fontSize: 11, lineHeight: 15, fontStyle: 'italic' },
+  draftActions: { flexDirection: 'row', gap: 8 },
+  draftAction: {
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  draftActionText: { fontSize: 13, fontWeight: '600' },
+
   stepRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -2435,31 +3365,54 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginTop: 6,
   },
-  decisionRow: {
+  // Activity row title line — an optional badge (e.g. "Decision") sits before
+  // the title; the title flexes to fill and wrap.
+  activityTitleRow: {
     flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 8,
+    alignItems: 'center',
+    gap: 6,
   },
-  decisionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 8,
-  },
-  decisionTs: {
-    fontSize: 11,
-    marginTop: 4,
+  activityBadge: {
+    fontSize: 10,
+    fontWeight: '700',
     letterSpacing: 0.3,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
   },
   settingsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 8,
+    alignItems: 'center',
   },
+  settingsHint: { fontSize: 12, lineHeight: 17, marginTop: -2, marginBottom: 6, opacity: 0.9 },
+  visPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  visDot: { width: 7, height: 7, borderRadius: 4 },
+  visPillText: { fontSize: 12.5, fontWeight: '700' },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  previewRowText: { fontSize: 14, fontWeight: '600' },
+  previewRowChev: { fontSize: 18, fontWeight: '700' },
   personChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -2479,24 +3432,6 @@ const styles = StyleSheet.create({
   sharePillText: { fontSize: 13, fontWeight: '600' },
 
   // Chat
-  // Header sits CENTRED in the top bar, between the ⋮ and X (which float over
-  // it). paddingTop lines its content up with those 44px buttons (top:12).
-  chatHeader: {
-    alignItems: 'center',
-    // Keep clear of the edge buttons (⋮ / X) so a long title never collides.
-    paddingHorizontal: 64,
-    paddingTop: 22,
-    paddingBottom: 12,
-  },
-  chatHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  chatHeaderEmoji: { fontSize: 20 },
-  chatHeaderTitle: { fontSize: 17, fontWeight: '600', maxWidth: 200 },
-  chatHeaderProgress: { fontSize: 13, marginTop: 3 },
-
   // Horizontal starters row — sits just under the sticky header, above the
   // message list. `flexGrow:0` so it never steals the messages' vertical space.
   chatSuggestScroll: {
@@ -2544,8 +3479,29 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   oneBubble: { alignSelf: 'flex-start', borderTopLeftRadius: 6 },
-  userBubble: { alignSelf: 'flex-end', borderTopRightRadius: 6 },
+  userBubble: { borderTopRightRadius: 6 },
+  // Full-width LTR row that pins the user bubble to the visual right (see the
+  // render note). direction:'ltr' makes flex-end deterministic on the RTL engine.
+  userBubbleRow: { flexDirection: 'row', direction: 'ltr', justifyContent: 'flex-end' },
   bubbleText: { fontSize: 16, lineHeight: 22 },
+  // Attached photo inside a user bubble.
+  bubbleImage: { width: 210, height: 158, borderRadius: 14, backgroundColor: '#00000022' },
+  // In-process call: control button in the dock (speaker / mute / camera).
+  callCtrlBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  // In-process call: ONE's orb presence, pinned above the call dock.
+  callPresence: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 10, zIndex: 8 },
+  callOrbWrap: { width: 100, height: 100, alignItems: 'center', justifyContent: 'center' },
+  callRing: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 2.5,
+    borderColor: '#22C55E',
+  },
+  callPresenceText: { fontSize: 14, fontWeight: '700' },
   /** Flat ONE reply — no bubble, no background. Same treatment as Home chat. */
   chatOneFlat: {
     fontSize: 16,
@@ -2554,4 +3510,5 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     alignSelf: 'stretch',
   },
+  unitWidgetWrap: { alignSelf: 'stretch', marginVertical: 8 },
 });

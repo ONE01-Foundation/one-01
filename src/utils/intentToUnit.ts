@@ -283,13 +283,21 @@ export function unitFromIntent(
 
   const tag = pickTag(p.tags);
   const defaults = TAG_DEFAULTS[tag] ?? {};
-  // Fallback status line when the model gave no broadcast — refinement-oriented
-  // and language-aware (was a hardcoded English "Just started — what is first?").
+  const steps = buildSteps(p.nextSteps, defaults.nextSteps);
+  const firstStep = steps.find((s) => !s.done)?.title?.trim();
+  // Fallback status line when the model gave no broadcast. NOT a generic "what
+  // matters first?" question repeated on every process — instead a concrete
+  // line derived from the process's OWN first step, so each reads differently
+  // in the home briefing.
   const broadcast =
     p.broadcast?.trim() ||
-    (lang === 'he'
-      ? 'רגע להתחלה — מה הכי חשוב שנדייק קודם?'
-      : "Fresh start — what matters most to nail down first?");
+    (firstStep
+      ? lang === 'he'
+        ? `מתחילים מ: ${firstStep}.`
+        : `Starting with: ${firstStep}.`
+      : lang === 'he'
+        ? 'הכול מוכן — יוצאים לדרך.'
+        : 'All set — getting started.');
   const ts = nowIso();
   const id = uniqueId('unit');
   const broadcastType: UnitBroadcastType = 'event';
@@ -321,7 +329,7 @@ export function unitFromIntent(
     lastUpdatedAt: ts,
     unreadUpdates: 1,
     visibility: 'private',
-    nextSteps: buildSteps(p.nextSteps, defaults.nextSteps),
+    nextSteps: steps,
     metrics: buildMetrics(p.metrics, defaults.metrics),
     quickActions: buildQuickActions(p.quickActions, defaults.quickActions),
     createdAt: ts,
@@ -345,17 +353,24 @@ export function unitFromIntent(
  */
 export function buildProcessOpener(unit: Unit, lang: 'he' | 'en'): string {
   const he = lang === 'he';
-  // Don't announce "I set up X for you" + a steps dump (the steps live in the
-  // profile). Open by REFINING: name the process, then ask the concrete
-  // question that starts turning the intent into something real.
+  // ONE should ALREADY be working — not open every process with the same
+  // generic "what's your goal, by when?" question. Name the process it built,
+  // say it's started, and surface the CONCRETE first move + what's next (real,
+  // process-specific substance from the steps it lined up). End with a light,
+  // optional invite — not a mandatory clarifying question.
+  const steps = (unit.nextSteps ?? []).filter((s) => !s.done).map((s) => s.title.trim()).filter(Boolean);
+  const first = steps[0];
+  const next = steps.slice(1, 3);
   if (he) {
-    return (
-      `בוא נדייק את «${unit.title}» ${unit.emoji} ונהפוך את זה למשהו מוחשי.\n` +
-      `כדי לכוון נכון — מה היעד המדויק שאתה רוצה להגיע אליו, ועד מתי?`
-    );
+    const lines = [`סידרתי לך את «${unit.title}» ${unit.emoji} — אני כבר על זה.`];
+    if (first) lines.push(`מתחיל מ: ${first}.`);
+    if (next.length) lines.push(`בהמשך: ${next.join(' · ')}.`);
+    lines.push('אתקדם — ואם יש משהו שחשוב שאדע קודם, כתוב, אמור, או צרף קובץ.');
+    return lines.join('\n');
   }
-  return (
-    `Let's sharpen “${unit.title}” ${unit.emoji} and turn it into something real.\n` +
-    `So I aim it right — what's the exact outcome you want, and by when?`
-  );
+  const lines = [`I've set up “${unit.title}” ${unit.emoji} — I'm already on it.`];
+  if (first) lines.push(`Starting with: ${first}.`);
+  if (next.length) lines.push(`Then: ${next.join(' · ')}.`);
+  lines.push("I'll get going — if there's anything I should know first, type it, say it, or attach a file.");
+  return lines.join('\n');
 }

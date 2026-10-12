@@ -13,8 +13,8 @@
  * was rising to the front simply stays there. Seamless.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
@@ -71,8 +71,11 @@ export function CardLoop<T>({
   onAdvance,
 }: CardLoopProps<T>) {
   const n = items.length;
-  const { height: winH } = useWindowDimensions();
-  const exitY = winH; // drop the whole way off the bottom
+  // The front card leaves with a SHORT downward drop + fade — not a full-screen
+  // slide. The host places opaque content directly below the loop, so the last
+  // of the drop happens behind it; a small exit keeps the fade quick so the card
+  // is nearly gone by the time it reaches that content (never runs over it).
+  const exitY = 64;
 
   const [head, setHead] = useState(0);
   const t = useSharedValue(0); // 0 = at rest, 1 = one full advance
@@ -80,14 +83,23 @@ export function CardLoop<T>({
   const touching = useRef(false);
   const depths = depthStyles(exitY);
 
-  // Commit one step forward and reset the timeline (positional slots keep the
-  // rising card in place, so this is invisible).
+  // Commit one step forward. IMPORTANT: we do NOT reset `t` here. Resetting the
+  // timeline while `head` is still the OLD value (React re-renders a beat later)
+  // would flash the just-exited front card back into the front slot for a frame
+  // — the "you see the card that passed, again" glitch. Instead we bump `head`
+  // now and reset `t` in the layout effect below, so the reset lands together
+  // with the new-head render (before paint) and the swap stays seamless.
   const commit = useCallback(() => {
     setHead((h) => (h + 1) % Math.max(1, n));
+    onAdvance?.();
+  }, [n, onAdvance]);
+
+  // Reset the timeline the instant the new `head` is rendered (runs before the
+  // browser/native paint), so `t=0` and the advanced `head` apply as one frame.
+  useLayoutEffect(() => {
     t.value = 0;
     animating.current = false;
-    onAdvance?.();
-  }, [n, t, onAdvance]);
+  }, [head, t]);
 
   const advance = useCallback(() => {
     if (animating.current || n < 2) return;

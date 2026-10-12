@@ -53,6 +53,8 @@ const EYE_CX_RIGHT = 41;
 // 5 means a fully positive eyeLookY (e.g. fully scrolled processes) shifts
 // the eye centre by 5 viewBox units → clearly "looking down".
 const EYE_TRACK_RANGE = 5;
+// Horizontal gaze range (viewBox units) for the autonomous "look around".
+const EYE_LOOK_X = 3.2;
 
 export interface OrbProps {
   size: number;
@@ -100,6 +102,11 @@ export interface OrbProps {
    */
   eyeOpen?: SharedValue<number>;
   /**
+   * When true, ONE feels alive: its eyes autonomously glance to the sides now
+   * and then (with pauses), on top of the blink. Used on the Home hero orb.
+   */
+  alive?: boolean;
+  /**
    * Force a specific skin instead of the app-wide chosen one. Used by the
    * Settings skin picker to preview each skin as a real mini-face.
    */
@@ -115,7 +122,7 @@ export interface OrbProps {
   noShadow?: boolean;
 }
 
-export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink, mouth, outline, eyeOpen, skinOverride, noShadow }: OrbProps) {
+export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink, mouth, outline, eyeOpen, alive, skinOverride, noShadow }: OrbProps) {
   const { colors } = useThemeStore();
   // The user's chosen skin (Settings). Skins are accessories + eye-shape, never
   // a colour swap — the face stays the theme's central black.
@@ -126,6 +133,11 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
   const eyeFill = outline ? faceColor : eyeColor;
   const square = skin.eyeShape === 'square';
   const accent = skin.accent ?? eyeColor;
+  // Where the accessory is mounted: eyewear rides the eyes, headwear the head.
+  const isEyewear = skin.accessory === 'glasses' || skin.accessory === 'sunglasses';
+  const isHeadwear = skin.accessory === 'hat' || skin.accessory === 'headphones';
+  // Glasses frame radius (hugging the eye) — shared by clear + sun lenses.
+  const lensR = EYE_RX + 2.7;
 
   // Blink: ry oscillates from OPEN → BLINK → OPEN on a randomised cadence.
   // Each Orb instance picks its own first-delay so two faces on screen
@@ -154,31 +166,73 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
     };
   }, [noBlink, ry]);
 
+  // Autonomous horizontal gaze — ONE occasionally glances to a side, holds,
+  // then returns to centre, so the face reads as alive/curious. Each instance
+  // runs its own irregular schedule.
+  const lookX = useSharedValue(0);
+  useEffect(() => {
+    if (!alive || noBlink) return;
+    let live = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const glance = () => {
+      if (!live) return;
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const mag = 0.55 + Math.random() * 0.45;
+      lookX.value = withSequence(
+        withTiming(dir * mag, { duration: 460, easing: Easing.inOut(Easing.quad) }),
+        withDelay(700 + Math.random() * 1100, withTiming(0, { duration: 460, easing: Easing.inOut(Easing.quad) })),
+      );
+      timer = setTimeout(glance, 2600 + Math.random() * 3400);
+    };
+    timer = setTimeout(glance, 1400 + Math.random() * 1800);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+      lookX.value = 0;
+    };
+  }, [alive, noBlink, lookX]);
+  // The eye group carries the FULL gaze — horizontal glance (lookX) AND the
+  // vertical look (eyeLookY). Everything mounted on the eyes (the eyes
+  // themselves + eyewear like glasses/shades) lives inside this group, so a
+  // pair of glasses rides the eyes instead of hanging fixed while they move.
+  const eyeGroupProps = useAnimatedProps(() => {
+    'worklet';
+    const v = eyeLookY ? eyeLookY.value : 0;
+    const offset = Math.max(-EYE_TRACK_RANGE, Math.min(EYE_TRACK_RANGE, v * EYE_TRACK_RANGE));
+    return { transform: [{ translateX: lookX.value * EYE_LOOK_X }, { translateY: offset }] };
+  });
+  // Headwear (hat / headphones) sits on the HEAD, not the eyes — so it only
+  // gets a gentle parallax with the glance (a quarter of the eye travel), which
+  // reads as the whole head shifting a touch, not a rigid decal.
+  const headAccessoryProps = useAnimatedProps(() => {
+    'worklet';
+    const op = eyesOpacityAnim ? eyesOpacityAnim.value : eyesOpacity;
+    return { opacity: op, transform: [{ translateX: lookX.value * EYE_LOOK_X * 0.25 }] };
+  });
+
   // Animated props for the eyes. Left + right share the SAME props (they track
   // together and blink in sync); only their static cx / x differs. `ry` is the
   // blink height scaled by `eyeOpen` (lids), clamped to the thin blink line so
   // a fully-shut eye still reads as a closed lid, not a vanished eye. Opacity
   // rides through too so `eyesOpacityAnim` can fade the eyes in on splash.
+  // Vertical look is now applied to the whole eye GROUP (see eyeGroupProps), so
+  // the eyes only own their blink height + fade here — cy stays the resting
+  // centre and the group shifts them.
   const eyeEllipseProps = useAnimatedProps(() => {
     'worklet';
-    const v = eyeLookY ? eyeLookY.value : 0;
-    const offset = Math.max(-EYE_TRACK_RANGE, Math.min(EYE_TRACK_RANGE, v * EYE_TRACK_RANGE));
     const op = eyesOpacityAnim ? eyesOpacityAnim.value : eyesOpacity;
     const eo = eyeOpen ? eyeOpen.value : 1;
     const ryEff = Math.max(EYE_RY_BLINK, ry.value * eo);
-    return { cy: EYE_CY + offset, ry: ryEff, opacity: op };
+    return { cy: EYE_CY, ry: ryEff, opacity: op };
   });
   // Square-eye variant: same geometry expressed as a rounded rect. y / height
   // animate around the eye centre so the blink + lid-close still work.
   const eyeRectProps = useAnimatedProps(() => {
     'worklet';
-    const v = eyeLookY ? eyeLookY.value : 0;
-    const offset = Math.max(-EYE_TRACK_RANGE, Math.min(EYE_TRACK_RANGE, v * EYE_TRACK_RANGE));
     const op = eyesOpacityAnim ? eyesOpacityAnim.value : eyesOpacity;
     const eo = eyeOpen ? eyeOpen.value : 1;
     const ryEff = Math.max(EYE_RY_BLINK, ry.value * eo);
-    const cy = EYE_CY + offset;
-    return { y: cy - ryEff, height: ryEff * 2, opacity: op };
+    return { y: EYE_CY - ryEff, height: ryEff * 2, opacity: op };
   });
   // Accessories fade with the eyes so they never pop in before the face has
   // "opened its eyes" on the splash → home handoff.
@@ -240,58 +294,101 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
           stroke={outline ? faceColor : undefined}
           strokeWidth={outline ? 2.5 : 0}
         />
-        {square ? (
-          <>
-            <AnimatedRect
-              animatedProps={eyeRectProps}
-              x={EYE_CX_LEFT - EYE_RX}
-              width={EYE_RX * 2}
-              rx={2}
-              fill={eyeFill}
-            />
-            <AnimatedRect
-              animatedProps={eyeRectProps}
-              x={EYE_CX_RIGHT - EYE_RX}
-              width={EYE_RX * 2}
-              rx={2}
-              fill={eyeFill}
-            />
-          </>
-        ) : (
-          <>
-            <AnimatedEllipse
-              animatedProps={eyeEllipseProps}
-              cx={EYE_CX_LEFT}
-              rx={EYE_RX}
-              fill={eyeFill}
-            />
-            <AnimatedEllipse
-              animatedProps={eyeEllipseProps}
-              cx={EYE_CX_RIGHT}
-              rx={EYE_RX}
-              fill={eyeFill}
-            />
-          </>
-        )}
-        {/* Accessories — glasses / beanie. Skipped in ghost (outline) mode so
-            the incognito face reads as a bare ring. Tinted by the skin accent;
-            the face itself stays black. */}
-        {!outline && skin.accessory !== 'none' && (
-          <AnimatedG animatedProps={accessoryProps}>
-            {skin.accessory === 'glasses' && (
-              <>
-                <Circle cx={EYE_CX_LEFT} cy={EYE_CY} r={EYE_RX + 2.5} fill="none" stroke={accent} strokeWidth={2} />
-                <Circle cx={EYE_CX_RIGHT} cy={EYE_CY} r={EYE_RX + 2.5} fill="none" stroke={accent} strokeWidth={2} />
-                <Line x1={EYE_CX_LEFT + EYE_RX + 2.5} y1={EYE_CY} x2={EYE_CX_RIGHT - EYE_RX - 2.5} y2={EYE_CY} stroke={accent} strokeWidth={2} />
-                <Line x1={EYE_CX_LEFT - EYE_RX - 2.5} y1={EYE_CY} x2={7} y2={EYE_CY - 1.5} stroke={accent} strokeWidth={2} strokeLinecap="round" />
-                <Line x1={EYE_CX_RIGHT + EYE_RX + 2.5} y1={EYE_CY} x2={57} y2={EYE_CY - 1.5} stroke={accent} strokeWidth={2} strokeLinecap="round" />
-              </>
-            )}
+        <AnimatedG animatedProps={eyeGroupProps}>
+          {square ? (
+            <>
+              <AnimatedRect
+                animatedProps={eyeRectProps}
+                x={EYE_CX_LEFT - EYE_RX}
+                width={EYE_RX * 2}
+                rx={2}
+                fill={eyeFill}
+              />
+              <AnimatedRect
+                animatedProps={eyeRectProps}
+                x={EYE_CX_RIGHT - EYE_RX}
+                width={EYE_RX * 2}
+                rx={2}
+                fill={eyeFill}
+              />
+            </>
+          ) : (
+            <>
+              <AnimatedEllipse
+                animatedProps={eyeEllipseProps}
+                cx={EYE_CX_LEFT}
+                rx={EYE_RX}
+                fill={eyeFill}
+              />
+              <AnimatedEllipse
+                animatedProps={eyeEllipseProps}
+                cx={EYE_CX_RIGHT}
+                rx={EYE_RX}
+                fill={eyeFill}
+              />
+            </>
+          )}
+          {/* Eyewear rides the eyes — it lives INSIDE the gaze group, so
+              glasses / shades track the glance + look instead of hanging fixed
+              while the eyes move. Fades in with the eyes via accessoryProps. */}
+          {!outline && isEyewear && (
+            <AnimatedG animatedProps={accessoryProps}>
+              {skin.accessory === 'glasses' && (square ? (
+                <>
+                  {/* Rectangular "scholar" frames — match the square eyes. */}
+                  <Rect x={EYE_CX_LEFT - lensR} y={EYE_CY - lensR + 0.5} width={lensR * 2} height={lensR * 2 - 1} rx={2.6} fill="none" stroke={accent} strokeWidth={2.2} />
+                  <Rect x={EYE_CX_RIGHT - lensR} y={EYE_CY - lensR + 0.5} width={lensR * 2} height={lensR * 2 - 1} rx={2.6} fill="none" stroke={accent} strokeWidth={2.2} />
+                  <Line x1={EYE_CX_LEFT + lensR} y1={EYE_CY - 2} x2={EYE_CX_RIGHT - lensR} y2={EYE_CY - 2} stroke={accent} strokeWidth={2.2} strokeLinecap="round" />
+                  <Line x1={EYE_CX_LEFT - lensR} y1={EYE_CY - 1} x2={6.5} y2={EYE_CY - 3} stroke={accent} strokeWidth={2.2} strokeLinecap="round" />
+                  <Line x1={EYE_CX_RIGHT + lensR} y1={EYE_CY - 1} x2={57.5} y2={EYE_CY - 3} stroke={accent} strokeWidth={2.2} strokeLinecap="round" />
+                </>
+              ) : (
+                <>
+                  {/* Modern round frames with an arched bridge. */}
+                  <Circle cx={EYE_CX_LEFT} cy={EYE_CY} r={lensR} fill="none" stroke={accent} strokeWidth={2.2} />
+                  <Circle cx={EYE_CX_RIGHT} cy={EYE_CY} r={lensR} fill="none" stroke={accent} strokeWidth={2.2} />
+                  <Path d={`M${EYE_CX_LEFT + lensR - 0.5} ${EYE_CY - 1.5} Q 32 ${EYE_CY - 4.6} ${EYE_CX_RIGHT - lensR + 0.5} ${EYE_CY - 1.5}`} fill="none" stroke={accent} strokeWidth={2.2} strokeLinecap="round" />
+                  <Line x1={EYE_CX_LEFT - lensR} y1={EYE_CY - 1} x2={6.5} y2={EYE_CY - 3} stroke={accent} strokeWidth={2.2} strokeLinecap="round" />
+                  <Line x1={EYE_CX_RIGHT + lensR} y1={EYE_CY - 1} x2={57.5} y2={EYE_CY - 3} stroke={accent} strokeWidth={2.2} strokeLinecap="round" />
+                </>
+              ))}
+              {skin.accessory === 'sunglasses' && (
+                <>
+                  {/* Tinted lenses with a light metal rim (so they read on the
+                      black face) + a glossy highlight streak. */}
+                  <Circle cx={EYE_CX_LEFT} cy={EYE_CY} r={lensR + 0.4} fill={accent} stroke="#9AA6B2" strokeWidth={1.8} />
+                  <Circle cx={EYE_CX_RIGHT} cy={EYE_CY} r={lensR + 0.4} fill={accent} stroke="#9AA6B2" strokeWidth={1.8} />
+                  <Line x1={EYE_CX_LEFT + lensR} y1={EYE_CY - 2} x2={EYE_CX_RIGHT - lensR} y2={EYE_CY - 2} stroke="#9AA6B2" strokeWidth={2} strokeLinecap="round" />
+                  <Line x1={EYE_CX_LEFT - lensR} y1={EYE_CY - 2.5} x2={6} y2={EYE_CY - 4.5} stroke="#9AA6B2" strokeWidth={2} strokeLinecap="round" />
+                  <Line x1={EYE_CX_RIGHT + lensR} y1={EYE_CY - 2.5} x2={58} y2={EYE_CY - 4.5} stroke="#9AA6B2" strokeWidth={2} strokeLinecap="round" />
+                  <Line x1={EYE_CX_LEFT - 2.6} y1={EYE_CY - 2.4} x2={EYE_CX_LEFT + 0.6} y2={EYE_CY + 0.8} stroke="#FFFFFF" strokeOpacity={0.55} strokeWidth={1.5} strokeLinecap="round" />
+                  <Line x1={EYE_CX_RIGHT - 2.6} y1={EYE_CY - 2.4} x2={EYE_CX_RIGHT + 0.6} y2={EYE_CY + 0.8} stroke="#FFFFFF" strokeOpacity={0.55} strokeWidth={1.5} strokeLinecap="round" />
+                </>
+              )}
+            </AnimatedG>
+          )}
+        </AnimatedG>
+        {/* Headwear sits on the HEAD (a separate group). It only gets a gentle
+            parallax with the glance, so it feels attached but not glued. Skipped
+            in ghost (outline) mode. */}
+        {!outline && isHeadwear && (
+          <AnimatedG animatedProps={headAccessoryProps}>
             {skin.accessory === 'hat' && (
               <>
-                <Path d="M8 17 C 8 3, 56 3, 56 17 Z" fill={accent} />
-                <Rect x={6} y={14.5} width={52} height={5} rx={2.5} fill={accent} />
-                <Circle cx={32} cy={5} r={3} fill={accent} />
+                {/* Soft artist's beret — a tilted cap ellipse, a shaded band and
+                    an off-centre stub. */}
+                <Ellipse cx={32} cy={13} rx={21} ry={8.6} fill={accent} />
+                <Ellipse cx={32} cy={16.6} rx={20} ry={3.3} fill="#000000" opacity={0.16} />
+                <Circle cx={42} cy={6} r={2.7} fill={accent} />
+              </>
+            )}
+            {skin.accessory === 'headphones' && (
+              <>
+                {/* Over-ear headphones — a band arcing over the crown + two
+                    ear-cups hugging the sides. */}
+                <Path d="M9 33 C 9 7, 55 7, 55 33" fill="none" stroke={accent} strokeWidth={3} strokeLinecap="round" />
+                <Rect x={5.5} y={27} width={8} height={13.5} rx={4} fill={accent} />
+                <Rect x={50.5} y={27} width={8} height={13.5} rx={4} fill={accent} />
               </>
             )}
           </AnimatedG>

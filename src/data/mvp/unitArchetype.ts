@@ -108,6 +108,16 @@ export function detectArchetype(desire: string): ArchetypeKey {
   return 'learning';
 }
 
+/** Like detectArchetype but returns null when nothing actually matches (instead
+ *  of defaulting to 'learning'), so callers can choose a generic path for an
+ *  unrecognised desire rather than forcing it into the learning archetype. */
+export function detectArchetypeStrict(desire: string): ArchetypeKey | null {
+  for (const key of ARCHETYPE_KEYS) {
+    if (DOMAIN_KEYWORDS[key].test(desire)) return key;
+  }
+  return null;
+}
+
 // ── Archetypes ──────────────────────────────────────────────────────────────
 
 function buildContent(key: ArchetypeKey, desire: string, t: Pick): RichContent {

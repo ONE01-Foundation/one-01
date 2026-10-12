@@ -30,6 +30,136 @@ export interface Identity {
   updatedAt: string;
 }
 
+/**
+ * A thing ONE remembers about the user — the "remembers what matters to you"
+ * promise made concrete. Account-wide (one ONE knows you across every space).
+ * Captured from chat ("remember that…") or added by hand in the ONE profile.
+ */
+export interface MemoryItem {
+  id: string;
+  text: string;
+  /** Epoch ms. */
+  ts: number;
+  /**
+   * Sharing rule for this remembered fact — same scale as a DisclosureField.
+   * A memory is something ONE learned about you, so it is `private` by default;
+   * you open it up deliberately. Older memories have no tier and read as private.
+   */
+  tier?: DisclosureTier;
+}
+
+/**
+ * ── ONE's TOOLS ──────────────────────────────────────────────────────────────
+ * Interactive capabilities ONE deploys INSIDE the conversation as chat widgets
+ * (a multiple-choice quiz, appointment booking, a form…). A tool almost always
+ * serves a PROCESS and feeds its result back into it. The quiz is the first.
+ */
+
+/** One multiple-choice question. `correct` indexes into `options`. */
+export interface QuizQuestion {
+  q: string;
+  options: string[];
+  correct: number;
+  /** Optional one-line explanation shown after answering. */
+  why?: string;
+}
+
+/** A live quiz ONE deployed in the thread. State lives in the store so the
+ *  widget reads it live (like a process card) and it survives reloads. */
+export interface QuizRun {
+  id: string;
+  /** The process this quiz is helping with (score flows back here). */
+  unitId?: string;
+  title: string;
+  /** The unit metric to write the result onto when finished (e.g. "תיאוריה"). */
+  metricLabel?: string;
+  questions: QuizQuestion[];
+  /** Chosen option index per question; null = not yet answered. */
+  answers: (number | null)[];
+  /** ISO timestamp set when every question is answered. */
+  finishedAt?: string;
+}
+
+export interface BookingSlot {
+  id: string;
+  /** Display label, e.g. "יום ג׳ 14:00" / "Tue 14:00". */
+  label: string;
+  /** ISO timestamp of the slot start, when known. */
+  iso?: string;
+}
+
+/** A live booking ONE deployed in the thread — pick a time with a provider.
+ *  State lives in the store so the widget reads it live and survives reloads.
+ *  The confirmed slot flows back onto the process as a timeline entry. */
+export interface BookingRun {
+  id: string;
+  /** The process this booking belongs to. */
+  unitId?: string;
+  title: string;
+  /** Who the appointment is with, when known (e.g. "מוסך דני"). */
+  provider?: string;
+  slots: BookingSlot[];
+  /** The chosen slot id; undefined until the user picks one. */
+  selectedSlotId?: string;
+  /** ISO timestamp set when the user confirms the booking. */
+  confirmedAt?: string;
+}
+
+export interface FormField {
+  id: string;
+  label: string;
+  placeholder?: string;
+  /** 'number' hints a numeric keypad; default is free text. */
+  kind?: 'text' | 'number';
+  value?: string;
+  /** When set, submitting saves this field onto the matching disclosure fact
+   *  (name/phone/email/city/age) so ONE can then represent it. */
+  discKey?: string;
+}
+
+/** A live form ONE deployed in the thread — collect a few structured details.
+ *  On submit the values flow back: a note on the process, and any `discKey`
+ *  field is saved into "What ONE knows about you" (the disclosure policy). */
+export interface FormRun {
+  id: string;
+  unitId?: string;
+  title: string;
+  fields: FormField[];
+  /** ISO timestamp set when the user submits. */
+  submittedAt?: string;
+}
+
+/**
+ * How freely ONE may disclose a given fact about you when it represents you to
+ * a business or a person. This is ONE's trust core and its sharpest contrast
+ * with "agent" products that sign in AS you with your full credentials: ONE is
+ * a *permissioned representative* — it never impersonates you, and it discloses
+ * only what you've allowed.
+ *   • open    — ONE may share this freely whenever it's relevant.
+ *   • ask     — ONE shares this only after it asks you and you approve.
+ *   • private — ONE never discloses this to anyone.
+ */
+export type DisclosureTier = 'open' | 'ask' | 'private';
+
+/**
+ * One fact ONE can represent on your behalf, paired with the rule for sharing
+ * it. System fields (name/phone/email/…) carry a stable `key` the UI maps to a
+ * localized label; user-added fields carry a literal `label`.
+ */
+export interface DisclosureField {
+  id: string;
+  /** i18n key for a built-in field (see SYSTEM_DISCLOSURE_LABELS). */
+  key?: string;
+  /** Literal label for a user-added field. */
+  label?: string;
+  /** The value ONE would share. Empty until you fill it in. */
+  value?: string;
+  /** Sharing rule for this fact. */
+  tier: DisclosureTier;
+  /** Built-in field — not user-removable. */
+  system?: boolean;
+}
+
 export type UnitBroadcastType =
   | 'next_step'
   | 'event'
@@ -107,7 +237,8 @@ export type UnitActivityKind =
   | 'update'
   | 'created'
   | 'completed'
-  | 'reminder';
+  | 'reminder'
+  | 'draft';
 
 export interface UnitTimelineItem {
   id: string;
@@ -158,6 +289,36 @@ export interface UnitReminder {
   createdAt: string;
 }
 
+/**
+ * An outward artifact ONE composed for a process — the actual next
+ * communication or document (the WhatsApp to the instructor, the email to the
+ * landlord, the filled form text). This is the "intent → reality" bridge: ONE
+ * doesn't just track the process, it drafts the thing that moves it forward,
+ * which the user reviews, edits, and sends. Sending uses the OS share sheet;
+ * ONE never sends silently.
+ */
+export interface UnitDraft {
+  id: string;
+  /** How it would go out — shapes the icon + the send affordance. */
+  channel: 'whatsapp' | 'email' | 'sms' | 'call' | 'form' | 'note';
+  /** Who it's for, as a label ("Sarah Salon", "the landlord", "Dr. Cohen"). */
+  to?: string;
+  /** Subject line (channel === 'email'). */
+  subject?: string;
+  /** The actual text ONE composed — editable by the user before sending. */
+  body: string;
+  status: 'draft' | 'sent';
+  createdAt: string;
+  /** ISO time the user sent it via the share sheet. */
+  sentAt?: string;
+  /**
+   * Ids of 'ask'-tier disclosure fields the user has approved for THIS outreach.
+   * 'open' fields are always included (policy); 'private' never. This is what
+   * makes selective disclosure concrete at the moment ONE acts on your behalf.
+   */
+  sharedFields?: string[];
+}
+
 export interface Unit {
   id: string;
   identityId: string;
@@ -194,6 +355,8 @@ export interface Unit {
   history?: UnitHistoryItem[];
   decisions?: UnitDecision[];
   reminders?: UnitReminder[];
+  /** Outward artifacts ONE drafted for this process (newest first). */
+  drafts?: UnitDraft[];
 
   /** Lifecycle. Undefined / 'active' = in progress. 'completed' = the user
    *  finished it — from intent to reality. Completed processes drop out of

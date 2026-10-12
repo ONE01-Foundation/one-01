@@ -1,11 +1,15 @@
 /**
- * OneProfileSheet — agent profile, redesigned 6/24 to match user mockup.
+ * OneProfileSheet — the ONE profile: who ONE is, what it knows & may share on
+ * your behalf, what it can do, and your network.
  *
- * Sticky top: kebab (⋮) → settings, "Ariel ⌄" identity row → switch, X → close.
- * Body: big breathing Orb, "ONE" title, broadcast line, 3-column stats row
- *       (CONNECTIONS / TRUST POINTS / POSSESSES), chevron-down hint.
- * Below: Appearance + Language segmented controls, Identities list,
- *        Settings link card.
+ * Sticky: kebab (⋮) menu, a compact "ONE · <name>" title, X close; a floating
+ * profile switcher dock; an inline SubscriptionPanel.
+ * Body: hero (breathing Orb + identity + plan + "share my ONE"), the NETWORK
+ * row (followers / following), a live metrics strip, Today agenda,
+ * "What ONE knows about you" (memory + selective disclosure unified — each fact
+ * carries a share tier), the TOOLBOX (ONE's live capabilities), Connections &
+ * sources, how ONE looks & sounds, All processes / Completed / Recent activity,
+ * Plan, Settings.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -38,14 +42,19 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Orb } from '../../components/mvp/Orb';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
-import { CloseIcon, MenuIcon, ArrowDownIcon } from '../../components/mvp/icons';
+import { CloseIcon, MenuIcon, ArrowDownIcon, PlusIcon, PersonIcon, BriefcaseIcon, HouseIcon, PencilIcon, GearIcon, LinkIcon, StarIcon, SlidersIcon, GlobeIcon, VerifiedIcon, ClockIcon } from '../../components/mvp/icons';
 import { useThemeStore } from '../../stores/themeStore';
+import type { ThemeColors } from '../../utils/theme';
 import { useT, useLanguage } from '../../i18n/useT';
-import { useMvpStore, useActiveIdentity } from '../../stores/mvpStore';
+import { useMvpStore, useActiveIdentity, useActiveDisclosure } from '../../stores/mvpStore';
+import { disclosureLabel } from '../../data/mvp/disclosure';
+import type { DisclosureTier } from '../../core/mvp/types';
 import { BottomSheet } from '../../components/mvp/BottomSheet';
+import { InlinePrompt, type InlinePromptConfig } from '../../components/mvp/InlinePrompt';
 import { SubscriptionPanel } from './SubscriptionPanel';
 import { ActionMenu, type ActionMenuItem } from '../../components/mvp/ActionMenu';
 import { CONNECTORS } from '../../data/mvp/connectors';
+import { TOOLS, toolEnabled } from '../../data/mvp/tools';
 import { entitlementsFor } from '../../utils/entitlements';
 import { buildAgenda, agendaHeadline, type AgendaItem } from '../../utils/agenda';
 import { SNOOZE_OPTIONS, snoozeOptionLabel, snoozeTarget } from '../../utils/snooze';
@@ -70,9 +79,15 @@ interface OneProfileSheetProps {
   onAddIdentity?: () => void;
   /** Open the create-business flow (a business gets its own ONE). */
   onCreateBusiness?: () => void;
+  /** Open the Timeline (the "past") — ONE's cross-process history. Lives on
+   *  Home; the navigator closes this sheet then raises it. */
+  onOpenTimeline?: () => void;
   /** Shared value the sheet writes its LIVE animated index into, so Home can
    *  track the slide and bring its orb back in sync with the close drag. */
   animatedIndex?: SharedValue<number>;
+  /** True while a voice call is active. The profile orb then wears the live
+   *  green call ring — the call "moved into" the profile with you. */
+  callActive?: boolean;
 }
 
 // Open as a HALF card by default (matching UnitProfileSheet's pattern).
@@ -87,7 +102,9 @@ export function OneProfileSheet({
   onOpenUnit,
   onAddIdentity,
   onCreateBusiness,
+  onOpenTimeline,
   animatedIndex,
+  callActive = false,
 }: OneProfileSheetProps) {
   const { colors } = useThemeStore();
   const t = useT();
@@ -104,6 +121,18 @@ export function OneProfileSheet({
   const plan = useMvpStore((s) => s.plan);
   const connections = useMvpStore((s) => s.connections);
   const setConnection = useMvpStore((s) => s.setConnection);
+  const enabledTools = useMvpStore((s) => s.enabledTools);
+  const setToolEnabled = useMvpStore((s) => s.setToolEnabled);
+  const memories = useMvpStore((s) => s.memories);
+  const addMemory = useMvpStore((s) => s.addMemory);
+  const removeMemory = useMvpStore((s) => s.removeMemory);
+  const setMemoryTier = useMvpStore((s) => s.setMemoryTier);
+  const name = useMvpStore((s) => s.name);
+  const disclosure = useActiveDisclosure();
+  const setDisclosureTier = useMvpStore((s) => s.setDisclosureTier);
+  const setDisclosureValue = useMvpStore((s) => s.setDisclosureValue);
+  const addDisclosureField = useMvpStore((s) => s.addDisclosureField);
+  const removeDisclosureField = useMvpStore((s) => s.removeDisclosureField);
   // What the current plan unlocks (limits + capabilities).
   const ent = entitlementsFor(plan);
   // The plan badge shown INLINE next to "ONE" — its own colour per tier.
@@ -127,27 +156,114 @@ export function OneProfileSheet({
     setSubscriptionOpen(true);
   }, []);
 
+  // Cross-platform text prompt (replaces iOS-only Alert.prompt) — rides the
+  // sheet's screen-pinned overlay slot, see render below.
+  const [promptConfig, setPromptConfig] = useState<InlinePromptConfig | null>(null);
+
   // ── ⋮ action menu (context-aware by the active profile) ─────────────────
   const [menuOpen, setMenuOpen] = useState(false);
+  // Verified badge next to "ONE" — grey/translucent until the identity is
+  // verified, blue once it is. No verification backend yet, so it's off; tapping
+  // opens the (placeholder) verification flow.
+  const oneVerified = false;
   const comingSoon = useCallback(() => {
     Alert.alert(he ? 'בקרוב' : 'Coming soon', he ? 'עוד רגע — היכולת הזו בדרך.' : "This one's on the way.");
   }, [he]);
+  // Add a memory by hand. iOS has Alert.prompt; Android points to the chat
+  // (where "remember that…" is captured automatically).
+  const promptAddMemory = useCallback(() => {
+    haptic.tap();
+    setPromptConfig({
+      title: he ? 'מה שאזכור' : 'Remember this',
+      message: he ? 'משהו שחשוב שאזכור עליך' : 'Something I should remember about you',
+      placeholder: he ? 'למשל: אני אלרגי לפניצילין' : 'e.g. I’m allergic to penicillin',
+      multiline: true,
+      onSubmit: (v) => { if (v) addMemory(v); },
+    });
+  }, [he, addMemory]);
+
+  // ── Selective disclosure — ONE as a permissioned representative ──────────
+  const discFields = disclosure ?? [];
+  // Pre-fill the name field from the profile name the first time — feels alive —
+  // but never overwrite a value the user set.
+  useEffect(() => {
+    const nameField = (disclosure ?? []).find((d) => d.key === 'name');
+    if (nameField && !nameField.value && name.trim()) {
+      setDisclosureValue(nameField.id, name.trim());
+    }
+  }, [name, disclosure, setDisclosureValue]);
+  const tierMeta = useCallback(
+    (tier: DisclosureTier): { label: string; color: string } => {
+      if (tier === 'open') return { label: he ? 'גלוי' : 'Open', color: '#10B981' };
+      if (tier === 'ask') return { label: he ? 'באישור' : 'Ask', color: '#F59E0B' };
+      return { label: he ? 'פרטי' : 'Private', color: colors.textSecondary };
+    },
+    [he, colors.textSecondary],
+  );
+  const cycleDisclosureTier = useCallback(
+    (id: string, cur: DisclosureTier) => {
+      haptic.select();
+      const next: DisclosureTier = cur === 'open' ? 'ask' : cur === 'ask' ? 'private' : 'open';
+      setDisclosureTier(id, next);
+    },
+    [setDisclosureTier],
+  );
+  const cycleMemoryTier = useCallback(
+    (id: string, cur: DisclosureTier) => {
+      haptic.select();
+      const next: DisclosureTier = cur === 'open' ? 'ask' : cur === 'ask' ? 'private' : 'open';
+      setMemoryTier(id, next);
+    },
+    [setMemoryTier],
+  );
+  const editDisclosureValue = useCallback(
+    (id: string, label: string, current?: string) => {
+      haptic.tap();
+      setPromptConfig({
+        title: label,
+        message: he ? 'מה שוואן ישתף עבור פרט זה' : 'What ONE would share for this',
+        initialValue: current ?? '',
+        placeholder: he ? 'הקלד ערך' : 'Enter a value',
+        onSubmit: (v) => setDisclosureValue(id, v),
+      });
+    },
+    [he, setDisclosureValue],
+  );
+  const promptAddDisclosure = useCallback(() => {
+    haptic.tap();
+    setPromptConfig({
+      title: he ? 'הוספת פרט' : 'Add a detail',
+      message: he ? 'איזה פרט וואן יכול לייצג? (למשל: כתובת, מקצוע)' : 'Which detail can ONE represent? (e.g. address, profession)',
+      placeholder: he ? 'שם הפרט' : 'Detail name',
+      onSubmit: (v) => { if (v) addDisclosureField(v); },
+    });
+  }, [he, addDisclosureField]);
+  // Plain-language summary of the live policy — makes the control read as
+  // "what ONE will actually do", not just a settings list.
+  const disclosureSummary = useMemo(() => {
+    const open = discFields.filter((d) => d.tier === 'open').map((d) => disclosureLabel(d, he));
+    const ask = discFields.filter((d) => d.tier === 'ask').map((d) => disclosureLabel(d, he));
+    return { open, ask };
+  }, [discFields, he]);
+
   const menuItems: ActionMenuItem[] =
     identity?.type === 'business'
       ? [
-          { icon: '🏪', label: he ? 'צור/ערוך עסק ONE' : 'Create / edit business ONE', onPress: onCreateBusiness ?? comingSoon },
-          { icon: '🌐', label: he ? 'תצוגה ציבורית' : 'Public view', onPress: comingSoon },
-          { icon: '🔗', label: he ? 'חיבורים ומקורות' : 'Connections & sources', onPress: comingSoon },
-          { icon: '⭐', label: he ? 'תוכנית ומנוי' : 'Plan & subscription', onPress: () => openUpgrade(undefined) },
-          { icon: '⚙️', label: he ? 'הגדרות ONE' : 'ONE settings', onPress: onOpenSettings },
+          { iconNode: <ClockIcon size={19} color={colors.text} />, label: he ? 'ציר זמן' : 'Timeline', onPress: onOpenTimeline ?? comingSoon },
+          { iconNode: <BriefcaseIcon size={19} color={colors.text} />, label: he ? 'צור/ערוך עסק ONE' : 'Create / edit business ONE', onPress: onCreateBusiness ?? comingSoon },
+          { iconNode: <GlobeIcon size={19} color={colors.text} />, label: he ? 'תצוגה ציבורית' : 'Public view', onPress: comingSoon },
+          { iconNode: <LinkIcon size={19} color={colors.text} />, label: he ? 'חיבורים ומקורות' : 'Connections & sources', onPress: comingSoon },
+          { iconNode: <StarIcon size={19} color={colors.text} />, label: he ? 'תוכנית ומנוי' : 'Plan & subscription', onPress: () => openUpgrade(undefined) },
+          { iconNode: <GearIcon size={19} color={colors.text} />, label: he ? 'הגדרות ONE' : 'ONE settings', onPress: onOpenSettings },
         ]
       : [
-          { icon: '✏️', label: he ? 'ערוך פרופיל' : 'Edit profile', onPress: comingSoon },
-          { icon: '🏪', label: he ? 'צור עסק ONE' : 'Create a business ONE', onPress: onCreateBusiness ?? comingSoon },
-          { icon: '🎨', label: he ? 'התאם את ONE' : 'Customize ONE', onPress: onOpenSettings },
-          { icon: '🔗', label: he ? 'חיבורים ומקורות' : 'Connections & sources', onPress: comingSoon },
-          { icon: '⭐', label: he ? 'תוכנית ומנוי' : 'Plan & subscription', onPress: () => openUpgrade(undefined) },
-          { icon: '⚙️', label: he ? 'הגדרות ONE' : 'ONE settings', onPress: onOpenSettings },
+          { iconNode: <ClockIcon size={19} color={colors.text} />, label: he ? 'ציר זמן' : 'Timeline', onPress: onOpenTimeline ?? comingSoon },
+          { iconNode: <PencilIcon size={19} color={colors.text} />, label: he ? 'ערוך פרופיל' : 'Edit profile', onPress: comingSoon },
+          { iconNode: <BriefcaseIcon size={19} color={colors.text} />, label: he ? 'צור עסק ONE' : 'Create a business ONE', onPress: onCreateBusiness ?? comingSoon },
+          { iconNode: <SlidersIcon size={19} color={colors.text} />, label: he ? 'התאם את ONE' : 'Customize ONE', onPress: onOpenSettings },
+          { iconNode: <LinkIcon size={19} color={colors.text} />, label: he ? 'חיבורים ומקורות' : 'Connections & sources', onPress: comingSoon },
+          { iconNode: <StarIcon size={19} color={colors.text} />, label: he ? 'תוכנית ומנוי' : 'Plan & subscription', onPress: () => openUpgrade(undefined) },
+          { iconNode: <GearIcon size={19} color={colors.text} />, label: he ? 'הגדרות ONE' : 'ONE settings', onPress: onOpenSettings },
         ];
 
   // Connect / disconnect a source. Disconnecting is always allowed; connecting
@@ -335,43 +451,18 @@ export function OneProfileSheet({
         { emoji: '📄', name: 'Documents', desc: 'Contracts, approvals, policy' },
         { emoji: '❓', name: 'FAQ', desc: 'Verified answers' },
       ];
-  // Some abilities unlock with the plan (advanced model / proactive).
-  const ABILITIES = he
-    ? [
-        { name: 'לפתוח תהליך', locked: false },
-        { name: 'לסכם את היום', locked: false },
-        { name: 'לקבוע תזכורות', locked: false },
-        { name: 'לקרוא אימיילים', locked: !ent.advancedModel },
-        { name: 'לנתח קבצים', locked: !ent.advancedModel },
-        { name: 'לפעול אוטומטית בשמך', locked: !ent.proactive },
-      ]
-    : [
-        { name: 'Open a process', locked: false },
-        { name: 'Summarise your day', locked: false },
-        { name: 'Set reminders', locked: false },
-        { name: 'Read emails', locked: !ent.advancedModel },
-        { name: 'Analyse files', locked: !ent.advancedModel },
-        { name: 'Act on your behalf', locked: !ent.proactive },
-      ];
-  const MEMORY_CATS = he
-    ? ['העדפות', 'החלטות', 'נתונים חשובים', 'אנשים ותהליכים']
-    : ['Preferences', 'Decisions', 'Key facts', 'People & processes'];
-  const VERIFICATION = he
-    ? [
-        { label: 'אימייל', ok: true },
-        { label: 'טלפון', ok: true },
-        { label: 'גיל', ok: false },
-        { label: 'עסק', ok: false },
-      ]
-    : [
-        { label: 'Email', ok: true },
-        { label: 'Phone', ok: true },
-        { label: 'Age', ok: false },
-        { label: 'Business', ok: false },
-      ];
   // Status carousel — the horizontal metrics strip under the header. A mix of
   // live aggregates and structural counts, so opening ONE reads as "here's what
   // I'm holding for you", not vanity stats.
+  // The status carousel opens with `direction: rtl` (Hebrew), which lays the
+  // FIRST metric (Processes) at the right edge — but a horizontal ScrollView
+  // still rests at offset 0 (the LEFT edge = the last metric, Plan). Snap it to
+  // the right on open so the reading starts from Processes, as it should.
+  const metricsScrollRef = React.useRef<ScrollView>(null);
+  const metricsSnappedRef = React.useRef(false);
+  useEffect(() => {
+    if (visible) metricsSnappedRef.current = false;
+  }, [visible]);
   const metrics: { label: string; value: string; color?: string }[] = [
     { label: he ? 'תהליכים' : 'Processes', value: `${liveStats.processes}` },
     { label: he ? 'צעדים' : 'Open steps', value: `${liveStats.openSteps}` },
@@ -379,7 +470,7 @@ export function OneProfileSheet({
     { label: he ? 'חיבורים' : 'Connections', value: `${connectedCount}` },
     { label: he ? 'ערוצים' : 'Channels', value: `${CHANNELS.length}` },
     { label: he ? 'מקורות' : 'Sources', value: `${SOURCES.length}` },
-    { label: he ? 'זיכרון' : 'Memory', value: he ? 'פעיל' : 'Active' },
+    { label: he ? 'זיכרון' : 'Memory', value: memories.length > 0 ? `${memories.length}` : (he ? 'פעיל' : 'Active') },
     { label: he ? 'תוכנית' : 'Plan', value: planMeta.word, color: planMeta.color },
   ];
 
@@ -389,20 +480,28 @@ export function OneProfileSheet({
   // with a fade so ONE feels like it's quietly speaking about itself.
   const oneLines = useMemo(() => {
     const name = identity?.name?.trim();
+    // The memory line reflects the REAL count once ONE remembers things.
+    const memLine = he
+      ? memories.length > 0
+        ? `זוכר ${memories.length} דברים חשובים עליך.`
+        : 'זוכר כל מה שתפקיד בידיי.'
+      : memories.length > 0
+        ? `Remembering ${memories.length} things that matter about you.`
+        : "I remember everything you trust me with.";
     return he
       ? [
           name ? `אני ה‑ONE של ${name}.` : 'אני ה‑ONE שלך.',
           `מחזיק ${liveStats.processes} תהליכים ו‑${liveStats.openSteps} צעדים פתוחים בשבילך.`,
           'כאן כדי להפוך כוונות למציאות.',
-          'אני זוכר כל מה שהפקדת בידיי.',
+          memLine,
         ]
       : [
           name ? `I'm ${name}'s ONE.` : "I'm your ONE.",
           `Holding ${liveStats.processes} processes and ${liveStats.openSteps} open steps for you.`,
           'Here to turn intentions into reality.',
-          "I remember everything you've trusted me with.",
+          memLine,
         ];
-  }, [identity?.name, liveStats.processes, liveStats.openSteps, he]);
+  }, [identity?.name, liveStats.processes, liveStats.openSteps, he, memories.length]);
   const [lineIdx, setLineIdx] = useState(0);
   const lineOpacity = useSharedValue(1);
   const broadcastLineStyle = useAnimatedStyle(() => ({ opacity: lineOpacity.value }));
@@ -523,6 +622,24 @@ export function OneProfileSheet({
   // (a clean hand-off from the home orb collapsing behind the sheet).
   const enterScale = useSharedValue(0.8);
   const enterOpacity = useSharedValue(0);
+  // Live call ring — barely-there breath (1 → 1.045), matching the home call
+  // ring, so it reads "alive" while a call is active.
+  const callRingPulse = useSharedValue(1);
+  React.useEffect(() => {
+    if (callActive) {
+      callRingPulse.value = withRepeat(
+        withSequence(
+          withTiming(1.045, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+          withTiming(1.0, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+        ),
+        -1,
+        true,
+      );
+    } else {
+      callRingPulse.value = 1;
+    }
+  }, [callActive, callRingPulse]);
+  const callRingStyle = useAnimatedStyle(() => ({ transform: [{ scale: callRingPulse.value }] }));
   React.useEffect(() => {
     if (!visible) {
       breathScale.value = 1;
@@ -567,87 +684,73 @@ export function OneProfileSheet({
   // content it hangs off the bottom of the screen at the half card. A
   // horizontal strip of the user's profiles + an "add profile" chip; switching
   // who ONE works for is one tap away. Lifts with the keyboard + fades on close.
+  // Icon for an identity by its type (person / briefcase / house).
+  const identityIcon = (type: string, color: string, size: number) =>
+    type === 'business' ? (
+      <BriefcaseIcon size={size} color={color} />
+    ) : type === 'family' ? (
+      <HouseIcon size={size} color={color} />
+    ) : (
+      <PersonIcon size={size} color={color} />
+    );
+  const activeIdentity = identities.find((id) => id.id === activeIdentityId) ?? null;
+  const inactiveIdentities = identities.filter((id) => id.id !== activeIdentityId);
+  // Floating profile switcher — NOT a boxed bar. A centred row of plain circular
+  // buttons: + to add, one circle per OTHER profile (its type icon), and the
+  // ACTIVE profile as a solid dark pill with its name. Locked LTR so + sits on
+  // the left and the active pill on the right (matches the reference), in both
+  // languages.
   const switcherDockNode = (
     <Animated.View
       style={[styles.switcherDock, { paddingBottom: Math.max(insets.bottom, 12) }, dockStyle]}
       pointerEvents="box-none"
     >
-      <View style={[styles.switcherBar, { backgroundColor: colors.surface }]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.switcherContent, he && styles.switcherContentRTL]}
+      <View style={styles.switcherRow}>
+        {/* Add profile → create-identity flow (gated by the plan). */}
+        <Pressable
+          onPress={handleAddProfile}
+          style={[styles.switcherCircle, { backgroundColor: colors.surface }]}
+          accessibilityRole="button"
+          accessibilityLabel={he ? 'הוסף פרופיל' : 'Add profile'}
+          hitSlop={8}
         >
-          {identities.map((id) => {
-            const active = id.id === activeIdentityId;
-            return (
-              <Pressable
-                key={id.id}
-                onPress={() => {
-                  haptic.select();
-                  if (id.id === activeIdentityId) return;
-                  setActiveIdentity(id.id);
-                  // Jump home ONLY from the HALF card (index ~0): you feel the
-                  // change instead of staying in the profile card. When the card
-                  // is dragged up to FULL (index ~1), switching stays in place —
-                  // the profile just re-renders under the new identity.
-                  if (sheetIndex.value < 0.5) {
-                    onClose();
-                  }
-                }}
-                style={[
-                  styles.profilePill,
-                  he && styles.rowReverse,
-                  {
-                    backgroundColor: active ? colors.text : colors.background,
-                    borderColor: active ? colors.text : colors.border,
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                accessibilityLabel={id.name}
-              >
-                <View
-                  style={[
-                    styles.profilePillAvatar,
-                    { backgroundColor: active ? colors.background : colors.surface },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.profilePillInitial,
-                      { color: active ? colors.text : colors.textSecondary },
-                    ]}
-                  >
-                    {id.initials ?? id.name.slice(0, 1)}
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.profilePillName,
-                    { color: active ? colors.background : colors.text },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {id.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-          {/* Add profile → create-identity flow (gated by the plan). */}
+          <PlusIcon size={22} color={colors.text} />
+        </Pressable>
+        {/* Other profiles — a circle each, tap to switch. */}
+        {inactiveIdentities.map((id) => (
           <Pressable
-            onPress={handleAddProfile}
-            style={[styles.addPill, he && styles.rowReverse, { borderColor: colors.border }]}
+            key={id.id}
+            onPress={() => {
+              haptic.select();
+              setActiveIdentity(id.id);
+              // From the HALF card, jump home so the switch is felt; at the FULL
+              // card, switch in place (the profile re-renders).
+              if (sheetIndex.value < 0.5) onClose();
+            }}
+            style={[styles.switcherCircle, { backgroundColor: colors.surface }]}
             accessibilityRole="button"
-            accessibilityLabel={he ? 'הוסף פרופיל' : 'Add profile'}
+            accessibilityLabel={id.name}
+            hitSlop={8}
           >
-            <Text style={[styles.addPillPlus, { color: colors.textSecondary }]}>+</Text>
-            <Text style={[styles.addPillText, { color: colors.textSecondary }]} numberOfLines={1}>
-              {he ? 'הוסף פרופיל' : 'Add profile'}
-            </Text>
+            {identityIcon(id.type, colors.text, 20)}
           </Pressable>
-        </ScrollView>
+        ))}
+        {/* Active profile — solid dark pill with the name + its type icon. */}
+        {activeIdentity && (
+          <View
+            style={[styles.switcherActivePill, { backgroundColor: colors.text }]}
+            accessibilityRole="text"
+            accessibilityLabel={activeIdentity.name}
+          >
+            <Text
+              style={[styles.switcherActiveName, { color: colors.background }]}
+              numberOfLines={1}
+            >
+              {activeIdentity.name}
+            </Text>
+            {identityIcon(activeIdentity.type, colors.background, 18)}
+          </View>
+        )}
       </View>
     </Animated.View>
   );
@@ -684,6 +787,12 @@ export function OneProfileSheet({
             visible={subscriptionOpen}
             reason={subscriptionReason}
             onClose={() => setSubscriptionOpen(false)}
+          />
+          <InlinePrompt
+            config={promptConfig}
+            onClose={() => setPromptConfig(null)}
+            colors={colors}
+            lang={lang}
           />
         </>
       }
@@ -743,12 +852,41 @@ export function OneProfileSheet({
             sideways swipe here — it fought the scroll; tap is the one path. */}
         <View style={styles.heroBlock}>
           <Animated.View style={breathStyle}>
-            <Orb size={120} eyeLookY={eyeLookY} noShadow />
+            <View style={styles.oneOrbWrap}>
+              <Orb size={120} eyeLookY={eyeLookY} noShadow />
+              {/* Live green call ring — shown while a voice call is active, so
+                  the call reads as having "moved into" the profile with you.
+                  Breathes gently, like the home call ring. */}
+              {callActive && (
+                <Animated.View style={[styles.oneCallRing, callRingStyle]} pointerEvents="none" />
+              )}
+              {/* Edit — a small pencil on the orb's corner (edit ONE's look). */}
+              <Pressable
+                onPress={comingSoon}
+                hitSlop={8}
+                style={[styles.editOrbBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                accessibilityRole="button"
+                accessibilityLabel={he ? 'ערוך' : 'Edit'}
+              >
+                <PencilIcon size={15} color={colors.text} />
+              </Pressable>
+            </View>
           </Animated.View>
-          {/* Title is just "ONE" — the agent. Below it: which profile ONE is
-              acting through (name · role), and the plan as a SMALL badge, not
-              the title. Tap the row → plans panel (upgrade / manage). */}
-          <Text style={[styles.heroTitle, { color: colors.text }]}>{oneName}</Text>
+          {/* Title "ONE" + a verified badge AFTER the word. "ONE" is always
+              Latin, so the row is fixed LTR (name first, badge after) in every
+              language — the badge stays to the right of ONE in Hebrew too. Grey
+              when unverified (tap → verify), blue when verified. */}
+          <View style={styles.heroTitleRow}>
+            <Text style={[styles.heroTitle, { color: colors.text }]}>{oneName}</Text>
+            <Pressable
+              onPress={comingSoon}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={he ? (oneVerified ? 'מאומת' : 'אימות ONE') : oneVerified ? 'Verified' : 'Verify ONE'}
+            >
+              <VerifiedIcon size={20} color={oneVerified ? '#3B82F6' : '#C4C1BA'} />
+            </Pressable>
+          </View>
           <Pressable
             onPress={() => openUpgrade(undefined)}
             hitSlop={8}
@@ -757,7 +895,7 @@ export function OneProfileSheet({
             accessibilityLabel={`${identity?.name ?? ''} · ${roleLabelFor(identity?.type)} — ${planMeta.word}`}
           >
             <Text style={[styles.identityLine, { color: colors.textSecondary }]} numberOfLines={1}>
-              {[identity?.name, roleLabelFor(identity?.type)].filter(Boolean).join(' · ')}
+              {[identity?.name || (he ? 'אישי' : 'Personal'), roleLabelFor(identity?.type)].filter(Boolean).join(' · ')}
             </Text>
             <View style={[styles.planBadge, { borderColor: planMeta.color }]}>
               <Text style={[styles.planBadgeText, { color: planMeta.color }]}>{planMeta.word}</Text>
@@ -775,10 +913,19 @@ export function OneProfileSheet({
             profile. Scrolls sideways so it can carry more than three metrics
             without crowding the hero. */}
         <ScrollView
+          ref={metricsScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           style={[styles.metricsScroll, { borderColor: colors.border }]}
           contentContainerStyle={[styles.metricsRow, rtlRow(lang)]}
+          onContentSizeChange={() => {
+            // Once per open (Hebrew only): jump to the right edge so the row
+            // reads from Processes, not Plan.
+            if (he && !metricsSnappedRef.current) {
+              metricsSnappedRef.current = true;
+              metricsScrollRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
         >
           {metrics.map((m, i) => (
             <React.Fragment key={m.label}>
@@ -980,72 +1127,215 @@ export function OneProfileSheet({
           </View>
         </Section>
 
-        {/* Abilities — what ONE can do; some unlock with the plan. */}
-        <Section title={he ? 'יכולות' : 'Abilities'} colors={colors}>
-          <View style={[styles.tagWrap, rtlRow(lang)]}>
-            {ABILITIES.map((a) => (
-              <View
-                key={a.name}
-                style={[
-                  styles.tagChip,
-                  {
-                    backgroundColor: a.locked ? colors.background : colors.surface,
-                    borderColor: colors.border,
-                    opacity: a.locked ? 0.6 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.tagChipText, { color: colors.text }]}>
-                  {a.locked ? '🔒 ' : ''}{a.name}
-                </Text>
-              </View>
-            ))}
+        {/* Toolbox — what ONE can DO: live capabilities it deploys in the chat.
+            Live tools toggle on/off; the chat checks this before deploying. */}
+        <Section title={he ? 'מה ONE יודע לעשות' : 'What ONE can do'} colors={colors}>
+          <View style={styles.toolList}>
+            {TOOLS.map((tool) => {
+              const live = tool.status === 'live';
+              const on = live && toolEnabled(enabledTools, tool.id);
+              return (
+                <View
+                  key={tool.id}
+                  style={[styles.toolRow, { backgroundColor: colors.surface, borderColor: colors.border, opacity: live ? 1 : 0.7 }]}
+                >
+                  <Text style={styles.toolEmoji}>{tool.emoji}</Text>
+                  <View style={styles.flex1}>
+                    <View style={[styles.toolTitleRow, rtlRow(lang)]}>
+                      <Text style={[styles.toolName, { color: colors.text }, rtlText(lang)]}>
+                        {tool.label(he)}
+                      </Text>
+                      {tool.pro && (
+                        <Text style={[styles.toolProTag, { color: colors.textSecondary, borderColor: colors.border }]}>Pro</Text>
+                      )}
+                    </View>
+                    <Text style={[styles.toolDesc, { color: colors.textSecondary }, rtlText(lang)]} numberOfLines={1}>
+                      {tool.desc(he)}
+                    </Text>
+                  </View>
+                  {live ? (
+                    <Pressable
+                      onPress={() => { haptic.select(); setToolEnabled(tool.id, !on); }}
+                      style={[styles.toolTgl, { backgroundColor: on ? colors.primary : colors.border }]}
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: on }}
+                      accessibilityLabel={tool.label(he)}
+                    >
+                      <View style={[styles.toolKnob, on ? styles.toolKnobOn : styles.toolKnobOff]} />
+                    </Pressable>
+                  ) : (
+                    <Text style={[styles.toolSoon, { color: colors.textSecondary, backgroundColor: colors.background }]}>
+                      {he ? 'בקרוב' : 'Soon'}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         </Section>
 
         {/* Memory — what ONE remembers (categories, not the raw data). */}
-        <Section title={he ? 'זיכרון' : 'Memory'} colors={colors}>
-          <View style={[styles.tagWrap, rtlRow(lang)]}>
-            {MEMORY_CATS.map((m) => (
-              <View key={m} style={[styles.tagChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[styles.tagChipText, { color: colors.text }]}>{m}</Text>
-              </View>
-            ))}
-          </View>
-          <Pressable
-            onPress={onOpenSettings}
-            style={({ pressed }) => [
-              styles.manageRow,
-              { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
-              rtlRow(lang),
-            ]}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.manageRowText, { color: colors.text }]}>
-              {he ? 'נהל זיכרון' : 'Manage memory'}
-            </Text>
-            <Text style={[styles.settingsLinkChev, { color: colors.textSecondary }]}>›</Text>
-          </Pressable>
-        </Section>
-
-        {/* Verification & privacy — ONE verifies you, shares only what's needed. */}
-        <Section title={he ? 'אימות ופרטיות' : 'Verification & privacy'} colors={colors}>
+        {/* What ONE knows about you — the single trust surface. Every fact ONE
+            holds, whether a structured detail you filled in or something you
+            told it to remember, carries a share-tier: Open (shares freely) ·
+            Ask (asks first) · Private (never shares). This permissioned model is
+            what sets ONE apart from agents that act AS you with full credentials.
+            Tap a detail to set its value; tap any pill to cycle the tier. */}
+        <Section title={he ? 'מה ONE יודע עליך' : 'What ONE knows about you'} colors={colors}>
           <Text style={[styles.connectionsIntro, { color: colors.textSecondary }, rtlText(lang)]}>
             {he
-              ? 'ONE מאמת אותך — ומשתף רק את מה שנדרש.'
-              : 'ONE verifies you — and shares only what’s needed.'}
+              ? 'וואן מייצג אותך — לא מתחזה אליך. לכל פרט שהוא יודע יש כלל שיתוף: גלוי · באישור · פרטי.'
+              : 'ONE represents you — never impersonates you. Every fact it knows has a sharing rule: Open · Ask · Private.'}
           </Text>
-          <View style={[styles.tagWrap, rtlRow(lang)]}>
-            {VERIFICATION.map((v) => (
-              <View
-                key={v.label}
-                style={[styles.tagChip, { backgroundColor: colors.surface, borderColor: v.ok ? '#10B981' : colors.border }]}
-              >
-                <Text style={[styles.tagChipText, { color: v.ok ? '#10B981' : colors.textSecondary }]}>
-                  {v.ok ? '✓ ' : ''}{v.label}
-                </Text>
-              </View>
-            ))}
+
+          {/* Group 1 — structured details (name, city, contact, IDs…). */}
+          <Text style={[styles.knowGroupLabel, { color: colors.textSecondary }, rtlText(lang)]}>
+            {he ? 'פרטים' : 'Details'}
+          </Text>
+          <View style={styles.discList}>
+            {discFields.map((d) => {
+              const meta = tierMeta(d.tier);
+              const label = disclosureLabel(d, he);
+              return (
+                <View
+                  key={d.id}
+                  style={[styles.discRow, { backgroundColor: colors.surface }, rtlRow(lang)]}
+                >
+                  <Pressable
+                    style={styles.discMain}
+                    onPress={() => editDisclosureValue(d.id, label, d.value)}
+                    accessibilityRole="button"
+                    accessibilityLabel={label}
+                  >
+                    <Text style={[styles.discLabel, { color: colors.text }, rtlText(lang)]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                    <Text
+                      style={[styles.discValue, { color: colors.textSecondary, opacity: d.value ? 1 : 0.6 }, rtlText(lang)]}
+                      numberOfLines={1}
+                    >
+                      {d.value || (he ? 'הקש להוספה' : 'Tap to add')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => cycleDisclosureTier(d.id, d.tier)}
+                    style={[styles.discTier, { borderColor: meta.color }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${label}: ${meta.label}`}
+                  >
+                    <View style={[styles.discTierDot, { backgroundColor: meta.color }]} />
+                    <Text style={[styles.discTierText, { color: meta.color }]}>{meta.label}</Text>
+                  </Pressable>
+                  {!d.system && (
+                    <Pressable
+                      onPress={() => { haptic.select(); removeDisclosureField(d.id); }}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={he ? 'הסר' : 'Remove'}
+                    >
+                      <CloseIcon size={13} color={colors.textSecondary} />
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Group 2 — things you've told ONE to remember. Each is a fact with
+              its own tier, private by default. */}
+          <Text style={[styles.knowGroupLabel, { color: colors.textSecondary }, rtlText(lang)]}>
+            {he ? 'מה שסיפרת לי' : "What you've told me"}
+          </Text>
+          {memories.length === 0 ? (
+            <Text style={[styles.memoryEmpty, { color: colors.textSecondary }, rtlText(lang)]}>
+              {he
+                ? 'עוד כלום. אמור לי «תזכור ש…» בצ׳אט ואשמור, או הוסף כאן.'
+                : "Nothing yet. Tell me “remember that…” in chat and I'll keep it, or add one here."}
+            </Text>
+          ) : (
+            <View style={styles.memoryList}>
+              {memories.slice(0, 8).map((m) => {
+                const mTier = m.tier ?? 'private';
+                const meta = tierMeta(mTier);
+                return (
+                  <View
+                    key={m.id}
+                    style={[styles.memoryRow, { backgroundColor: colors.surface }, rtlRow(lang)]}
+                  >
+                    <Text style={[styles.memoryText, { color: colors.text }, rtlText(lang)]} numberOfLines={2}>
+                      {m.text}
+                    </Text>
+                    <Pressable
+                      onPress={() => cycleMemoryTier(m.id, mTier)}
+                      style={[styles.discTier, { borderColor: meta.color }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${m.text}: ${meta.label}`}
+                    >
+                      <View style={[styles.discTierDot, { backgroundColor: meta.color }]} />
+                      <Text style={[styles.discTierText, { color: meta.color }]}>{meta.label}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { haptic.select(); removeMemory(m.id); }}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={he ? 'שכח' : 'Forget'}
+                    >
+                      <CloseIcon size={14} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Live summary — what the policy actually does right now. */}
+          {(disclosureSummary.open.length > 0 || disclosureSummary.ask.length > 0) && (
+            <Text style={[styles.discSummary, { color: colors.textSecondary }, rtlText(lang)]}>
+              {disclosureSummary.open.length > 0
+                ? he
+                  ? `וואן ישתף באופן חופשי: ${disclosureSummary.open.join(', ')}.`
+                  : `ONE shares freely: ${disclosureSummary.open.join(', ')}.`
+                : ''}
+              {disclosureSummary.ask.length > 0
+                ? he
+                  ? ` יבקש רשות ל: ${disclosureSummary.ask.join(', ')}.`
+                  : ` Asks first for: ${disclosureSummary.ask.join(', ')}.`
+                : ''}
+            </Text>
+          )}
+
+          {/* Add either kind of fact — a structured detail or a free memory. */}
+          <View style={[styles.knowActionsRow, rtlRow(lang)]}>
+            <Pressable
+              onPress={promptAddDisclosure}
+              style={({ pressed }) => [
+                styles.manageRow,
+                styles.knowAction,
+                { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
+                rtlRow(lang),
+              ]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.manageRowText, { color: colors.text }]}>
+                {he ? 'הוסף פרט' : 'Add detail'}
+              </Text>
+              <Text style={[styles.settingsLinkChev, { color: colors.textSecondary }]}>+</Text>
+            </Pressable>
+            <Pressable
+              onPress={promptAddMemory}
+              style={({ pressed }) => [
+                styles.manageRow,
+                styles.knowAction,
+                { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
+                rtlRow(lang),
+              ]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.manageRowText, { color: colors.text }]}>
+                {he ? 'הוסף זיכרון' : 'Add memory'}
+              </Text>
+              <Text style={[styles.settingsLinkChev, { color: colors.textSecondary }]}>+</Text>
+            </Pressable>
           </View>
         </Section>
 
@@ -1328,39 +1618,13 @@ function agendaColor(item: AgendaItem): string {
   return '#94A3B8'; // stuck — gray
 }
 
-function Stat({
-  label,
-  value,
-  colors,
-  muted,
-}: {
-  label: string;
-  value: string;
-  colors: ReturnType<typeof useThemeStore>['colors'];
-  muted?: boolean;
-}) {
-  return (
-    <View style={styles.statCol}>
-      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <Text
-        style={[
-          styles.statValue,
-          { color: muted ? colors.textSecondary : colors.text },
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 function Section({
   title,
   colors,
   children,
 }: {
   title: string;
-  colors: ReturnType<typeof useThemeStore>['colors'];
+  colors: ThemeColors;
   children: React.ReactNode;
 }) {
   const lang = useLanguage();
@@ -1374,48 +1638,6 @@ function Section({
   );
 }
 
-function Segmented<T extends string>({
-  options,
-  selected,
-  onChange,
-  colors,
-}: {
-  options: { value: T; label: string }[];
-  selected: T;
-  onChange: (v: T) => void;
-  colors: ReturnType<typeof useThemeStore>['colors'];
-}) {
-  return (
-    <View style={[styles.segmented, { backgroundColor: colors.surface }]}>
-      {options.map((opt) => {
-        const active = opt.value === selected;
-        return (
-          <Pressable
-            key={opt.value}
-            onPress={() => onChange(opt.value)}
-            style={({ pressed }) => [
-              styles.segmentedOption,
-              active && { backgroundColor: colors.background },
-              { opacity: pressed ? 0.85 : 1 },
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentedLabel,
-                {
-                  color: active ? colors.text : colors.textSecondary,
-                  fontWeight: active ? '600' : '500',
-                },
-              ]}
-            >
-              {opt.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -1488,69 +1710,47 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     zIndex: 10,
   },
-  switcherBar: {
-    borderRadius: 24,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  switcherContent: {
+  // Centred row of floating buttons — locked LTR so + stays left, active pill
+  // right, regardless of app language.
+  switcherRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 2,
-  },
-  // Hebrew: profiles read right-to-left (first one hugs the right edge).
-  switcherContentRTL: {
-    flexDirection: 'row-reverse',
-  },
-  profilePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  profilePillAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    ...(Platform.OS !== 'web' ? { direction: 'ltr' as const } : {}),
   },
-  profilePillInitial: {
-    fontSize: 12,
-    fontWeight: '700',
+  // A plain floating circle — the + and each inactive profile. Soft shadow so it
+  // reads as a button on the page, no enclosing bar.
+  switcherCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
-  profilePillName: {
-    fontSize: 14,
-    fontWeight: '600',
-    maxWidth: 130,
-  },
-  addPill: {
+  // The active profile — a solid dark pill with the name + its type icon.
+  switcherActivePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
+    gap: 8,
+    height: 52,
+    paddingHorizontal: 20,
+    borderRadius: 26,
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
-  addPillPlus: {
+  switcherActiveName: {
     fontSize: 17,
-    fontWeight: '600',
-    lineHeight: 19,
-  },
-  addPillText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+    maxWidth: 150,
   },
 
   // Hero: big Orb + ONE + rotating subline + upgrade.
@@ -1558,6 +1758,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingTop: 12,
+  },
+  // Orb + its call ring. 132 square = the 120 orb centred with ~6px around it,
+  // so the ring hugs the orb's edge.
+  oneOrbWrap: {
+    width: 132,
+    height: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  oneCallRing: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    borderWidth: 2.5,
+    borderColor: '#22C55E',
+  },
+  // Small pencil on the orb's corner (edit ONE's look).
+  editOrbBtn: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  // "ONE" + its verified badge, on one centred row. Fixed LTR so the badge
+  // always sits AFTER (to the right of) the Latin "ONE", regardless of language.
+  heroTitleRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    gap: 8,
   },
   heroTitle: {
     fontSize: 28,
@@ -1651,6 +1894,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  // Toolbox — ONE's capabilities as rows with a toggle (live) or "soon" tag.
+  toolList: { gap: 8, marginTop: 4 },
+  toolRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+  },
+  toolEmoji: { fontSize: 19 },
+  toolTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  toolName: { fontSize: 14, fontWeight: '700' },
+  toolProTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  toolDesc: { fontSize: 12, marginTop: 2 },
+  toolTgl: { width: 42, height: 26, borderRadius: 999, justifyContent: 'center', paddingHorizontal: 3 },
+  toolKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
+  toolKnobOn: { alignSelf: 'flex-end' },
+  toolKnobOff: { alignSelf: 'flex-start' },
+  toolSoon: {
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
   // A tappable "manage / upgrade" row (memory, plan).
   manageRow: {
     flexDirection: 'row',
@@ -1665,6 +1942,47 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     fontWeight: '600',
   },
+  // "What ONE knows about you" — group labels + the paired add actions.
+  knowGroupLabel: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.4, marginTop: 16, marginBottom: 2 },
+  knowActionsRow: { flexDirection: 'row', gap: 8 },
+  knowAction: { flex: 1, justifyContent: 'center' },
+  // "What ONE remembers" — the memory list.
+  memoryEmpty: { fontSize: 14, lineHeight: 20 },
+  memoryList: { gap: 8 },
+  memoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  memoryText: { flex: 1, fontSize: 14.5, lineHeight: 20 },
+  // ── Selective disclosure — the permissioned-representative control. ──────
+  discList: { gap: 8, marginTop: 6 },
+  discRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  discMain: { flex: 1, gap: 2 },
+  discLabel: { fontSize: 14.5, fontWeight: '600' },
+  discValue: { fontSize: 12.5, lineHeight: 16 },
+  discTier: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  discTierDot: { width: 7, height: 7, borderRadius: 4 },
+  discTierText: { fontSize: 12.5, fontWeight: '700' },
+  discSummary: { fontSize: 12.5, lineHeight: 18, marginTop: 10 },
   // Centre slot in the sticky header — holds the compact title that fades in
   // as the big name scrolls away. Flexes so ⋮ / X stay pinned to the edges.
   headerTitleSlot: {
@@ -1697,22 +2015,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginTop: 4,
   },
-  statCol: {
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  statValue: {
-    fontSize: 22,
-    fontWeight: '700',
-  },
-
   chevronDown: {
     alignItems: 'center',
     opacity: 0.5,
@@ -1778,20 +2080,6 @@ const styles = StyleSheet.create({
   },
   activityText: { fontSize: 14, lineHeight: 19, fontWeight: '500' },
   activitySub: { fontSize: 12, marginTop: 2 },
-
-  segmented: {
-    flexDirection: 'row',
-    borderRadius: 14,
-    padding: 4,
-    gap: 4,
-  },
-  segmentedOption: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  segmentedLabel: { fontSize: 14 },
 
   // Identities list rendered as a single card with internal rows.
   identitiesCard: {
