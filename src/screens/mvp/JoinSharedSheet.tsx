@@ -14,14 +14,8 @@ import { useThemeStore } from '../../stores/themeStore';
 import { useLanguage } from '../../i18n/useT';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
-import {
-  joinSharedUnit,
-  getSharedMessages,
-  postSharedMessage,
-  type SharedUnitRow,
-  type SharedMessage,
-  type SharedSnapshot,
-} from '../../services/cloudShared';
+import { joinSharedUnit, type SharedUnitRow, type SharedSnapshot } from '../../services/cloudShared';
+import { SharedThread } from '../../components/mvp/SharedThread';
 
 export function JoinSharedSheet({
   visible,
@@ -39,15 +33,13 @@ export function JoinSharedSheet({
   const [code, setCode] = useState('');
   const [name, setName] = useState(myName);
   const [row, setRow] = useState<SharedUnitRow | null>(null);
-  const [messages, setMessages] = useState<SharedMessage[]>([]);
-  const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   // Fresh each time the sheet opens.
   useEffect(() => {
     if (!visible) {
-      setRow(null); setMessages([]); setCode(''); setText(''); setErr(null);
+      setRow(null); setCode(''); setErr(null);
     } else {
       setName(myName || (he ? 'אורח' : 'Guest'));
     }
@@ -58,33 +50,13 @@ export function JoinSharedSheet({
     if (!c) return;
     haptic.tap(); setBusy(true); setErr(null);
     const r = await joinSharedUnit(c, name.trim() || (he ? 'אורח' : 'Guest'));
+    setBusy(false);
     if (!r) {
-      setBusy(false);
       setErr(he ? 'קוד לא נמצא, או אין חיבור כרגע.' : 'Code not found, or no connection right now.');
       return;
     }
     setRow(r);
-    setMessages(await getSharedMessages(r.code));
-    setBusy(false);
   }, [code, name, he]);
-
-  // Poll the thread while joined + visible.
-  useEffect(() => {
-    if (!visible || !row) return;
-    const id = setInterval(async () => {
-      setMessages(await getSharedMessages(row.code));
-    }, 4000);
-    return () => clearInterval(id);
-  }, [visible, row]);
-
-  const send = useCallback(async () => {
-    const t = text.trim();
-    if (!row || !t) return;
-    haptic.select();
-    setText('');
-    const posted = await postSharedMessage(row.code, name.trim() || (he ? 'אורח' : 'Guest'), 'human', t);
-    if (posted) setMessages((m) => [...m, posted]);
-  }, [row, text, name, he]);
 
   const snap = (row?.unit ?? {}) as SharedSnapshot;
 
@@ -143,44 +115,14 @@ export function JoinSharedSheet({
               </Text>
             )}
 
-            <View style={styles.thread}>
-              {messages.length === 0 ? (
-                <Text style={[styles.sub, { color: colors.textSecondary }, rtlText(lang)]}>
-                  {he ? 'אין הודעות עדיין — כתוב הודעה ראשונה.' : 'No messages yet — say hello.'}
-                </Text>
-              ) : messages.map((m) => {
-                const mine = m.author === name;
-                return (
-                  <View
-                    key={m.id}
-                    style={[
-                      styles.msg,
-                      mine ? styles.msgMine : styles.msgTheirs,
-                      { backgroundColor: mine ? colors.text : colors.surface, borderColor: colors.border },
-                    ]}
-                  >
-                    <Text style={[styles.msgAuthor, { color: mine ? colors.background : colors.textSecondary }]}>
-                      {m.role === 'one' ? `${m.author} · ONE` : m.author}
-                    </Text>
-                    <Text style={[styles.msgText, { color: mine ? colors.background : colors.text }]}>{m.text}</Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            <View style={[styles.replyRow, rtlRow(lang)]}>
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder={he ? 'כתוב תשובה…' : 'Write a reply…'}
-                placeholderTextColor={colors.textSecondary}
-                onSubmitEditing={send}
-                style={[styles.reply, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }, rtlText(lang)]}
-              />
-              <Pressable onPress={send} style={[styles.sendBtn, { backgroundColor: colors.text }]} accessibilityRole="button">
-                <Text style={[styles.primaryText, { color: colors.background }]}>{he ? 'שלח' : 'Send'}</Text>
-              </Pressable>
-            </View>
+            <SharedThread
+              code={row.code}
+              myName={name}
+              role="human"
+              active={visible}
+              colors={colors}
+              lang={lang}
+            />
           </View>
         )}
       </BottomSheetScrollView>

@@ -86,6 +86,7 @@ import { CloseIcon, MenuIcon, SpeakerIcon, MicIcon, MicOffIcon, CameraIcon } fro
 import { InputBar } from '../../components/mvp/InputBar';
 import { InlinePrompt, type InlinePromptConfig } from '../../components/mvp/InlinePrompt';
 import { SharedProcessPreview } from '../../components/mvp/SharedProcessPreview';
+import { SharedThreadOverlay } from '../../components/mvp/SharedThreadOverlay';
 import { shareUnit } from '../../services/cloudShared';
 import { ActionMenu, type ActionMenuItem } from '../../components/mvp/ActionMenu';
 import { relativeWhen, activityKindMeta } from '../../utils/activity';
@@ -348,6 +349,8 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
   const [promptConfig, setPromptConfig] = useState<InlinePromptConfig | null>(null);
   // "What the other side sees" preview (shared/public processes) — overlay slot.
   const [previewOpen, setPreviewOpen] = useState(false);
+  // The owner's view of the shared conversation (when the process has a code).
+  const [threadOpen, setThreadOpen] = useState(false);
   // In-process voice call — a self-contained call mode inside this sheet (the
   // top-level home call dock is behind this Modal, so it can't reach here). The
   // orb call-presence shows at the top and the dock switches to call controls.
@@ -1547,6 +1550,21 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
               />
             );
           })()}
+          {threadOpen && unit.shareCode && (
+            <SharedThreadOverlay
+              visible
+              code={unit.shareCode}
+              myName={
+                disclosureForIdentity(unit.identityId).find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim())?.value?.trim()
+                ?? unitIdentity?.name
+                ?? 'ONE'
+              }
+              providerName={unit.people?.[0]?.name}
+              onClose={() => setThreadOpen(false)}
+              colors={colors}
+              lang={lang}
+            />
+          )}
         </>
       }
     >
@@ -1637,6 +1655,7 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
             onShareWithOne={shareWithOne}
             onComposeDraft={composeDraft}
             onPreview={() => setPreviewOpen(true)}
+            onOpenThread={() => setThreadOpen(true)}
             isDrafting={isDrafting}
             doubleTap={doubleTap}
             onTapQuickAction={(label) => {
@@ -1718,6 +1737,7 @@ function ProfileView({
   onShareWithOne,
   onComposeDraft,
   onPreview,
+  onOpenThread,
   isDrafting,
   doubleTap,
 }: {
@@ -1732,6 +1752,7 @@ function ProfileView({
   onShareWithOne?: () => void;
   onComposeDraft?: () => void;
   onPreview?: () => void;
+  onOpenThread?: () => void;
   isDrafting?: boolean;
   doubleTap: ReturnType<typeof Gesture.Tap>;
 }) {
@@ -2296,6 +2317,18 @@ function ProfileView({
                 >
                   <Text style={[styles.previewRowText, { color: colors.text }, rtlText(lang)]}>
                     {he ? '👁 מה שהצד השני רואה' : '👁 What the other side sees'}
+                  </Text>
+                  <Text style={[styles.previewRowChev, { color: colors.textSecondary }]}>{he ? '‹' : '›'}</Text>
+                </Pressable>
+              )}
+              {!!unit.shareCode && (
+                <Pressable
+                  onPress={() => { haptic.tap(); onOpenThread?.(); }}
+                  style={({ pressed }) => [styles.previewRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }, rtlRow(lang)]}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.previewRowText, { color: colors.text }, rtlText(lang)]}>
+                    {he ? '💬 שיחה משותפת' : '💬 Shared conversation'}
                   </Text>
                   <Text style={[styles.previewRowChev, { color: colors.textSecondary }]}>{he ? '‹' : '›'}</Text>
                 </Pressable>
