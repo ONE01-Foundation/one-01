@@ -81,7 +81,6 @@ import { quizForText, buildQuizRun } from '../../data/mvp/quizBank';
 import { bookingForText, buildBookingRun } from '../../data/mvp/booking';
 import { formForText, buildFormRun } from '../../data/mvp/forms';
 import { toolEnabled } from '../../data/mvp/tools';
-import { PullUpSheet } from '../../components/mvp/PullUpSheet';
 import { ONBOARDING_EXAMPLE_UNITS } from '../../data/mvp/onboardingExamples';
 import { personalityPrompt } from '../../data/mvp/agentAppearance';
 import { generateOneReply } from '../../utils/mvpChatReply';
@@ -956,9 +955,6 @@ export function HomeScreen({
   // onLayout without a stale closure).
   const inputFocusedRef = useRef(false);
   useEffect(() => { inputFocusedRef.current = inputFocused; }, [inputFocused]);
-  // Processes pull-up sheet: opened by the up-chevron above the input, closed by
-  // dragging it down or tapping the scrim. Hidden (height 0) when closed.
-  const [sheetOpen, setSheetOpen] = useState(false);
   // The process the conversation is currently ABOUT (last one ONE touched in
   // chat) — threaded to ONE as the active context so follow-ups keep filling it.
   const [activeChatUnitId, setActiveChatUnitId] = useState<string | null>(null);
@@ -3251,10 +3247,9 @@ export function HomeScreen({
 
   // 0 closed → 1 open for the processes pull-up sheet; drives the backdrop that
   // dims the chat behind the sheet while it's open.
+  // Kept at 0 (the processes are inline now, no sheet) — still read by the
+  // chevron's opacity math below.
   const sheetProgress = useSharedValue(0);
-  const sheetScrimStyle = useAnimatedStyle(() => ({
-    opacity: sheetProgress.value * 0.34,
-  }));
   // Idle-fade opacity shared by BOTH hint chevrons (declared here so the bottom
   // chevron's style below can read it). 0 at rest/during the splash; wakeChevron
   // fades them in → holds → fades out, and any home touch wakes them again.
@@ -4420,9 +4415,15 @@ export function HomeScreen({
                 )}
               </View>
 
-              {/* Processes/spaces no longer live in the chat scroll — they're in
-                  the pull-up sheet below (see <PullUpSheet>). The chat scroll is
-                  now pure conversation. */}
+              {/* Processes/spaces live INLINE in the scroll now (no sheet):
+                  below the full-screen hero, so they're revealed by scrolling
+                  down past the figure — as ONE shrinks up to the top bar, the
+                  process list slides into view. */}
+              {hasOnboarded && (
+                <View style={styles.processesInline}>
+                  {processesContent}
+                </View>
+              )}
             </Animated.ScrollView>
             </GestureDetector>
 
@@ -4833,46 +4834,17 @@ export function HomeScreen({
           </View>
         )}
 
-        {/* Spaces / processes — a bottom sheet opened by the up-chevron above the
-            input. Closed it's hidden (no bar); open, a WHITE sheet slides up from
-            the bottom and the chat behind dims. Tap the scrim or drag down to
-            close. Only once onboarded; hidden during a call. */}
-        {hasOnboarded && !callActive && (
-          <AnimatedPressable
-            // Full-screen dim behind the sheet; tap it to close. The open sheet
-            // (zIndex above the dock) covers the input, so the dim only ever
-            // shows over the chat ABOVE the sheet.
-            pointerEvents={sheetOpen ? 'auto' : 'none'}
-            onPress={() => setSheetOpen(false)}
-            style={[styles.sheetScrim, sheetScrimStyle]}
-          />
-        )}
-        {hasOnboarded && !callActive && (
-          <PullUpSheet
-            open={sheetOpen}
-            onClose={() => setSheetOpen(false)}
-            expandedHeight={Math.round(SCREEN_H * 0.62)}
-            // Slides up from the very bottom of the screen (inside the
-            // SafeAreaView, so bottom:0 already clears the home indicator).
-            bottomOffset={0}
-            progress={sheetProgress}
-          >
-            {processesContent}
-          </PullUpSheet>
-        )}
-
-        {/* Up-chevron above the input → opens the processes sheet from the
-            bottom. box-none so only the small arrow captures taps; it fades out
-            on scroll, while typing, and as the sheet opens. */}
+        {/* Down-chevron → scrolls the home DOWN into the inline process list
+            (no sheet). box-none so only the small arrow captures taps; it fades
+            out on scroll, while typing, etc. */}
         {hasOnboarded && !callActive && (
           <Animated.View
             pointerEvents="box-none"
             style={[styles.processesChevron, { bottom: Math.round(SCREEN_H / 2) - CHEVRON_CENTER_GAP }, processesChevronStyle]}
           >
             <Pressable
-              onPress={() => { haptic.press(); Keyboard.dismiss(); setSheetOpen(true); }}
+              onPress={() => { haptic.press(); Keyboard.dismiss(); scrollRef.current?.scrollTo({ y: SNAP_OPEN, animated: true }); }}
               hitSlop={18}
-              disabled={sheetOpen}
               accessibilityRole="button"
               accessibilityLabel={lang === 'he' ? 'פתח תהליכים ומרחבים' : 'Open processes'}
             >
@@ -5581,6 +5553,14 @@ const styles = StyleSheet.create({
   // ── Empty-processes state — rendered INSIDE the cards scroll surface (not
   // on the resting hero). Fills the same minHeight the card list reserves so
   // it lands centered when the user pulls the surface up.
+  // Processes list, inline in the home scroll (below the hero). Reserves at
+  // least a screen so even a short/empty list still lets the home scroll far
+  // enough to fully collapse the figure up to the top bar.
+  processesInline: {
+    minHeight: SNAP_OPEN,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+  },
   emptyCardsState: {
     minHeight: SNAP_OPEN,
     alignItems: 'center',
