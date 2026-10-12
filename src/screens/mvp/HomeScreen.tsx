@@ -2537,6 +2537,29 @@ export function HomeScreen({
     dwellFor: chatPromptDwell,
   });
 
+  // ONE's ambient channel — the subtle line UNDER the composer at rest. It's
+  // where ONE quietly "speaks" when there's no conversation open: a slow
+  // rotation of short, present invitations in ONE's own voice, with the Upgrade
+  // invite woven in as the final beat of each round. Tapping a ONE line opens
+  // the chat (ONE reaching out); tapping the Upgrade beat opens plans. The whole
+  // row collapses + fades as you pull into the processes (homeUpgradeStyle), so
+  // it IS the "שורת שדרוג" that disappears on scroll — just now it carries ONE's
+  // voice, not a dead CTA. Neutral Hebrew phrasing so it fits any gender.
+  const BOX_CHANNEL_UPGRADE = '__one_box_upgrade__';
+  const boxChannelLines = useMemo<string[]>(() => {
+    const base =
+      lang === 'he'
+        ? ['אני כאן — אפשר לדבר על כל דבר.', 'יש משהו לקדם?', 'אפשר גם פשוט לדבר.', 'מה חשוב עכשיו?']
+        : ["I'm here — talk to me about anything.", 'Anything to move forward?', 'We can just talk, too.', 'What matters right now?'];
+    return onUpgrade ? [...base, BOX_CHANNEL_UPGRADE] : base;
+  }, [lang, onUpgrade]);
+  const { line: boxChannelRaw, index: boxChannelIdx } = useBroadcastNavigator(boxChannelLines, {
+    autoCycle: hasOnboarded && !chatActive && !recording && !signInOpen,
+    seedIndex: 0,
+    dwellFor: chatPromptDwell,
+  });
+  const boxChannelIsUpgrade = boxChannelLines[boxChannelIdx] === BOX_CHANNEL_UPGRADE;
+
   // Sign-in sheet open → broadcast reads as the sign-in headline so the
   // home surface frames the sheet. Takes priority over chat prompt / loop.
   // Neutral — the sign-in sheet is used both to CONNECT for the first time and
@@ -3099,6 +3122,15 @@ export function HomeScreen({
   const broadcastLineStyle = useAnimatedStyle(() => ({
     opacity: broadcastLineOpacity.value,
   }));
+
+  // Crossfade the under-box channel line when it rotates — ONE "speaking" its
+  // next line, not flipping a card.
+  const boxChannelOpacity = useSharedValue(1);
+  useEffect(() => {
+    boxChannelOpacity.value = 0;
+    boxChannelOpacity.value = withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) });
+  }, [boxChannelIdx, boxChannelOpacity]);
+  const boxChannelTextStyle = useAnimatedStyle(() => ({ opacity: boxChannelOpacity.value }));
 
   // Orb scale animation has three states:
   //   • resting (default): slow 2.4s breath — "alive but quiet"
@@ -4985,27 +5017,50 @@ export function HomeScreen({
                   • not yet     → "Already have ONE? Sign in" (connect first).
                   Hidden while chatting. */}
               {!chatActive && (hasOnboarded ? onUpgrade : onSignIn) && (
+                // One line under the composer. For an onboarded user it's ONE's
+                // ambient channel — a rotating line in ONE's own voice (tap →
+                // opens the chat, ONE reaching out), with the Upgrade invite as
+                // the last beat of the round (tap → plans). Before onboarding it
+                // stays the "Already have ONE? Sign in" invite.
                 <AnimatedPressable
-                  onPress={() => (hasOnboarded ? onUpgrade?.() : onSignIn?.())}
+                  onPress={() => {
+                    if (!hasOnboarded) { onSignIn?.(); return; }
+                    if (boxChannelIsUpgrade) { onUpgrade?.(); return; }
+                    haptic.tap();
+                    setChatReturnFocus((n) => n + 1); // focus the box → open chat
+                  }}
                   hitSlop={8}
                   style={[styles.upgradeRow, homeUpgradeStyle]}
                   accessibilityRole="button"
                   accessibilityLabel={
-                    hasOnboarded
-                      ? lang === 'he' ? 'שדרוג' : 'Upgrade'
-                      : lang === 'he' ? 'התחברות' : 'Sign in'
+                    !hasOnboarded
+                      ? lang === 'he' ? 'התחברות' : 'Sign in'
+                      : boxChannelIsUpgrade
+                        ? lang === 'he' ? 'שדרוג' : 'Upgrade'
+                        : boxChannelRaw
                   }
                 >
-                  <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
-                    {hasOnboarded
-                      ? lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '
-                      : lang === 'he' ? 'כבר יש לך ONE? ' : 'Already have ONE? '}
-                  </Text>
-                  <Text style={[styles.upgradeLink, { color: colors.text }]}>
-                    {hasOnboarded
-                      ? lang === 'he' ? 'שדרוג' : 'Upgrade'
-                      : lang === 'he' ? 'התחבר' : 'Sign in'}
-                  </Text>
+                  {hasOnboarded && !boxChannelIsUpgrade ? (
+                    <Animated.Text
+                      numberOfLines={1}
+                      style={[styles.upgradePrompt, { color: colors.textSecondary }, boxChannelTextStyle]}
+                    >
+                      {boxChannelRaw}
+                    </Animated.Text>
+                  ) : (
+                    <>
+                      <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
+                        {hasOnboarded
+                          ? lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '
+                          : lang === 'he' ? 'כבר יש לך ONE? ' : 'Already have ONE? '}
+                      </Text>
+                      <Text style={[styles.upgradeLink, { color: colors.text }]}>
+                        {hasOnboarded
+                          ? lang === 'he' ? 'שדרוג' : 'Upgrade'
+                          : lang === 'he' ? 'התחבר' : 'Sign in'}
+                      </Text>
+                    </>
+                  )}
                 </AnimatedPressable>
               )}
             </>
