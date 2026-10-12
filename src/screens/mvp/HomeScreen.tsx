@@ -123,6 +123,11 @@ import { enrichUnitFromArchetype, generateRichUnit, detectArchetypeStrict } from
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
 
+// The up/down hint chevrons sit SYMMETRICALLY about the screen's vertical
+// centre — the top one this far above centre, the bottom one the same distance
+// below — so they read as one matched pair framing the figure + composer.
+const CHEVRON_CENTER_GAP = Math.round(SCREEN_H * 0.34);
+
 // Visual footprint of the bottom dock — capsule (72) + outer padding (10+4).
 // The dock is now flush to the safe-area bottom (bottom:0), so no extra
 // offset to account for. Used to inset the cards list and the messages
@@ -2758,7 +2763,7 @@ export function HomeScreen({
   // orb just above the composer, like being handed the mic. These are the
   // offsets that bring them together: the orb rises a touch above dead-centre
   // and the input lifts up from the bottom to sit just beneath it.
-  const SLEEP_PAIR_GAP = 36; // gap between the orb's bottom and the input's top
+  const SLEEP_PAIR_GAP = 56; // gap between the orb's bottom and the input's top
   const SLEEP_ORB_RAISE = Math.round((SLEEP_PAIR_GAP + INPUT_BAR_H) / 2);
   const SLEEP_INPUT_LIFT = Math.max(
     0,
@@ -3243,10 +3248,18 @@ export function HomeScreen({
   const sheetScrimStyle = useAnimatedStyle(() => ({
     opacity: sheetProgress.value * 0.34,
   }));
-  // The up-chevron that opens the processes sheet — fades out as the user
-  // scrolls into the cards, while the keyboard is up, and as the sheet opens.
+  // Idle-fade opacity shared by BOTH hint chevrons (declared here so the bottom
+  // chevron's style below can read it). 0 at rest/during the splash; wakeChevron
+  // fades them in → holds → fades out, and any home touch wakes them again.
+  const chevronIdleOpacity = useSharedValue(0);
+  const upChevronOpacity = useSharedValue(0);
+  // The down-chevron (opens the processes list) — the SAME idle fade as the top
+  // one (so it never flashes over the splash and disappears after its hold),
+  // further faded out as the user scrolls into the cards / the keyboard opens /
+  // the sheet opens.
   const processesChevronStyle = useAnimatedStyle(() => ({
     opacity:
+      chevronIdleOpacity.value *
       interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP) *
       (1 - kbOpenSV.value) *
       (1 - sheetProgress.value),
@@ -3666,8 +3679,8 @@ export function HomeScreen({
   // First reveal waits for the splash/intro (dot grows → eyes open → rise →
   // broadcast settles, ~1.8s) so the arrows never flash over the rising face.
   const CHEVRON_INTRO_DELAY_MS = 1900;
-  const chevronIdleOpacity = useSharedValue(0);
-  const upChevronOpacity = useSharedValue(0);
+  // (chevronIdleOpacity / upChevronOpacity are declared higher up, above
+  // processesChevronStyle, so that worklet can read the idle fade.)
 
   // Gentle fade in → hold → fade out, applied to BOTH arrows at once. Pure
   // opacity — nothing moves. (Named `wakeChevron` because several call sites
@@ -4459,7 +4472,7 @@ export function HomeScreen({
                 // Exact mirror of the bottom chevron: same size (26), same icon
                 // flipped 180° (points up), positioned symmetric ABOVE the orb
                 // by the same ~161px the bottom one sits below its centre.
-                style={[styles.globalChevron, { top: Math.max(insets.top - 18, 4) }, upChevronStyle]}
+                style={[styles.globalChevron, { top: Math.round(SCREEN_H / 2) - CHEVRON_CENTER_GAP }, upChevronStyle]}
               >
                 {/* Tap the up arrow → ONE01 Global (same destination as the
                     pull-down gesture). */}
@@ -4841,7 +4854,7 @@ export function HomeScreen({
         {hasOnboarded && !callActive && (
           <Animated.View
             pointerEvents="box-none"
-            style={[styles.processesChevron, { bottom: INPUT_BAR_H + insets.bottom + 36 }, processesChevronStyle]}
+            style={[styles.processesChevron, { bottom: Math.round(SCREEN_H / 2) - CHEVRON_CENTER_GAP }, processesChevronStyle]}
           >
             <Pressable
               onPress={() => { haptic.press(); Keyboard.dismiss(); setSheetOpen(true); }}
