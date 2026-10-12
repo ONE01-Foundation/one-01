@@ -342,6 +342,7 @@ function HomeWithOverlays() {
         }}
         signInOpen={s.signInOpen}
         profileOpen={s.oneProfileOpen}
+        settingsOpen={s.settingsOpen}
         quickActionsOpen={s.quickActionsOpen}
         // A process sheet is open over Home → HomeScreen drops the chat keyboard
         // on open and brings it back on close.

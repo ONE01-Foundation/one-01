@@ -316,6 +316,10 @@ interface HomeScreenProps {
    *  (shrinks + fades) so the face reads as moving INTO the profile, which
    *  grows its own orb in from zero. A clean cross-fade hand-off. */
   profileOpen?: boolean;
+  /** True while ONE's Settings sheet is open (long-press the orb). Treated like
+   *  the profile for the figure hand-off: the figure shrinks to a dot in place
+   *  (no rise / box-drop). */
+  settingsOpen?: boolean;
   /** True while the Quick Actions (+) sheet is open. When it closes and the
    *  user had opened it FROM an active chat with the keyboard up, we bring the
    *  keyboard back so they land straight back in typing. */
@@ -614,6 +618,7 @@ export function HomeScreen({
   onCreatedFromChat,
   signInOpen = false,
   profileOpen = false,
+  settingsOpen = false,
   quickActionsOpen = false,
   unitOpen = false,
   anySheetOpen = false,
@@ -3089,28 +3094,53 @@ export function HomeScreen({
   // chat, a call, a sheet, sign-in or a profile). Scroll unwinding is handled
   // separately by scrollRestFactor.
   useEffect(() => {
-    const atRest = !chatActive && !callActive && !anySheetOpen && !signInOpen && !profileOpen && !inputFocused;
+    // Profile / settings are an EXCEPTION: the figure + composer stay centred
+    // (the figure just shrinks to a dot in place via dotProgress), so don't
+    // unwind the pair for them even though they count as an open sheet.
+    const overlayUnwinds = anySheetOpen && !profileOpen && !settingsOpen;
+    const atRest = !chatActive && !callActive && !overlayUnwinds && !signInOpen && !inputFocused;
     restPairGate.value = withTiming(atRest ? 1 : 0, {
       duration: atRest ? 320 : 220,
       easing: Easing.out(Easing.cubic),
     });
-  }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, inputFocused, restPairGate]);
+  }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, settingsOpen, inputFocused, restPairGate]);
 
-  // ONE's soft, slowly-rotating status line shown INSIDE the composer — but ONLY
-  // in the HOME rest pose (centred pair). The moment the user scrolls into the
-  // processes list (`inCards`) — or opens the chat — it's gone, so the scrolled
-  // composer stays a clean caret. Subtle (textSecondary) with a blinking caret.
-  const IDLE_LINES = lang === 'he'
-    ? ['אני כאן אם צריך', 'על מה נדבר?', 'משהו שבא לך לקדם?', 'אפשר גם פשוט לדבר', 'מה חשוב עכשיו?', 'אני ער — רק תגיד']
-    : ["I'm here if you need me", 'What should we talk about?', 'Anything on your mind?', 'We can just talk, too', 'What matters right now?'];
+  // ONE's status line INSIDE the composer — shown ONLY in the HOME rest pose
+  // (gone the moment you scroll into the processes / open the chat). It is
+  // deliberately CALM, not naggy: ONE speaks a line, then goes quiet for a beat
+  // or two (empty `''` entries = just the caret). The pool mixes:
+  //   • time-aware lines (good morning / late / weekend …),
+  //   • a couple of gentle invites,
+  //   • the occasional "from the network" note (ambient — real followed-channel
+  //     content will slot in here once the following system is wired).
+  // Keyed on the time bucket (part-of-day) so it's stable, not rebuilt each tick.
+  const idleBucket = timeBucket(nowTick);
+  const statusPool = useMemo<string[]>(() => {
+    const he = lang === 'he';
+    const times = timeAwareLines(lang, nowTick); // 1–3 context lines
+    const invites = he
+      ? ['אני כאן אם צריך', 'משהו שבא לך לקדם?', 'אפשר גם פשוט לדבר']
+      : ["I'm here if you need me", 'Anything on your mind?', 'We can just talk, too'];
+    const network = he
+      ? ['משהו זז ברשת — אני עוקב בשבילך.', 'יש תנועה בתחומים שמעניינים אותך.']
+      : ["Something's moving in your network — I'm watching.", 'There’s activity in the areas you follow.'];
+    // One line, then QUIET (two empty beats), so ONE pauses between thoughts.
+    const spoken = [times[0], invites[0], network[0], times[1] ?? invites[1], invites[2], network[1] ?? '']
+      .filter((s) => !!s);
+    const pool: string[] = [];
+    spoken.forEach((line) => pool.push(line, '', ''));
+    return pool.length ? pool : [''];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang, idleBucket]);
   const [idleLineIdx, setIdleLineIdx] = useState(0);
   const idleLineActive = hasOnboarded && !chatActive && !inCards;
   useEffect(() => {
     if (!idleLineActive) return;
-    const id = setInterval(() => setIdleLineIdx((i) => i + 1), 4000);
+    const id = setInterval(() => setIdleLineIdx((i) => i + 1), 4500);
     return () => clearInterval(id);
   }, [idleLineActive]);
-  const idleLine = idleLineActive ? IDLE_LINES[idleLineIdx % IDLE_LINES.length] : undefined;
+  // '' entries render as just the caret (InputBar's showIdle needs non-empty text).
+  const idleLine = idleLineActive ? statusPool[idleLineIdx % statusPool.length] : undefined;
 
   // The hero's eyes fade in on the splash → home handoff (eyesOpacityMount) and
   // stay open at rest. Pulling toward Global fades them out, AND idle-sleep now
@@ -3198,15 +3228,33 @@ export function HomeScreen({
   }, [profileOpen, profileSheetIndex, fallbackProfileIndex]);
   const profileIdx = profileSheetIndex ?? fallbackProfileIndex;
 
-  // Opening the profile no longer makes the hero VANISH — instead it "goes to
-  // sleep": the eyes shut and it becomes the bare black dot (splash state),
-  // then the eyes re-open as the profile closes. `profileEyeFactor` is 1 while
-  // the profile is closed (idx -1) and 0 once it's open (idx ≥ 0). We fold it
-  // into the hero's eye opacity + lid openness (both driven off the SAME
-  // underlying values, just multiplied by this).
+  // Settings (long-press the orb) uses the SAME figure→dot hand-off as the
+  // profile, but it has no finger-tracked index, so drive a simple 0→1 value
+  // off the boolean.
+  const settingsDotSV = useSharedValue(0);
+  useEffect(() => {
+    settingsDotSV.value = withTiming(settingsOpen ? 1 : 0, {
+      duration: settingsOpen ? 220 : 160,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [settingsOpen, settingsDotSV]);
+
+  // How far the figure has become its bare dot for the profile / settings
+  // hand-off (0 = full figure, 1 = shrunk dot). Opening EITHER shrinks the
+  // figure in place (eyes shut) — it does NOT rise or drop the composer.
+  const dotProgress = useDerivedValue(() => {
+    'worklet';
+    const profilePc = interpolate(profileIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP);
+    return Math.max(profilePc, settingsDotSV.value);
+  });
+
+  // Opening the profile/settings no longer makes the hero VANISH — instead it
+  // "goes to sleep": the eyes shut and it becomes the bare black dot (splash
+  // state), then re-open on close. 1 while closed, 0 once open. Folded into the
+  // hero's eye opacity + lid openness.
   const profileEyeFactor = useDerivedValue(() => {
     'worklet';
-    return interpolate(profileIdx.value, [-1, 0], [1, 0], Extrapolation.CLAMP);
+    return 1 - dotProgress.value;
   });
   const heroEyesOpacityFinal = useDerivedValue(() => {
     'worklet';
@@ -3540,16 +3588,17 @@ export function HomeScreen({
     // identical big-orb-at-rest treatment as the home.)
     const collapsedTarget = HERO_PROCESSES_ORB_SCALE;
     const collapseScale = 1 - f * (1 - collapsedTarget);
-    // Profile hand-off: the orb no longer VANISHES — it stays put, shuts its
-    // eyes (→ bare black dot, via heroEye*Final) AND shrinks a little, so it
-    // reads as ONE receding to a dot as its profile takes over. `pc` is 0 while
-    // closed, 1 once the profile is open; the scale eases to PROFILE_ORB_SHRINK.
-    const pc = interpolate(profileIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP);
+    // Profile / settings hand-off: the figure STAYS in place and just shrinks
+    // (eyes shut via heroEye*Final) into a bare black dot — it does NOT rise or
+    // drop the composer (restPairGate is kept engaged for these). `pc` = 0 while
+    // closed, 1 once open (profile finger-tracked OR settings). The scale eases
+    // to PROFILE_ORB_SHRINK.
+    const pc = dotProgress.value;
     const profileScale = 1 - pc * (1 - PROFILE_ORB_SHRINK);
-    // …and it GLIDES DOWN to screen centre as it shrinks — the same rest→centre
-    // delta the sleep drop uses, so the orb dives into its profile and rises
-    // back out on close. Gated by (1 - f): only the resting hero travels.
-    const profileDrop = pc * ORB_FROM_CENTER_OFFSET * (1 - f);
+    // A SMALL glide (just the pair-raise) so the shrinking dot settles to TRUE
+    // centre — consistent with the splash / sleep dot. Gated by (1 - f): only
+    // the resting hero travels.
+    const profileDrop = pc * SLEEP_ORB_RAISE * (1 - f);
     // Global pull: glide DOWN to mid-screen and shrink ~40% toward a bare dot.
     const gp = globalProgress.value;
     // Idle rest: the figure glides DOWN toward screen centre, but stops a touch
