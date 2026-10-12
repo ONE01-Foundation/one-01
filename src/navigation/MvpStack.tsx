@@ -30,6 +30,7 @@ import { UnitProfileSheet } from '../screens/mvp/UnitProfileSheet';
 import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
 import { OneProfileSheet } from '../screens/mvp/OneProfileSheet';
 import { GlobalSheet } from '../screens/mvp/GlobalSheet';
+import { JoinSharedSheet } from '../screens/mvp/JoinSharedSheet';
 import { BusinessSheet } from '../screens/mvp/BusinessSheet';
 import { CreateBusinessSheet } from '../screens/mvp/CreateBusinessSheet';
 import { DIRECTORY } from '../utils/businessDirectory';
@@ -115,6 +116,7 @@ type PendingSheet =
   | 'createIdentity'
   | 'createProcess'
   | 'createBusiness'
+  | 'joinShared'
   | 'delete'
   | { legal: NonNullable<LegalDoc> }
   | { unit: string }
@@ -229,6 +231,8 @@ function HomeWithOverlays() {
   // after the Modal has actually unmounted. A short setTimeout (40ms)
   // lets RN settle before mounting the next Modal.
   const [pendingSheet, setPendingSheet] = React.useState<PendingSheet | null>(null);
+  // The "join a shared process" sheet (provider side of a shared Unit).
+  const [joinOpen, setJoinOpen] = React.useState(false);
   // TRUE when the currently-open unit was reached via a card LONG-PRESS → the
   // sheet opens straight into chat with the keyboard up. A normal tap clears it.
   const [unitForceChat, setUnitForceChat] = React.useState(false);
@@ -239,6 +243,7 @@ function HomeWithOverlays() {
     setPendingSheet(null);
     setTimeout(() => {
       if (which === 'settings') s.setSettingsOpen(true);
+      else if (which === 'joinShared') setJoinOpen(true);
       else if (which === 'identity') s.setIdentityOpen(true);
       else if (which === 'createIdentity') s.setCreateIdentityOpen(true);
       else if (which === 'delete') s.setDeleteOpen(true);
@@ -362,7 +367,17 @@ function HomeWithOverlays() {
         openTimelineSignal={timelineSignal}
       />
       )}
-      <GlobalSheet visible={s.globalOpen} onClose={() => s.setGlobalOpen(false)} animatedIndex={globalSheetIndex} />
+      <GlobalSheet
+        visible={s.globalOpen}
+        onClose={() => { s.setGlobalOpen(false); openPending(); }}
+        onJoinShared={() => { setPendingSheet('joinShared'); s.setGlobalOpen(false); }}
+        animatedIndex={globalSheetIndex}
+      />
+      <JoinSharedSheet
+        visible={joinOpen}
+        onClose={() => setJoinOpen(false)}
+        myName={activeIdentityName ?? ''}
+      />
       <BusinessSheet
         visible={!!s.businessId}
         // Prefer the live cloud record (carries cloudId → follow + owner

@@ -63,6 +63,8 @@ import { generateRichUnitByKey, type ArchetypeKey } from '../../data/mvp/unitArc
 interface GlobalSheetProps {
   visible: boolean;
   onClose: () => void;
+  /** Open the "join a shared process by code" sheet (provider side). */
+  onJoinShared?: () => void;
   /** Live animated index (-1 closed … 0 open), written as the sheet slides so
    *  Home can fade its input dock back in sync with the close drag. */
   animatedIndex?: SharedValue<number>;
@@ -92,7 +94,7 @@ const ARCHETYPE_TITLE: Record<ArchetypeKey, [string, string]> = {
   travel: ['Plan a trip', 'תכנון טיול'],
 };
 
-export function GlobalSheet({ visible, onClose, animatedIndex }: GlobalSheetProps) {
+export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: GlobalSheetProps) {
   const { colors } = useThemeStore();
   const lang = useLanguage();
   const he = lang === 'he';
@@ -317,6 +319,21 @@ export function GlobalSheet({ visible, onClose, animatedIndex }: GlobalSheetProp
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Provider side: join a process someone shared with you, by code. */}
+        {onJoinShared && (
+          <Pressable
+            onPress={() => { haptic.tap(); onJoinShared(); }}
+            style={({ pressed }) => [styles.joinRow, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.8 : 1 }, rtlRow(lang)]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.joinEmoji}>🔗</Text>
+            <Text style={[styles.joinText, { color: colors.text }, rtl]} numberOfLines={1}>
+              {he ? 'הצטרף לתהליך משותף בעזרת קוד' : 'Join a shared process with a code'}
+            </Text>
+            <Text style={[styles.joinChev, { color: colors.textSecondary }]}>{he ? '‹' : '›'}</Text>
+          </Pressable>
+        )}
+
         {/* 1) LIVE WANTS — the loop, first, breathing space below the header. */}
         {loopCards.length > 0 ? (
           <CardLoop
@@ -754,6 +771,20 @@ const styles = StyleSheet.create({
   // paddingTop clears the absolute header AND gives the banner room to breathe
   // below the credits / close row. paddingBottom clears the floating input dock.
   content: { paddingHorizontal: 22, paddingTop: 84, paddingBottom: 132, gap: 14 },
+
+  // "Join a shared process by code" — the provider entry into the two-sided Unit.
+  joinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    paddingVertical: 13,
+    paddingHorizontal: 15,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  joinEmoji: { fontSize: 18 },
+  joinText: { flex: 1, fontSize: 14.5, fontWeight: '600' },
+  joinChev: { fontSize: 18, fontWeight: '700' },
 
   // Opaque band that everything below the loop sits on — the dropping front card
   // slides behind it and disappears (page colour → seamless, no visible seam).
