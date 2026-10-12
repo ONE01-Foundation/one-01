@@ -687,8 +687,11 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     // start BLACK and then flip to white mid-open (the status-bar "flick").
     setClockDark(false);
     // Profile by default; chat for unseen updates / a fresh conversation — OR
-    // when the user long-pressed the card (forceChat).
-    const openChat = forceChat || computeOpenInChat(unitId);
+    // when the user long-pressed the card (forceChat). A JOINED process (you're
+    // the provider) always opens to the profile, which leads with the shared
+    // conversation — the local AI chat isn't the point there.
+    const joinedHere = useMvpStore.getState().units.find((x) => x.id === unitId)?.sharedRole === 'human';
+    const openChat = !joinedHere && (forceChat || computeOpenInChat(unitId));
     // Seed sheetIndex to the snap we're about to present at (0 = half/profile,
     // 1 = full/chat) BEFORE gorhom takes over, so the dock's snap-offset is
     // correct from the first frame regardless of any stale value left behind by
@@ -1965,6 +1968,27 @@ function ProfileView({
       >
         {lines[lineIdx % lines.length]}
       </Animated.Text>
+
+      {/* JOINED process (you're the provider): the conversation IS the point —
+          lead with it, since the owner's steps/drafts aren't yours to fill. */}
+      {unit.sharedRole === 'human' && !!unit.shareCode && (
+        <Pressable
+          onPress={() => { haptic.tap(); onOpenThread?.(); }}
+          style={({ pressed }) => [styles.joinedConvo, { backgroundColor: colors.text, opacity: pressed ? 0.85 : 1 }, rtlRow(lang)]}
+          accessibilityRole="button"
+        >
+          <Text style={styles.joinedConvoEmoji}>💬</Text>
+          <View style={styles.flex1}>
+            <Text style={[styles.joinedConvoTitle, { color: colors.background }, rtlText(lang)]}>
+              {he ? 'פתח שיחה משותפת' : 'Open shared conversation'}
+            </Text>
+            <Text style={[styles.joinedConvoSub, { color: colors.background }, rtlText(lang)]} numberOfLines={1}>
+              {he ? `עם ${unit.people?.[0]?.name ?? 'הצד השני'}` : `With ${unit.people?.[0]?.name ?? 'the other side'}`}
+            </Text>
+          </View>
+          <Text style={[styles.joinedConvoChev, { color: colors.background }]}>{he ? '‹' : '›'}</Text>
+        </Pressable>
+      )}
 
       {/* Metrics — up to 3 as an even row; more scroll sideways. */}
       {allMetrics.length > 0 &&
@@ -3480,6 +3504,12 @@ const styles = StyleSheet.create({
   },
   previewRowText: { fontSize: 14, fontWeight: '600' },
   previewRowChev: { fontSize: 18, fontWeight: '700' },
+  // Joined-process (provider) conversation banner — the primary action.
+  joinedConvo: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, paddingVertical: 13, paddingHorizontal: 15, marginTop: 6 },
+  joinedConvoEmoji: { fontSize: 22 },
+  joinedConvoTitle: { fontSize: 15, fontWeight: '700' },
+  joinedConvoSub: { fontSize: 12.5, opacity: 0.72, marginTop: 1 },
+  joinedConvoChev: { fontSize: 20, fontWeight: '800' },
   personChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
