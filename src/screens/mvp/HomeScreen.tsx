@@ -2537,28 +2537,6 @@ export function HomeScreen({
     dwellFor: chatPromptDwell,
   });
 
-  // ONE's ambient channel — the subtle line UNDER the composer at rest. It's
-  // where ONE quietly "speaks" when there's no conversation open: a slow
-  // rotation of short, present invitations in ONE's own voice, with the Upgrade
-  // invite woven in as the final beat of each round. Tapping a ONE line opens
-  // the chat (ONE reaching out); tapping the Upgrade beat opens plans. The whole
-  // row collapses + fades as you pull into the processes (homeUpgradeStyle), so
-  // it IS the "שורת שדרוג" that disappears on scroll — just now it carries ONE's
-  // voice, not a dead CTA. Neutral Hebrew phrasing so it fits any gender.
-  const BOX_CHANNEL_UPGRADE = '__one_box_upgrade__';
-  const boxChannelLines = useMemo<string[]>(() => {
-    const base =
-      lang === 'he'
-        ? ['אני כאן — אפשר לדבר על כל דבר.', 'יש משהו לקדם?', 'אפשר גם פשוט לדבר.', 'מה חשוב עכשיו?']
-        : ["I'm here — talk to me about anything.", 'Anything to move forward?', 'We can just talk, too.', 'What matters right now?'];
-    return onUpgrade ? [...base, BOX_CHANNEL_UPGRADE] : base;
-  }, [lang, onUpgrade]);
-  const { line: boxChannelRaw, index: boxChannelIdx } = useBroadcastNavigator(boxChannelLines, {
-    autoCycle: hasOnboarded && !chatActive && !recording && !signInOpen,
-    seedIndex: 0,
-    dwellFor: chatPromptDwell,
-  });
-  const boxChannelIsUpgrade = boxChannelLines[boxChannelIdx] === BOX_CHANNEL_UPGRADE;
 
   // Sign-in sheet open → broadcast reads as the sign-in headline so the
   // home surface frames the sheet. Takes priority over chat prompt / loop.
@@ -2662,19 +2640,12 @@ export function HomeScreen({
         { text: he ? 'מה בא לך שאנהל או אייצג בשבילך?' : 'What would you like me to manage or represent for you?', kind: 'beat' as const },
       ];
     }
-    const he = lang === 'he';
-    const greeting = timeGreeting(lang, nowTick, identity?.name, greetingRot);
-
-    // A LIGHT opener (not crowded): the greeting + the one move worth surfacing,
-    // as ONE's chat bubbles. The bubbles ARE the status — no separate status
-    // line. Never a flat echo of the cards below.
-    const messages = oneHomeMessages(allProfileUnits, he, nowTick, greetingRot);
-    const action = messages[messages.length - 1];
-
-    return [
-      { text: greeting, kind: 'beat' as const },
-      ...(action && action !== greeting ? [{ text: action, kind: 'beat' as const }] : []),
-    ].filter((l) => !!l.text);
+    // Clean rest home: the figure sits alone over the composer — NO broadcast
+    // bubbles. ONE speaks through the under-box channel line now (and through the
+    // chat once you open it), so the resting home stays quiet and uncrowded
+    // (matches the target home mock). The first-run discovery beats above are
+    // kept — onboarding still needs ONE to introduce itself.
+    return [];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasOnboarded, onboardStep, userName, lang, identity?.id, identity?.name, allProfileUnits, nowTick, heroStatus, greetingRot, headlineStage, hintRot]);
 
@@ -2812,6 +2783,24 @@ export function HomeScreen({
   const inputMountY = useSharedValue(30);      // input dock slides from +30
   const elementsMountOpacity = useSharedValue(0);
   const inputMountOpacity = useSharedValue(0);
+  // ── Rest-pair ("calm home") ─────────────────────────────────────────────
+  // The DEFAULT resting home is the centred pair: the awake figure just above
+  // the composer, near screen-centre, with NO broadcast bubbles (ONE speaks
+  // through the under-box channel line instead). This used to happen only when
+  // ONE dozed (sleepSV); now it's the steady rest pose. `restPairGate` is 1 at
+  // rest and eases to 0 whenever the home leaves rest (chat/call/sheet/sign-in/
+  // profile); `scrollRestFactor` is 1 at scrollY≈0 and unwinds to 0 as the user
+  // scrolls into the processes — written from the scroll handler so the early
+  // dock worklets (declared above scrollY) can still read it. Both are plain
+  // SharedValues so inputMountStyle (declared before scrollY) can read them
+  // without a decl-order crash. See [[reanimated-worklet-decl-order]].
+  // Starts engaged (1) so the figure rests in the centred pair from the very
+  // first frame — the splash dot grows in AT screen-centre and simply stays
+  // there (no rise-to-top then drop-back, which read as a jump). Eases to 0 only
+  // when the home leaves rest. Paired with orbMountY starting at 0 (the centring
+  // now comes from the rest-pair offset, not from an upward mount travel).
+  const restPairGate = useSharedValue(1);
+  const scrollRestFactor = useSharedValue(1);
   // Idle-sleep progress: 1 = awake / eyes open, 0 = asleep. Declared UP HERE
   // (before inputMountStyle / broadcastCrossfadeStyle reference it) so those
   // useAnimatedStyle worklets don't read it while it's still undefined during
@@ -2868,7 +2857,9 @@ export function HomeScreen({
     // the very top (on first mount they're already here).
     setStatusBarHidden(true);
     orbEnterScale.value = 0;
-    orbMountY.value = ORB_FROM_CENTER_OFFSET;
+    // 0 — the figure's centring comes from the rest-pair offset (sleepDrop), so
+    // the dot grows in AT screen-centre and stays; no upward mount travel.
+    orbMountY.value = 0;
     eyesOpacityMount.value = 0;
     elementsMountOpacity.value = 0;
     elementsMountY.value = 16;
@@ -2911,16 +2902,9 @@ export function HomeScreen({
         withTiming(1, { duration: SHRINK_MS, easing: Easing.inOut(Easing.quad) }),
       ),
     );
-    // Phase 1: orb rises from centre to Home rest position.
-    orbMountY.value = withDelay(
-      RISE_DELAY,
-      withTiming(0, {
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-      }),
-    );
-    // Phase 1b: eyes open at the same instant the rise starts — the
-    // face wakes up THROUGH the upward motion, not before it.
+    // Phase 1: no rise — the figure's resting place IS screen-centre (the
+    // centred pair), where the dot already grew in. orbMountY stays 0.
+    // Phase 1b: eyes open once the dot has settled to agent size.
     eyesOpacityMount.value = withDelay(
       EYES_OPEN_DELAY,
       withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }),
@@ -2986,7 +2970,11 @@ export function HomeScreen({
     // the lift in.) Only for the empty home (sleepCenterOK) — with a
     // conversation the orb is a top header, so the input stays put. Only the
     // mount cascade still fades the opacity.
-    const sleepLift = (1 - sleepSV.value) * SLEEP_INPUT_LIFT * sleepCenterOK.value;
+    // Lift to the centred pair whenever EITHER ONE is dozing (1-sleepSV) OR the
+    // home is simply at rest (restPairGate × scrollRestFactor) — the latter is
+    // the new default so the composer sits just under the figure at steady rest.
+    const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
+    const sleepLift = centerAmt * SLEEP_INPUT_LIFT * sleepCenterOK.value;
     return {
       opacity: inputMountOpacity.value,
       transform: [{ translateY: inputMountY.value - sleepLift }],
@@ -3002,6 +2990,15 @@ export function HomeScreen({
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
       scrollY.value = e.contentOffset.y;
+      // Unwind the centred rest pair as the user scrolls up into the processes.
+      // Written here (not a useDerivedValue) so the dock worklets declared above
+      // scrollY can read it without a decl-order crash.
+      scrollRestFactor.value = interpolate(
+        e.contentOffset.y,
+        [0, SNAP_OPEN * 0.25],
+        [1, 0],
+        Extrapolation.CLAMP,
+      );
     },
   });
 
@@ -3077,38 +3074,53 @@ export function HomeScreen({
     sleepCenterOK.value = sessionMessages.length > 0 ? 0 : 1;
   }, [sessionMessages.length, sleepCenterOK]);
 
-  // ONE's soft, slowly-rotating invite shown INSIDE the composer while it rests
-  // (idle/asleep) — ONE speaking in its own voice, with a blinking caret, so the
-  // box isn't a dead placeholder but ONE quietly here for you.
-  const IDLE_LINES = lang === 'he'
-    ? ['אני כאן אם צריך', 'על מה נדבר?', 'משהו שבא לך לקדם?', 'דבר איתי מתי שתרצה', 'אני ער — רק תגיד']
-    : ["I'm here if you need me", 'What should we talk about?', 'Anything on your mind?', 'Talk to me anytime'];
-  const [idleLineIdx, setIdleLineIdx] = useState(0);
+  // The centred rest pair is the DEFAULT home pose — eased in whenever the home
+  // is simply at rest, and eased out the moment it leaves rest (opening the
+  // chat, a call, a sheet, sign-in or a profile). Scroll unwinding is handled
+  // separately by scrollRestFactor.
   useEffect(() => {
-    if (!orbAsleep) return;
-    const id = setInterval(() => setIdleLineIdx((i) => i + 1), 3500);
+    const atRest = !chatActive && !callActive && !anySheetOpen && !signInOpen && !profileOpen && !inputFocused;
+    restPairGate.value = withTiming(atRest ? 1 : 0, {
+      duration: atRest ? 320 : 220,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, inputFocused, restPairGate]);
+
+  // ONE's soft, slowly-rotating line shown INSIDE the composer at rest — ONE
+  // speaking in its own voice (subtle, textSecondary, with a blinking caret), so
+  // the box is where ONE quietly communicates rather than a dead placeholder.
+  // Active whenever the home is simply at rest (onboarded, no open conversation),
+  // not only once ONE dozes. The InputBar hides it the moment the field is
+  // focused or has text. Neutral Hebrew phrasing so it fits any gender.
+  const IDLE_LINES = lang === 'he'
+    ? ['אני כאן אם צריך', 'על מה נדבר?', 'משהו שבא לך לקדם?', 'אפשר גם פשוט לדבר', 'מה חשוב עכשיו?', 'אני ער — רק תגיד']
+    : ["I'm here if you need me", 'What should we talk about?', 'Anything on your mind?', 'We can just talk, too', 'What matters right now?'];
+  const [idleLineIdx, setIdleLineIdx] = useState(0);
+  const idleLineActive = hasOnboarded && !chatActive;
+  useEffect(() => {
+    if (!idleLineActive) return;
+    const id = setInterval(() => setIdleLineIdx((i) => i + 1), 4000);
     return () => clearInterval(id);
-  }, [orbAsleep]);
-  const idleLine = orbAsleep ? IDLE_LINES[idleLineIdx % IDLE_LINES.length] : undefined;
+  }, [idleLineActive]);
+  const idleLine = idleLineActive ? IDLE_LINES[idleLineIdx % IDLE_LINES.length] : undefined;
 
   // The hero's eyes fade in on the splash → home handoff (eyesOpacityMount) and
-  // stay open at rest. Pulling toward Global fades the eyes fully out (ONE
-  // returns to the bare-dot splash state as it dives into the world). Idle rest
-  // no longer shuts them — ONE stays a FIGURE (eyes open) and simply gathers to
-  // the centred pair, so sleepSV is intentionally NOT a factor here.
+  // stay open at rest. Pulling toward Global fades them out, AND idle-sleep now
+  // closes them too: as ONE dozes (sleepSV 1→0) it returns to the bare black dot
+  // it started as (the splash dot), still centred.
   const heroEyesOpacity = useDerivedValue(() => {
     'worklet';
     const fade = interpolate(globalProgress.value, [0, 0.4], [0, 1], Extrapolation.CLAMP);
-    return eyesOpacityMount.value * (1 - fade);
+    return eyesOpacityMount.value * (1 - fade) * sleepSV.value;
   });
 
   // Combined lid openness for the hero Orb's `eyeOpen`: Global pull closes the
-  // lids EARLY (fully shut by ~40% of the sweep) so the orb is a bare dot by the
-  // time Global opens. Idle rest keeps them OPEN (ONE stays the figure).
+  // lids EARLY (fully shut by ~40% of the sweep), and idle-sleep closes them as
+  // ONE settles to a dot (sleepSV 1→0).
   const heroEyeOpen = useDerivedValue(() => {
     'worklet';
     const pullClose = interpolate(globalProgress.value, [0, 0.4], [0, 1], Extrapolation.CLAMP);
-    return (1 - pullClose);
+    return (1 - pullClose) * sleepSV.value;
   });
 
   // Subtle crossfade when the broadcast line changes — fade out / fade in.
@@ -3122,15 +3134,6 @@ export function HomeScreen({
   const broadcastLineStyle = useAnimatedStyle(() => ({
     opacity: broadcastLineOpacity.value,
   }));
-
-  // Crossfade the under-box channel line when it rotates — ONE "speaking" its
-  // next line, not flipping a card.
-  const boxChannelOpacity = useSharedValue(1);
-  useEffect(() => {
-    boxChannelOpacity.value = 0;
-    boxChannelOpacity.value = withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) });
-  }, [boxChannelIdx, boxChannelOpacity]);
-  const boxChannelTextStyle = useAnimatedStyle(() => ({ opacity: boxChannelOpacity.value }));
 
   // Orb scale animation has three states:
   //   • resting (default): slow 2.4s breath — "alive but quiet"
@@ -3369,10 +3372,11 @@ export function HomeScreen({
   // rides up to KB_GAP above the keyboard when it opens. On iOS the SafeAreaView
   // already provides the bottom inset, so we only apply the keyboard slide.
   const inputDockStyle = useAnimatedStyle(() => {
-    // Idle-rest lift (0 while awake, and 0 once a conversation exists) — carried
-    // in BOTH dock transforms so the input rises to the centred pair no matter
-    // which style wins the flatten.
-    const sleepLift = (1 - sleepSV.value) * SLEEP_INPUT_LIFT * sleepCenterOK.value;
+    // Rest-pair lift — carried in BOTH dock transforms so the input rises to the
+    // centred pair no matter which style wins the flatten. Active at steady rest
+    // (restPairGate × scrollRestFactor) as well as while dozing (1-sleepSV).
+    const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
+    const sleepLift = centerAmt * SLEEP_INPUT_LIFT * sleepCenterOK.value;
     if (isAndroid) {
       const kb = keyboardHeight.value;
       const lift = kb > 1 ? kb + KB_GAP : insetsBottom;
@@ -3536,8 +3540,11 @@ export function HomeScreen({
     // bottom land as one pair centred together (figure over composer). Gated by
     // (1 - f) so it only travels from the RESTING hero, never while scrolled into
     // the processes list.
-    const sleepDrop =
-      (1 - sleepSV.value) * (ORB_FROM_CENTER_OFFSET - SLEEP_ORB_RAISE) * (1 - f);
+    // Glide DOWN to the centred pair at steady rest (restPairGate) as well as
+    // while dozing (1-sleepSV); `(1 - f)` unwinds it as the user scrolls up into
+    // the processes, and scrollRestFactor keeps it in step with the composer.
+    const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
+    const sleepDrop = centerAmt * (ORB_FROM_CENTER_OFFSET - SLEEP_ORB_RAISE) * (1 - f);
     // As it settles asleep in the centre, the bare black dot swells a touch —
     // ending a bit BIGGER than the resting hero, like the splash dot. Gated by
     // (1 - f) so only the resting hero grows.
@@ -3693,9 +3700,10 @@ export function HomeScreen({
   // overlay sheet is up (a process card, profile, settings, global, +, …).
   const homeAtRest = !chatActive && !callActive && !anySheetOpen;
   const scheduleSleep = useCallback(() => {
-    // Idle "sleep" is a native-only flourish; on web its transform-heavy
-    // centre-drop mis-renders (orb vanishes), so skip it in the browser.
-    if (Platform.OS === 'web') return;
+    // Sleep used to be native-only — its transform-heavy centre-drop mis-rendered
+    // on web (orb vanished). The figure now rests centred already (rest-pair), so
+    // sleep no longer moves it — it just closes the eyes to a bare dot in place —
+    // which is web-safe, so it runs on every platform now.
     if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
     sleepTimerRef.current = setTimeout(() => {
       // If ONE dozed off while scrolled into the processes list, glide back to
@@ -4841,9 +4849,10 @@ export function HomeScreen({
               disabled={sheetOpen}
               accessibilityRole="button"
               accessibilityLabel={lang === 'he' ? 'פתח תהליכים ומרחבים' : 'Open processes'}
-              style={styles.flipUp}
             >
-              <ArrowDownIcon size={24} color={colors.textSecondary} />
+              {/* Points DOWN — the exact mirror of the top (Global) chevron, same
+                  size, so the two read as one symmetric pair (per the home mock). */}
+              <ArrowDownIcon size={26} color={colors.textSecondary} />
             </Pressable>
           </Animated.View>
         )}
@@ -5016,51 +5025,33 @@ export function HomeScreen({
                   • signed in  → "Want more from ONE? Upgrade" (plans panel).
                   • not yet     → "Already have ONE? Sign in" (connect first).
                   Hidden while chatting. */}
+              {/* One line under the input, in the SAME prominent spot:
+                  • signed in  → "Want more from ONE? Upgrade" (plans panel).
+                  • not yet     → "Already have ONE? Sign in" (connect first).
+                  A STATIC invite — ONE's own voice lives INSIDE the box (idleLine),
+                  not here. Hidden while chatting, collapses on scroll. */}
               {!chatActive && (hasOnboarded ? onUpgrade : onSignIn) && (
-                // One line under the composer. For an onboarded user it's ONE's
-                // ambient channel — a rotating line in ONE's own voice (tap →
-                // opens the chat, ONE reaching out), with the Upgrade invite as
-                // the last beat of the round (tap → plans). Before onboarding it
-                // stays the "Already have ONE? Sign in" invite.
                 <AnimatedPressable
-                  onPress={() => {
-                    if (!hasOnboarded) { onSignIn?.(); return; }
-                    if (boxChannelIsUpgrade) { onUpgrade?.(); return; }
-                    haptic.tap();
-                    setChatReturnFocus((n) => n + 1); // focus the box → open chat
-                  }}
+                  onPress={() => (hasOnboarded ? onUpgrade?.() : onSignIn?.())}
                   hitSlop={8}
                   style={[styles.upgradeRow, homeUpgradeStyle]}
                   accessibilityRole="button"
                   accessibilityLabel={
-                    !hasOnboarded
-                      ? lang === 'he' ? 'התחברות' : 'Sign in'
-                      : boxChannelIsUpgrade
-                        ? lang === 'he' ? 'שדרוג' : 'Upgrade'
-                        : boxChannelRaw
+                    hasOnboarded
+                      ? lang === 'he' ? 'שדרוג' : 'Upgrade'
+                      : lang === 'he' ? 'התחברות' : 'Sign in'
                   }
                 >
-                  {hasOnboarded && !boxChannelIsUpgrade ? (
-                    <Animated.Text
-                      numberOfLines={1}
-                      style={[styles.upgradePrompt, { color: colors.textSecondary }, boxChannelTextStyle]}
-                    >
-                      {boxChannelRaw}
-                    </Animated.Text>
-                  ) : (
-                    <>
-                      <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
-                        {hasOnboarded
-                          ? lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '
-                          : lang === 'he' ? 'כבר יש לך ONE? ' : 'Already have ONE? '}
-                      </Text>
-                      <Text style={[styles.upgradeLink, { color: colors.text }]}>
-                        {hasOnboarded
-                          ? lang === 'he' ? 'שדרוג' : 'Upgrade'
-                          : lang === 'he' ? 'התחבר' : 'Sign in'}
-                      </Text>
-                    </>
-                  )}
+                  <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
+                    {hasOnboarded
+                      ? lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '
+                      : lang === 'he' ? 'כבר יש לך ONE? ' : 'Already have ONE? '}
+                  </Text>
+                  <Text style={[styles.upgradeLink, { color: colors.text }]}>
+                    {hasOnboarded
+                      ? lang === 'he' ? 'שדרוג' : 'Upgrade'
+                      : lang === 'he' ? 'התחבר' : 'Sign in'}
+                  </Text>
                 </AnimatedPressable>
               )}
             </>
