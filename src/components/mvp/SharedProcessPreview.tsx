@@ -10,7 +10,7 @@
  * meant for a sheet's screen-pinned `overlay` slot. Renders null when hidden.
  */
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import type { ThemeColors } from '../../utils/theme';
 import { rtlText, rtlRow } from '../../utils/rtl';
 
@@ -24,6 +24,7 @@ export function SharedProcessPreview({
   openFacts,
   hiddenCount,
   draftBody,
+  shareCode,
   onClose,
   colors,
   lang,
@@ -37,6 +38,8 @@ export function SharedProcessPreview({
   openFacts: string[];
   hiddenCount: number;
   draftBody?: string;
+  /** Live join code, once published to the shared backend. */
+  shareCode?: string;
   onClose: () => void;
   colors: ThemeColors;
   lang: 'en' | 'he';
@@ -60,7 +63,15 @@ export function SharedProcessPreview({
             </Pressable>
           </View>
 
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.scrollContent}>
+            {!!shareCode && (
+              <View style={[styles.codeBanner, { backgroundColor: colors.background, borderColor: colors.border }, rtlRow(lang)]}>
+                <Text style={[styles.codeLabel, { color: colors.textSecondary }, rtlText(lang)]}>
+                  {he ? 'קוד הצטרפות — תן לצד השני:' : 'Join code — give the other side:'}
+                </Text>
+                <Text style={[styles.codeValue, { color: colors.text }]} selectable>{shareCode}</Text>
+              </View>
+            )}
             <Text style={[styles.sharedBy, { color: colors.textSecondary }, rtlText(lang)]}>
               {sharedByName
                 ? he ? `${sharedByName} שיתף/ה איתך תהליך:` : `${sharedByName} shared a process with you:`
@@ -115,7 +126,7 @@ export function SharedProcessPreview({
                   ? 'רק מה שאישרת לשיתוף מופיע כאן.'
                   : 'Only what you allowed to share is shown here.'}
             </Text>
-          </ScrollView>
+          </View>
         </View>
       </View>
     </View>
@@ -142,6 +153,9 @@ const styles = StyleSheet.create({
   close: { fontSize: 16, fontWeight: '600' },
   scroll: { flexGrow: 0 },
   scrollContent: { paddingBottom: 8, gap: 14 },
+  codeBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 11, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
+  codeLabel: { fontSize: 12, flex: 1 },
+  codeValue: { fontSize: 18, fontWeight: '800', letterSpacing: 2 },
   sharedBy: { fontSize: 13, lineHeight: 18 },
   processRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderRadius: 14 },
   processEmoji: { fontSize: 26 },

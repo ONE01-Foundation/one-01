@@ -86,6 +86,7 @@ import { CloseIcon, MenuIcon, SpeakerIcon, MicIcon, MicOffIcon, CameraIcon } fro
 import { InputBar } from '../../components/mvp/InputBar';
 import { InlinePrompt, type InlinePromptConfig } from '../../components/mvp/InlinePrompt';
 import { SharedProcessPreview } from '../../components/mvp/SharedProcessPreview';
+import { shareUnit } from '../../services/cloudShared';
 import { ActionMenu, type ActionMenuItem } from '../../components/mvp/ActionMenu';
 import { relativeWhen, activityKindMeta } from '../../utils/activity';
 import { analyzeUnit } from '../../utils/processIntelligence';
@@ -1219,7 +1220,7 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
   // People, the process flips to "shared", and ONE logs + announces it.
   const shareWithOne = () => {
     if (!unit) return;
-    const apply = (raw: string) => {
+    const apply = async (raw: string) => {
       const nm = raw.trim().replace(/^@/, '');
       if (!nm) return;
       const store = useMvpStore.getState();
@@ -1241,18 +1242,40 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
         lastUpdatedAt: ts,
         updatedAt: ts,
       });
-      store.pushUnitNotification({
-        unitId: unit.id,
-        text: `Shared with ${nm}`,
-        emoji: '🤝',
-        kind: 'update',
-      });
+      store.pushUnitNotification({ unitId: unit.id, text: `Shared with ${nm}`, emoji: '🤝', kind: 'update' });
+
+      // Publish a DISCLOSURE-SAFE snapshot to the shared backend so the other
+      // side can actually join (only open facts + the outward message cross;
+      // ask/private stay local). Degrades to local-only when unreachable.
+      const policy = disclosureForIdentity(cur.identityId);
+      const sharedByName = policy.find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim())?.value?.trim();
+      const row = await shareUnit(
+        {
+          title: cur.title,
+          emoji: cur.emoji,
+          status: unitStatusLine(cur, he),
+          openFacts: openDisclosureStrings(policy, he),
+          message: cur.drafts?.[0]?.body,
+          sharedByName,
+          providerName: nm,
+        },
+        sharedByName ?? unitIdentity?.name ?? 'ONE',
+      );
+      if (row?.code) {
+        store.updateUnit(unit.id, { shareCode: row.code });
+        store.pushUnitNotification({
+          unitId: unit.id,
+          text: he ? `קוד הצטרפות: ${row.code}` : `Join code: ${row.code}`,
+          emoji: '🔗',
+          kind: 'event',
+        });
+      }
     };
     setPromptConfig({
       title: he ? 'שיתוף עם ONE' : 'Share with a ONE',
       message: he ? 'שם או @כינוי של ה-ONE שתרצה בתהליך הזה.' : 'Name or @handle of the ONE you want on this process.',
       placeholder: he ? 'שם או @כינוי' : 'Name or @handle',
-      onSubmit: (v) => apply(v),
+      onSubmit: (v) => { void apply(v); },
     });
   };
 
@@ -1517,6 +1540,7 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
                 openFacts={openFacts}
                 hiddenCount={hiddenCount}
                 draftBody={unit.drafts?.[0]?.body}
+                shareCode={unit.shareCode}
                 onClose={() => setPreviewOpen(false)}
                 colors={colors}
                 lang={lang}

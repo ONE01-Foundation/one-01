@@ -338,6 +338,9 @@ export interface Unit {
   /** One short metadata label: "Coach Eli +1", "Shared +2", "Auto", etc. */
   relationLabel?: string;
   visibility?: 'private' | 'shared' | 'public';
+  /** Short code from the shared backend once this process is published for the
+   *  other side to join (see cloudShared). Absent = local-only share. */
+  shareCode?: string;
 
   progress?: {
     current: number;
