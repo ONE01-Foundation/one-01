@@ -117,6 +117,7 @@ export function JoinSharedSheet({
 
             <SharedThread
               code={row.code}
+              unitId={row.id}
               myName={name}
               role="human"
               active={visible}

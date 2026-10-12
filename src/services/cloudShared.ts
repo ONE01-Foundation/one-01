@@ -135,3 +135,34 @@ export async function listSharedMembers(code: string): Promise<SharedMember[]> {
   const { data, error } = await c.rpc('list_shared_members', { p_code: code.trim() });
   return error || !data ? [] : (data as SharedMember[]);
 }
+
+/** Resolve a code to the shared unit's uuid (public read) — needed for the
+ *  realtime filter, which keys on unit_id. */
+export async function getSharedUnitByCode(code: string): Promise<{ id: string } | null> {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c
+    .from('shared_units')
+    .select('id')
+    .eq('code', code.trim().toLowerCase())
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as { id: string };
+}
+
+/** Live-subscribe to new messages in a shared unit (Supabase Realtime). Returns
+ *  an unsubscribe fn; a no-op when Supabase isn't configured. The caller keeps a
+ *  slow poll as a fallback in case the socket drops. */
+export function subscribeSharedMessages(unitId: string, onInsert: (m: SharedMessage) => void): () => void {
+  const c = client();
+  if (!c) return () => {};
+  const channel = c
+    .channel(`shared_unit_${unitId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'shared_unit_messages', filter: `unit_id=eq.${unitId}` },
+      (payload) => onInsert(payload.new as SharedMessage),
+    )
+    .subscribe();
+  return () => { void c.removeChannel(channel); };
+}

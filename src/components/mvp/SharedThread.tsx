@@ -10,10 +10,17 @@ import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import type { ThemeColors } from '../../utils/theme';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
-import { getSharedMessages, postSharedMessage, type SharedMessage } from '../../services/cloudShared';
+import {
+  getSharedMessages,
+  postSharedMessage,
+  getSharedUnitByCode,
+  subscribeSharedMessages,
+  type SharedMessage,
+} from '../../services/cloudShared';
 
 export function SharedThread({
   code,
+  unitId,
   myName,
   role,
   active = true,
@@ -21,9 +28,12 @@ export function SharedThread({
   lang,
 }: {
   code: string;
+  /** The shared unit's uuid, when the caller has it (else resolved from code) —
+   *  used for the realtime filter. */
+  unitId?: string;
   myName: string;
   role: 'one' | 'human';
-  /** Poll only while the view is actually on screen. */
+  /** Subscribe/poll only while the view is actually on screen. */
   active?: boolean;
   colors: ThemeColors;
   lang: 'en' | 'he';
@@ -32,18 +42,36 @@ export function SharedThread({
   const [messages, setMessages] = useState<SharedMessage[]>([]);
   const [text, setText] = useState('');
 
-  // Initial load + poll while active.
+  // Merge in messages by id (so realtime + poll + our own posts never dupe),
+  // kept in chronological order.
+  const upsert = useCallback((incoming: SharedMessage[]) => {
+    setMessages((prev) => {
+      const map = new Map(prev.map((m) => [m.id, m]));
+      for (const m of incoming) map.set(m.id, m);
+      return [...map.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    });
+  }, []);
+
+  // LIVE: initial load → subscribe to realtime inserts → a slow fallback poll in
+  // case the socket drops. All comms flow through the shared thread, instantly.
   useEffect(() => {
     if (!active || !code) return;
     let alive = true;
-    const load = async () => {
+    let unsub = () => {};
+    (async () => {
+      const initial = await getSharedMessages(code);
+      if (!alive) return;
+      setMessages(initial);
+      const uid = unitId ?? (await getSharedUnitByCode(code))?.id;
+      if (!alive || !uid) return;
+      unsub = subscribeSharedMessages(uid, (m) => { if (alive) upsert([m]); });
+    })();
+    const poll = setInterval(async () => {
       const m = await getSharedMessages(code);
-      if (alive) setMessages(m);
-    };
-    load();
-    const id = setInterval(load, 4000);
-    return () => { alive = false; clearInterval(id); };
-  }, [active, code]);
+      if (alive) upsert(m);
+    }, 15000);
+    return () => { alive = false; clearInterval(poll); unsub(); };
+  }, [active, code, unitId, upsert]);
 
   const send = useCallback(async () => {
     const t = text.trim();
@@ -51,8 +79,8 @@ export function SharedThread({
     haptic.select();
     setText('');
     const posted = await postSharedMessage(code, myName || (he ? 'אני' : 'Me'), role, t);
-    if (posted) setMessages((m) => [...m, posted]);
-  }, [text, code, myName, role, he]);
+    if (posted) upsert([posted]);
+  }, [text, code, myName, role, he, upsert]);
 
   return (
     <View style={styles.wrap}>

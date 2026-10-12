@@ -31,6 +31,7 @@ import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
 import { OneProfileSheet } from '../screens/mvp/OneProfileSheet';
 import { GlobalSheet } from '../screens/mvp/GlobalSheet';
 import { JoinSharedSheet } from '../screens/mvp/JoinSharedSheet';
+import { useSharedReplyNotifications } from '../hooks/useSharedReplyNotifications';
 import { BusinessSheet } from '../screens/mvp/BusinessSheet';
 import { CreateBusinessSheet } from '../screens/mvp/CreateBusinessSheet';
 import { DIRECTORY } from '../utils/businessDirectory';
@@ -128,6 +129,10 @@ function HomeWithOverlays() {
   // ONE's heartbeat: surface reminders the moment they come due (toast +
   // timeline + badge), on launch, on foreground, and on a slow interval.
   useDueReminderWatcher();
+
+  // Keep all communication flowing through ONE: live-listen to shared processes
+  // and surface the other side's replies as notifications.
+  useSharedReplyNotifications();
 
   // Live cloud businesses (created on this device or on the web). Refresh once
   // on mount so the BusinessSheet + chat discovery see the shared directory.
