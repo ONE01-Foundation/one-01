@@ -2862,9 +2862,11 @@ export function HomeScreen({
     // the very top (on first mount they're already here).
     setStatusBarHidden(true);
     orbEnterScale.value = 0;
-    // 0 — the figure's centring comes from the rest-pair offset (sleepDrop), so
-    // the dot grows in AT screen-centre and stays; no upward mount travel.
-    orbMountY.value = 0;
+    // Start at SLEEP_ORB_RAISE so the dot grows in at TRUE screen-centre (the
+    // rest-pair offset lands the figure a touch ABOVE centre, so +raise cancels
+    // that back to dead-centre); it then RISES by `raise` into the figure's
+    // paired resting spot — "a dot that comes up into the figure".
+    orbMountY.value = SLEEP_ORB_RAISE;
     eyesOpacityMount.value = 0;
     elementsMountOpacity.value = 0;
     elementsMountY.value = 16;
@@ -2907,9 +2909,14 @@ export function HomeScreen({
         withTiming(1, { duration: SHRINK_MS, easing: Easing.inOut(Easing.quad) }),
       ),
     );
-    // Phase 1: no rise — the figure's resting place IS screen-centre (the
-    // centred pair), where the dot already grew in. orbMountY stays 0.
-    // Phase 1b: eyes open once the dot has settled to agent size.
+    // Phase 1: the dot RISES from true centre into the figure's paired resting
+    // spot (orbMountY: SLEEP_ORB_RAISE → 0) — a small, deliberate "come up".
+    orbMountY.value = withDelay(
+      RISE_DELAY,
+      withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }),
+    );
+    // Phase 1b: eyes open as the dot rises — it becomes the figure THROUGH the
+    // upward motion.
     eyesOpacityMount.value = withDelay(
       EYES_OPEN_DELAY,
       withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }),
@@ -2941,7 +2948,7 @@ export function HomeScreen({
         easing: Easing.out(Easing.cubic),
       }),
     );
-  }, [orbMountY, orbEnterScale, elementsMountY, elementsMountOpacity, inputMountY, inputMountOpacity, eyesOpacityMount]);
+  }, [orbMountY, orbEnterScale, elementsMountY, elementsMountOpacity, inputMountY, inputMountOpacity, eyesOpacityMount, SLEEP_ORB_RAISE]);
 
   // Play the opening once on mount.
   useEffect(() => {
@@ -2981,7 +2988,9 @@ export function HomeScreen({
     const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
     const sleepLift = centerAmt * SLEEP_INPUT_LIFT * sleepCenterOK.value;
     return {
-      opacity: inputMountOpacity.value,
+      // The composer FADES OUT as ONE dozes (sleepChromeSV) — on sleep the home
+      // clears to just the bare black dot at centre; it fades back in on wake.
+      opacity: inputMountOpacity.value * sleepChromeSV.value,
       transform: [{ translateY: inputMountY.value - sleepLift }],
     };
   });
@@ -3091,17 +3100,15 @@ export function HomeScreen({
     });
   }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, inputFocused, restPairGate]);
 
-  // ONE's soft, slowly-rotating line shown INSIDE the composer at rest — ONE
-  // speaking in its own voice (subtle, textSecondary, with a blinking caret), so
-  // the box is where ONE quietly communicates rather than a dead placeholder.
-  // Active whenever the home is simply at rest (onboarded, no open conversation),
-  // not only once ONE dozes. The InputBar hides it the moment the field is
-  // focused or has text. Neutral Hebrew phrasing so it fits any gender.
+  // ONE's soft, slowly-rotating status line shown INSIDE the composer — but ONLY
+  // in the HOME rest pose (centred pair). The moment the user scrolls into the
+  // processes list (`inCards`) — or opens the chat — it's gone, so the scrolled
+  // composer stays a clean caret. Subtle (textSecondary) with a blinking caret.
   const IDLE_LINES = lang === 'he'
     ? ['אני כאן אם צריך', 'על מה נדבר?', 'משהו שבא לך לקדם?', 'אפשר גם פשוט לדבר', 'מה חשוב עכשיו?', 'אני ער — רק תגיד']
     : ["I'm here if you need me", 'What should we talk about?', 'Anything on your mind?', 'We can just talk, too', 'What matters right now?'];
   const [idleLineIdx, setIdleLineIdx] = useState(0);
-  const idleLineActive = hasOnboarded && !chatActive;
+  const idleLineActive = hasOnboarded && !chatActive && !inCards;
   useEffect(() => {
     if (!idleLineActive) return;
     const id = setInterval(() => setIdleLineIdx((i) => i + 1), 4000);
@@ -3453,7 +3460,9 @@ export function HomeScreen({
   // work without one clobbering the other's opacity.
   const homeUpgradeStyle = useAnimatedStyle(() => {
     const scrollP = interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP);
-    return { opacity: scrollP * (1 - globalProgress.value), height: scrollP * 30, marginTop: scrollP * 8 };
+    // Also fades away with the composer as ONE dozes (sleepChromeSV) — on sleep
+    // the whole surface clears to the bare dot.
+    return { opacity: scrollP * (1 - globalProgress.value) * sleepChromeSV.value, height: scrollP * 30, marginTop: scrollP * 8 };
   });
 
   /*
@@ -3553,11 +3562,15 @@ export function HomeScreen({
     // bottom land as one pair centred together (figure over composer). Gated by
     // (1 - f) so it only travels from the RESTING hero, never while scrolled into
     // the processes list.
-    // Glide DOWN to the centred pair at steady rest (restPairGate) as well as
+    // Glide DOWN to the centred pose at steady rest (restPairGate) as well as
     // while dozing (1-sleepSV); `(1 - f)` unwinds it as the user scrolls up into
-    // the processes, and scrollRestFactor keeps it in step with the composer.
+    // the processes. The pair RAISE (figure sitting a touch above centre, over
+    // the composer) only applies while awake — as ONE dozes (sleepSV→0) the
+    // figure settles to TRUE centre, back to the bare splash dot, as the
+    // composer fades away.
     const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
-    const sleepDrop = centerAmt * (ORB_FROM_CENTER_OFFSET - SLEEP_ORB_RAISE) * (1 - f);
+    const pairRaise = SLEEP_ORB_RAISE * sleepSV.value;
+    const sleepDrop = centerAmt * (ORB_FROM_CENTER_OFFSET - pairRaise) * (1 - f);
     // As it settles asleep in the centre, the bare black dot swells a touch —
     // ending a bit BIGGER than the resting hero, like the splash dot. Gated by
     // (1 - f) so only the resting hero grows.
@@ -3675,7 +3688,7 @@ export function HomeScreen({
   // the screen — just enough to say "there's more above and below" without ever
   // moving around or hijacking the view.
   const CHEVRON_HOLD_MS = 2000;
-  const CHEVRON_PEAK_OPACITY = 0.22;
+  const CHEVRON_PEAK_OPACITY = 0.4;
   // First reveal waits for the splash/intro (dot grows → eyes open → rise →
   // broadcast settles, ~1.8s) so the arrows never flash over the rising face.
   const CHEVRON_INTRO_DELAY_MS = 1900;
@@ -5029,8 +5042,8 @@ export function HomeScreen({
                 // Keep it the SAME box as the resting home — it just rises with
                 // the keyboard, no shape change (the + stays inside the capsule).
                 compact={false}
-                // While ONE rests (idle/asleep) the box carries ONE's soft
-                // rotating invite + a blinking caret, in its own voice.
+                // ONE's rotating status — shown only in the home rest pose (the
+                // idleLine itself is gated on !inCards / !chatActive).
                 idleLine={idleLine}
               />
               </Animated.View>
