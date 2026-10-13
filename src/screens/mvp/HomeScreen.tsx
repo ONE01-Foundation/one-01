@@ -4107,22 +4107,7 @@ export function HomeScreen({
             }
           />
         </Animated.View>
-        {onUpgrade && (
-          <AnimatedPressable
-            onPress={onUpgrade}
-            hitSlop={8}
-            style={[styles.upgradeRow, restChromeStyle]}
-            accessibilityRole="button"
-            accessibilityLabel={lang === 'he' ? 'שדרוג' : 'Upgrade'}
-          >
-            <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
-              {lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '}
-            </Text>
-            <Text style={[styles.upgradeLink, { color: colors.text }]}>
-              {lang === 'he' ? 'שדרוג' : 'Upgrade'}
-            </Text>
-          </AnimatedPressable>
-        )}
+        {/* No Upgrade line in call mode — the call surface stays clean. */}
       </Animated.View>
     </>
   );
@@ -4311,9 +4296,12 @@ export function HomeScreen({
               // button; the keyboard just opens and closes on the same page.
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
-              // The chat scroll is now pure conversation (processes live in the
-              // pull-up sheet), so there's no cards detent — free-scroll the
-              // thread (up for history).
+              // Snap between the resting home (0) and the fully-open processes
+              // (SNAP_OPEN), so a half-scroll "flows" to completion — the figure
+              // finishes collapsing up and the composer finishes dropping down,
+              // landing the list right under the figure. Past SNAP_OPEN the
+              // longer list free-scrolls.
+              snapToOffsets={[0, SNAP_OPEN]}
               snapToEnd={false}
               decelerationRate="normal"
               // The conversation is inline scroll content now, so the list must
@@ -5106,6 +5094,42 @@ export function HomeScreen({
         </Animated.View>
         )}
       </View>
+
+      {/* Chat / call header — X (close → home) on one side, the temporary-chat
+          ("ghost") toggle on the other. Shown in chat AND call mode. Bare icons
+          over the top of the surface (per the chatHeader style). */}
+      {(chatActive || callActive) && (
+        <Animated.View
+          pointerEvents="box-none"
+          style={[
+            styles.chatHeader,
+            { direction: lang === 'he' ? 'ltr' : 'rtl', top: insets.top + 8 },
+            chatHeaderStyle,
+          ]}
+        >
+          <Pressable
+            onPress={() => (callActive ? endCall() : dismissChatAnimated())}
+            hitSlop={12}
+            style={styles.chatHeaderBtn}
+            accessibilityRole="button"
+            accessibilityLabel={lang === 'he' ? 'סגור' : 'Close'}
+          >
+            <View style={styles.closeAsPlus}>
+              <PlusThinIcon size={26} color={colors.text} />
+            </View>
+          </Pressable>
+          <Pressable
+            onPress={() => { haptic.select(); setGhostMode((v) => !v); }}
+            hitSlop={12}
+            style={styles.chatHeaderBtn}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: ghostMode }}
+            accessibilityLabel={lang === 'he' ? 'שיחה זמנית' : 'Temporary chat'}
+          >
+            <GhostModeIcon size={26} color={ghostMode ? colors.text : colors.textSecondary} />
+          </Pressable>
+        </Animated.View>
+      )}
 
       {/* Call dock — rendered at the TOP LEVEL (sibling of the home tree) so no
           home layer can cover/dim it. Only while a call is active. */}
