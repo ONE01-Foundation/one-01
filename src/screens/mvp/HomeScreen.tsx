@@ -158,8 +158,15 @@ const INPUT_BAR_H = 86;
  * past the snap point Just Works.
  */
 const TITLE_BAR_H = 78;              // small Orb + identity below it
-const HERO_REST_H = SCREEN_H;        // hero spacer fills the screen at rest
-const SNAP_OPEN = SCREEN_H - TITLE_BAR_H - 12;  // pull this far for full open
+// Hero spacer. SHORTER than a full screen so the processes list enters the
+// scroll EARLIER — its first row sits just below the screen bottom at rest
+// (hidden behind the composer + bottom gradient) instead of a full screen down,
+// so a small scroll already slides the list into place as the figure shrinks up.
+const HERO_REST_H = SCREEN_H - 120;
+// Full-open scroll distance — coupled to HERO_REST_H so the figure finishes
+// collapsing to the top bar at the SAME point the list lands in its final
+// position (one continuous motion, no snap needed to "complete" it).
+const SNAP_OPEN = HERO_REST_H - TITLE_BAR_H - 12;
 /** Resting agent face on Home. Splash dot uses the same value so the
  *  hand-off is seamless (splash dot grows to this size and lands here).
  *  Nudged up a touch (84 → 92) — the resting face carries a bit more presence
@@ -171,7 +178,7 @@ const HOME_ORB_SIZE = 100;
 const HERO_CENTER_TOP = Math.round(SCREEN_H * 0.085);
 
 /** Home → Global transition. Pulling DOWN past the top (negative overscroll)
- *  scrubs this 0→1: ONE slides back to screen-centre, CLOSES its eyes (so only
+ *  scrubs this 0→1: ONE stays in place, SHRINKS and CLOSES its eyes (so only
  *  the bare dot is left) and the broadcast/identity text fades out — a visible
  *  "ONE folds into a dot and dives into the world" hand-off into ONE01 Global.
  *  GLOBAL_PULL_RANGE is the overscroll distance (px) for a full 0→1 sweep;
@@ -181,12 +188,6 @@ const HERO_CENTER_TOP = Math.round(SCREEN_H * 0.085);
 // trips it by accident.
 const GLOBAL_PULL_RANGE = 120;
 const GLOBAL_OPEN_THRESHOLD = 74;
-/** How far the orb travels DOWN to re-centre during the pull. Lands its centre
- *  near mid-screen (0.46·H reads better than dead-centre against the bottom). */
-const PULL_CENTER_DELTA = Math.max(
-  60,
-  Math.round(SCREEN_H * 0.46 - (HERO_CENTER_TOP + HOME_ORB_SIZE / 2)),
-);
 
 // Call-orb floating-bubble geometry. The call face sits in the SAME spot as
 // the resting Home agent (its centre matches), just a touch larger — and the
@@ -3676,20 +3677,22 @@ export function HomeScreen({
     // which clipped the line ("cut"). Keeps its row height so it just dissolves.
     return { opacity: scrollP * (1 - globalProgress.value) * sleepChromeSV.value };
   });
-  // The scroll-reveal saying: appears EARLY in the home→processes scroll and
-  // RISES UP with the figure (translateY), fading out well before the process
-  // list scrolls up to it (so they never overlap).
+  // The scroll-reveal saying is GLUED to the figure: it rises with it almost all
+  // the way to the top bar (translateY tracks the figure's collapse travel) and
+  // only fades out near the end, as the figure settles up top and the process
+  // list lands below it — so the line stays attached to ONE instead of detaching
+  // mid-rise, and never overlaps the list (which fills the area BELOW the figure).
   const scrollSayingStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollY.value / SNAP_OPEN));
     const op = interpolate(
       p,
-      [0.04, 0.22, 0.5, 0.68],
+      [0.03, 0.18, 0.62, 0.84],
       [0, 1, 1, 0],
       Extrapolation.CLAMP,
     );
     return {
       opacity: op * (1 - globalProgress.value),
-      transform: [{ translateY: -p * SCREEN_H * 0.34 }],
+      transform: [{ translateY: -p * SCREEN_H * 0.4 }],
     };
   });
 
@@ -3789,7 +3792,9 @@ export function HomeScreen({
     // centre — consistent with the splash / sleep dot. Gated by (1 - f): only
     // the resting hero travels.
     const profileDrop = pc * SLEEP_ORB_RAISE * (1 - f);
-    // Global pull: glide DOWN to mid-screen and shrink ~40% toward a bare dot.
+    // Global pull: the figure STAYS IN PLACE (no downward glide — the user
+    // disliked being able to drag it almost to the bottom) and just shrinks
+    // toward a bare, eyeless dot (eyes close via heroEyeOpen/heroEyesOpacity).
     const gp = globalProgress.value;
     // Idle rest: the figure glides DOWN toward screen centre, but stops a touch
     // ABOVE it (minus SLEEP_ORB_RAISE) so that it + the input lifting up from the
@@ -3820,7 +3825,8 @@ export function HomeScreen({
             // NO keyboard lift for the figure — in chat it's pinned at the top at
             // a fixed size/place; the old chatOpenLiftSV made it ride too HIGH
             // when the keyboard opened. (The composer still rises with the kb.)
-            gp * PULL_CENTER_DELTA +
+            // NO Global-pull drift either — the figure holds its spot and only
+            // shrinks (below) during the Global pull.
             sleepDrop +
             profileDrop +
             interpolate(signInIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP) * 130,
@@ -3829,7 +3835,7 @@ export function HomeScreen({
           scale:
             collapseScale *
             orbEnterScale.value *
-            (1 - 0.4 * gp) *
+            (1 - 0.55 * gp) *
             profileScale *
             sleepGrow,
           // NO keyboard shrink — the keyboard-closed size (collapseScale) is the
@@ -4513,9 +4519,10 @@ export function HomeScreen({
                   atProcessesRef.current = open;
                   haptic.select();
                 }
-                if (!chatActiveRef.current && y > 4 && y < SNAP_OPEN - 4) {
-                  scrollRef.current?.scrollTo({ y: open ? SNAP_OPEN : 0, animated: true });
-                }
+                // NO snap-to-detent — the home↔processes scroll is ONE continuous
+                // motion now (figure shrinks up, list slides into place together),
+                // so the scroll settles wherever you leave it instead of being
+                // yanked to 0 / SNAP_OPEN.
               }}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
@@ -5920,7 +5927,10 @@ const styles = StyleSheet.create({
   processesInline: {
     minHeight: SNAP_OPEN,
     paddingHorizontal: 18,
-    paddingTop: 58,
+    // A touch more top padding so the FIRST row sits safely behind the composer
+    // at rest (the hero spacer is shorter now), then clears the collapsed figure
+    // + top bar once scrolled open.
+    paddingTop: 72,
   },
   emptyCardsState: {
     minHeight: SNAP_OPEN,
