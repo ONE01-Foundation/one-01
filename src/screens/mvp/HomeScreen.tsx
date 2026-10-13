@@ -4402,9 +4402,22 @@ export function HomeScreen({
               {!collapsed && (
                 <View style={styles.drawerBody}>
                   {items.length === 0 && (
-                    <Text style={[styles.drawerEmptyHint, { color: colors.textSecondary }, rtlText(lang)]}>
-                      {lang === 'he' ? 'עדיין אין תהליכים במרחב הזה.' : 'No processes in this space yet.'}
-                    </Text>
+                    // Warm, process-first invitation instead of a flat "none yet":
+                    // one tap opens the create flow so a fresh user never faces a
+                    // blank page. Quiet, to match the home's minimal tone.
+                    <Pressable
+                      onPress={() => { haptic.tap(); onCreateProcess?.(); }}
+                      style={styles.emptyInvite}
+                      accessibilityRole="button"
+                      accessibilityLabel={lang === 'he' ? 'התחל תהליך ראשון' : 'Start your first process'}
+                    >
+                      <Text style={[styles.drawerEmptyHint, { color: colors.textSecondary }, rtlText(lang)]}>
+                        {lang === 'he' ? 'עדיין אין כאן תהליכים.' : 'No processes here yet.'}
+                      </Text>
+                      <Text style={[styles.emptyInviteCta, { color: colors.text }, rtlText(lang)]}>
+                        {lang === 'he' ? '+ התחל תהליך ראשון' : '+ Start your first process'}
+                      </Text>
+                    </Pressable>
                   )}
                   {items.map((u, ci) => (
                     <Animated.View key={u.id} entering={FadeIn.duration(240).delay(ci * 40)}>
@@ -6024,6 +6037,11 @@ const styles = StyleSheet.create({
   drawerCount: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
   drawerBody: { gap: 10, paddingBottom: 6 },
   drawerEmptyHint: { fontSize: 14, lineHeight: 20, opacity: 0.7, paddingVertical: 6, paddingHorizontal: 4 },
+  // Fresh-user empty state → a quiet, tappable "start your first process".
+  // alignSelf stretch so the Pressable fills the row (else it shrinks to
+  // min-content and the text wraps per-character).
+  emptyInvite: { alignSelf: 'stretch', paddingVertical: 6, paddingHorizontal: 4, gap: 2 },
+  emptyInviteCta: { fontSize: 15, lineHeight: 21, fontWeight: '700' },
   // "New space" button below the last drawer — a quiet dashed affordance.
   addSpaceBtn: {
     flexDirection: 'row',
