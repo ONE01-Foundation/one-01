@@ -1249,11 +1249,17 @@ export function HomeScreen({
   // with ONE reaching out — never an empty box. Once a thread exists its own
   // history already leads, so we don't double-greet.
   const openerPostedRef = useRef(false);
+  // Where the scroll was when the chat/call OPENED (home 0, or the processes
+  // SNAP_OPEN) — so exiting returns THERE, not to wherever the thread scroll
+  // left it.
+  const chatOriginScrollRef = useRef(0);
   useEffect(() => {
     const active = chatActive || callActive;
     if (!active) { openerPostedRef.current = false; return; }
     if (openerPostedRef.current) return;
     openerPostedRef.current = true;
+    // Remember where we came from BEFORE the thread scroll moves scrollY.
+    chatOriginScrollRef.current = scrollY.value > SNAP_OPEN * 0.5 ? SNAP_OPEN : 0;
     // Entering the chat/call always FOCUSES the latest message (scroll to it).
     scrollToLatest();
     // ONE writes FIRST on EVERY open — even when there's already history (not
@@ -1270,12 +1276,12 @@ export function HomeScreen({
   }, [chatActive, callActive, identity?.name, lang, scrollToLatest]);
 
   // The chat/call shares the home's single ScrollView, so scrolling the thread
-  // moves the same scrollY. When we LEAVE chat/call, reliably reset it to 0 so
-  // the home returns to its CENTRED rest — otherwise a scrolled thread (esp.
-  // with history) left the home collapsed and the return "sometimes" failed.
+  // moves the same scrollY. When we LEAVE chat/call, snap it back to WHERE WE
+  // OPENED FROM (home 0, or the processes SNAP_OPEN) — not wherever the thread
+  // scroll left it (which stranded the home mid-way between home and the list).
   useEffect(() => {
     if (chatActive || callActive) return;
-    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: chatOriginScrollRef.current, animated: false }));
   }, [chatActive, callActive]);
 
   const handleInputFocus = useCallback(() => {
@@ -3494,6 +3500,25 @@ export function HomeScreen({
       : Math.max(0, -inputKeyboardLift.value);
     return { opacity: kbOpenSV.value, transform: [{ translateY: -kb }] };
   });
+  // Keyboard spacer at the very bottom of the chat thread — grows to the live
+  // keyboard height so the bottom-anchored thread (and its newest bubble) lifts
+  // ABOVE the keyboard, instead of the newest sitting behind it.
+  const kbSpacerStyle = useAnimatedStyle(() => {
+    const kb = isAndroid
+      ? (keyboardHeight.value > 1 ? keyboardHeight.value : 0)
+      : Math.max(0, -inputKeyboardLift.value);
+    return { height: kb };
+  });
+  // Solid background filling the band BELOW the composer, down past the keyboard
+  // top — anchored to the screen bottom (does NOT ride up), so when the composer
+  // lifts with the keyboard, the gap under it stays opaque (no thread peeking).
+  // Only visible while the keyboard is up.
+  const kbCoverStyle = useAnimatedStyle(() => {
+    const kb = isAndroid
+      ? (keyboardHeight.value > 1 ? keyboardHeight.value : 0)
+      : Math.max(0, -inputKeyboardLift.value);
+    return { height: kb + INPUT_BAR_H, opacity: kbOpenSV.value };
+  });
 
   // Input capsule GROWS at the resting hero and SHRINKS back to normal as the
   // user scrolls down into the cards (and whenever a chat is active). Gives the
@@ -4508,6 +4533,11 @@ export function HomeScreen({
                     )}
                   </Animated.View>
                 )}
+                {/* Keyboard spacer — grows to the keyboard height so the
+                    bottom-anchored thread lifts above the keyboard. */}
+                {(chatActive || callActive) && (
+                  <Animated.View style={kbSpacerStyle} pointerEvents="none" />
+                )}
               </View>
 
               {/* Processes/spaces live INLINE in the scroll now (no sheet):
@@ -4557,10 +4587,6 @@ export function HomeScreen({
                 style={[StyleSheet.absoluteFill, styles.kbFadeHost, kbBottomFadeStyle]}
               >
                 <EdgeBars top={false} bottom bottomHeight={150} />
-                {/* SOLID base right above the keyboard — the gradient alone left
-                    thread content faintly peeking in the gap between the composer
-                    and the keyboard; this fully covers it. */}
-                <View style={[styles.kbSolidBase, { backgroundColor: colors.background }]} />
               </Animated.View>
             )}
 
@@ -4935,6 +4961,16 @@ export function HomeScreen({
               <ArrowDownIcon size={26} color={colors.textSecondary} />
             </Pressable>
           </Animated.View>
+        )}
+
+        {/* Solid cover for the band BELOW the composer (down past the keyboard
+            top) — behind the dock, so the composer shows but nothing peeks in the
+            gap. Only while the keyboard is up. */}
+        {!callActive && (
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.kbCover, { backgroundColor: colors.background }, kbCoverStyle]}
+          />
         )}
 
         {/* Home / chat input dock. During a CALL this does NOT render — the call
@@ -5865,9 +5901,9 @@ const styles = StyleSheet.create({
   // The keyboard-lifted bottom fade — above the chat bubbles (0-5) and the
   // static EdgeBars (15), below the input dock (30).
   kbFadeHost: { zIndex: 16 },
-  // Solid fill covering the composer→keyboard band (inside the kb fade host,
-  // which rides up with the keyboard). The composer (zIndex 30) sits on top.
-  kbSolidBase: { position: 'absolute', left: 0, right: 0, bottom: 0, height: INPUT_BAR_H + 44 },
+  // Solid fill below the composer (anchored to the screen bottom) — behind the
+  // dock (zIndex 30) but above the scrolling thread.
+  kbCover: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 25 },
   // The up-chevron strip above the input dock (full width for centering; only
   // the arrow inside captures taps). Below the sheet (31) so the open sheet
   // covers it.
