@@ -1,77 +1,75 @@
 /**
- * SubscriptionPanel — ONE's plans (Pro / Max), as an INLINE slide-up panel.
+ * SubscriptionPanel — ONE's paid plans (Pro / Max), as a focused upgrade sheet
+ * in the "Get ONE Pro / Max" style: a centred plan icon, a big title, a two-way
+ * segmented toggle, the plan's feature list (no Free comparison column) and one
+ * big "Upgrade for ₪X" pill.
  *
- * It renders into a sheet's `overlay` slot (screen-pinned), the same pattern as
- * UnitQuickActionsPanel: a full-screen scrim + a panel that slides up OVER the
- * host sheet. This is why it opens instantly and doesn't close the profile
- * first (the old Modal version had to close one sheet before presenting the
- * next — slow, and it dismissed the profile).
+ * Interactions:
+ *  • SWIPE sideways (or tap the toggle) to switch between the two plans.
+ *  • DRAG the sheet DOWN to dismiss — the sheet follows your finger physically
+ *    (like the ONE profile sheet) and either flings closed or springs back.
+ *
+ * It renders into a host sheet's `overlay` slot (screen-pinned), so it opens
+ * instantly over the profile/settings sheet without closing it first.
  *
  * We're in Israel and NOT wiring Stripe yet, so choosing a tier is a local
  * (mock) `setPlan` flip. The real IL billing slots in behind the same call.
  */
 
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSpring,
+  runOnJS,
   Easing,
+  interpolate,
+  Extrapolation,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../stores/themeStore';
 import { useLanguage } from '../../i18n/useT';
 import { useMvpStore } from '../../stores/mvpStore';
+import type { PlanTier } from '../../stores/mvpStore';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
 import { CloseIcon } from '../../components/mvp/icons';
-import { EdgeBars } from '../../components/mvp/EdgeBars';
 
 interface SubscriptionPanelProps {
   visible: boolean;
   onClose: () => void;
-  /** Optional contextual line shown at the top — set when the panel is opened
-   *  from a gated action ("You've reached the free limit of 2 profiles"). */
+  /** Optional contextual line shown under the title — set when the panel is
+   *  opened from a gated action ("You've reached the free limit of 2 profiles"). */
   reason?: string;
 }
 
-type Tier = 'free' | 'pro' | 'max';
+type PaidTier = Extract<PlanTier, 'pro' | 'max'>;
 
-interface TierDef {
-  id: Tier;
+interface PlanDef {
+  id: PaidTier;
   name: string;
   /** Monthly price, in ILS (₪) — we bill in Israel. */
   price: string;
-  /** Highlighted card (the one we nudge toward) gets the filled black CTA. */
-  featured?: boolean;
   tagline: { he: string; en: string };
   features: { he: string; en: string }[];
 }
 
-const TIERS: TierDef[] = [
-  {
-    id: 'free',
-    name: 'Free',
-    price: '₪0',
-    tagline: { he: 'הכר את ONE וגלה מה הוא יכול — בחינם.', en: 'Get to know ONE and what it can do — free.' },
-    features: [
-      { he: 'עד 2 מרחבים', en: 'Up to 2 spaces' },
-      { he: 'תהליכים וצ׳אט עם ONE', en: 'Processes & chat with ONE' },
-      { he: 'מקור מחובר אחד', en: 'One connected source' },
-    ],
-  },
+// The two paid options (no Free — this sheet is purely the upgrade choice).
+const PLANS: PlanDef[] = [
   {
     id: 'pro',
     name: 'Pro',
     price: '₪29',
-    featured: true,
-    tagline: { he: 'ל‑ONE שמלווה אותך בכל תהליך.', en: 'For a ONE that carries every process.' },
+    tagline: { he: 'ל‑ONE שמלווה אותך בכל תהליך.', en: 'A ONE that carries every process.' },
     features: [
       { he: 'תהליכים ומרחבים ללא הגבלה', en: 'Unlimited processes & spaces' },
       { he: 'ONE חכם יותר (מודל מתקדם)', en: 'A smarter ONE (advanced model)' },
-      { he: 'חיבור כל החשבונות והמקורות', en: 'Connect all your accounts & sources' },
+      { he: 'חיבור כל החשבונות והמקורות', en: 'Connect all accounts & sources' },
       { he: 'תזכורות ואוטומציות', en: 'Reminders & automations' },
+      { he: 'זיכרון מורחב', en: 'Expanded memory' },
     ],
   },
   {
@@ -84,9 +82,33 @@ const TIERS: TierDef[] = [
       { he: 'ONE יוזם ופועל בשבילך', en: 'ONE takes initiative for you' },
       { he: 'עדיפות מקסימלית + תמיכה אישית', en: 'Top priority + personal support' },
       { he: 'גישה מוקדמת ליכולות חדשות', en: 'Early access to new abilities' },
+      { he: 'זיכרון מורחב לאורך זמן', en: 'Long, expanded memory' },
     ],
   },
 ];
+
+const ACCENT = '#3B82F6';
+// How far down you must drag (or how fast you must fling) to dismiss.
+const DISMISS_DISTANCE = 130;
+const DISMISS_VELOCITY = 950;
+
+function PlanIcon({ tier }: { tier: PaidTier }) {
+  // Pro → a filled accent diamond with a spark; Max → a brighter sparkle cluster.
+  if (tier === 'max') {
+    return (
+      <View style={styles.iconWrap}>
+        <Text style={[styles.sparkBig, { color: ACCENT }]}>✦</Text>
+        <Text style={[styles.sparkSmall, { color: ACCENT }]}>✦</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.iconWrap}>
+      <View style={[styles.iconDiamond, { backgroundColor: ACCENT }]} />
+      <Text style={styles.iconDiamondSpark}>✦</Text>
+    </View>
+  );
+}
 
 export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPanelProps) {
   const { colors } = useThemeStore();
@@ -96,157 +118,209 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
   const plan = useMvpStore((s) => s.plan);
   const setPlan = useMvpStore((s) => s.setPlan);
 
+  // Which plan the sheet is showing (0 = Pro, 1 = Max).
+  const [index, setIndex] = useState(0);
+  const active = PLANS[index];
+  const isCurrent = plan === active.id;
+
+  // Entrance + drag.
   const sv = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const dragX = useSharedValue(0);
+  const axisLock = useSharedValue(0); // 0 none, 1 vertical, 2 horizontal
+  const contentFade = useSharedValue(1);
+
   useEffect(() => {
-    sv.value = withTiming(visible ? 1 : 0, { duration: 240, easing: Easing.out(Easing.cubic) });
-  }, [visible, sv]);
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: sv.value * 0.55 }));
+    if (visible) {
+      dragY.value = 0;
+      dragX.value = 0;
+      setIndex((i) => i); // keep selection across reopens
+    }
+    sv.value = withTiming(visible ? 1 : 0, { duration: 260, easing: Easing.out(Easing.cubic) });
+  }, [visible, sv, dragY, dragX]);
+
+  // Crossfade the plan "page" when it switches (swipe or toggle tap).
+  useEffect(() => {
+    contentFade.value = 0.25;
+    contentFade.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) });
+  }, [index, contentFade]);
+
+  const switchTo = (next: number) => {
+    const clamped = Math.max(0, Math.min(PLANS.length - 1, next));
+    if (clamped === index) return;
+    haptic.select();
+    setIndex(clamped);
+  };
+
+  const closeNow = () => {
+    onClose();
+  };
+
+  const pan = Gesture.Pan()
+    .onBegin(() => {
+      axisLock.value = 0;
+    })
+    .onUpdate((e) => {
+      if (axisLock.value === 0) {
+        if (Math.abs(e.translationY) > 8 || Math.abs(e.translationX) > 8) {
+          axisLock.value = Math.abs(e.translationY) >= Math.abs(e.translationX) ? 1 : 2;
+        }
+      }
+      if (axisLock.value === 1) {
+        // Downward dismiss drag only (resist upward).
+        dragY.value = Math.max(0, e.translationY);
+      } else if (axisLock.value === 2) {
+        dragX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      if (axisLock.value === 1) {
+        if (e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY) {
+          // Fling the rest of the way down, THEN unmount — one continuous motion.
+          dragY.value = withTiming(900, { duration: 220, easing: Easing.in(Easing.cubic) }, (done) => {
+            if (done) runOnJS(closeNow)();
+          });
+        } else {
+          dragY.value = withSpring(0, { damping: 20, stiffness: 220 });
+        }
+      } else if (axisLock.value === 2) {
+        const dir = e.translationX <= -50 ? 1 : e.translationX >= 50 ? -1 : 0;
+        if (dir !== 0) runOnJS(switchTo)(index + dir);
+        dragX.value = withSpring(0, { damping: 20, stiffness: 220 });
+      }
+      axisLock.value = 0;
+    });
+
+  const scrimStyle = useAnimatedStyle(() => {
+    const dragFade = 1 - interpolate(dragY.value, [0, 420], [0, 1], Extrapolation.CLAMP);
+    return { opacity: sv.value * 0.55 * dragFade };
+  });
   const panelStyle = useAnimatedStyle(() => ({
-    opacity: sv.value,
-    transform: [{ translateY: (1 - sv.value) * 420 }],
+    transform: [{ translateY: (1 - sv.value) * 520 + dragY.value }],
+  }));
+  const pageStyle = useAnimatedStyle(() => ({
+    opacity: contentFade.value,
+    transform: [{ translateX: dragX.value * 0.5 }],
   }));
 
-  const choose = (tier: Tier) => {
+  const choose = () => {
+    if (isCurrent) return;
     haptic.success();
-    // Mock upgrade (no Stripe in IL yet) — flips the local/persisted plan.
-    setPlan(tier);
+    setPlan(active.id); // mock upgrade (no Stripe in IL yet)
     onClose();
   };
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
-      {/* Scrim — tap outside the panel to dismiss. */}
+      {/* Scrim — tap outside to dismiss. */}
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={he ? 'סגור' : 'Close'}>
-        <Animated.View
-          style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }, scrimStyle]}
-          pointerEvents="none"
-        />
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }, scrimStyle]} pointerEvents="none" />
       </Pressable>
 
-      <Animated.View
-        style={[
-          styles.panel,
-          { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 16) + 8 },
-          panelStyle,
-        ]}
-      >
-        <View style={[styles.handle, { backgroundColor: colors.border }]} />
-        {/* Close (X) — same round button as the ONE profile. */}
-        <Pressable
-          onPress={onClose}
-          hitSlop={12}
-          style={[styles.closeBtn, { backgroundColor: colors.surface }]}
-          accessibilityRole="button"
-          accessibilityLabel={he ? 'סגור' : 'Close'}
+      <GestureDetector gesture={pan}>
+        <Animated.View
+          style={[
+            styles.panel,
+            { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 16) + 10 },
+            panelStyle,
+          ]}
         >
-          <CloseIcon size={18} color={colors.text} />
-        </Pressable>
+          {/* Physical drag handle. */}
+          <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
-        {/* One header sentence — no separate title + subtitle. */}
-        <Text style={[styles.title, { color: colors.text }, rtlText(lang)]}>
-          {he ? 'התחל חינם, וגדל בקצב שלך.' : 'Start free, and scale as you grow.'}
-        </Text>
+          {/* Close (X) — same round button as the ONE profile. */}
+          <Pressable
+            onPress={onClose}
+            hitSlop={12}
+            style={[styles.closeBtn, { backgroundColor: colors.surface }]}
+            accessibilityRole="button"
+            accessibilityLabel={he ? 'סגור' : 'Close'}
+          >
+            <CloseIcon size={18} color={colors.text} />
+          </Pressable>
 
-        {/* Contextual reason when opened from a gated action. */}
-        {!!reason && (
-          <View style={[styles.reasonPill, { backgroundColor: colors.surface }]}>
-            <Text style={styles.reasonStar}>✦</Text>
-            <Text style={[styles.reasonText, { color: colors.text }, rtlText(lang)]}>{reason}</Text>
-          </View>
-        )}
+          {/* The swipeable plan "page" (icon + title + subtitle + features). */}
+          <Animated.View style={[styles.page, pageStyle]}>
+            <PlanIcon tier={active.id} />
+            <Text style={[styles.title, { color: colors.text }]}>
+              {he ? `קבלו ONE ${active.name}` : `Get ONE ${active.name}`}
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              {he ? active.tagline.he : active.tagline.en}
+            </Text>
 
-        {/* Scroll region with soft top + bottom fades (like the processes list),
-            and overscroll-past-the-content to dismiss. */}
-        <View style={styles.scrollArea}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          alwaysBounceVertical
-          onScrollEndDrag={(e) => {
-            const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-            const overBottom = contentOffset.y - (contentSize.height - layoutMeasurement.height);
-            // Pulled down past the top, or dragged up past the bottom → close.
-            if (contentOffset.y < -70 || overBottom > 70) onClose();
-          }}
-        >
-          {TIERS.map((tier) => {
-            const current = plan === tier.id;
-            // Black filled CTA for the plan we nudge toward + any real upgrade;
-            // an outline "current plan" pill for the one you're on.
-            const filled = !current && tier.featured;
-            return (
-              <View
-                key={tier.id}
-                style={[
-                  styles.tierCard,
-                  { backgroundColor: colors.surface, borderColor: current ? colors.text : colors.border },
-                  current && { borderWidth: 1.5 },
-                ]}
-              >
-                <Text style={[styles.tierName, { color: colors.text }, rtlText(lang)]}>{tier.name}</Text>
-                <View style={[styles.priceRow, rtlRow(lang)]}>
-                  <Text style={[styles.price, { color: colors.text }]}>{tier.price}</Text>
-                  <Text style={[styles.priceUnit, { color: colors.textSecondary }]}>
-                    {he ? '/ לחודש' : '/ month'}
-                  </Text>
-                </View>
+            {/* Contextual reason when opened from a gated action. */}
+            {!!reason && (
+              <View style={[styles.reasonPill, { backgroundColor: colors.surface }]}>
+                <Text style={styles.reasonStar}>✦</Text>
+                <Text style={[styles.reasonText, { color: colors.text }, rtlText(lang)]}>{reason}</Text>
+              </View>
+            )}
+          </Animated.View>
 
-                <Text style={[styles.tagline, { color: colors.textSecondary }, rtlText(lang)]}>
-                  {he ? tier.tagline.he : tier.tagline.en}
-                </Text>
-
-                <View style={styles.featureList}>
-                  {tier.features.map((f, i) => (
-                    <View key={i} style={[styles.featureRow, rtlRow(lang)]}>
-                      <Text style={[styles.featureCheck, { color: colors.textSecondary }]}>✓</Text>
-                      <Text style={[styles.featureText, { color: colors.text }, rtlText(lang)]}>
-                        {he ? f.he : f.en}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-
+          {/* Two-option segmented toggle (also switchable by swiping the page). */}
+          <View style={[styles.toggle, { backgroundColor: colors.surface }]}>
+            {PLANS.map((p, i) => {
+              const on = i === index;
+              return (
                 <Pressable
-                  onPress={() => (current ? undefined : choose(tier.id))}
-                  disabled={current}
-                  style={({ pressed }) => [
-                    styles.chooseBtn,
-                    current
-                      ? { backgroundColor: 'transparent', borderColor: colors.border, borderWidth: 1 }
-                      : filled
-                        ? { backgroundColor: colors.text }
-                        : { backgroundColor: colors.background, borderColor: colors.text, borderWidth: 1 },
-                    { opacity: pressed && !current ? 0.85 : 1 },
-                  ]}
+                  key={p.id}
+                  onPress={() => switchTo(i)}
+                  style={[styles.toggleSeg, on && { backgroundColor: colors.background }]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
                 >
-                  <Text
-                    style={[
-                      styles.chooseBtnText,
-                      { color: current ? colors.textSecondary : filled ? colors.background : colors.text },
-                    ]}
-                  >
-                    {current
-                      ? he ? 'התוכנית הנוכחית שלך' : 'Your current plan'
-                      : tier.id === 'free'
-                        ? he ? 'חזרה ל‑Free' : 'Switch to Free'
-                        : he ? `שדרג ל‑${tier.name}` : `Upgrade to ${tier.name}`}
+                  <Text style={[styles.toggleText, { color: on ? colors.text : colors.textSecondary }]}>
+                    {p.name}
                   </Text>
                 </Pressable>
-              </View>
-            );
-          })}
+              );
+            })}
+          </View>
 
-          {/* Billing isn't wired yet (no Stripe in Israel). Keep it honest. */}
-          <Text style={[styles.billingNote, { color: colors.textSecondary }, rtlText(lang)]}>
+          {/* Feature list for the selected plan — no Free column, just what you get. */}
+          <Animated.View style={[styles.featureBox, { borderColor: colors.border }, pageStyle]}>
+            {active.features.map((f, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.featureRow,
+                  rtlRow(lang),
+                  i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.featureText, { color: colors.text }, rtlText(lang)]}>
+                  {he ? f.he : f.en}
+                </Text>
+                <Text style={[styles.featureCheck, { color: ACCENT }]}>✓</Text>
+              </View>
+            ))}
+          </Animated.View>
+
+          {/* Big "Upgrade for ₪X" pill — sized like the home box. */}
+          <Pressable
+            onPress={choose}
+            disabled={isCurrent}
+            style={({ pressed }) => [
+              styles.cta,
+              { backgroundColor: isCurrent ? colors.surface : colors.text, opacity: pressed && !isCurrent ? 0.9 : 1 },
+            ]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.ctaText, { color: isCurrent ? colors.textSecondary : colors.background }]}>
+              {isCurrent
+                ? he ? 'התוכנית הנוכחית שלך' : 'Your current plan'
+                : he ? `שדרגו תמורת ${active.price}` : `Upgrade for ${active.price}`}
+            </Text>
+          </Pressable>
+
+          <Text style={[styles.fineprint, { color: colors.textSecondary }]}>
             {he
-              ? 'התשלום בישראל ייפתח בקרוב — בינתיים השדרוג נשמר במכשיר.'
-              : 'Billing in Israel is coming soon — for now the upgrade is saved on-device.'}
+              ? 'מתחדש מדי חודש. אפשר לבטל בכל רגע. התשלום בישראל ייפתח בקרוב.'
+              : 'Auto-renews monthly. Cancel anytime. Billing in Israel is coming soon.'}
           </Text>
-        </ScrollView>
-        {/* Soft fades so content dissolves at the edges instead of a hard cut. */}
-        <EdgeBars topLinear topHeight={40} bottomHeight={64} />
-        </View>
-      </Animated.View>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -257,19 +331,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    // Fixed height so the scroll area (flex:1 below) is bounded and the fades
-    // can overlay its edges.
-    height: '86%',
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingTop: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 22,
     zIndex: 40,
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
     shadowOffset: { width: 0, height: -6 },
-    elevation: 16,
+    elevation: 18,
   },
   handle: {
     alignSelf: 'center',
@@ -277,126 +349,116 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 3,
     opacity: 0.5,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  // Round X in the top corner (leading side), matching the ONE profile.
   closeBtn: {
     position: 'absolute',
     top: 14,
-    left: 14,
+    right: 16,
     width: 36,
     height: 36,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
+    zIndex: 3,
   },
-  // Bounded, relative container so the ScrollView scrolls and EdgeBars can
-  // overlay its top + bottom edges.
-  scrollArea: { flex: 1, position: 'relative' },
-  title: {
-    fontSize: 23,
-    lineHeight: 30,
+  page: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  iconWrap: {
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    marginBottom: 14,
+  },
+  iconDiamond: {
+    position: 'absolute',
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    transform: [{ rotate: '45deg' }],
+  },
+  iconDiamondSpark: {
+    color: '#FFFFFF',
+    fontSize: 22,
     fontWeight: '800',
-    letterSpacing: 0.2,
-    marginTop: 6,
-    marginBottom: 12,
-    // Clear the X in the corner.
-    paddingHorizontal: 4,
+  },
+  sparkBig: { fontSize: 40, fontWeight: '800' },
+  sparkSmall: { position: 'absolute', top: 6, right: 8, fontSize: 20, fontWeight: '800' },
+  title: {
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 15.5,
+    lineHeight: 21,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 10,
   },
   reasonPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    marginBottom: 4,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    borderRadius: 13,
+    marginTop: 12,
   },
-  reasonStar: {
-    fontSize: 13,
-    color: '#FBBF24',
-  },
-  reasonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    flex: 1,
-    lineHeight: 18,
-  },
-  scrollContent: {
-    gap: 14,
-    paddingTop: 10,
-    // Clears the bottom fade so the last card + note aren't hidden under it.
-    paddingBottom: 72,
-  },
-  tierCard: {
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 18,
-    gap: 12,
-  },
-  tierName: {
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  priceRow: {
+  reasonStar: { fontSize: 13, color: '#FBBF24' },
+  reasonText: { fontSize: 13, fontWeight: '600', flex: 1, lineHeight: 18 },
+  toggle: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
-    marginTop: 4,
+    borderRadius: 24,
+    padding: 4,
+    marginTop: 22,
+    width: '100%',
   },
-  price: {
-    fontSize: 40,
-    fontWeight: '800',
-    lineHeight: 44,
-    letterSpacing: -0.5,
+  toggleSeg: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  priceUnit: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 7,
-  },
-  tagline: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  featureList: {
-    gap: 8,
-    marginTop: 2,
+  toggleText: { fontSize: 16, fontWeight: '700' },
+  featureBox: {
+    width: '100%',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    marginTop: 18,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    paddingVertical: 15,
   },
-  featureCheck: {
-    fontSize: 15,
-    fontWeight: '800',
-    width: 16,
-    textAlign: 'center',
-  },
-  featureText: {
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-  chooseBtn: {
-    marginTop: 6,
-    borderRadius: 16,
-    paddingVertical: 14,
+  featureText: { fontSize: 16, fontWeight: '600', flex: 1 },
+  featureCheck: { fontSize: 18, fontWeight: '800', marginHorizontal: 8 },
+  // Big pill — matches the prominence of the home composer box.
+  cta: {
+    width: '100%',
+    height: 58,
+    borderRadius: 29,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 24,
   },
-  chooseBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  billingNote: {
-    fontSize: 12,
+  ctaText: { fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
+  fineprint: {
+    fontSize: 12.5,
     lineHeight: 17,
     textAlign: 'center',
-    paddingHorizontal: 10,
-    marginTop: 2,
+    marginTop: 14,
+    paddingHorizontal: 16,
   },
 });
