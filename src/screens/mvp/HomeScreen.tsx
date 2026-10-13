@@ -1214,8 +1214,12 @@ export function HomeScreen({
   // scrolling on the count change alone left the newest card under the keyboard.
   const scrollToLatest = useCallback((animated = true) => {
     requestAnimationFrame(() => {
-      const kb = inputFocusedRef.current ? SCREEN_H * 0.42 : 0;
-      const available = SCREEN_H - insets.top - INPUT_BAR_H - 48 - kb;
+      // Use the LIVE keyboard height when it's actually up (falls back to an
+      // estimate) so the newest message lands just ABOVE the keyboard + input,
+      // not behind it.
+      const liveKb = keyboardHeight.value;
+      const kb = inputFocusedRef.current ? (liveKb > 60 ? liveKb : SCREEN_H * 0.42) : 0;
+      const available = SCREEN_H - insets.top - INPUT_BAR_H - 24 - kb;
       const target = Math.max(0, threadBottomRef.current - available);
       scrollRef.current?.scrollTo({ y: target, animated });
     });
@@ -1225,17 +1229,6 @@ export function HomeScreen({
     scrollToLatest();
   }, [chatActive, chatMessages.length, inputFocused, insets.top, scrollToLatest]);
 
-  // Gentle auto-settle when a home drag ends part-way between the rest home and
-  // the open processes list. A SMOOTH animated scroll (not the hard
-  // snapToOffsets, which read as aggressive), biased TOWARD the list: a small
-  // pull up completes to the list; only a small residual near the very top eases
-  // back home. Never fires in chat/call or once past the list (free-scroll).
-  const settleHomeScroll = useCallback((y: number) => {
-    if (chatActiveRef.current) return;
-    if (y <= 2 || y >= SNAP_OPEN - 2) return;
-    const target = y > SNAP_OPEN * 0.28 ? SNAP_OPEN : 0;
-    scrollRef.current?.scrollTo({ y: target, animated: true });
-  }, []);
 
   // Each time chat activates from a fresh state, bump a counter so the
   // broadcast navigator picks a new opening suggestion on each entry.
@@ -1263,12 +1256,27 @@ export function HomeScreen({
     openerPostedRef.current = true;
     // Entering the chat/call always FOCUSES the latest message (scroll to it).
     scrollToLatest();
+    // ONE writes FIRST on EVERY open — even when there's already history (not
+    // just the first ever message). Skip only if ONE's own greeting is already
+    // the last thing said (it's still waiting on you — no need to repeat it).
     const store = useMvpStore.getState();
-    if (store.homeChat.length > 0) return; // a conversation already exists
+    const last = store.homeChat[store.homeChat.length - 1] as InlineMessage | undefined;
+    if (last && last.from === 'one' && last.id.startsWith('one_opener_')) return;
     const greeting = timeGreeting(lang, Date.now(), identity?.name, 0);
     const text = lang === 'he' ? `${greeting} במה אפשר לעזור?` : `${greeting} How can I help?`;
     store.appendHomeChat({ id: `one_opener_${Date.now()}`, from: 'one', text, ts: Date.now() });
+    // Bring the fresh greeting into view (above the keyboard if it's open).
+    requestAnimationFrame(() => scrollToLatest());
   }, [chatActive, callActive, identity?.name, lang, scrollToLatest]);
+
+  // The chat/call shares the home's single ScrollView, so scrolling the thread
+  // moves the same scrollY. When we LEAVE chat/call, reliably reset it to 0 so
+  // the home returns to its CENTRED rest — otherwise a scrolled thread (esp.
+  // with history) left the home collapsed and the return "sometimes" failed.
+  useEffect(() => {
+    if (chatActive || callActive) return;
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
+  }, [chatActive, callActive]);
 
   const handleInputFocus = useCallback(() => {
     setInputFocused(true);
@@ -4315,7 +4323,7 @@ export function HomeScreen({
               alwaysBounceVertical
               // Drag DOWN past the top (a deliberate overscroll) → open Global —
               // the OPPOSITE-direction gesture to scrolling up into the processes.
-              onScrollEndDrag={(e) => {
+              onScrollEndDrag={() => {
                 if (
                   overscrollMin.value <= -GLOBAL_OPEN_THRESHOLD &&
                   onOpenGlobal && !chatActive && !callActive && !anySheetOpen && !signInOpen
@@ -4324,16 +4332,10 @@ export function HomeScreen({
                   onOpenGlobal();
                 }
                 overscrollMin.value = 0;
-                // Released with ~no momentum → settle gently to the nearest detent
-                // now (a fling settles in onMomentumScrollEnd instead).
-                if (Math.abs(e.nativeEvent.velocity?.y ?? 0) < 0.12) {
-                  settleHomeScroll(e.nativeEvent.contentOffset.y);
-                }
               }}
-              // A light tick each time the list SNAPS between the resting hero
-              // and the open processes list (in either direction), so the
-              // detent change is felt, not just seen. Then gently auto-settle to
-              // the nearest detent (biased to the list).
+              // Natural free scroll — no forced snap in either direction (the
+              // auto-snap read as unnatural). A light tick when the list crosses
+              // the open/closed detent, so the change is still felt.
               onMomentumScrollEnd={(e) => {
                 const open = e.nativeEvent.contentOffset.y > SNAP_OPEN * 0.5;
                 if (open) seenProcessesRef.current = true; // learned it
@@ -4341,7 +4343,6 @@ export function HomeScreen({
                   atProcessesRef.current = open;
                   haptic.select();
                 }
-                settleHomeScroll(e.nativeEvent.contentOffset.y);
               }}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
@@ -5148,10 +5149,9 @@ export function HomeScreen({
             accessibilityRole="button"
             accessibilityLabel={lang === 'he' ? 'סגור' : 'Close'}
           >
-            <View style={styles.closeAsPlus}>
-              {/* Same soft colour as the home chevrons (textSecondary). */}
-              <PlusThinIcon size={26} color={colors.textSecondary} />
-            </View>
+            {/* A chevron (same type + soft colour as the home chevrons), not an
+                X — a down chevron reads as "collapse back to home". */}
+            <ArrowDownIcon size={26} color={colors.textSecondary} />
           </Pressable>
           <Pressable
             onPress={() => { haptic.select(); setGhostMode((v) => !v); }}
