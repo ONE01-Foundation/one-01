@@ -255,6 +255,7 @@ export function OneProfileSheet({
           { iconNode: <LinkIcon size={19} color={colors.text} />, label: he ? 'חיבורים ומקורות' : 'Connections & sources', onPress: comingSoon },
           { iconNode: <StarIcon size={19} color={colors.text} />, label: he ? 'תוכנית ומנוי' : 'Plan & subscription', onPress: () => openUpgrade(undefined) },
           { iconNode: <GearIcon size={19} color={colors.text} />, label: he ? 'הגדרות ONE' : 'ONE settings', onPress: onOpenSettings },
+          { label: he ? 'התנתק' : 'Log out', destructive: true, onPress: () => { useMvpStore.getState().reset(); onClose(); } },
         ]
       : [
           { iconNode: <ClockIcon size={19} color={colors.text} />, label: he ? 'ציר זמן' : 'Timeline', onPress: onOpenTimeline ?? comingSoon },
@@ -264,6 +265,7 @@ export function OneProfileSheet({
           { iconNode: <LinkIcon size={19} color={colors.text} />, label: he ? 'חיבורים ומקורות' : 'Connections & sources', onPress: comingSoon },
           { iconNode: <StarIcon size={19} color={colors.text} />, label: he ? 'תוכנית ומנוי' : 'Plan & subscription', onPress: () => openUpgrade(undefined) },
           { iconNode: <GearIcon size={19} color={colors.text} />, label: he ? 'הגדרות ONE' : 'ONE settings', onPress: onOpenSettings },
+          { label: he ? 'התנתק' : 'Log out', destructive: true, onPress: () => { useMvpStore.getState().reset(); onClose(); } },
         ];
 
   // Connect / disconnect a source. Disconnecting is always allowed; connecting
@@ -793,6 +795,18 @@ export function OneProfileSheet({
               hang off-screen at the low snap. */}
           <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />
           {switcherDockNode}
+          {/* Big close — centred at the bottom (the X moved here from the top
+              header). Primary way out of the profile. */}
+          <View pointerEvents="box-none" style={[styles.closeDockWrap, { bottom: Math.max(insets.bottom, 12) + 2 }]}>
+            <Pressable
+              onPress={onClose}
+              style={[styles.closeDockBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel={t('common_close')}
+            >
+              <CloseIcon size={26} color={colors.text} />
+            </Pressable>
+          </View>
           <SubscriptionPanel
             visible={subscriptionOpen}
             reason={subscriptionReason}
@@ -811,20 +825,12 @@ export function OneProfileSheet({
       {/* Soft top gradient behind the header — content scrolls UNDER it, same
           treatment as the process sheet. The header (zIndex 20) stays crisp. */}
       <EdgeBars bottom={false} topHeight={112} topLinear />
-      {/* Sticky top header — kebab / Ariel / X. Renders OUTSIDE the scroll
-          view so it stays visible when the user scrolls for more. */}
+      {/* Sticky top header — now just the compact title (the X + ⋮ moved: X is a
+          big button at the bottom centre, the ⋮ menu lives on the orb). Renders
+          OUTSIDE the scroll view so the title stays visible when scrolling. */}
       <View style={styles.topHeader} pointerEvents="box-none">
-        <Pressable
-          onPress={() => setMenuOpen(true)}
-          hitSlop={10}
-          style={[styles.pillBtn, { backgroundColor: colors.surface }]}
-          accessibilityLabel={he ? 'עוד אפשרויות' : 'More options'}
-        >
-          <MenuIcon size={22} color={colors.text} />
-        </Pressable>
         {/* Compact sticky title — empty at the top (clean header), fades in
-            "ONE <PLAN>" (plan word in its tier colour) once the big title
-            scrolls off. Mirrors the hero title. */}
+            "ONE <PLAN>" once the big title scrolls off. */}
         <Animated.View
           style={[styles.headerTitleSlot, compactTitleStyle]}
           pointerEvents="none"
@@ -839,14 +845,6 @@ export function OneProfileSheet({
             ) : null}
           </Text>
         </Animated.View>
-        <Pressable
-          onPress={onClose}
-          hitSlop={10}
-          style={[styles.pillBtn, { backgroundColor: colors.surface }]}
-          accessibilityLabel={t('common_close')}
-        >
-          <CloseIcon size={22} color={colors.text} />
-        </Pressable>
       </View>
 
       <BottomSheetScrollView
@@ -870,15 +868,19 @@ export function OneProfileSheet({
               {callActive && (
                 <Animated.View style={[styles.oneCallRing, callRingStyle]} pointerEvents="none" />
               )}
-              {/* Edit — a small pencil on the orb's corner (edit ONE's look). */}
+              {/* ⋯ menu on the orb's corner — opens the options tab (Settings,
+                  Log out, …). MenuIcon is vertical, rotated 90° so it reads as
+                  horizontal dots. */}
               <Pressable
-                onPress={comingSoon}
+                onPress={() => setMenuOpen(true)}
                 hitSlop={8}
                 style={[styles.editOrbBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 accessibilityRole="button"
-                accessibilityLabel={he ? 'ערוך' : 'Edit'}
+                accessibilityLabel={he ? 'עוד אפשרויות' : 'More options'}
               >
-                <PencilIcon size={15} color={colors.text} />
+                <View style={{ transform: [{ rotate: '90deg' }] }}>
+                  <MenuIcon size={17} color={colors.text} />
+                </View>
               </Pressable>
             </View>
           </Animated.View>
@@ -1746,6 +1748,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 8,
     zIndex: 10,
+  },
+  // Big bottom-centre close button (the X moved out of the top header).
+  closeDockWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 14,
+  },
+  closeDockBtn: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   // Centred row of floating buttons — locked LTR so + stays left, active pill
   // right, regardless of app language.

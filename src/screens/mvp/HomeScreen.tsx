@@ -1239,6 +1239,23 @@ export function HomeScreen({
     lastChatActiveRef.current = chatActive;
   }, [chatActive]);
 
+  // ONE always speaks FIRST: when the chat or a call opens on a fresh thread
+  // (no history yet), ONE posts an opening greeting, so the conversation begins
+  // with ONE reaching out — never an empty box. Once a thread exists its own
+  // history already leads, so we don't double-greet.
+  const openerPostedRef = useRef(false);
+  useEffect(() => {
+    const active = chatActive || callActive;
+    if (!active) { openerPostedRef.current = false; return; }
+    if (openerPostedRef.current) return;
+    openerPostedRef.current = true;
+    const store = useMvpStore.getState();
+    if (store.homeChat.length > 0) return; // a conversation already exists
+    const greeting = timeGreeting(lang, Date.now(), identity?.name, 0);
+    const text = lang === 'he' ? `${greeting} במה אפשר לעזור?` : `${greeting} How can I help?`;
+    store.appendHomeChat({ id: `one_opener_${Date.now()}`, from: 'one', text, ts: Date.now() });
+  }, [chatActive, callActive, identity?.name, lang]);
+
   const handleInputFocus = useCallback(() => {
     setInputFocused(true);
     // Back to focus-driven chat state — the + "hold open" bridge is no longer
@@ -5628,11 +5645,13 @@ const styles = StyleSheet.create({
   // it lands centered when the user pulls the surface up.
   // Processes list, inline in the home scroll (below the hero). Reserves at
   // least a screen so even a short/empty list still lets the home scroll far
-  // enough to fully collapse the figure up to the top bar.
+  // enough to fully collapse the figure up to the top bar. The top padding
+  // drops the list clear of the collapsed figure + the top gradient (otherwise
+  // the gradient hides the first rows when snapped open).
   processesInline: {
     minHeight: SNAP_OPEN,
     paddingHorizontal: 18,
-    paddingTop: 10,
+    paddingTop: 58,
   },
   emptyCardsState: {
     minHeight: SNAP_OPEN,
