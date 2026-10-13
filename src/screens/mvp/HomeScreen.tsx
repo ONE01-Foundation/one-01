@@ -121,6 +121,10 @@ import { enrichUnitFromArchetype, generateRichUnit, detectArchetypeStrict } from
 
 const SCREEN_H = Dimensions.get('window').height;
 const SCREEN_W = Dimensions.get('window').width;
+// On a phone the UI is full-width; on a WIDE viewport (the app on web/desktop)
+// the composer + conversation would otherwise stretch edge-to-edge, which reads
+// badly. Cap the content column and centre it so it keeps a phone-like width.
+const CONTENT_MAX_W = Math.min(SCREEN_W, 540);
 
 // The up/down hint chevrons sit SYMMETRICALLY about the screen's vertical
 // centre — the top one this far above centre, the bottom one the same distance
@@ -3491,7 +3495,14 @@ export function HomeScreen({
     // The chat pin EASES OFF with the exit slide (chatExitProgress 0→1), so on
     // close the figure grows back to centre AS the thread slides away — one
     // continuous motion, not a sharp cut after the slide finishes.
-    const chatPin = chatActiveSV.value * (1 - chatExitProgress.value);
+    // A CALL pins it too (callHideSV, animated) — a call started from the resting
+    // home has chatActive=false, so without this the figure stayed big/centred
+    // and hid the conversation (it only worked when the call came from an open
+    // chat). callHideSV gives the same compact-header layout, in or out of chat.
+    const chatPin = Math.max(
+      chatActiveSV.value * (1 - chatExitProgress.value),
+      callHideSV.value,
+    );
     return Math.max(scrollP, chatPin);
   });
 
@@ -3555,6 +3566,18 @@ export function HomeScreen({
       hideSub.remove();
     };
   }, [inputKeyboardLift, insetsBottom]);
+
+  // Re-focus the thread ABOVE the keyboard every time it opens — not just on the
+  // first focus. keyboardDidShow fires once the keyboard is fully up (real
+  // height known), so closing then reopening the keyboard re-pulls the newest
+  // bubbles above it (the focus-change effect alone ran too early, before the
+  // height was known, so a reopen left the bubbles behind the keyboard).
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      if (chatActiveRef.current) requestAnimationFrame(() => scrollToLatest());
+    });
+    return () => sub.remove();
+  }, [scrollToLatest]);
 
   // Input dock vertical position. On Android the dock rests `insetsBottom`
   // above the screen bottom (RN's SafeAreaView does NOT inset the bottom under
@@ -6059,8 +6082,10 @@ const styles = StyleSheet.create({
   },
   upgradePrompt: { fontSize: 13, fontWeight: '400' },
   upgradeLink: { fontSize: 13, fontWeight: '700' },
-  // Tiny horizontal inset only — the capsule reads at a comfortable width.
-  inputNarrow: { paddingHorizontal: 3 },
+  // Tiny horizontal inset only — the capsule reads at a comfortable width. On a
+  // wide (web/desktop) viewport it caps at CONTENT_MAX_W and the parent dock
+  // (alignItems:center) centres it, so the box never stretches edge-to-edge.
+  inputNarrow: { paddingHorizontal: 3, width: '100%', maxWidth: CONTENT_MAX_W, alignSelf: 'center' },
   // Dims the chat behind the processes sheet while it's open. Sits below the
   // sheet (31) and above the chat/EdgeBars (15). Tappable to close when open.
   sheetScrim: {
@@ -6097,6 +6122,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    // Centre the capsule on wide (web/desktop) viewports — the inner wrapper
+    // (inputNarrow) caps its width, so this keeps it centred instead of stuck to
+    // the left edge of a full-width dock.
+    alignItems: 'center',
     // Above EdgeBars (15) so the input capsule + floating + button never
     // get masked by the bottom gradient as cards/bubbles scroll behind.
     zIndex: 30,
