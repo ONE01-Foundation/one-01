@@ -796,7 +796,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    // More breathing room between the three toggles (was 4).
-    gap: 14,
+    // Tighter gap so the three 62px toggles + the + and hang-up still fit the
+    // capsule width on narrow phones.
+    gap: 8,
   },
 });

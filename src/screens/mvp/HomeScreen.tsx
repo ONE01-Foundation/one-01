@@ -1015,8 +1015,22 @@ export function HomeScreen({
   const chatMessages = useMvpStore((s) => s.homeChat) as InlineMessage[];
   const appendHomeChat = useMvpStore((s) => s.appendHomeChat);
   const clearHomeChatAction = useMvpStore((s) => s.clearHomeChat);
+  // Ghost mode — an "off the record" / anonymous chat toggle in the chat header.
+  const [ghostMode, setGhostMode] = useState(false);
+  // Ephemeral "temporary chat" (ghost / anonymous) thread. While ghost mode is
+  // on, the ENTIRE send pipeline writes here instead of the persisted homeChat
+  // (see the branch in setChatMessages), so nothing is saved or linked to the
+  // user; it's discarded when ghost mode turns off. `ghostModeRef` lets the
+  // (mount-time) setChatMessages callback read the live toggle at call time.
+  const [ghostMessages, setGhostMessages] = useState<InlineMessage[]>([]);
+  const ghostModeRef = useRef(false);
   const setChatMessages = useCallback(
     (updater: ((m: InlineMessage[]) => InlineMessage[]) | InlineMessage[]) => {
+      // Anonymous mode: keep the whole conversation in local ephemeral state.
+      if (ghostModeRef.current) {
+        setGhostMessages((cur) => (typeof updater === 'function' ? updater(cur) : updater));
+        return;
+      }
       const cur = useMvpStore.getState().homeChat as InlineMessage[];
       const next = typeof updater === 'function' ? updater(cur) : updater;
       // We always append a single message at a time, so derive the delta
@@ -1050,6 +1064,11 @@ export function HomeScreen({
     () => sessionMessages.filter((m) => !(m.unitId && !m.widget && foldedProcessIds.has(m.unitId))),
     [sessionMessages, foldedProcessIds],
   );
+  // What the thread actually SHOWS: the anonymous ephemeral thread while ghost
+  // mode is on (the regular conversation is hidden, not deleted), else the real
+  // persisted conversation.
+  const activeMessages = ghostMode ? ghostMessages : visibleMessages;
+  const activeCount = ghostMode ? ghostMessages.length : sessionMessages.length;
   // Index (in the VISIBLE list) of the NEWEST process drawer — only that one
   // opens expanded (you just acted on it), older drawers mount collapsed so the
   // thread stays tidy. Each drawer keeps its own state after mount.
@@ -1085,8 +1104,6 @@ export function HomeScreen({
   // (on web) runs the browser speech recognizer to transcribe into the input.
   const [recording, setRecording] = useState(false);
   const [recSeconds, setRecSeconds] = useState(0);
-  // Ghost mode — an "off the record" chat toggle in the chat header.
-  const [ghostMode, setGhostMode] = useState(false);
   // Idle-sleep — after a long, untouched rest on Home, ONE "falls asleep"
   // (lids drop). Woken by any touch of the Home surface. Never sleeps while a
   // chat / call / sheet is up.
@@ -1284,6 +1301,28 @@ export function HomeScreen({
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: chatOriginScrollRef.current, animated: false }));
   }, [chatActive, callActive]);
 
+  // Ghost / temporary-chat mode. Entering it HIDES the regular conversation and
+  // opens a clean anonymous thread where ONE speaks first (nothing is saved or
+  // linked to the user). Leaving it discards that ephemeral thread and brings
+  // the real conversation back. `ghostModeRef` mirrors the toggle so the
+  // send-pipeline sink (setChatMessages) routes to the right thread.
+  useEffect(() => {
+    ghostModeRef.current = ghostMode;
+    if (ghostMode) {
+      setGhostMessages((cur) => {
+        if (cur.length) return cur;
+        const now = Date.now();
+        const text =
+          lang === 'he'
+            ? 'מצב אנונימי. כלום כאן לא נשמר ולא משויך אליך — נדבר חופשי, וכשתסגור הכול נמחק. על מה תרצה לדבר?'
+            : "Anonymous mode. Nothing here is saved or linked to you — talk freely, and it's all wiped when you leave. What's on your mind?";
+        return [{ id: `ghost_opener_${now}`, from: 'one', text, ts: now }];
+      });
+    } else {
+      setGhostMessages([]);
+    }
+  }, [ghostMode, lang]);
+
   const handleInputFocus = useCallback(() => {
     setInputFocused(true);
     // Back to focus-driven chat state — the + "hold open" bridge is no longer
@@ -1309,12 +1348,12 @@ export function HomeScreen({
   // force focus off so Home returns cleanly to rest — one consistent close.
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
-      if (!chatHeldOpen && sessionMessages.length === 0 && !unitOpen && !quickActionsOpen) {
+      if (!chatHeldOpen && activeCount === 0 && !unitOpen && !quickActionsOpen) {
         setInputFocused(false);
       }
     });
     return () => sub.remove();
-  }, [chatHeldOpen, sessionMessages.length, unitOpen, quickActionsOpen]);
+  }, [chatHeldOpen, activeCount, unitOpen, quickActionsOpen]);
 
   // When Quick Actions (+) closes, bring the keyboard back IF the user had
   // opened it from chat with the keyboard up. Tracks the previous open-state so
@@ -2536,7 +2575,7 @@ export function HomeScreen({
     ];
   }, [lang, userGender]);
 
-  const isComposingFirst = chatActive && sessionMessages.length === 0;
+  const isComposingFirst = chatActive && activeCount === 0;
 
   // Home broadcast loop (rest state). No cycling while chat is active.
   const {
@@ -2615,7 +2654,7 @@ export function HomeScreen({
   // moment a thread exists it steps aside for the inline chat (which lives in
   // the same home scroll), so at rest you see the CONVERSATION, not a separate
   // broadcast line. One continuous surface, no mode switch.
-  const broadcastShouldHide = sessionMessages.length > 0;
+  const broadcastShouldHide = activeCount > 0;
 
   // ONE's own clock/status — date + live time. Shown in the hero sequence at
   // rest AND kept under the collapsed orb in the cards view (the system status
@@ -3430,11 +3469,11 @@ export function HomeScreen({
   // a big orb. The big resting orb is for the empty / fresh home only.
   const hasChatMessagesSV = useSharedValue(0);
   useEffect(() => {
-    hasChatMessagesSV.value = withTiming(sessionMessages.length > 0 ? 1 : 0, {
+    hasChatMessagesSV.value = withTiming(activeCount > 0 ? 1 : 0, {
       duration: 320,
       easing: Easing.out(Easing.cubic),
     });
-  }, [sessionMessages.length, hasChatMessagesSV]);
+  }, [activeCount, hasChatMessagesSV]);
 
   // Collapse fraction: 0 = resting hero (big centred Orb + broadcast),
   // 1 = compact header (small Orb up top + identity name). Driven by EITHER
@@ -4009,10 +4048,11 @@ export function HomeScreen({
     opacity: 1 - chatActiveSV.value * (1 - chatExitProgress.value) * 0.8,
   }));
 
-  // Chat header (X + ghost) — fades in with the chat and fades out on close.
-  // Pure opacity, no movement.
+  // Chat header (back-chevron + ghost toggle) — fades in with the chat AND the
+  // call (both windows show it), fades out on close. Pure opacity, no movement.
   const chatHeaderStyle = useAnimatedStyle(() => ({
-    opacity: chatActiveSV.value * (1 - chatExitProgress.value),
+    opacity:
+      Math.max(chatActiveSV.value, callActiveSV.value) * (1 - chatExitProgress.value),
   }));
 
   // ── In-call draggable orb. The bubble floats and can be dragged anywhere,
@@ -4500,7 +4540,7 @@ export function HomeScreen({
                   delayLongPress={450}
                   accessibilityLabel="Next broadcast. Hold to answer by voice."
                 />
-                {(chatActive || callActive) && sessionMessages.length > 0 && (
+                {(chatActive || callActive) && activeCount > 0 && (
                   <Animated.View
                     style={[styles.threadInline, threadSleepFadeStyle]}
                     onLayout={(e) => {
@@ -4511,10 +4551,10 @@ export function HomeScreen({
                       if (chatActiveRef.current) scrollToLatest();
                     }}
                   >
-                    {visibleMessages.map((m, idx) => {
+                    {activeMessages.map((m, idx) => {
                       // Timestamp under the LAST message in a close-in-time run
                       // from one speaker — keeps the thread from stamp-soup.
-                      const next = visibleMessages[idx + 1];
+                      const next = activeMessages[idx + 1];
                       const showStamp =
                         !next ||
                         next.from !== m.from ||
@@ -4917,7 +4957,7 @@ export function HomeScreen({
                   during a chat turn. Per the latest mockup: "חושב…" /
                   "Thinking…" sits directly beneath the small Orb while ONE is
                   generating a reply. Hidden when no active turn. */}
-              {sessionMessages.length > 0 && chatStatus && (
+              {activeCount > 0 && chatStatus && (
                 <View style={styles.statusCaptionWrap} pointerEvents="none">
                   <Text
                     style={[styles.statusCaption, { color: colors.textSecondary }]}
@@ -5493,10 +5533,12 @@ const styles = StyleSheet.create({
   // Bigger + more breathing room than before; the background fill conveys state
   // (dark = on, red = muted, tint = off).
   callCtrlBtn: {
-    // Same size as the home call button (InputBar's voiceBtn, 52).
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    // Match the VISUAL size of the home call button: voiceBtn (52) is rendered
+    // with voiceBtnScaleStyle (scale 1.2) ≈ 62, so the call-bar toggles are 62
+    // too and the whole bar reads as one uniform row of buttons.
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -5628,19 +5670,20 @@ const styles = StyleSheet.create({
   // that (~92) and the chat reads from HIGH on the page, flowing downward: orb
   // header → these bubbles → cards. No overlay, never pinned to the bottom.
   threadInline: {
-    // Top padding clears the pinned figure when scrolled to the top of a long
-    // thread; the thread is bottom-anchored in chat (heroChatBottom) so a short
-    // thread sits just above the composer.
-    paddingTop: 112,
+    // Top padding clears the pinned figure so the FIRST bubble sits just below
+    // it; the thread is TOP-anchored (heroChatBottom → flex-start) so the
+    // conversation reads from high on the page and flows downward.
+    paddingTop: 124,
     paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 8,
   },
-  // Chat/call: bottom-anchor the thread — the newest bubble sits just above the
-  // composer and older history fills UPWARD (scroll up to peek). The composer +
-  // keyboard are cleared by the paddingBottom.
+  // Chat/call: TOP-anchor the thread — the FIRST bubble sits just under the
+  // figure and the conversation grows DOWNWARD (ONE opens from the top, not the
+  // bottom). As it outgrows the viewport, scrollToLatest keeps the newest bubble
+  // above the composer/keyboard. The composer is cleared by the paddingBottom.
   heroChatBottom: {
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     paddingBottom: INPUT_BAR_H + 20,
   },
   hlBubbleText: {
