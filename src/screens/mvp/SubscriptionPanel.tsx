@@ -189,7 +189,10 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
           dragY.value = withSpring(0, { damping: 20, stiffness: 220 });
         }
       } else if (axisLock.value === 2) {
-        const dir = e.translationX <= -50 ? 1 : e.translationX >= 50 ? -1 : 0;
+        // LTR: swipe left → next plan. In RTL (Hebrew) the axis is mirrored, so
+        // flip it — swiping toward the incoming tab moves to that tab either way.
+        let dir = e.translationX <= -50 ? 1 : e.translationX >= 50 ? -1 : 0;
+        if (he) dir = -dir;
         if (dir !== 0) runOnJS(switchTo)(index + dir);
         dragX.value = withSpring(0, { damping: 20, stiffness: 220 });
       }
@@ -237,11 +240,13 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
           {/* Physical drag handle. */}
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
-          {/* Close (X) — same size + position as the Global sheet's X. */}
+          {/* Close (X) — same size as the Global sheet's X; on the LEADING side
+              (left in Hebrew / RTL, right in English) with the same gap from the
+              top as from the side. */}
           <Pressable
             onPress={onClose}
             hitSlop={12}
-            style={[styles.closeBtn, { backgroundColor: colors.surface }]}
+            style={[styles.closeBtn, he ? { left: 20 } : { right: 20 }, { backgroundColor: colors.surface }]}
             accessibilityRole="button"
             accessibilityLabel={he ? 'סגור' : 'Close'}
           >
@@ -361,11 +366,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   // Matches the Global sheet's X (pillBtn): 44×44 surface pill with a soft
-  // shadow, top-right.
+  // shadow. Leading side (left/right) is set inline per language; the top gap
+  // matches the side gap (20) so it's inset symmetrically from the corner.
   closeBtn: {
     position: 'absolute',
-    top: 12,
-    right: 20,
+    top: 20,
     width: 44,
     height: 44,
     borderRadius: 22,

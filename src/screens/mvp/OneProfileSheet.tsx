@@ -795,18 +795,8 @@ export function OneProfileSheet({
               hang off-screen at the low snap. */}
           <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />
           {switcherDockNode}
-          {/* Big close — centred at the bottom (the X moved here from the top
-              header). Primary way out of the profile. */}
-          <View pointerEvents="box-none" style={[styles.closeDockWrap, { bottom: Math.max(insets.bottom, 12) + 2 }]}>
-            <Pressable
-              onPress={onClose}
-              style={[styles.closeDockBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel={t('common_close')}
-            >
-              <CloseIcon size={19} color={colors.text} />
-            </Pressable>
-          </View>
+          {/* Close is the top-corner Global-style X (see topHeader) — no bottom
+              close dock any more. */}
           <SubscriptionPanel
             visible={subscriptionOpen}
             reason={subscriptionReason}
@@ -829,6 +819,17 @@ export function OneProfileSheet({
           big button at the bottom centre, the ⋮ menu lives on the orb). Renders
           OUTSIDE the scroll view so the title stays visible when scrolling. */}
       <View style={styles.topHeader} pointerEvents="box-none">
+        {/* Close (X) — same size + place as the Global sheet's X (44×44 surface
+            pill), on the LEADING corner (left in Hebrew / RTL, right in English). */}
+        <Pressable
+          onPress={onClose}
+          hitSlop={10}
+          style={[styles.pillBtn, styles.headerClose, he ? { left: 20 } : { right: 20 }, { backgroundColor: colors.surface }]}
+          accessibilityRole="button"
+          accessibilityLabel={t('common_close')}
+        >
+          <CloseIcon size={22} color={colors.text} />
+        </Pressable>
         {/* Compact sticky title — empty at the top (clean header), fades in
             "ONE <PLAN>" once the big title scrolls off. */}
         <Animated.View
@@ -1717,6 +1718,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
+  // The header close X — absolutely placed in the leading corner so it doesn't
+  // shift the centred sticky title. Leading side (left/right) is set inline.
+  headerClose: {
+    position: 'absolute',
+    top: 10,
+    zIndex: 3,
+  },
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1750,26 +1758,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   // Big bottom-centre close button (the X moved out of the top header).
-  closeDockWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 14,
-  },
-  closeDockBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
   // Centred row of floating buttons — locked LTR so + stays left, active pill
   // right, regardless of app language.
   switcherRow: {
