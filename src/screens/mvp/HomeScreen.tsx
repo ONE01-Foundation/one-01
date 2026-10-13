@@ -3099,12 +3099,13 @@ export function HomeScreen({
     });
   }, [orbAsleep, sleepSV, sleepChromeSV]);
 
-  // Pair-centering in sleep is only for the empty home (centred figure). Once a
-  // conversation exists the orb is a top header, so keep the input at the
-  // bottom on idle instead of floating it to the middle.
+  // The home rest ALWAYS centres the figure + composer now — the chat lives in
+  // its own mode (chatActive), so a persisted conversation no longer pins the
+  // orb as a top header on the rest home. Only chat mode disables the pair
+  // centring (the composer drops to the bottom for the thread).
   useEffect(() => {
-    sleepCenterOK.value = sessionMessages.length > 0 ? 0 : 1;
-  }, [sessionMessages.length, sleepCenterOK]);
+    sleepCenterOK.value = chatActive ? 0 : 1;
+  }, [chatActive, sleepCenterOK]);
 
   // The centred rest pair is the DEFAULT home pose — eased in whenever the home
   // is simply at rest, and eased out the moment it leaves rest (opening the
@@ -3377,12 +3378,13 @@ export function HomeScreen({
   // touch for the keyboard.
   const collapseFrac = useDerivedValue(() => {
     'worklet';
-    // Collapse is driven by SCROLL ONLY. The chat behaves EXACTLY like the empty
-    // home: the orb is big at rest (whether or not a conversation exists) and
-    // only shrinks to the compact header as you scroll down. Nothing about
-    // "having a thread" collapses it — that's what made the chat look different
-    // from the home. The orb shrinks a touch on keyboard-open via kbOpenSV.
-    return Math.max(0, Math.min(1, scrollY.value / SNAP_OPEN));
+    // On the home, collapse is driven by SCROLL (big at rest, shrinks to the
+    // compact header as you scroll into the processes).
+    const scrollP = Math.max(0, Math.min(1, scrollY.value / SNAP_OPEN));
+    // In CHAT the figure is PINNED small at the top — a fixed size/place, NOT
+    // linked to the chat scroll (only the eyes track the scroll, via eyeLookY).
+    // So force full collapse while chatActive.
+    return Math.max(scrollP, chatActiveSV.value);
   });
 
   // Lift the hero (orb + CTA) when chat opens so the keyboard doesn't
@@ -4354,7 +4356,7 @@ export function HomeScreen({
                   delayLongPress={450}
                   accessibilityLabel="Next broadcast. Hold to answer by voice."
                 />
-                {sessionMessages.length > 0 && (
+                {chatActive && sessionMessages.length > 0 && (
                   <Animated.View
                     style={[styles.threadInline, threadSleepFadeStyle]}
                     onLayout={(e) => {
