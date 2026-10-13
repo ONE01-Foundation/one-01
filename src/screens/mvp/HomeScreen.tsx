@@ -1225,6 +1225,18 @@ export function HomeScreen({
     scrollToLatest();
   }, [chatActive, chatMessages.length, inputFocused, insets.top, scrollToLatest]);
 
+  // Gentle auto-settle when a home drag ends part-way between the rest home and
+  // the open processes list. A SMOOTH animated scroll (not the hard
+  // snapToOffsets, which read as aggressive), biased TOWARD the list: a small
+  // pull up completes to the list; only a small residual near the very top eases
+  // back home. Never fires in chat/call or once past the list (free-scroll).
+  const settleHomeScroll = useCallback((y: number) => {
+    if (chatActiveRef.current) return;
+    if (y <= 2 || y >= SNAP_OPEN - 2) return;
+    const target = y > SNAP_OPEN * 0.28 ? SNAP_OPEN : 0;
+    scrollRef.current?.scrollTo({ y: target, animated: true });
+  }, []);
+
   // Each time chat activates from a fresh state, bump a counter so the
   // broadcast navigator picks a new opening suggestion on each entry.
   const [chatSessionIndex, setChatSessionIndex] = useState(0);
@@ -3122,16 +3134,18 @@ export function HomeScreen({
   // chat, a call, a sheet, sign-in or a profile). Scroll unwinding is handled
   // separately by scrollRestFactor.
   useEffect(() => {
-    // Profile / settings are an EXCEPTION: the figure + composer stay centred
-    // (the figure just shrinks to a dot in place via dotProgress), so don't
-    // unwind the pair for them even though they count as an open sheet.
-    const overlayUnwinds = anySheetOpen && !profileOpen && !settingsOpen;
+    // Profile / settings / GLOBAL are an EXCEPTION: the figure + composer stay
+    // centred (Global's own transition dives the figure + fades the composer),
+    // so don't unwind the pair for them even though they count as an open sheet —
+    // otherwise the figure rises + the composer drops (the same bad animation the
+    // profile had).
+    const overlayUnwinds = anySheetOpen && !profileOpen && !settingsOpen && !globalOpen;
     const atRest = !chatActive && !callActive && !overlayUnwinds && !signInOpen && !inputFocused;
     restPairGate.value = withTiming(atRest ? 1 : 0, {
       duration: atRest ? 320 : 220,
       easing: Easing.out(Easing.cubic),
     });
-  }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, settingsOpen, inputFocused, restPairGate]);
+  }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, settingsOpen, globalOpen, inputFocused, restPairGate]);
 
   // ONE's status line INSIDE the composer — shown ONLY in the HOME rest pose
   // (gone the moment you scroll into the processes / open the chat). It is a
@@ -3550,7 +3564,9 @@ export function HomeScreen({
   const HERO_HEADER_REST_SCALE = 82 / HOME_ORB_SIZE;
   // In the PROCESSES LIST (scroll collapse) the head reads bigger than in chat —
   // it's the agent presiding over the list, not a compact chat avatar.
-  const HERO_PROCESSES_ORB_SCALE = 66 / HOME_ORB_SIZE;
+  const HERO_PROCESSES_ORB_SCALE = 80 / HOME_ORB_SIZE;
+  // Chat keeps the smaller, compact head (the size the user confirmed is right).
+  const HERO_CHAT_ORB_SCALE = 66 / HOME_ORB_SIZE;
   // How much the hero shrinks as the profile opens — it dives DOWN to screen
   // centre while shrinking, so it reads as ONE gliding into its profile (and
   // rising back out on close). Shrinks to ~half, not a vanish.
@@ -3600,7 +3616,10 @@ export function HomeScreen({
     // Scrolling down collapses the orb to the processes-list header size — same
     // as the empty home. (No separate "chat header" size: the chat uses the
     // identical big-orb-at-rest treatment as the home.)
-    const collapsedTarget = HERO_PROCESSES_ORB_SCALE;
+    // Chat uses the smaller compact head; the processes list uses the bigger
+    // one (blend by chatActiveSV so each mode lands at its own size).
+    const collapsedTarget =
+      HERO_PROCESSES_ORB_SCALE + (HERO_CHAT_ORB_SCALE - HERO_PROCESSES_ORB_SCALE) * chatActiveSV.value;
     const collapseScale = 1 - f * (1 - collapsedTarget);
     // Profile / settings hand-off: the figure STAYS in place and just shrinks
     // (eyes shut via heroEye*Final) into a bare black dot — it does NOT rise or
@@ -4296,7 +4315,7 @@ export function HomeScreen({
               alwaysBounceVertical
               // Drag DOWN past the top (a deliberate overscroll) → open Global —
               // the OPPOSITE-direction gesture to scrolling up into the processes.
-              onScrollEndDrag={() => {
+              onScrollEndDrag={(e) => {
                 if (
                   overscrollMin.value <= -GLOBAL_OPEN_THRESHOLD &&
                   onOpenGlobal && !chatActive && !callActive && !anySheetOpen && !signInOpen
@@ -4305,10 +4324,16 @@ export function HomeScreen({
                   onOpenGlobal();
                 }
                 overscrollMin.value = 0;
+                // Released with ~no momentum → settle gently to the nearest detent
+                // now (a fling settles in onMomentumScrollEnd instead).
+                if (Math.abs(e.nativeEvent.velocity?.y ?? 0) < 0.12) {
+                  settleHomeScroll(e.nativeEvent.contentOffset.y);
+                }
               }}
               // A light tick each time the list SNAPS between the resting hero
               // and the open processes list (in either direction), so the
-              // detent change is felt, not just seen.
+              // detent change is felt, not just seen. Then gently auto-settle to
+              // the nearest detent (biased to the list).
               onMomentumScrollEnd={(e) => {
                 const open = e.nativeEvent.contentOffset.y > SNAP_OPEN * 0.5;
                 if (open) seenProcessesRef.current = true; // learned it
@@ -4316,6 +4341,7 @@ export function HomeScreen({
                   atProcessesRef.current = open;
                   haptic.select();
                 }
+                settleHomeScroll(e.nativeEvent.contentOffset.y);
               }}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}

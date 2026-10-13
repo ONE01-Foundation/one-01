@@ -582,13 +582,13 @@ export function InputBar({
             onPress={onEndCall}
             hitSlop={14}
             accessibilityLabel="End call"
-            // Bigger than the call/voice button — the hang-up is the primary
-            // action in a call, so it reads as the dominant control.
-            style={[styles.voiceBtn, styles.hangUpBtn, voiceBtnStyle, { backgroundColor: HANGUP_RED }]}
+            // SAME size as the home call button (voiceBtn + voiceBtnStyle) — so
+            // the call capsule reads exactly like the home box.
+            style={[styles.voiceBtn, voiceBtnStyle, { backgroundColor: HANGUP_RED }]}
           >
             {/* Phone handset tilted to the classic "hang up" angle. */}
             <View style={styles.hangUp}>
-              <PhoneIcon size={26} color="#FFFFFF" />
+              <PhoneIcon size={22} color="#FFFFFF" />
             </View>
           </Pressable>
         </View>
@@ -786,8 +786,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Hang-up is bigger than the 52px voice button (overrides voiceBtn's size).
-  hangUpBtn: { width: 64, height: 64, borderRadius: 32 },
   // Handset rotated to the universal "hang up" tilt.
   hangUp: { transform: [{ rotate: '135deg' }] },
   // Call-mode middle slot — holds the speaker/mute/camera cluster in the same
