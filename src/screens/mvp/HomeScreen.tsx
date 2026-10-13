@@ -158,11 +158,15 @@ const INPUT_BAR_H = 86;
  * past the snap point Just Works.
  */
 const TITLE_BAR_H = 78;              // small Orb + identity below it
-// Hero spacer. SHORTER than a full screen so the processes list enters the
-// scroll EARLIER — its first row sits just below the screen bottom at rest
-// (hidden behind the composer + bottom gradient) instead of a full screen down,
-// so a small scroll already slides the list into place as the figure shrinks up.
-const HERO_REST_H = SCREEN_H - 120;
+// A full-width opaque "curtain" sits just BELOW the resting composer and covers
+// the top of the processes list, so the list can start HIGH (right under the
+// composer) yet stay hidden at rest. As you scroll it recedes downward, so the
+// list is uncovered FROM THE TOP as the figure shrinks up — one continuous
+// motion instead of "scroll an empty screen, THEN the list" (two pages).
+const LIST_COVER_TOP = Math.round(SCREEN_H * 0.55);
+// Hero spacer. Much SHORTER than a screen: the list's first rows start just
+// below the curtain, so the home→processes transition is a short single scroll.
+const HERO_REST_H = Math.round(SCREEN_H * 0.6);
 // Full-open scroll distance — coupled to HERO_REST_H so the figure finishes
 // collapsing to the top bar at the SAME point the list lands in its final
 // position (one continuous motion, no snap needed to "complete" it).
@@ -656,6 +660,8 @@ export function HomeScreen({
   // home itself does the introduction now. Returning / signed-in users get
   // the time-aware greeting + identity-driven lines.
   const hasOnboarded = useMvpStore((s) => s.hasCompletedOnboarding);
+  const plan = useMvpStore((s) => s.plan);
+  const isPaid = plan === 'pro' || plan === 'max';
   const userName = useMvpStore((s) => s.name);
   const setUserName = useMvpStore((s) => s.setName);
   // Conversational onboarding on the classic home: ONE introduces itself and
@@ -3431,7 +3437,11 @@ export function HomeScreen({
       chevronIdleOpacity.value *
       interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP) *
       (1 - kbOpenSV.value) *
-      (1 - sheetProgress.value),
+      (1 - sheetProgress.value) *
+      // Vanish during the Global pull (same as the top chevron) and in sleep
+      // (with the rest of the home chrome) — nothing lingers over the folding dot.
+      (1 - globalProgress.value) *
+      sleepChromeSV.value,
   }));
   // "Back to home" up-chevron shown in the PROCESSES list (the inverse of the
   // down-chevron): fades IN as you scroll into the list, same idle fade + faint
@@ -3694,6 +3704,15 @@ export function HomeScreen({
       opacity: op * (1 - globalProgress.value),
       transform: [{ translateY: -p * SCREEN_H * 0.4 }],
     };
+  });
+  // The list "curtain": an opaque bg panel just below the resting composer that
+  // hides the top of the processes list at rest, then SLIDES DOWN off-screen as
+  // you scroll — so the list is uncovered from the top as the figure shrinks up,
+  // reading as ONE motion. Receding a touch faster than the scroll (×1.25) so the
+  // list is fully revealed by the time it settles, never trailing the curtain.
+  const listCoverStyle = useAnimatedStyle(() => {
+    const p = Math.max(0, Math.min(1, (scrollY.value / SNAP_OPEN) * 1.25));
+    return { transform: [{ translateY: p * (SCREEN_H - LIST_COVER_TOP + 80) }] };
   });
 
   /*
@@ -4060,13 +4079,14 @@ export function HomeScreen({
       interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP),
   }));
   const upChevronStyle = useAnimatedStyle(() => ({
-    // Fades out as the user pulls the process list UP (positive scroll) AND as
-    // the user pulls DOWN toward Global (globalPull) — it shouldn't linger over
-    // the orb folding into a dot.
+    // Fades out as the user pulls the process list UP (positive scroll), as the
+    // user pulls DOWN toward Global (globalPull), AND in sleep — it shouldn't
+    // linger over the orb folding into a dot.
     opacity:
       upChevronOpacity.value *
       interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP) *
-      (1 - globalProgress.value),
+      (1 - globalProgress.value) *
+      sleepChromeSV.value,
   }));
 
   // Cards fade behind the chat overlay when chat is active. Reads as the
@@ -4701,6 +4721,18 @@ export function HomeScreen({
               )}
             </Animated.ScrollView>
             </GestureDetector>
+
+            {/* List curtain — opaque bg below the resting composer that hides the
+                top of the processes list at rest and slides down as you scroll,
+                so the list is uncovered from the top in one continuous motion.
+                Only on the home rest (not chat/call). Below the EdgeBars (15) and
+                dock (30); above the scrolling list. */}
+            {hasOnboarded && !chatActive && !callActive && (
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.listCover, { backgroundColor: colors.background }, listCoverStyle]}
+              />
+            )}
 
             {/* EdgeBars sit ABOVE the scroll content + bubbles (zIndex 15)
                 but BELOW the orb / broadcast / chat header / input dock
@@ -5341,12 +5373,18 @@ export function HomeScreen({
                 >
                   <Text style={[styles.upgradePrompt, { color: colors.textSecondary }]}>
                     {hasOnboarded
-                      ? lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '
+                      ? isPaid
+                        // Already on a paid plan — no "Upgrade" nudge; a subtle
+                        // "manage plan" label that still opens the plans sheet.
+                        ? lang === 'he' ? 'התוכנית שלך · ' : 'Your plan · '
+                        : lang === 'he' ? 'רוצה יותר יכולות? ' : 'Want more from ONE? '
                       : lang === 'he' ? 'כבר יש לך ONE? ' : 'Already have ONE? '}
                   </Text>
                   <Text style={[styles.upgradeLink, { color: colors.text }]}>
                     {hasOnboarded
-                      ? lang === 'he' ? 'שדרוג' : 'Upgrade'
+                      ? isPaid
+                        ? `ONE ${plan === 'max' ? 'Max' : 'Pro'}`
+                        : lang === 'he' ? 'שדרוג' : 'Upgrade'
                       : lang === 'he' ? 'התחבר' : 'Sign in'}
                   </Text>
                 </AnimatedPressable>
@@ -5925,7 +5963,10 @@ const styles = StyleSheet.create({
   // drops the list clear of the collapsed figure + the top gradient (otherwise
   // the gradient hides the first rows when snapped open).
   processesInline: {
-    minHeight: SNAP_OPEN,
+    // Reserve a full screen so that even an empty list leaves enough scroll
+    // room to reach SNAP_OPEN and fully collapse the figure (the hero spacer is
+    // now only ~0.6 of a screen, so SNAP_OPEN alone wouldn't be reachable).
+    minHeight: SCREEN_H,
     paddingHorizontal: 18,
     // A touch more top padding so the FIRST row sits safely behind the composer
     // at rest (the hero spacer is shorter now), then clears the collapsed figure
@@ -6113,6 +6154,9 @@ const styles = StyleSheet.create({
   // Solid fill below the composer (anchored to the screen bottom) — behind the
   // dock (zIndex 30) but above the scrolling thread.
   kbCover: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 25 },
+  // The home→processes "curtain": opaque bg just below the resting composer,
+  // hiding the list at rest; slides down (listCoverStyle) to reveal it.
+  listCover: { position: 'absolute', left: 0, right: 0, top: LIST_COVER_TOP, height: SCREEN_H, zIndex: 8 },
   // The up-chevron strip above the input dock (full width for centering; only
   // the arrow inside captures taps). Below the sheet (31) so the open sheet
   // covers it.
