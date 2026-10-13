@@ -702,7 +702,10 @@ const styles = StyleSheet.create({
   // paddingTop clears the absolute header AND gives the banner room to breathe
   // below the credits / close row. paddingBottom leaves a little breathing room
   // above the bottom gradient (the floating input dock was removed).
-  content: { paddingHorizontal: 22, paddingTop: 84, paddingBottom: 40, gap: 14 },
+  // maxWidth + centre so the content column doesn't stretch edge-to-edge on wide
+  // (web/desktop) viewports even though the sheet is full-width. No effect on a
+  // phone (screen narrower than the cap).
+  content: { paddingHorizontal: 22, paddingTop: 84, paddingBottom: 40, gap: 14, width: '100%', maxWidth: 620, alignSelf: 'center' },
 
   // "Join a shared process by code" — the provider entry into the two-sided Unit.
   joinRow: {

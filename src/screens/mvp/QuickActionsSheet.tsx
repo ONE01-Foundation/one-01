@@ -174,7 +174,10 @@ export function QuickActionsSheet({
           showsHorizontalScrollIndicator={false}
           nestedScrollEnabled
           directionalLockEnabled
-          style={styles.tilesScroll}
+          // Hebrew (RTL): mirror the whole row (scaleX:-1) so the carousel STARTS
+          // from the RIGHT — the first tile (תמונה / picture) sits on the right.
+          // Each tile is un-mirrored below so its emoji + label read normally.
+          style={[styles.tilesScroll, he && styles.flipX]}
           contentContainerStyle={styles.tilesRow}
         >
           {tiles.map((tile) => (
@@ -183,6 +186,7 @@ export function QuickActionsSheet({
               onPress={tile.onPress}
               style={({ pressed }) => [
                 styles.tile,
+                he && styles.flipX,
                 {
                   backgroundColor: colors.surface,
                   opacity: pressed ? 0.82 : 1,
@@ -270,6 +274,11 @@ const styles = StyleSheet.create({
     // Clearance so the last action isn't hidden behind the floating button
     // (bigger + raised now, so a touch more room).
     paddingBottom: 108,
+    // Cap + centre so the + sheet's content doesn't stretch edge-to-edge on a
+    // wide (web/desktop) viewport (the sheet itself stays full-width).
+    width: '100%',
+    maxWidth: 620,
+    alignSelf: 'center',
   },
   // Floating "Add action" pill — centred near the sheet's bottom edge.
   // Full-width primary action, styled like the SignIn "Continue with Email"
@@ -335,6 +344,8 @@ const styles = StyleSheet.create({
   // hidden` masks the tiles at the screen edges so a scrolling tile never spills
   // off-screen. Vertical padding gives the tile shadows room inside the mask.
   tilesScroll: { marginHorizontal: -20, overflow: 'hidden', paddingVertical: 6 },
+  // RTL mirror for the horizontal tiles carousel (see the ScrollView above).
+  flipX: { transform: [{ scaleX: -1 }] },
   tilesRow: {
     paddingHorizontal: 20,
     paddingVertical: 2,

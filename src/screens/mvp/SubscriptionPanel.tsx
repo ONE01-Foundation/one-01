@@ -386,6 +386,10 @@ const styles = StyleSheet.create({
   page: {
     alignItems: 'center',
     width: '100%',
+    // Cap + centre the content on wide (web/desktop) viewports so it doesn't
+    // stretch edge-to-edge even though the sheet itself is full-width.
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   iconWrap: {
     width: 60,
@@ -441,6 +445,8 @@ const styles = StyleSheet.create({
     padding: 4,
     marginTop: 22,
     width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   toggleSeg: {
     flex: 1,
@@ -452,6 +458,8 @@ const styles = StyleSheet.create({
   toggleText: { fontSize: 16, fontWeight: '700' },
   featureBox: {
     width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 20,
     paddingHorizontal: 18,
@@ -468,6 +476,8 @@ const styles = StyleSheet.create({
   // Big pill — matches the prominence of the home composer box.
   cta: {
     width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
     height: 58,
     borderRadius: 29,
     alignItems: 'center',

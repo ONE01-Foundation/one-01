@@ -3200,18 +3200,19 @@ export function HomeScreen({
   // chat, a call, a sheet, sign-in or a profile). Scroll unwinding is handled
   // separately by scrollRestFactor.
   useEffect(() => {
-    // Profile / settings / GLOBAL are an EXCEPTION: the figure + composer stay
-    // centred (Global's own transition dives the figure + fades the composer),
-    // so don't unwind the pair for them even though they count as an open sheet —
-    // otherwise the figure rises + the composer drops (the same bad animation the
-    // profile had).
-    const overlayUnwinds = anySheetOpen && !profileOpen && !settingsOpen && !globalOpen;
+    // Profile / settings / GLOBAL / Quick Actions (+) are an EXCEPTION: the
+    // figure + composer stay centred (Global's own transition dives the figure +
+    // fades the composer), so don't unwind the pair for them even though they
+    // count as an open sheet — otherwise the figure rises + the composer drops
+    // (the bad animation the profile had; the user flagged it on the + too).
+    const overlayUnwinds =
+      anySheetOpen && !profileOpen && !settingsOpen && !globalOpen && !quickActionsOpen;
     const atRest = !chatActive && !callActive && !overlayUnwinds && !signInOpen && !inputFocused;
     restPairGate.value = withTiming(atRest ? 1 : 0, {
       duration: atRest ? 320 : 220,
       easing: Easing.out(Easing.cubic),
     });
-  }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, settingsOpen, globalOpen, inputFocused, restPairGate]);
+  }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, settingsOpen, globalOpen, quickActionsOpen, inputFocused, restPairGate]);
 
   // ONE's status line INSIDE the composer — shown ONLY in the HOME rest pose
   // (gone the moment you scroll into the processes / open the chat). It is a
@@ -5747,6 +5748,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 8,
+    // Cap + centre the conversation column on wide (web/desktop) viewports so the
+    // bubbles don't stretch edge-to-edge (same cap as the composer). No effect on
+    // a phone (screen narrower than the cap).
+    width: '100%',
+    maxWidth: CONTENT_MAX_W,
+    alignSelf: 'center',
   },
   // Chat/call: TOP-anchor the thread — the FIRST bubble sits just under the
   // figure and the conversation grows DOWNWARD (ONE opens from the top, not the
@@ -5976,6 +5983,11 @@ const styles = StyleSheet.create({
     // at rest (the hero spacer is shorter now), then clears the collapsed figure
     // + top bar once scrolled open.
     paddingTop: 72,
+    // Cap + centre the list column on wide (web/desktop) viewports so the process
+    // rows don't stretch edge-to-edge (same cap as the composer / chat).
+    width: '100%',
+    maxWidth: CONTENT_MAX_W,
+    alignSelf: 'center',
   },
   emptyCardsState: {
     minHeight: SNAP_OPEN,

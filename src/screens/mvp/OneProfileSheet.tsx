@@ -1745,6 +1745,11 @@ const styles = StyleSheet.create({
     // needs air above the bar, not behind it.
     paddingBottom: 104,
     gap: 22,
+    // Cap + centre so the content doesn't stretch edge-to-edge on a wide
+    // (web/desktop) viewport (the sheet itself stays full-width).
+    width: '100%',
+    maxWidth: 620,
+    alignSelf: 'center',
   },
   /** Floating dock that pins the profile switcher to the sheet's bottom edge,
    *  above scroll content. Translates up with the keyboard. */

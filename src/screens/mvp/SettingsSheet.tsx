@@ -679,7 +679,9 @@ const styles = StyleSheet.create({
   grabber: { width: 40, height: 5, borderRadius: 2.5 },
 
   // paddingTop clears the absolute header so the first group starts below it.
-  content: { paddingHorizontal: 24, paddingTop: 70, paddingBottom: 40, gap: 22 },
+  // maxWidth + centre so the settings don't stretch edge-to-edge on a wide
+  // (web/desktop) viewport (the sheet itself stays full-width).
+  content: { paddingHorizontal: 24, paddingTop: 70, paddingBottom: 40, gap: 22, width: '100%', maxWidth: 620, alignSelf: 'center' },
 
   // Fixed header row (title + X) — ABSOLUTE overlay (same shape as GlobalSheet /
   // the process sheet) so content scrolls fully UNDER it and fades cleanly into
