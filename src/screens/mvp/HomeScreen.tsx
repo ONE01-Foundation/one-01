@@ -4333,15 +4333,20 @@ export function HomeScreen({
                 }
                 overscrollMin.value = 0;
               }}
-              // Natural free scroll — no forced snap in either direction (the
-              // auto-snap read as unnatural). A light tick when the list crosses
-              // the open/closed detent, so the change is still felt.
+              // After the natural momentum settles, GENTLY glide to the nearest
+              // ideal position (home 0 or the open list SNAP_OPEN) if it stopped
+              // part-way — a smooth animated scroll, not a hard snap. Only in the
+              // home↔list band; past the list the longer list free-scrolls.
               onMomentumScrollEnd={(e) => {
-                const open = e.nativeEvent.contentOffset.y > SNAP_OPEN * 0.5;
+                const y = e.nativeEvent.contentOffset.y;
+                const open = y > SNAP_OPEN * 0.5;
                 if (open) seenProcessesRef.current = true; // learned it
                 if (open !== atProcessesRef.current) {
                   atProcessesRef.current = open;
                   haptic.select();
+                }
+                if (!chatActiveRef.current && y > 4 && y < SNAP_OPEN - 4) {
+                  scrollRef.current?.scrollTo({ y: open ? SNAP_OPEN : 0, animated: true });
                 }
               }}
               scrollEventThrottle={16}
@@ -4362,9 +4367,10 @@ export function HomeScreen({
               // chat was a separate overlay that owned the drag.)
               scrollEnabled
               contentContainerStyle={{
-                // Clear the input dock AND the collapsed processes-sheet peek
-                // (~46) so the last bubble can scroll above both.
-                paddingBottom: INPUT_BAR_H + 58,
+                // In chat/call the hero region is bottom-anchored (its own
+                // paddingBottom lifts the newest bubble above the input), so no
+                // extra bottom padding here; on the home it clears the dock.
+                paddingBottom: (chatActive || callActive) ? 8 : INPUT_BAR_H + 58,
               }}
             >
               {/* Hero spacer — the Orb + broadcast are rendered as an overlay
@@ -4380,7 +4386,7 @@ export function HomeScreen({
                   is literally ONE scroll: orb → conversation → cards. No
                   separate chat window, no mode switch — focusing the input just
                   raises the keyboard over the same page. */}
-              <View style={{ minHeight: HERO_REST_H }}>
+              <View style={[{ minHeight: HERO_REST_H }, (chatActive || callActive) && styles.heroChatBottom]}>
                 <Pressable
                   style={StyleSheet.absoluteFill}
                   onPress={onBroadcastTap}
@@ -4551,6 +4557,10 @@ export function HomeScreen({
                 style={[StyleSheet.absoluteFill, styles.kbFadeHost, kbBottomFadeStyle]}
               >
                 <EdgeBars top={false} bottom bottomHeight={150} />
+                {/* SOLID base right above the keyboard — the gradient alone left
+                    thread content faintly peeking in the gap between the composer
+                    and the keyboard; this fully covers it. */}
+                <View style={[styles.kbSolidBase, { backgroundColor: colors.background }]} />
               </Animated.View>
             )}
 
@@ -5150,8 +5160,11 @@ export function HomeScreen({
             accessibilityLabel={lang === 'he' ? 'סגור' : 'Close'}
           >
             {/* A chevron (same type + soft colour as the home chevrons), not an
-                X — a down chevron reads as "collapse back to home". */}
-            <ArrowDownIcon size={26} color={colors.textSecondary} />
+                X — pointing to the SIDE (rotated 90°) so it reads as "back / out"
+                rather than "down". */}
+            <View style={{ transform: [{ rotate: '90deg' }] }}>
+              <ArrowDownIcon size={26} color={colors.textSecondary} />
+            </View>
           </Pressable>
           <Pressable
             onPress={() => { haptic.select(); setGhostMode((v) => !v); }}
@@ -5466,13 +5479,20 @@ const styles = StyleSheet.create({
   // that (~92) and the chat reads from HIGH on the page, flowing downward: orb
   // header → these bubbles → cards. No overlay, never pinned to the bottom.
   threadInline: {
-    // Starts right where the resting opener sits (just under the big orb,
-    // ≈ HERO_CENTER_TOP + orb), so the empty home → chat transition keeps the
-    // bubbles in the SAME place — same page, not a new layer.
-    paddingTop: 176,
+    // Top padding clears the pinned figure when scrolled to the top of a long
+    // thread; the thread is bottom-anchored in chat (heroChatBottom) so a short
+    // thread sits just above the composer.
+    paddingTop: 112,
     paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 8,
+  },
+  // Chat/call: bottom-anchor the thread — the newest bubble sits just above the
+  // composer and older history fills UPWARD (scroll up to peek). The composer +
+  // keyboard are cleared by the paddingBottom.
+  heroChatBottom: {
+    justifyContent: 'flex-end',
+    paddingBottom: INPUT_BAR_H + 20,
   },
   hlBubbleText: {
     fontSize: 15.5,
@@ -5845,6 +5865,9 @@ const styles = StyleSheet.create({
   // The keyboard-lifted bottom fade — above the chat bubbles (0-5) and the
   // static EdgeBars (15), below the input dock (30).
   kbFadeHost: { zIndex: 16 },
+  // Solid fill covering the composer→keyboard band (inside the kb fade host,
+  // which rides up with the keyboard). The composer (zIndex 30) sits on top.
+  kbSolidBase: { position: 'absolute', left: 0, right: 0, bottom: 0, height: INPUT_BAR_H + 44 },
   // The up-chevron strip above the input dock (full width for centering; only
   // the arrow inside captures taps). Below the sheet (31) so the open sheet
   // covers it.
