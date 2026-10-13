@@ -3092,6 +3092,11 @@ const styles = StyleSheet.create({
     // OneProfileSheet, so the scroll-pan bridge works.
     paddingBottom: 150,
     gap: 22,
+    // Cap + centre so the process profile doesn't stretch edge-to-edge on a wide
+    // (web/desktop) viewport (the sheet stays full-width).
+    width: '100%',
+    maxWidth: 620,
+    alignSelf: 'center',
   },
   /**
    * Floating dock that pins the InputBar to the sheet's bottom edge,
@@ -3564,6 +3569,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingHorizontal: 16,
     paddingTop: 8,
+    // Cap + centre the process-chat column on wide (web/desktop) viewports.
+    width: '100%',
+    maxWidth: 620,
+    alignSelf: 'center',
     // Bottom clearance for the absolute-positioned InputBar dock (now floating
     // a gap above the sheet bottom) — the newest message sits above the capsule.
     paddingBottom: 132,

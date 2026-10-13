@@ -128,6 +128,12 @@ interface MvpStore {
    */
   hasCompletedOnboarding: boolean;
   /**
+   * Highest version of the onboarding "explainer cards" overlay the user has
+   * seen (0 = never). Shown when it's below the current ONBOARDING_CARDS_VERSION,
+   * so it re-appears after a feature update that bumps the version.
+   */
+  onboardingCardsSeen: number;
+  /**
    * Toast queue. Head of the list is rendered as a banner under the status
    * bar. Auto-dismissed by the Toast component when its slide-out finishes.
    */
@@ -336,6 +342,8 @@ interface MvpStore {
   /** Mark today's digest as delivered (stores YYYY-MM-DD). */
   markDigestDelivered: (isoDate: string) => void;
   markOnboardingComplete: () => void;
+  /** Record that the user has seen the onboarding cards up to version `v`. */
+  setOnboardingCardsSeen: (v: number) => void;
   /** Reset back to seeded mock data — used by "clear state" dev affordance. */
   reset: () => void;
   /** Replace units with an empty list — used to demo the empty broadcast state. */
@@ -383,6 +391,7 @@ export const useMvpStore = create<MvpStore>()(
       activeIdentityId: DEFAULT_IDENTITY_ID,
       units: [],
       hasCompletedOnboarding: false,
+      onboardingCardsSeen: 0,
       notifications: [],
       homeChat: [],
       unitChats: {},
@@ -847,6 +856,7 @@ export const useMvpStore = create<MvpStore>()(
         }),
       markDigestDelivered: (isoDate) => set({ lastDigestDate: isoDate }),
       markOnboardingComplete: () => set({ hasCompletedOnboarding: true }),
+      setOnboardingCardsSeen: (v) => set({ onboardingCardsSeen: v }),
       reset: () =>
         set({
           name: '',
@@ -854,6 +864,7 @@ export const useMvpStore = create<MvpStore>()(
           activeIdentityId: DEFAULT_IDENTITY_ID,
           units: [],
           hasCompletedOnboarding: false,
+          onboardingCardsSeen: 0,
           notifications: [],
           homeChat: [],
           unitChats: {},
@@ -914,6 +925,7 @@ export const useMvpStore = create<MvpStore>()(
         activeIdentityId: state.activeIdentityId,
         units: state.units,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
+        onboardingCardsSeen: state.onboardingCardsSeen,
         homeChat: state.homeChat,
         unitChats: state.unitChats,
         quizRuns: state.quizRuns,

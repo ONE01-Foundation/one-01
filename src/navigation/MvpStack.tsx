@@ -45,6 +45,7 @@ import { LegalSheet, type LegalDoc } from '../screens/mvp/LegalSheet';
 import { useMvpStore } from '../stores/mvpStore';
 import { NotificationToast } from '../components/mvp/NotificationToast';
 import { SubscriptionPanel } from '../screens/mvp/SubscriptionPanel';
+import { OnboardingOverlay, ONBOARDING_CARDS_VERSION } from '../screens/mvp/OnboardingOverlay';
 import { CompletionCelebration } from '../components/mvp/CompletionCelebration';
 import { useDueReminderWatcher } from '../hooks/useDueReminderWatcher';
 
@@ -142,6 +143,16 @@ function HomeWithOverlays() {
   );
   React.useEffect(() => {
     void useBusinessStore.getState().refresh();
+  }, []);
+
+  // First-run (and post-update) onboarding cards over the home. Gate on the
+  // persisted version so it only re-appears when ONBOARDING_CARDS_VERSION bumps.
+  // A short delay lets the home splash play before the scrim fades in.
+  const onboardingCardsSeen = useMvpStore((st) => st.onboardingCardsSeen);
+  const [onboardingReady, setOnboardingReady] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setOnboardingReady(true), 900);
+    return () => clearTimeout(t);
   }, []);
 
   // Live animated index of the ONE profile sheet, shared between the sheet
@@ -550,6 +561,16 @@ function HomeWithOverlays() {
       {/* Pricing / upgrade sheet — a screen-pinned slide-up (not a Modal), so it
           overlays the home directly when the user taps "שדרג". */}
       <SubscriptionPanel visible={s.upgradeOpen} onClose={() => s.setUpgradeOpen(false)} />
+      {/* First-run / post-update onboarding cards over the home. */}
+      <OnboardingOverlay
+        visible={
+          onboardingReady &&
+          onboardingCardsSeen < ONBOARDING_CARDS_VERSION &&
+          !s.signInOpen &&
+          !s.openUnitId
+        }
+        onDone={() => useMvpStore.getState().setOnboardingCardsSeen(ONBOARDING_CARDS_VERSION)}
+      />
     </>
   );
 }
