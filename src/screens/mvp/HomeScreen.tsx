@@ -175,8 +175,8 @@ const HERO_CENTER_TOP = Math.round(SCREEN_H * 0.085);
 // Opening Global takes a DELIBERATE, STRONG pull — a long overscroll with a
 // far release point — so light back-scrolling (reading earlier chat) never
 // trips it by accident.
-const GLOBAL_PULL_RANGE = 170;
-const GLOBAL_OPEN_THRESHOLD = 125;
+const GLOBAL_PULL_RANGE = 120;
+const GLOBAL_OPEN_THRESHOLD = 74;
 /** How far the orb travels DOWN to re-centre during the pull. Lands its centre
  *  near mid-screen (0.46·H reads better than dead-centre against the bottom). */
 const PULL_CENTER_DELTA = Math.max(
@@ -2775,15 +2775,18 @@ export function HomeScreen({
   const profileSwipe = React.useMemo(
     () =>
       Gesture.Pan()
-        .enabled(!chatActive)
+        // Enabled in chat too — a sideways swipe EXITS the chat. At the home it
+        // still switches profile. (Fails on vertical so the thread/list scroll.)
+        .enabled(!callActive && !signInOpen && !profileOpen)
         .activeOffsetX([-55, 55])
         .failOffsetY([-18, 18])
         .onEnd((e) => {
           'worklet';
           if (Math.abs(e.translationX) < 70 && Math.abs(e.velocityX) < 350) return;
+          if (chatActive) { runOnJS(dismissChatAnimated)(); return; } // swipe to the side → exit chat
           runOnJS(switchProfile)(e.translationX < 0 ? 1 : -1); // swipe left → next profile
         }),
-    [chatActive, switchProfile],
+    [chatActive, callActive, signInOpen, profileOpen, switchProfile, dismissChatAnimated],
   );
 
   // Tap-grow on the Orb. Driven from native Pressable's onPressIn/onPressOut.
@@ -3355,6 +3358,15 @@ export function HomeScreen({
       (1 - kbOpenSV.value) *
       (1 - sheetProgress.value),
   }));
+  // "Back to home" up-chevron shown in the PROCESSES list (the inverse of the
+  // down-chevron): fades IN as you scroll into the list, same idle fade + faint
+  // persistence as the other chevrons; tapping it eases back to the home.
+  const backHomeChevronStyle = useAnimatedStyle(() => ({
+    opacity:
+      chevronIdleOpacity.value *
+      interpolate(scrollY.value, [SNAP_OPEN * 0.4, SNAP_OPEN * 0.8], [0, 1], Extrapolation.CLAMP) *
+      (1 - kbOpenSV.value),
+  }));
 
   // Ghost (temporary-chat) mode visibly changes ONE: the face fades back to a
   // quieter, "incognito" presence so the user can SEE they're off the record.
@@ -3800,6 +3812,10 @@ export function HomeScreen({
   // moving around or hijacking the view.
   const CHEVRON_HOLD_MS = 2000;
   const CHEVRON_PEAK_OPACITY = 0.4;
+  // After the peak + hold, the chevrons don't vanish — they settle to a REALLY
+  // faint, persistent presence (so they're always just-there, and brighten on a
+  // touch). Only chat/call/sheets take them fully to 0.
+  const CHEVRON_REST_OPACITY = 0.09;
   // First reveal waits for the splash/intro (dot grows → eyes open → rise →
   // broadcast settles, ~1.8s) so the arrows never flash over the rising face.
   const CHEVRON_INTRO_DELAY_MS = 1900;
@@ -3815,12 +3831,13 @@ export function HomeScreen({
         withTiming(CHEVRON_PEAK_OPACITY, { duration: 450, easing: Easing.out(Easing.cubic) }),
         withDelay(
           CHEVRON_HOLD_MS,
-          withTiming(0, { duration: 750, easing: Easing.out(Easing.cubic) }),
+          // Settle to the faint persistent level — NOT 0.
+          withTiming(CHEVRON_REST_OPACITY, { duration: 750, easing: Easing.out(Easing.cubic) }),
         ),
       );
     chevronIdleOpacity.value = fade();
     upChevronOpacity.value = fade();
-  }, [chevronIdleOpacity, upChevronOpacity]);
+  }, [chevronIdleOpacity, upChevronOpacity, CHEVRON_REST_OPACITY]);
 
   // Touch-to-reveal — gated so a touch on an overlay (chat/call/sign-in/profile)
   // never lights the arrows up behind it.
@@ -4963,6 +4980,26 @@ export function HomeScreen({
           </Animated.View>
         )}
 
+        {/* Back-to-home UP chevron — shown in the processes list, ABOVE the
+            composer with good spacing. Same chevron style/rules as the home ones;
+            tapping it eases back to the home rest. */}
+        {hasOnboarded && !callActive && !chatActive && (
+          <Animated.View
+            pointerEvents="box-none"
+            style={[styles.processesChevron, { bottom: INPUT_BAR_H + insets.bottom + 34 }, backHomeChevronStyle]}
+          >
+            <Pressable
+              onPress={() => { haptic.press(); scrollRef.current?.scrollTo({ y: 0, animated: true }); }}
+              hitSlop={18}
+              accessibilityRole="button"
+              accessibilityLabel={lang === 'he' ? 'חזרה לבית' : 'Back to home'}
+              style={styles.flipUp}
+            >
+              <ArrowDownIcon size={26} color={colors.textSecondary} />
+            </Pressable>
+          </Animated.View>
+        )}
+
         {/* Solid cover for the band BELOW the composer (down past the keyboard
             top) — behind the dock, so the composer shows but nothing peeks in the
             gap. Only while the keyboard is up. */}
@@ -5196,9 +5233,10 @@ export function HomeScreen({
             accessibilityLabel={lang === 'he' ? 'סגור' : 'Close'}
           >
             {/* A chevron (same type + soft colour as the home chevrons), not an
-                X — pointing to the SIDE (rotated 90°) so it reads as "back / out"
-                rather than "down". */}
-            <View style={{ transform: [{ rotate: '90deg' }] }}>
+                X — pointing to the SIDE so it reads as "back / out". The close
+                sits on the LEFT in Hebrew (→ point left) and on the RIGHT in
+                English (→ point right), so it always points toward the edge. */}
+            <View style={{ transform: [{ rotate: lang === 'he' ? '90deg' : '-90deg' }] }}>
               <ArrowDownIcon size={26} color={colors.textSecondary} />
             </View>
           </Pressable>
