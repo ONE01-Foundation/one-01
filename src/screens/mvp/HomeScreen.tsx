@@ -158,14 +158,13 @@ const INPUT_BAR_H = 86;
  * past the snap point Just Works.
  */
 const TITLE_BAR_H = 78;              // small Orb + identity below it
-// A full-width opaque "curtain" sits just BELOW the resting composer and covers
-// the top of the processes list, so the list can start HIGH (right under the
-// composer) yet stay hidden at rest. As you scroll it recedes downward, so the
-// list is uncovered FROM THE TOP as the figure shrinks up — one continuous
-// motion instead of "scroll an empty screen, THEN the list" (two pages).
-const LIST_COVER_TOP = Math.round(SCREEN_H * 0.55);
+// A full-width opaque "curtain" (listCover) is anchored to the resting
+// composer's BOTTOM and covers only the band below it, so the list can start
+// HIGH (right under the composer) yet stay hidden at rest. As the composer drops
+// on scroll the curtain recedes with it, uncovering the list FROM THE TOP — one
+// continuous motion instead of "scroll an empty screen, THEN the list".
 // Hero spacer. Much SHORTER than a screen: the list's first rows start just
-// below the curtain, so the home→processes transition is a short single scroll.
+// below the composer, so the home→processes transition is a short single scroll.
 const HERO_REST_H = Math.round(SCREEN_H * 0.6);
 // Full-open scroll distance — coupled to HERO_REST_H so the figure finishes
 // collapsing to the top bar at the SAME point the list lands in its final
@@ -3705,14 +3704,17 @@ export function HomeScreen({
       transform: [{ translateY: -p * SCREEN_H * 0.4 }],
     };
   });
-  // The list "curtain": an opaque bg panel just below the resting composer that
-  // hides the top of the processes list at rest, then SLIDES DOWN off-screen as
-  // you scroll — so the list is uncovered from the top as the figure shrinks up,
-  // reading as ONE motion. Receding a touch faster than the scroll (×1.25) so the
-  // list is fully revealed by the time it settles, never trailing the curtain.
+  // The list "curtain": an opaque bg panel whose TOP tracks the resting
+  // composer's BOTTOM — so it only ever covers the band BELOW the composer (the
+  // bottom-gradient area / what sits under the keyboard), NEVER cutting the list
+  // above it. It rides UP with the composer at rest (hiding the list), and as you
+  // scroll the composer drops to the bottom so the curtain recedes with it and
+  // the list is uncovered from the top — one motion, aligned with the gradient.
   const listCoverStyle = useAnimatedStyle(() => {
-    const p = Math.max(0, Math.min(1, (scrollY.value / SNAP_OPEN) * 1.25));
-    return { transform: [{ translateY: p * (SCREEN_H - LIST_COVER_TOP + 80) }] };
+    const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
+    const sleepLift = centerAmt * SLEEP_INPUT_LIFT * sleepCenterOK.value;
+    // Overlap the composer a touch (−50) so there's no seam between them.
+    return { transform: [{ translateY: SCREEN_H - sleepLift - 50 }] };
   });
 
   /*
@@ -5963,10 +5965,12 @@ const styles = StyleSheet.create({
   // drops the list clear of the collapsed figure + the top gradient (otherwise
   // the gradient hides the first rows when snapped open).
   processesInline: {
-    // Reserve a full screen so that even an empty list leaves enough scroll
-    // room to reach SNAP_OPEN and fully collapse the figure (the hero spacer is
-    // now only ~0.6 of a screen, so SNAP_OPEN alone wouldn't be reachable).
-    minHeight: SCREEN_H,
+    // Reserve JUST enough that an empty list can still scroll far enough to reach
+    // SNAP_OPEN and fully collapse the figure — no MORE, so you can't over-scroll
+    // the list up into empty space. (content = HERO_REST_H + this + the dock
+    // paddingBottom must reach SCREEN_H + SNAP_OPEN; SNAP_OPEN = HERO_REST_H − 90
+    // and the dock pad ≈ INPUT_BAR_H + 58, so this ≈ SCREEN_H − 230.)
+    minHeight: SCREEN_H - 230,
     paddingHorizontal: 18,
     // A touch more top padding so the FIRST row sits safely behind the composer
     // at rest (the hero spacer is shorter now), then clears the collapsed figure
@@ -6154,9 +6158,10 @@ const styles = StyleSheet.create({
   // Solid fill below the composer (anchored to the screen bottom) — behind the
   // dock (zIndex 30) but above the scrolling thread.
   kbCover: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 25 },
-  // The home→processes "curtain": opaque bg just below the resting composer,
-  // hiding the list at rest; slides down (listCoverStyle) to reveal it.
-  listCover: { position: 'absolute', left: 0, right: 0, top: LIST_COVER_TOP, height: SCREEN_H, zIndex: 8 },
+  // The home→processes "curtain": opaque bg whose top tracks the composer bottom
+  // (listCoverStyle translates it), hiding the list below the composer at rest
+  // and receding as you scroll. Anchored top:0 so the translate positions it.
+  listCover: { position: 'absolute', left: 0, right: 0, top: 0, height: SCREEN_H, zIndex: 8 },
   // The up-chevron strip above the input dock (full width for centering; only
   // the arrow inside captures taps). Below the sheet (31) so the open sheet
   // covers it.
