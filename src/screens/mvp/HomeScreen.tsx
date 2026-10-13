@@ -3840,9 +3840,17 @@ export function HomeScreen({
 
   // The inline conversation thread fades out as ONE goes idle (same fast
   // sleepChromeSV as the opener), leaving just the centred figure + composer.
-  const threadSleepFadeStyle = useAnimatedStyle(() => ({
-    opacity: sleepChromeSV.value,
-  }));
+  const threadSleepFadeStyle = useAnimatedStyle(() => {
+    // On close the thread SLIDES DOWN and off (chatExitProgress 0→1) while it
+    // fades — so the exit reads as a drag-dismiss of the conversation, not a
+    // hard cut. This is the motion the figure's grow-back (collapseFrac) and
+    // the dim-lift are timed against.
+    const exit = chatExitProgress.value;
+    return {
+      opacity: sleepChromeSV.value * (1 - exit),
+      transform: [{ translateY: exit * SCREEN_H * 0.6 }],
+    };
+  });
 
   const identityCrossfadeStyle = useAnimatedStyle(() => ({
     // Identity row fades in over the SECOND half of collapse — only when

@@ -804,7 +804,7 @@ export function OneProfileSheet({
               accessibilityRole="button"
               accessibilityLabel={t('common_close')}
             >
-              <CloseIcon size={26} color={colors.text} />
+              <CloseIcon size={19} color={colors.text} />
             </Pressable>
           </View>
           <SubscriptionPanel
@@ -1758,9 +1758,9 @@ const styles = StyleSheet.create({
     zIndex: 14,
   },
   closeDockBtn: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,

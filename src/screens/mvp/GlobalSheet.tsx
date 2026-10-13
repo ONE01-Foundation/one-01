@@ -21,23 +21,12 @@ import {
   Pressable,
   ScrollView,
   Alert,
-  Platform,
-  Keyboard,
-  type KeyboardEvent,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  Easing,
-  type SharedValue,
-} from 'react-native-reanimated';
+import { type SharedValue } from 'react-native-reanimated';
 import { BottomSheet } from '../../components/mvp/BottomSheet';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
 import { CardLoop } from '../../components/mvp/CardLoop';
-import { InputBar } from '../../components/mvp/InputBar';
 import { CloseIcon, ArrowDownIcon, HeartIcon, BookIcon, HouseIcon, PlaneIcon, BriefcaseIcon, DocIcon, PlusIcon } from '../../components/mvp/icons';
 import { Orb } from '../../components/mvp/Orb';
 
@@ -98,7 +87,6 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
   const { colors } = useThemeStore();
   const lang = useLanguage();
   const he = lang === 'he';
-  const insets = useSafeAreaInsets();
   const identity = useActiveIdentity();
   const activeIdentityId = useMvpStore((s) => s.activeIdentityId);
   const addUnit = useMvpStore((s) => s.addUnit);
@@ -112,8 +100,6 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
   // Filters — category chip + free-text (tapped hashtag).
   const [selectedCat, setSelectedCat] = useState<CategoryKey>('all');
   const [query, setQuery] = useState('');
-  // The floating "talk to ONE" input at the sheet's bottom.
-  const [input, setInput] = useState('');
   // Collapsible "drawer" worlds — all open by default so scrolling reveals content.
   const [openDrawers, setOpenDrawers] = useState<Record<string, boolean>>({
     business: true,
@@ -135,39 +121,14 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
     [selectedCat],
   );
 
-  // Reset filters + input each time the sheet opens.
+  // Reset filters each time the sheet opens.
   useEffect(() => {
     if (visible) {
       setSelectedCat('all');
       setQuery('');
-      setInput('');
       setOpenDrawers({ business: true, processes: true, templates: true, insights: true });
     }
   }, [visible]);
-
-  // Floating-dock keyboard lift — translate the bottom input up by the keyboard
-  // height so it stays reachable while typing (same pattern as the other sheets).
-  const dockLift = useSharedValue(0);
-  useEffect(() => {
-    const showEv = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEv = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const onShow = (e: KeyboardEvent) => {
-      dockLift.value = withTiming(-(e.endCoordinates?.height ?? 0), {
-        duration: 240,
-        easing: Easing.out(Easing.cubic),
-      });
-    };
-    const onHide = () => {
-      dockLift.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.cubic) });
-    };
-    const a = Keyboard.addListener(showEv, onShow);
-    const b = Keyboard.addListener(hideEv, onHide);
-    return () => {
-      a.remove();
-      b.remove();
-    };
-  }, [dockLift]);
-  const dockStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dockLift.value }] }));
 
   // ── Filtered datasets ────────────────────────────────────────────────────
   const wants = feed.wants.filter((w) => inCat(w.category) && match(w.text));
@@ -198,15 +159,6 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
     },
     [setPendingHomeInput, onClose],
   );
-
-  // Floating input → hand the user's own want to ONE (lands on Home, ONE answers).
-  const submitInput = useCallback(() => {
-    const text = input.trim();
-    if (!text) return;
-    Keyboard.dismiss();
-    setInput('');
-    askOne(text);
-  }, [input, askOne]);
 
   // ── The wants loop (top banner) ────────────────────────────────────────────
   const loopCards: LoopCard[] = useMemo(
@@ -258,31 +210,10 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
       bypassDefaultView={true}
       onDragDismissCross={() => haptic.press()}
       overlay={
-        <>
-          {/* Screen-pinned bottom fade — content scrolls into it, BEHIND the
-              floating input dock (zIndex 10). */}
-          <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />
-          {/* Floating "talk to ONE" input, pinned to the sheet bottom. Lifts with
-              the keyboard; fades with the sheet on close (overlay wrapper fade). */}
-          <Animated.View
-            style={[styles.inputDock, { paddingBottom: Math.max(insets.bottom, 12) }, dockStyle]}
-            pointerEvents="box-none"
-          >
-            {/* Same wrapper + margins as the home dock so the capsule reads
-                identical (size / position). No placeholder — just the resting
-                caret, like home. */}
-            <View style={styles.inputNarrow}>
-              <InputBar
-                value={input}
-                onChangeText={setInput}
-                onSubmit={submitInput}
-                onPressVoice={submitInput}
-                bordered
-                elevated
-              />
-            </View>
-          </Animated.View>
-        </>
+        /* Screen-pinned bottom fade — content scrolls into it. (The floating
+           "talk to ONE" input was removed from Global; you talk to ONE from the
+           Home box — tapping a want/row here still hands it to ONE via askOne.) */
+        <EdgeBars top={false} bottomHeight={110} style={{ zIndex: 5 }} />
       }
       sheetStyle={styles.sheet}
     >
@@ -769,8 +700,9 @@ const styles = StyleSheet.create({
   },
 
   // paddingTop clears the absolute header AND gives the banner room to breathe
-  // below the credits / close row. paddingBottom clears the floating input dock.
-  content: { paddingHorizontal: 22, paddingTop: 84, paddingBottom: 132, gap: 14 },
+  // below the credits / close row. paddingBottom leaves a little breathing room
+  // above the bottom gradient (the floating input dock was removed).
+  content: { paddingHorizontal: 22, paddingTop: 84, paddingBottom: 40, gap: 14 },
 
   // "Join a shared process by code" — the provider entry into the two-sided Unit.
   joinRow: {
@@ -820,19 +752,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   tagText: { fontSize: 13, fontWeight: '600' },
-
-  // Floating "talk to ONE" input — pinned to the sheet's bottom, above the
-  // bottom gradient (zIndex 10 > EdgeBars zIndex 5).
-  inputDock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 10,
-  },
-  // Matches the home dock's inner wrapper so the capsule's width + side margins
-  // line up exactly (3 here + the InputBar's own 18 = the home inset).
-  inputNarrow: { paddingHorizontal: 3 },
 
   // Actions.
   actionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },

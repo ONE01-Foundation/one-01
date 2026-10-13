@@ -388,11 +388,6 @@ export function InputBar({
           // reads CENTRED because minHeight === button height + symmetric
           // padding, so "bottom" and "centre" coincide at rest.
           alignItems: 'flex-end',
-          // Hebrew: + on the RIGHT, the voice/call button on the LEFT (mirror of
-          // the LTR layout). Padding swaps to keep the spacing right.
-          ...(lang === 'he'
-            ? { flexDirection: 'row-reverse' as const, direction: 'ltr' as const, paddingLeft: 10, paddingRight: 14 }
-            : null),
         },
         elevated && styles.capsuleElevated,
         bordered && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
@@ -579,10 +574,6 @@ export function InputBar({
             styles.capsule,
             styles.capsuleFull,
             { backgroundColor: colors.surface, shadowColor: '#000' },
-            // Hebrew: + on the RIGHT, hang-up on the LEFT (mirror), like the home.
-            lang === 'he'
-              ? { flexDirection: 'row-reverse' as const, direction: 'ltr' as const, paddingLeft: 10, paddingRight: 14 }
-              : null,
           ]}
         >
           {plusButton}
