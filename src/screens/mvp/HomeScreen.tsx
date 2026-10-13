@@ -5130,7 +5130,7 @@ export function HomeScreen({
         {hasOnboarded && !callActive && !chatActive && (
           <Animated.View
             pointerEvents="box-none"
-            style={[styles.processesChevron, { bottom: INPUT_BAR_H + insets.bottom + 10 }, backHomeChevronStyle]}
+            style={[styles.processesChevron, { bottom: INPUT_BAR_H + insets.bottom - 4 }, backHomeChevronStyle]}
           >
             <Pressable
               onPress={() => { haptic.press(); scrollRef.current?.scrollTo({ y: 0, animated: true }); }}

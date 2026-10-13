@@ -129,6 +129,11 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
   const dragX = useSharedValue(0);
   const axisLock = useSharedValue(0); // 0 none, 1 vertical, 2 horizontal
   const contentFade = useSharedValue(1);
+  // The panel's own measured height — the hidden pose translates it DOWN by
+  // exactly this, so it sits fully OFF-SCREEN (below the frame) at rest instead
+  // of peeking above the bottom edge when a host sheet (profile/settings) or the
+  // app first renders it. Starts large so it's hidden before the first layout.
+  const panelH = useSharedValue(900);
 
   useEffect(() => {
     if (visible) {
@@ -196,7 +201,8 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
     return { opacity: sv.value * 0.55 * dragFade };
   });
   const panelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: (1 - sv.value) * 520 + dragY.value }],
+    // Hidden = translated fully below the screen by its own height (no peek).
+    transform: [{ translateY: (1 - sv.value) * panelH.value + dragY.value }],
   }));
   const pageStyle = useAnimatedStyle(() => ({
     opacity: contentFade.value,
@@ -219,6 +225,9 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
 
       <GestureDetector gesture={pan}>
         <Animated.View
+          onLayout={(e) => {
+            panelH.value = e.nativeEvent.layout.height;
+          }}
           style={[
             styles.panel,
             { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 16) + 10 },
@@ -228,7 +237,7 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
           {/* Physical drag handle. */}
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
-          {/* Close (X) — same round button as the ONE profile. */}
+          {/* Close (X) — same size + position as the Global sheet's X. */}
           <Pressable
             onPress={onClose}
             hitSlop={12}
@@ -236,7 +245,7 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
             accessibilityRole="button"
             accessibilityLabel={he ? 'סגור' : 'Close'}
           >
-            <CloseIcon size={18} color={colors.text} />
+            <CloseIcon size={22} color={colors.text} />
           </Pressable>
 
           {/* The swipeable plan "page" (icon + title + subtitle + features). */}
@@ -351,16 +360,23 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     marginBottom: 6,
   },
+  // Matches the Global sheet's X (pillBtn): 44×44 surface pill with a soft
+  // shadow, top-right.
   closeBtn: {
     position: 'absolute',
-    top: 14,
-    right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    top: 12,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   page: {
     alignItems: 'center',
