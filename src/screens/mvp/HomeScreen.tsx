@@ -3449,8 +3449,11 @@ export function HomeScreen({
     const scrollP = Math.max(0, Math.min(1, scrollY.value / SNAP_OPEN));
     // In CHAT the figure is PINNED small at the top — a fixed size/place, NOT
     // linked to the chat scroll (only the eyes track the scroll, via eyeLookY).
-    // So force full collapse while chatActive.
-    return Math.max(scrollP, chatActiveSV.value);
+    // The chat pin EASES OFF with the exit slide (chatExitProgress 0→1), so on
+    // close the figure grows back to centre AS the thread slides away — one
+    // continuous motion, not a sharp cut after the slide finishes.
+    const chatPin = chatActiveSV.value * (1 - chatExitProgress.value);
+    return Math.max(scrollP, chatPin);
   });
 
   // Lift the hero (orb + CTA) when chat opens so the keyboard doesn't
@@ -3611,16 +3614,21 @@ export function HomeScreen({
     // which clipped the line ("cut"). Keeps its row height so it just dissolves.
     return { opacity: scrollP * (1 - globalProgress.value) * sleepChromeSV.value };
   });
-  // The scroll-reveal saying: invisible at the home AND at the open list, peaks
-  // in the MIDDLE of the home→processes scroll (where the empty space is).
+  // The scroll-reveal saying: appears EARLY in the home→processes scroll and
+  // RISES UP with the figure (translateY), fading out well before the process
+  // list scrolls up to it (so they never overlap).
   const scrollSayingStyle = useAnimatedStyle(() => {
+    const p = Math.max(0, Math.min(1, scrollY.value / SNAP_OPEN));
     const op = interpolate(
-      scrollY.value,
-      [SNAP_OPEN * 0.12, SNAP_OPEN * 0.42, SNAP_OPEN * 0.66, SNAP_OPEN * 0.94],
+      p,
+      [0.04, 0.22, 0.5, 0.68],
       [0, 1, 1, 0],
       Extrapolation.CLAMP,
     );
-    return { opacity: op * (1 - globalProgress.value) };
+    return {
+      opacity: op * (1 - globalProgress.value),
+      transform: [{ translateY: -p * SCREEN_H * 0.34 }],
+    };
   });
 
   /*
@@ -5477,9 +5485,10 @@ const styles = StyleSheet.create({
   // Bigger + more breathing room than before; the background fill conveys state
   // (dark = on, red = muted, tint = off).
   callCtrlBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    // Same size as the home call button (InputBar's voiceBtn, 52).
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -5671,7 +5680,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 30,
     right: 30,
-    top: Math.round(SCREEN_H * 0.42),
+    // Starts just below centre and rises up with the figure (translateY above).
+    top: Math.round(SCREEN_H * 0.5),
     alignItems: 'center',
     zIndex: 12,
   },
