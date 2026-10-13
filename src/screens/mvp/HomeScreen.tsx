@@ -1249,12 +1249,14 @@ export function HomeScreen({
     if (!active) { openerPostedRef.current = false; return; }
     if (openerPostedRef.current) return;
     openerPostedRef.current = true;
+    // Entering the chat/call always FOCUSES the latest message (scroll to it).
+    scrollToLatest();
     const store = useMvpStore.getState();
     if (store.homeChat.length > 0) return; // a conversation already exists
     const greeting = timeGreeting(lang, Date.now(), identity?.name, 0);
     const text = lang === 'he' ? `${greeting} במה אפשר לעזור?` : `${greeting} How can I help?`;
     store.appendHomeChat({ id: `one_opener_${Date.now()}`, from: 'one', text, ts: Date.now() });
-  }, [chatActive, callActive, identity?.name, lang]);
+  }, [chatActive, callActive, identity?.name, lang, scrollToLatest]);
 
   const handleInputFocus = useCallback(() => {
     setInputFocused(true);
@@ -1349,6 +1351,9 @@ export function HomeScreen({
     // normal (non-incognito) presence, and the next chat starts on the record.
     setGhostMode(false);
     Keyboard.dismiss();
+    // Reset the scroll so the home lands on its proper CENTRED rest — otherwise
+    // a chat left scrolled dropped you onto a collapsed/mis-arranged home.
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
   }, []);
 
   // chatExitProgress: 0 = chat in place, 1 = chat fully slid off-screen.
@@ -3018,10 +3023,15 @@ export function HomeScreen({
 
   const scrollY = useSharedValue(0);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  // Deepest NEGATIVE overscroll reached during the current drag (drag DOWN past
+  // the top). Checked on release to open Global — the opposite-direction gesture
+  // to scrolling UP into the processes.
+  const overscrollMin = useSharedValue(0);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
       scrollY.value = e.contentOffset.y;
+      if (e.contentOffset.y < overscrollMin.value) overscrollMin.value = e.contentOffset.y;
       // Unwind the centred rest pair as the user scrolls up into the processes.
       // Written here (not a useDerivedValue) so the dock worklets declared above
       // scrollY can read it without a decl-order crash.
@@ -4273,17 +4283,29 @@ export function HomeScreen({
               ref={scrollRef}
               style={styles.flex1}
               onScroll={scrollHandler}
-              // Starting a drag is a touch — gently reveal the arrows.
+              // Starting a drag is a touch — gently reveal the arrows + reset the
+              // overscroll tracker for the Global gesture.
               onScrollBeginDrag={() => {
                 noteInteract();
                 revealChevrons();
+                overscrollMin.value = 0;
               }}
-              // The UP axis (overscroll past the top) is CANCELLED — no Global,
-              // no mode switch. The home reads as one calm continuous thread:
-              // scrolling up just bounces. Global is a deliberate tap on the
-              // up-chevron above the orb (user: "just cancel the up-scroll; the
-              // down-scroll to processes is good"). Down-scroll → processes is
-              // untouched.
+              // Bounce at the top so a DOWNWARD drag overscrolls into negative
+              // offset — that's the Global gesture (the opposite of scrolling UP
+              // into the processes).
+              alwaysBounceVertical
+              // Drag DOWN past the top (a deliberate overscroll) → open Global —
+              // the OPPOSITE-direction gesture to scrolling up into the processes.
+              onScrollEndDrag={() => {
+                if (
+                  overscrollMin.value <= -GLOBAL_OPEN_THRESHOLD &&
+                  onOpenGlobal && !chatActive && !callActive && !anySheetOpen && !signInOpen
+                ) {
+                  seenGlobalRef.current = true;
+                  onOpenGlobal();
+                }
+                overscrollMin.value = 0;
+              }}
               // A light tick each time the list SNAPS between the resting hero
               // and the open processes list (in either direction), so the
               // detent change is felt, not just seen.
@@ -4301,12 +4323,10 @@ export function HomeScreen({
               // button; the keyboard just opens and closes on the same page.
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
-              // Snap between the resting home (0) and the fully-open processes
-              // (SNAP_OPEN), so a half-scroll "flows" to completion — the figure
-              // finishes collapsing up and the composer finishes dropping down,
-              // landing the list right under the figure. Past SNAP_OPEN the
-              // longer list free-scrolls.
-              snapToOffsets={[0, SNAP_OPEN]}
+              // Free-scroll between the resting home and the processes — the hard
+              // snapToOffsets snap read as too aggressive (it yanked you to 0 or
+              // SNAP_OPEN). Natural deceleration lets the list settle where you
+              // leave it; the down-chevron still scrolls it open programmatically.
               snapToEnd={false}
               decelerationRate="normal"
               // The conversation is inline scroll content now, so the list must
@@ -4461,7 +4481,7 @@ export function HomeScreen({
                   below the full-screen hero, so they're revealed by scrolling
                   down past the figure — as ONE shrinks up to the top bar, the
                   process list slides into view. */}
-              {hasOnboarded && (
+              {hasOnboarded && !chatActive && !callActive && (
                 <View style={styles.processesInline}>
                   {processesContent}
                 </View>
@@ -5103,7 +5123,8 @@ export function HomeScreen({
             accessibilityLabel={lang === 'he' ? 'סגור' : 'Close'}
           >
             <View style={styles.closeAsPlus}>
-              <PlusThinIcon size={26} color={colors.text} />
+              {/* Same soft colour as the home chevrons (textSecondary). */}
+              <PlusThinIcon size={26} color={colors.textSecondary} />
             </View>
           </Pressable>
           <Pressable
