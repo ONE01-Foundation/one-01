@@ -319,6 +319,14 @@ export function InputBar({
     );
   }, [caretPulse]);
   const caretStyle = useAnimatedStyle(() => ({ opacity: caretPulse.value }));
+  // Softly fade the idle status text IN as it changes — a gentle crossfade, never
+  // a hard pop (the abrupt swap read as startling). Keyed on the idleLine value.
+  const idleTextOpacity = useSharedValue(1);
+  React.useEffect(() => {
+    idleTextOpacity.value = 0.12;
+    idleTextOpacity.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
+  }, [idleLine, idleTextOpacity]);
+  const idleTextStyle = useAnimatedStyle(() => ({ opacity: idleTextOpacity.value }));
   // The custom caret is the BIG black "ready to type" bar. Show it whenever the
   // field is empty (keyboard closed AND open) — so the caret stays big + black
   // when the keyboard opens, instead of the thin native cursor (whose colour
@@ -474,15 +482,16 @@ export function InputBar({
               ]}
             >
               <Animated.View style={[styles.idleCaret, caretStyle, { backgroundColor: colors.text }]} />
-              <Text
+              <Animated.Text
                 numberOfLines={1}
                 style={[
                   styles.idleText,
                   { color: colors.textSecondary, textAlign: isRTL ? 'right' : 'left' },
+                  idleTextStyle,
                 ]}
               >
                 {idleLine}
-              </Text>
+              </Animated.Text>
             </Animated.View>
           )}
         </View>
@@ -573,11 +582,13 @@ export function InputBar({
             onPress={onEndCall}
             hitSlop={14}
             accessibilityLabel="End call"
-            style={[styles.voiceBtn, voiceBtnStyle, { backgroundColor: HANGUP_RED }]}
+            // Bigger than the call/voice button — the hang-up is the primary
+            // action in a call, so it reads as the dominant control.
+            style={[styles.voiceBtn, styles.hangUpBtn, voiceBtnStyle, { backgroundColor: HANGUP_RED }]}
           >
             {/* Phone handset tilted to the classic "hang up" angle. */}
             <View style={styles.hangUp}>
-              <PhoneIcon size={22} color="#FFFFFF" />
+              <PhoneIcon size={26} color="#FFFFFF" />
             </View>
           </Pressable>
         </View>
@@ -775,6 +786,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Hang-up is bigger than the 52px voice button (overrides voiceBtn's size).
+  hangUpBtn: { width: 64, height: 64, borderRadius: 32 },
   // Handset rotated to the universal "hang up" tilt.
   hangUp: { transform: [{ rotate: '135deg' }] },
   // Call-mode middle slot — holds the speaker/mute/camera cluster in the same

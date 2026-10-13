@@ -3124,40 +3124,25 @@ export function HomeScreen({
   }, [chatActive, callActive, anySheetOpen, signInOpen, profileOpen, settingsOpen, inputFocused, restPairGate]);
 
   // ONE's status line INSIDE the composer — shown ONLY in the HOME rest pose
-  // (gone the moment you scroll into the processes / open the chat). It is
-  // deliberately CALM, not naggy: ONE speaks a line, then goes quiet for a beat
-  // or two (empty `''` entries = just the caret). The pool mixes:
-  //   • time-aware lines (good morning / late / weekend …),
-  //   • a couple of gentle invites,
-  //   • the occasional "from the network" note (ambient — real followed-channel
-  //     content will slot in here once the following system is wired).
-  // Keyed on the time bucket (part-of-day) so it's stable, not rebuilt each tick.
-  const idleBucket = timeBucket(nowTick);
+  // (gone the moment you scroll into the processes / open the chat). It is a
+  // quiet, ALWAYS-present subtle word/short line that softly CROSSFADES as it
+  // changes (InputBar animates the opacity) — never an empty box that a full
+  // sentence suddenly pops into (that read as startling). ONE is simply, calmly
+  // present. Short + gentle; neutral Hebrew so it fits any gender.
   const statusPool = useMemo<string[]>(() => {
     const he = lang === 'he';
-    const times = timeAwareLines(lang, nowTick); // 1–3 context lines
-    const invites = he
-      ? ['אני כאן אם צריך', 'משהו שבא לך לקדם?', 'אפשר גם פשוט לדבר']
-      : ["I'm here if you need me", 'Anything on your mind?', 'We can just talk, too'];
-    const network = he
-      ? ['משהו זז ברשת — אני עוקב בשבילך.', 'יש תנועה בתחומים שמעניינים אותך.']
-      : ["Something's moving in your network — I'm watching.", 'There’s activity in the areas you follow.'];
-    // One line, then QUIET (two empty beats), so ONE pauses between thoughts.
-    const spoken = [times[0], invites[0], network[0], times[1] ?? invites[1], invites[2], network[1] ?? '']
-      .filter((s) => !!s);
-    const pool: string[] = [];
-    spoken.forEach((line) => pool.push(line, '', ''));
-    return pool.length ? pool : [''];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang, idleBucket]);
+    return he
+      ? ['אני כאן', 'מקשיב', 'כאן בשבילך', 'על מה נדבר?', 'אפשר לדבר על הכול', 'ONE']
+      : ["I'm here", 'Listening', 'Here for you', "What's on your mind?", 'We can talk about anything', 'ONE'];
+  }, [lang]);
   const [idleLineIdx, setIdleLineIdx] = useState(0);
   const idleLineActive = hasOnboarded && !chatActive && !inCards;
   useEffect(() => {
     if (!idleLineActive) return;
-    const id = setInterval(() => setIdleLineIdx((i) => i + 1), 4500);
+    // A calm, slow cadence — ONE isn't announcing, just quietly there.
+    const id = setInterval(() => setIdleLineIdx((i) => i + 1), 5200);
     return () => clearInterval(id);
   }, [idleLineActive]);
-  // '' entries render as just the caret (InputBar's showIdle needs non-empty text).
   const idleLine = idleLineActive ? statusPool[idleLineIdx % statusPool.length] : undefined;
 
   // The hero's eyes fade in on the splash → home handoff (eyesOpacityMount) and
@@ -3646,7 +3631,9 @@ export function HomeScreen({
             ty +
             heroKeyboardLift.value +
             orbMountY.value +
-            chatOpenLiftSV.value +
+            // NO keyboard lift for the figure — in chat it's pinned at the top at
+            // a fixed size/place; the old chatOpenLiftSV made it ride too HIGH
+            // when the keyboard opened. (The composer still rises with the kb.)
             gp * PULL_CENTER_DELTA +
             sleepDrop +
             profileDrop +
@@ -3658,11 +3645,10 @@ export function HomeScreen({
             orbEnterScale.value *
             (1 - 0.4 * gp) *
             profileScale *
-            sleepGrow *
-            // Shrink a touch while the KEYBOARD is up (kbOpenSV) so the figure
-            // steps back and makes room — same in the empty home and in chat;
-            // it eases back to full size when the keyboard closes.
-            (1 - kbOpenSV.value * 0.22),
+            sleepGrow,
+          // NO keyboard shrink — the keyboard-closed size (collapseScale) is the
+          // right size in chat; shrinking it further on keyboard-open made the
+          // figure too small.
         },
       ],
     };
@@ -4356,7 +4342,7 @@ export function HomeScreen({
                   delayLongPress={450}
                   accessibilityLabel="Next broadcast. Hold to answer by voice."
                 />
-                {chatActive && sessionMessages.length > 0 && (
+                {(chatActive || callActive) && sessionMessages.length > 0 && (
                   <Animated.View
                     style={[styles.threadInline, threadSleepFadeStyle]}
                     onLayout={(e) => {
@@ -4789,25 +4775,8 @@ export function HomeScreen({
                 then wears the green ring. Its opacity is driven to 0 by pc. */}
             {callActive && (
               <>
-                {/* ONE's call talk — BELOW the orb, exactly where the home hero
-                    text sits, so the call reads as the home with a live ring. */}
-                <Animated.View
-                  pointerEvents="none"
-                  style={[styles.callTalk, { top: HERO_CENTER_TOP + HOME_ORB_SIZE + 34 }, callTalkStyle]}
-                >
-                  <Text
-                    // Same style as the broadcast's first (greeting) line —
-                    // hlGreeting, centred — so the call reads as the home speaking.
-                    style={[
-                      styles.hlGreeting,
-                      { color: colors.text, textAlign: 'center', writingDirection: lang === 'he' ? 'rtl' : 'ltr' },
-                    ]}
-                  >
-                    {lang === 'he'
-                      ? 'היי, אני כאן. על מה נדבר?'
-                      : "Hey, I'm here. What should we talk about?"}
-                  </Text>
-                </Animated.View>
+                {/* No talk line under the figure in a call — ONE's opener shows
+                    in the chat view instead. */}
                 {/* box-none: the layer passes touches through (so cards behind
                     stay scrollable), but the orb itself captures its tap. */}
                 <View pointerEvents="box-none" style={styles.callLayer}>
