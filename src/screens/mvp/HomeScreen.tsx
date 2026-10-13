@@ -3186,6 +3186,37 @@ export function HomeScreen({
   }, [idleLineActive]);
   const idleLine = idleLineActive ? statusPool[idleLineIdx % statusPool.length] : undefined;
 
+  // A ONE "saying" that surfaces in the EMPTY space DURING the home→processes
+  // scroll — a bold black quote / life note / greeting that CHANGES each scroll
+  // (a fresh one is picked when the drag begins, in onScrollBeginDrag).
+  const SCROLL_SAYINGS = useMemo<string[]>(
+    () =>
+      lang === 'he'
+        ? [
+            'כל יום הוא הזדמנות להתחיל מחדש.',
+            'הדרך היחידה לעשות עבודה גדולה היא לאהוב את מה שאתה עושה.',
+            'צעד קטן קדימה עדיף על עמידה במקום.',
+            'מה שחשוב באמת לרוב לא הכי רועש.',
+            'הזמן הכי טוב להתחיל הוא עכשיו.',
+            'דברים גדולים מתחילים מהחלטה אחת קטנה.',
+            'טוב לראות אותך שוב.',
+            'אל תחכה להרגשה המושלמת — תתחיל, וההרגשה תגיע.',
+          ]
+        : [
+            'Every day is a fresh start.',
+            'The only way to do great work is to love what you do.',
+            'A small step forward beats standing still.',
+            'What matters most is rarely the loudest.',
+            'The best time to start is now.',
+            'Big things start with one small decision.',
+            'Good to see you again.',
+            "Don't wait to feel ready — start, and ready follows.",
+          ],
+    [lang],
+  );
+  const [sayingIdx, setSayingIdx] = useState(() => Math.floor(Math.random() * 8));
+  const scrollSaying = SCROLL_SAYINGS[sayingIdx % SCROLL_SAYINGS.length];
+
   // The hero's eyes fade in on the splash → home handoff (eyesOpacityMount) and
   // stay open at rest. Pulling toward Global fades them out, AND idle-sleep now
   // closes them too: as ONE dozes (sleepSV 1→0) it returns to the bare black dot
@@ -3576,9 +3607,20 @@ export function HomeScreen({
   // work without one clobbering the other's opacity.
   const homeUpgradeStyle = useAnimatedStyle(() => {
     const scrollP = interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP);
-    // Also fades away with the composer as ONE dozes (sleepChromeSV) — on sleep
-    // the whole surface clears to the bare dot.
-    return { opacity: scrollP * (1 - globalProgress.value) * sleepChromeSV.value, height: scrollP * 30, marginTop: scrollP * 8 };
+    // Only FADE on scroll (and with the Global pull / sleep) — no height collapse,
+    // which clipped the line ("cut"). Keeps its row height so it just dissolves.
+    return { opacity: scrollP * (1 - globalProgress.value) * sleepChromeSV.value };
+  });
+  // The scroll-reveal saying: invisible at the home AND at the open list, peaks
+  // in the MIDDLE of the home→processes scroll (where the empty space is).
+  const scrollSayingStyle = useAnimatedStyle(() => {
+    const op = interpolate(
+      scrollY.value,
+      [SNAP_OPEN * 0.12, SNAP_OPEN * 0.42, SNAP_OPEN * 0.66, SNAP_OPEN * 0.94],
+      [0, 1, 1, 0],
+      Extrapolation.CLAMP,
+    );
+    return { opacity: op * (1 - globalProgress.value) };
   });
 
   /*
@@ -4358,6 +4400,11 @@ export function HomeScreen({
                 noteInteract();
                 revealChevrons();
                 overscrollMin.value = 0;
+                // A fresh saying for each home→processes scroll (only when
+                // starting from the home, not chat/call).
+                if (!chatActive && !callActive && scrollY.value < 30) {
+                  setSayingIdx((i) => i + 1 + Math.floor(Math.random() * 3));
+                }
               }}
               // Bounce at the top so a DOWNWARD drag overscrolls into negative
               // offset — that's the Global gesture (the opposite of scrolling UP
@@ -4617,6 +4664,17 @@ export function HomeScreen({
                 handler lives directly on the surface that moves with the
                 scroll, so iOS hit-testing is reliable. The inner Animated.View
                 only does breath + tap-grow scale. */}
+            {/* Scroll-reveal saying — a bold ONE quote / life note / greeting
+                that surfaces in the empty middle as you scroll home→processes,
+                and fades at both ends. Changes each scroll. */}
+            {hasOnboarded && !chatActive && !callActive && (
+              <Animated.View pointerEvents="none" style={[styles.scrollSayingWrap, scrollSayingStyle]}>
+                <Text style={[styles.scrollSayingText, { color: colors.text }, rtlText(lang)]}>
+                  {scrollSaying}
+                </Text>
+              </Animated.View>
+            )}
+
             {/* Global "up" chevron — hints "pull DOWN for ONE01 Global". Lives
                 at the very top; same brief reveal + idle reminder as the
                 bottom chevron. Hidden in chat / call / sign-in. */}
@@ -4986,7 +5044,7 @@ export function HomeScreen({
         {hasOnboarded && !callActive && !chatActive && (
           <Animated.View
             pointerEvents="box-none"
-            style={[styles.processesChevron, { bottom: INPUT_BAR_H + insets.bottom + 34 }, backHomeChevronStyle]}
+            style={[styles.processesChevron, { bottom: INPUT_BAR_H + insets.bottom + 10 }, backHomeChevronStyle]}
           >
             <Pressable
               onPress={() => { haptic.press(); scrollRef.current?.scrollTo({ y: 0, animated: true }); }}
@@ -5608,6 +5666,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 24,
   },
+  // Scroll-reveal saying — bold, centred in the middle band.
+  scrollSayingWrap: {
+    position: 'absolute',
+    left: 30,
+    right: 30,
+    top: Math.round(SCREEN_H * 0.42),
+    alignItems: 'center',
+    zIndex: 12,
+  },
+  scrollSayingText: {
+    fontSize: 23,
+    lineHeight: 31,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
   flipUp: { transform: [{ rotate: '180deg' }] },
 
   // ── Call mode ──────────────────────────────────────────────────────────
@@ -5919,7 +5992,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    overflow: 'hidden',
+    // Fixed spacing now (the height/marginTop are no longer animated — the row
+    // just fades, so it keeps its place instead of collapsing).
+    marginTop: 8,
   },
   upgradePrompt: { fontSize: 13, fontWeight: '400' },
   upgradeLink: { fontSize: 13, fontWeight: '700' },
