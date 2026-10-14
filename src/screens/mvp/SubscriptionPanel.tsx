@@ -135,13 +135,25 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
   // app first renders it. Starts large so it's hidden before the first layout.
   const panelH = useSharedValue(900);
 
+  // Mount ONLY while open (or animating closed). At rest the panel is NOT in the
+  // tree at all — so it can never peek, steal a tap, or fight the keyboard on
+  // mobile web, where a relayout (keyboard opening) shrank the measured height
+  // and rode the "hidden" sheet back up into view. "Shouldn't exist if I didn't
+  // tap it" — so it doesn't.
+  const [mounted, setMounted] = useState(visible);
+
   useEffect(() => {
     if (visible) {
+      setMounted(true);
       dragY.value = 0;
       dragX.value = 0;
       setIndex((i) => i); // keep selection across reopens
+      sv.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) });
+    } else {
+      sv.value = withTiming(0, { duration: 220, easing: Easing.in(Easing.cubic) }, (done) => {
+        if (done) runOnJS(setMounted)(false);
+      });
     }
-    sv.value = withTiming(visible ? 1 : 0, { duration: 260, easing: Easing.out(Easing.cubic) });
   }, [visible, sv, dragY, dragX]);
 
   // Crossfade the plan "page" when it switches (swipe or toggle tap).
@@ -220,6 +232,8 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
     setPlan(active.id); // mock upgrade (no Stripe in IL yet)
     onClose();
   };
+
+  if (!mounted) return null;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>

@@ -10,6 +10,7 @@ import { useLocaleStore } from './src/stores/localeStore';
 import { OneProvider } from './src/core/OneContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/mvp/ErrorBoundary';
+import { applyWebHead } from './src/utils/webHead';
 
 /**
  * Root: gates rendering on theme + locale init, then renders Home directly.
@@ -35,6 +36,12 @@ export default function App() {
     const interval = setInterval(() => updateTheme(), 60000);
     return () => clearInterval(interval);
   }, [updateTheme]);
+
+  // Web only: tint the browser chrome (status bar / toolbar) to the app bg and
+  // add the home-screen icon + standalone metas. Re-runs when the theme flips.
+  useEffect(() => {
+    applyWebHead(colors.background);
+  }, [colors.background]);
 
   if (!isInitialized) {
     return <View style={[styles.container, { backgroundColor: colors.background }]} />;

@@ -26,7 +26,10 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    // documentTitle: keep the browser tab (and the iOS "Add to Home Screen"
+    // default name) as "ONE". Without this, React Navigation overwrites
+    // document.title with the focused route name ("Home") on web.
+    <NavigationContainer documentTitle={{ formatter: () => 'ONE' }}>
       <MvpStack />
     </NavigationContainer>
   );
