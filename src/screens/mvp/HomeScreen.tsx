@@ -4811,16 +4811,9 @@ export function HomeScreen({
                 handler lives directly on the surface that moves with the
                 scroll, so iOS hit-testing is reliable. The inner Animated.View
                 only does breath + tap-grow scale. */}
-            {/* Scroll-reveal saying — a bold ONE quote / life note / greeting
-                that surfaces in the empty middle as you scroll home→processes,
-                and fades at both ends. Changes each scroll. */}
-            {hasOnboarded && !chatActive && !callActive && (
-              <Animated.View pointerEvents="none" style={[styles.scrollSayingWrap, scrollSayingStyle]}>
-                <Text style={[styles.scrollSayingText, { color: colors.text }, rtlText(lang)]}>
-                  {scrollSaying}
-                </Text>
-              </Animated.View>
-            )}
+            {/* (Removed) The scroll-reveal "saying" that used to surface in the
+                empty middle during home→processes — per request the scroll now
+                reveals ONLY the processes list, nothing cycling in the gap. */}
 
             {/* Global "up" chevron — hints "pull DOWN for ONE01 Global". Lives
                 at the very top; same brief reveal + idle reminder as the

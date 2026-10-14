@@ -10,7 +10,7 @@ import { useLocaleStore } from './src/stores/localeStore';
 import { OneProvider } from './src/core/OneContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/mvp/ErrorBoundary';
-import { applyWebHead } from './src/utils/webHead';
+import { applyWebHead, installWebViewportFix } from './src/utils/webHead';
 
 /**
  * Root: gates rendering on theme + locale init, then renders Home directly.
@@ -42,6 +42,12 @@ export default function App() {
   useEffect(() => {
     applyWebHead(colors.background);
   }, [colors.background]);
+
+  // Web only: keep the app glued to the visible viewport when the keyboard
+  // opens (install once).
+  useEffect(() => {
+    installWebViewportFix();
+  }, []);
 
   if (!isInitialized) {
     return <View style={[styles.container, { backgroundColor: colors.background }]} />;
