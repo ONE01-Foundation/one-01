@@ -1,0 +1,6 @@
+# This Next.js site is the MARKETING/gateway on one01.io. The PRODUCT is the
+# Expo build served on app.one01.io. Forward the old in-site /app route (and its
+# "Enter" CTAs) to the product subdomain so there's one product, not two.
+# Cloudflare Pages preserves the query string, so /app?q=... still carries intent.
+/app/*   https://app.one01.io/:splat   302
+/app     https://app.one01.io          302

@@ -1,0 +1,12 @@
+# Cloudflare Worker (project "one-app") that serves the EXPO WEB product on
+# app.one01.io. The Workers build runs:
+#     Build:  npx expo export --platform web      → produces ./dist
+#     Deploy: npx wrangler deploy                 → uploads ./dist as static assets
+# This file is the "where to put dist" — assets-only Worker, SPA fallback so a
+# refresh on any path still serves the app shell.
+name = "one-app"
+compatibility_date = "2024-11-01"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
