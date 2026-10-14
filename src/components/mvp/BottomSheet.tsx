@@ -17,6 +17,8 @@ import {
   StyleSheet,
   ViewStyle,
   StyleProp,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import GorhomBottomSheet, {
   BottomSheetView,
@@ -124,11 +126,39 @@ export function BottomSheet({
   const { colors } = useThemeStore();
   const ref = useRef<BottomSheetMethods>(null);
 
+  // DESKTOP WEB: present the sheet as a CENTERED, width-capped popup card
+  // (gorhom `detached` + bottomInset) instead of a full-width bottom sheet.
+  // Mobile web + native keep the bottom sheet. Kept inside gorhom so the
+  // children's BottomSheetScrollView / BottomSheetView still work.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && winW >= 768;
+
   // Stabilise snapPoints across renders so gorhom doesn't reset on every
   // parent re-render.
   const snapsKey = JSON.stringify(snapPoints);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const snaps = useMemo(() => snapPoints, [snapsKey]);
+  // On desktop a fixed-height card reads best — one tall detent, vertically
+  // centered via bottomInset = (100% - cardHeight) / 2. Dynamic-sizing sheets
+  // keep measuring their own height and just float off the bottom.
+  const DESKTOP_CARD_FRAC = 0.86;
+  const desktopSnaps = useMemo(() => [`${Math.round(DESKTOP_CARD_FRAC * 100)}%`], []);
+  const snapsForGorhom = enableDynamicSizing
+    ? undefined
+    : isDesktop
+      ? desktopSnaps
+      : snaps;
+  const bottomInset = isDesktop
+    ? enableDynamicSizing
+      ? Math.round(winH * 0.1)
+      : Math.round((winH * (1 - DESKTOP_CARD_FRAC)) / 2)
+    : 0;
+  // gorhom applies this to its outer animated container. maxWidth + auto side
+  // margins center the card on web.
+  const desktopSheetStyle = useMemo(
+    () => ({ maxWidth: 600, width: '100%', marginHorizontal: 'auto' }) as ViewStyle,
+    [],
+  );
 
   // The SharedValue gorhom writes the LIVE animated index into. Use the
   // caller's when they passed one (so their behind-the-sheet tracking keeps
@@ -341,12 +371,13 @@ export function BottomSheet({
     ref.current?.close();
   }, []);
 
-  // Snap to the requested initial detent on mount.
+  // Snap to the requested initial detent on mount. Desktop has a single centered
+  // detent (index 0), so there's nothing to snap to there.
   useEffect(() => {
-    if (!mounted || initialSnap === 0) return;
+    if (!mounted || initialSnap === 0 || isDesktop) return;
     const t = setTimeout(() => ref.current?.snapToIndex(initialSnap), 50);
     return () => clearTimeout(t);
-  }, [mounted, initialSnap]);
+  }, [mounted, initialSnap, isDesktop]);
 
   // gorhom's built-in animated backdrop. It interpolates opacity off the
   // sheet's internal animatedIndex — appearing as the sheet slides up and
@@ -405,11 +436,15 @@ export function BottomSheet({
           // measuring, leaving a chat-open stranded at the low card. gorhom
           // animates here on prop change too, so a later initialSnap change
           // (profile → tap input → chat) still expands.
-          index={initialSnap}
+          index={isDesktop ? 0 : initialSnap}
           // Dynamic-sizing sheets snap ONLY to their content height (no manual
-          // snap points), so they can't be dragged up to a taller detent —
-          // they just fit the content and pan down to close.
-          snapPoints={enableDynamicSizing ? undefined : snaps}
+          // snap points); desktop uses the single centered-card detent; mobile
+          // uses the caller's snaps.
+          snapPoints={snapsForGorhom}
+          // Desktop: detach into a floating card, lifted off the bottom + center.
+          detached={isDesktop}
+          bottomInset={bottomInset}
+          style={isDesktop ? desktopSheetStyle : undefined}
           // Live index — out to the caller's SharedValue (behind-the-sheet
           // surfaces like the Home orb) when given, else our internal one. We
           // ALWAYS watch it (see the dismiss-cross reaction above).
@@ -427,7 +462,11 @@ export function BottomSheet({
             styles.indicator,
             { backgroundColor: colors.border },
           ]}
-          backgroundStyle={[styles.background, { backgroundColor: colors.background }]}
+          backgroundStyle={[
+            styles.background,
+            isDesktop && styles.backgroundDesktop,
+            { backgroundColor: colors.background },
+          ]}
         >
           {bypassDefaultView ? (
             children
@@ -464,6 +503,16 @@ const styles = StyleSheet.create({
   background: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+  },
+  // Desktop popup card — round the bottom corners too + a soft floating shadow.
+  backgroundDesktop: {
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 24,
   },
   indicator: {
     width: 44,

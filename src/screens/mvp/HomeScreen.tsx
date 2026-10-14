@@ -2842,13 +2842,29 @@ export function HomeScreen({
   // the wrapped ScrollView, which DISABLES native touch scrolling — on a mobile
   // browser the home wouldn't scroll to processes or pull to Global at all. Force
   // `pan-y` back onto the scroll node so the browser handles vertical scroll while
-  // the horizontal swipe (activeOffsetX) still registers. Re-applied whenever
-  // profileSwipe re-creates (RNGH re-stamps touch-action then).
+  // the horizontal swipe (activeOffsetX) still registers.
+  //
+  // Setting it once raced with RNGH (which re-stamps `none` on gesture (re)init,
+  // AFTER our effect) — so the home scrolled only "sometimes" while sheets, with
+  // no such wrapper, always did. A MutationObserver re-asserts `pan-y` whenever
+  // the inline style changes, so RNGH can never win the race.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    const inst = scrollRef.current as unknown as { getScrollableNode?: () => { style?: CSSStyleDeclaration } };
-    const node = inst?.getScrollableNode ? inst.getScrollableNode() : (inst as unknown as { style?: CSSStyleDeclaration });
-    if (node?.style) node.style.touchAction = 'pan-y';
+    const inst = scrollRef.current as unknown as {
+      getScrollableNode?: () => HTMLElement;
+    };
+    const node: HTMLElement | undefined = inst?.getScrollableNode
+      ? inst.getScrollableNode()
+      : (inst as unknown as HTMLElement);
+    if (!node || !node.style) return;
+    const enforce = () => {
+      if (node.style.touchAction !== 'pan-y') node.style.touchAction = 'pan-y';
+    };
+    enforce();
+    if (typeof MutationObserver === 'undefined') return;
+    const obs = new MutationObserver(enforce);
+    obs.observe(node, { attributes: true, attributeFilter: ['style'] });
+    return () => obs.disconnect();
   }, [chatActive, callActive, signInOpen, profileOpen]);
 
   // Tap-grow on the Orb. Driven from native Pressable's onPressIn/onPressOut.
@@ -4065,6 +4081,30 @@ export function HomeScreen({
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
     };
   }, [homeAtRest, scheduleSleep, bumpGreeting]);
+
+  // DESKTOP (web): there's no touch, so the home-surface touch that wakes ONE
+  // and resets the doze timer never fires from a mouse. Treat mouse movement /
+  // key presses as activity: wake ONE from sleep, and keep pushing the doze
+  // countdown back while the user is clearly active. Throttled so it's cheap.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    let last = 0;
+    const onActivity = () => {
+      const now = Date.now();
+      if (now - last < 500) return;
+      last = now;
+      if (orbAsleep) handleHomeTouch();
+      else if (homeAtRest) scheduleSleep();
+    };
+    window.addEventListener('mousemove', onActivity, { passive: true });
+    window.addEventListener('mousedown', onActivity, { passive: true });
+    window.addEventListener('keydown', onActivity);
+    return () => {
+      window.removeEventListener('mousemove', onActivity);
+      window.removeEventListener('mousedown', onActivity);
+      window.removeEventListener('keydown', onActivity);
+    };
+  }, [orbAsleep, homeAtRest, handleHomeTouch, scheduleSleep]);
 
   // The first reveal waits out the splash; later entrances show immediately.
   const didFirstChevronWakeRef = useRef(false);

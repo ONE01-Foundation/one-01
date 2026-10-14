@@ -17,7 +17,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform, useWindowDimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -115,6 +115,11 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
   const lang = useLanguage();
   const he = lang === 'he';
   const insets = useSafeAreaInsets();
+  // On desktop web the sheet reads better as a CENTERED popup card (dimmed
+  // backdrop all around) than a full-width bottom sheet. Mobile web + native
+  // keep the bottom sheet.
+  const { width: winW } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && winW >= 768;
   const plan = useMvpStore((s) => s.plan);
   const setPlan = useMvpStore((s) => s.setPlan);
 
@@ -215,12 +220,19 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
     const dragFade = 1 - interpolate(dragY.value, [0, 420], [0, 1], Extrapolation.CLAMP);
     return { opacity: sv.value * 0.55 * dragFade };
   });
-  const panelStyle = useAnimatedStyle(() => ({
+  const panelStyle = useAnimatedStyle(() => {
+    if (isDesktop) {
+      // Centered popup: fade + a small pop-scale, and still follow a drag.
+      return {
+        opacity: sv.value,
+        transform: [{ translateY: dragY.value }, { scale: 0.96 + sv.value * 0.04 }],
+      };
+    }
     // Hidden = translated fully below the screen by its own height PLUS a buffer,
     // so the rounded top + handle never peek above the fold (seen on some mobile
     // browsers where the measured height / safe-area is a touch short).
-    transform: [{ translateY: (1 - sv.value) * (panelH.value + 80) + dragY.value }],
-  }));
+    return { transform: [{ translateY: (1 - sv.value) * (panelH.value + 80) + dragY.value }] };
+  });
   const pageStyle = useAnimatedStyle(() => ({
     opacity: contentFade.value,
     transform: [{ translateX: dragX.value * 0.5 }],
@@ -236,7 +248,10 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
   if (!mounted) return null;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
+    <View
+      style={[StyleSheet.absoluteFill, isDesktop && styles.centerHost]}
+      pointerEvents={visible ? 'auto' : 'none'}
+    >
       {/* Scrim — tap outside to dismiss. */}
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={he ? 'סגור' : 'Close'}>
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }, scrimStyle]} pointerEvents="none" />
@@ -249,12 +264,16 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
           }}
           style={[
             styles.panel,
-            { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 16) + 10 },
+            isDesktop && styles.panelDesktop,
+            {
+              backgroundColor: colors.background,
+              paddingBottom: isDesktop ? 26 : Math.max(insets.bottom, 16) + 10,
+            },
             panelStyle,
           ]}
         >
-          {/* Physical drag handle. */}
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          {/* Physical drag handle — only the bottom-sheet form needs a grabber. */}
+          {!isDesktop && <View style={[styles.handle, { backgroundColor: colors.border }]} />}
 
           {/* Close (X) — same size as the Global sheet's X; on the LEADING side
               (left in Hebrew / RTL, right in English) with the same gap from the
@@ -372,6 +391,28 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: -6 },
     elevation: 18,
+  },
+  // Desktop web: center the sheet as a floating popup card instead of a
+  // full-width bottom sheet. position:relative takes it out of the absolute
+  // bottom anchor; the host View centers it.
+  centerHost: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  panelDesktop: {
+    position: 'relative',
+    left: undefined,
+    right: undefined,
+    bottom: undefined,
+    width: '100%',
+    maxWidth: 600,
+    maxHeight: '90%',
+    borderRadius: 28,
+    paddingTop: 26,
+    alignSelf: 'center',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.24,
+    shadowRadius: 40,
   },
   handle: {
     alignSelf: 'center',
