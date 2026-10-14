@@ -2838,6 +2838,19 @@ export function HomeScreen({
     [chatActive, callActive, signInOpen, profileOpen, switchProfile, dismissChatAnimated],
   );
 
+  // WEB touch-scroll fix: RNGH's GestureDetector stamps `touch-action: none` on
+  // the wrapped ScrollView, which DISABLES native touch scrolling — on a mobile
+  // browser the home wouldn't scroll to processes or pull to Global at all. Force
+  // `pan-y` back onto the scroll node so the browser handles vertical scroll while
+  // the horizontal swipe (activeOffsetX) still registers. Re-applied whenever
+  // profileSwipe re-creates (RNGH re-stamps touch-action then).
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const inst = scrollRef.current as unknown as { getScrollableNode?: () => { style?: CSSStyleDeclaration } };
+    const node = inst?.getScrollableNode ? inst.getScrollableNode() : (inst as unknown as { style?: CSSStyleDeclaration });
+    if (node?.style) node.style.touchAction = 'pan-y';
+  }, [chatActive, callActive, signInOpen, profileOpen]);
+
   // Tap-grow on the Orb. Driven from native Pressable's onPressIn/onPressOut.
   // Combined multiplicatively with `orbBreathScale` so neither cancels the
   // other.

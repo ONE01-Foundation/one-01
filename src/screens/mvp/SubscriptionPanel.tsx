@@ -204,8 +204,10 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
     return { opacity: sv.value * 0.55 * dragFade };
   });
   const panelStyle = useAnimatedStyle(() => ({
-    // Hidden = translated fully below the screen by its own height (no peek).
-    transform: [{ translateY: (1 - sv.value) * panelH.value + dragY.value }],
+    // Hidden = translated fully below the screen by its own height PLUS a buffer,
+    // so the rounded top + handle never peek above the fold (seen on some mobile
+    // browsers where the measured height / safe-area is a touch short).
+    transform: [{ translateY: (1 - sv.value) * (panelH.value + 80) + dragY.value }],
   }));
   const pageStyle = useAnimatedStyle(() => ({
     opacity: contentFade.value,
