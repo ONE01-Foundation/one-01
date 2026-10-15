@@ -4919,7 +4919,7 @@ export function HomeScreen({
                 // Exact mirror of the bottom chevron: same size (26), same icon
                 // flipped 180° (points up), positioned symmetric ABOVE the orb
                 // by the same ~161px the bottom one sits below its centre.
-                style={[styles.globalChevron, { top: Math.round(SCREEN_H / 2) - CHEVRON_CENTER_GAP }, upChevronStyle]}
+                style={[styles.globalChevron, { top: Math.round(SCREEN_H / 2) - CHEVRON_CENTER_GAP - REST_PAIR_LIFT }, upChevronStyle]}
               >
                 {/* Tap the up arrow → ONE01 Global (same destination as the
                     pull-down gesture). */}
@@ -5256,7 +5256,7 @@ export function HomeScreen({
         {hasOnboarded && !callActive && (
           <Animated.View
             pointerEvents="box-none"
-            style={[styles.processesChevron, { bottom: Math.round(SCREEN_H / 2) - CHEVRON_CENTER_GAP }, processesChevronStyle]}
+            style={[styles.processesChevron, { bottom: Math.round(SCREEN_H / 2) - CHEVRON_CENTER_GAP + REST_PAIR_LIFT }, processesChevronStyle]}
           >
             <Pressable
               onPress={() => { haptic.press(); Keyboard.dismiss(); scrollRef.current?.scrollTo({ y: SNAP_OPEN, animated: true }); }}

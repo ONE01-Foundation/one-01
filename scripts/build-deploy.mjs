@@ -24,6 +24,7 @@ import {
 } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { patchWebHead } from './patch-web-head.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -64,6 +65,9 @@ if (existsSync(distHtmlPath)) {
     .replace(/href="\/_expo\//g, 'href="./_expo/');
   writeFileSync(distHtmlPath, patched, 'utf8');
   console.log('    paths rewritten OK');
+  // Inject the mobile <head> bits (viewport-fit=cover, theme-color, apple
+  // metas, touch icon) into the static HTML so iOS reads them at load.
+  patchWebHead(distHtmlPath);
 } else {
   console.warn('    WARN: dist/index.html missing');
 }
