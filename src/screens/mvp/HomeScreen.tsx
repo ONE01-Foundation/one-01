@@ -4830,7 +4830,12 @@ export function HomeScreen({
                   down past the figure — as ONE shrinks up to the top bar, the
                   process list slides into view. */}
               {hasOnboarded && !chatActive && !callActive && (
-                <View style={styles.processesInline}>
+                // Block taps on the list WHILE it's hidden behind the curtain at
+                // rest — otherwise a tap below the composer lands on a card lying
+                // underneath and opens it. pointerEvents:none here does NOT stop
+                // the ScrollView from scrolling (scroll lives on the parent), so
+                // you can still scroll down to reveal + then tap the real cards.
+                <View style={styles.processesInline} pointerEvents={curtainBlocks ? 'none' : 'auto'}>
                   {processesContent}
                 </View>
               )}
@@ -4841,10 +4846,12 @@ export function HomeScreen({
                 top of the processes list at rest and slides down as you scroll,
                 so the list is uncovered from the top in one continuous motion.
                 Only on the home rest (not chat/call). Below the EdgeBars (15) and
-                dock (30); above the scrolling list. */}
+                dock (30); above the scrolling list. pointerEvents:none ALWAYS —
+                it's purely visual; it must NOT eat the scroll / Global-pull
+                gesture (tap-blocking is done on the list itself, above). */}
             {hasOnboarded && !chatActive && !callActive && (
               <Animated.View
-                pointerEvents={curtainBlocks ? 'auto' : 'none'}
+                pointerEvents="none"
                 style={[styles.listCover, { backgroundColor: colors.background }, listCoverStyle]}
               />
             )}
