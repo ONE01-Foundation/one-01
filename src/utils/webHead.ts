@@ -30,15 +30,18 @@ function upsertMeta(name: string, content: string) {
 }
 
 // Make the page draw under the safe areas so cream (not white) shows behind the
-// iOS status bar + bottom toolbar, and app scrims cover them. iOS Safari re-lays
-// out when the viewport meta changes, so doing this at runtime is enough.
-function ensureViewportFitCover() {
+// iOS status bar + bottom toolbar, and app scrims cover them. Also ask the
+// browser to RESIZE CONTENT (not just the visual viewport) when the on-screen
+// keyboard opens — on browsers that support it (Chrome/Android) the layout
+// shrinks so the bottom-anchored composer sits above the keyboard with no page
+// scroll. iOS Safari ignores interactive-widget today; it's harmless there.
+function ensureViewportFlags() {
   const m = document.head.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
   if (!m) return;
-  const c = m.getAttribute('content') || '';
-  if (!/viewport-fit\s*=\s*cover/.test(c)) {
-    m.setAttribute('content', c.replace(/\s*$/, '') + ', viewport-fit=cover');
-  }
+  let c = m.getAttribute('content') || '';
+  if (!/viewport-fit\s*=\s*cover/.test(c)) c = c.replace(/\s*$/, '') + ', viewport-fit=cover';
+  if (!/interactive-widget/.test(c)) c = c.replace(/\s*$/, '') + ', interactive-widget=resizes-content';
+  m.setAttribute('content', c);
 }
 
 let touchIconDone = false;
@@ -77,58 +80,15 @@ export function applyWebHead(bgColor: string) {
   upsertMeta('mobile-web-app-capable', 'yes');
   upsertMeta('apple-mobile-web-app-title', 'ONE');
   upsertMeta('apple-mobile-web-app-status-bar-style', 'default');
-  ensureViewportFitCover();
+  ensureViewportFlags();
   ensureTouchIcon();
   // Paint the document itself the app colour so any safe-area band shows cream,
-  // not the browser's default white. Lock page scroll — the app is a fixed
-  // full-screen SPA; only in-app ScrollViews should scroll.
+  // not the browser's default white. (No body scroll-lock — it interfered with
+  // the on-screen keyboard on iOS; in-app ScrollViews handle their own scroll.)
   try {
-    const root = document.documentElement;
-    root.style.backgroundColor = bgColor;
+    document.documentElement.style.backgroundColor = bgColor;
     document.body.style.backgroundColor = bgColor;
-    document.body.style.overflow = 'hidden';
   } catch {
     /* non-DOM env */
   }
-}
-
-let viewportFixInstalled = false;
-/**
- * Pin the app element to the VISIBLE viewport height while the on-screen
- * keyboard is open. Without this, iOS Safari keeps the layout viewport at full
- * height, overlays the keyboard, then scrolls the page to reveal the focused
- * input — which left the composer floating mid-screen with a big gap above it.
- * Shrinking the app to the visible height removes the overflow, so there's
- * nothing for Safari to scroll and the bottom-anchored composer sits right
- * above the keyboard. Only engages while the keyboard is up (height dropped a
- * lot); normal address-bar show/hide is ignored.
- */
-export function installWebViewportFix() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-  if (viewportFixInstalled) return;
-  const vv = window.visualViewport;
-  const app =
-    document.getElementById('root') ||
-    document.getElementById('main') ||
-    (document.body.firstElementChild as HTMLElement | null);
-  if (!vv || !app) return;
-  viewportFixInstalled = true;
-
-  let maxH = vv.height;
-  let raf = 0;
-  const apply = () => {
-    cancelAnimationFrame(raf);
-    raf = requestAnimationFrame(() => {
-      maxH = Math.max(maxH, vv.height);
-      const kbOpen = maxH - vv.height > 120;
-      if (kbOpen) {
-        app.style.height = Math.round(vv.height) + 'px';
-      } else {
-        app.style.height = '';
-      }
-    });
-  };
-  vv.addEventListener('resize', apply);
-  vv.addEventListener('scroll', apply);
-  apply();
 }

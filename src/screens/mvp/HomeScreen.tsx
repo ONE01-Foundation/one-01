@@ -3607,6 +3607,28 @@ export function HomeScreen({
     };
   }, [inputKeyboardLift, insetsBottom]);
 
+  // WEB: RN's Keyboard events don't fire, so the dock never lifted for the
+  // on-screen keyboard. Drive the SAME `inputKeyboardLift` off the VisualViewport
+  // (keyboard height = how much the visual viewport shrank). This moves ONLY the
+  // composer (a transform) above the keyboard — no page/root resize, so iOS has
+  // the focused field in view and doesn't scroll the whole page off-screen.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let baseH = vv.height;
+    const onResize = () => {
+      baseH = Math.max(baseH, vv.height);
+      const kbH = Math.max(0, baseH - vv.height);
+      inputKeyboardLift.value = withTiming(
+        kbH > 120 ? -kbH + insetsBottom - KB_GAP : 0,
+        { duration: 180, easing: Easing.out(Easing.cubic) },
+      );
+    };
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, [inputKeyboardLift, insetsBottom]);
+
   // Re-focus the thread ABOVE the keyboard every time it opens — not just on the
   // first focus. keyboardDidShow fires once the keyboard is fully up (real
   // height known), so closing then reopening the keyboard re-pulls the newest
@@ -3704,9 +3726,12 @@ export function HomeScreen({
     return { opacity: p * kb, height: p * kb * 30, marginTop: p * kb * 8 };
   });
 
-  // Fades the input dock + upgrade line out with the SAME Global transition
-  // progress as the orb (globalProgress), so input + figure move together.
-  const globalHideStyle = useAnimatedStyle(() => ({ opacity: 1 - globalProgress.value }));
+  // Fades the input dock + upgrade line out as the Global pull begins. Fades
+  // FASTER than the pull itself (gone by ~45% of the pull) so the composer +
+  // upgrade line clear out early and don't linger over the opening Global.
+  const globalHideStyle = useAnimatedStyle(() => ({
+    opacity: 1 - interpolate(globalProgress.value, [0, 0.45], [0, 1], Extrapolation.CLAMP),
+  }));
   // The upgrade line already fades + collapses as the user scrolls DOWN into the
   // cards (restChrome). Fold the Global fade in by MULTIPLYING, so both gestures
   // work without one clobbering the other's opacity.
@@ -3714,7 +3739,9 @@ export function HomeScreen({
     const scrollP = interpolate(scrollY.value, [0, SNAP_OPEN * 0.25], [1, 0], Extrapolation.CLAMP);
     // Only FADE on scroll (and with the Global pull / sleep) — no height collapse,
     // which clipped the line ("cut"). Keeps its row height so it just dissolves.
-    return { opacity: scrollP * (1 - globalProgress.value) * sleepChromeSV.value };
+    // Global part fades FAST (gone by ~35% of the pull) so it clears early.
+    const globalFade = 1 - interpolate(globalProgress.value, [0, 0.35], [0, 1], Extrapolation.CLAMP);
+    return { opacity: scrollP * globalFade * sleepChromeSV.value };
   });
   // The scroll-reveal saying is GLUED to the figure: it rises with it almost all
   // the way to the top bar (translateY tracks the figure's collapse travel) and
@@ -3746,6 +3773,17 @@ export function HomeScreen({
     // Overlap the composer a touch (−50) so there's no seam between them.
     return { transform: [{ translateY: SCREEN_H - sleepLift - 50 }] };
   });
+  // The curtain must CAPTURE taps while it's covering the hidden list at rest —
+  // otherwise a tap lands on a process card lying underneath and opens it. Block
+  // while at rest (scroll ≈ 0); let taps through once the list is scrolled into
+  // view so the real cards are tappable again.
+  const [curtainBlocks, setCurtainBlocks] = useState(true);
+  useAnimatedReaction(
+    () => scrollY.value < 12,
+    (blocks, prev) => {
+      if (prev !== null && blocks !== prev) runOnJS(setCurtainBlocks)(blocks);
+    },
+  );
 
   /*
    * Fusion animation (Home → Processes):
@@ -3865,6 +3903,11 @@ export function HomeScreen({
     // ending a bit BIGGER than the resting hero, like the splash dot. Gated by
     // (1 - f) so only the resting hero grows.
     const sleepGrow = 1 + (1 - sleepSV.value) * SLEEP_ORB_GROW * (1 - f);
+    // Global pull: GLIDE the figure DOWN to the true screen centre (the splash
+    // dot's spot). At rest it sits at the pair pose, a touch ABOVE centre by
+    // `pairRaise`; adding gp·pairRaise lands it dead-centre as the pull completes,
+    // so it reads as ONE settling to the splash position while Global opens.
+    const globalDrop = gp * pairRaise * (1 - f);
     return {
       opacity: 1 - callHideSV.value,
       transform: [
@@ -3876,10 +3919,9 @@ export function HomeScreen({
             // NO keyboard lift for the figure — in chat it's pinned at the top at
             // a fixed size/place; the old chatOpenLiftSV made it ride too HIGH
             // when the keyboard opened. (The composer still rises with the kb.)
-            // NO Global-pull drift either — the figure holds its spot and only
-            // shrinks (below) during the Global pull.
             sleepDrop +
             profileDrop +
+            globalDrop +
             interpolate(signInIdx.value, [-1, 0], [0, 1], Extrapolation.CLAMP) * 130,
         },
         {
@@ -4798,7 +4840,7 @@ export function HomeScreen({
                 dock (30); above the scrolling list. */}
             {hasOnboarded && !chatActive && !callActive && (
               <Animated.View
-                pointerEvents="none"
+                pointerEvents={curtainBlocks ? 'auto' : 'none'}
                 style={[styles.listCover, { backgroundColor: colors.background }, listCoverStyle]}
               />
             )}
