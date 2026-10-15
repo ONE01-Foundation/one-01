@@ -2895,13 +2895,17 @@ export function HomeScreen({
   // and the input lifts up from the bottom to sit just beneath it.
   const SLEEP_PAIR_GAP = 56; // gap between the orb's bottom and the input's top
   const SLEEP_ORB_RAISE = Math.round((SLEEP_PAIR_GAP + INPUT_BAR_H) / 2);
+  // Nudge the whole resting pair (figure + composer + upgrade line) UP from dead
+  // centre so it sits a touch higher on the home. Applied to the composer/curtain
+  // lift here, mirrored on the figure's drop + the Global-pull drop below.
+  const REST_PAIR_LIFT = 48;
   const SLEEP_INPUT_LIFT = Math.max(
     0,
     Math.round(
       SCREEN_H -
         insets.bottom -
         INPUT_BAR_H -
-        (SCREEN_H / 2 - SLEEP_ORB_RAISE + HOME_ORB_SIZE / 2 + SLEEP_PAIR_GAP),
+        (SCREEN_H / 2 - REST_PAIR_LIFT - SLEEP_ORB_RAISE + HOME_ORB_SIZE / 2 + SLEEP_PAIR_GAP),
     ),
   );
   // 1 only when the orb is the big CENTRED figure (empty / fresh home) — the
@@ -3898,7 +3902,7 @@ export function HomeScreen({
     // composer fades away.
     const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
     const pairRaise = SLEEP_ORB_RAISE * sleepSV.value;
-    const sleepDrop = centerAmt * (ORB_FROM_CENTER_OFFSET - pairRaise) * (1 - f);
+    const sleepDrop = centerAmt * (ORB_FROM_CENTER_OFFSET - pairRaise - REST_PAIR_LIFT) * (1 - f);
     // As it settles asleep in the centre, the bare black dot swells a touch —
     // ending a bit BIGGER than the resting hero, like the splash dot. Gated by
     // (1 - f) so only the resting hero grows.
@@ -3907,7 +3911,7 @@ export function HomeScreen({
     // dot's spot). At rest it sits at the pair pose, a touch ABOVE centre by
     // `pairRaise`; adding gp·pairRaise lands it dead-centre as the pull completes,
     // so it reads as ONE settling to the splash position while Global opens.
-    const globalDrop = gp * pairRaise * (1 - f);
+    const globalDrop = gp * (pairRaise + REST_PAIR_LIFT) * (1 - f);
     return {
       opacity: 1 - callHideSV.value,
       transform: [

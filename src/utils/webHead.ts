@@ -44,6 +44,27 @@ function ensureViewportFlags() {
   m.setAttribute('content', c);
 }
 
+// A solid cap over the top safe-area (the status-bar notch band). iOS Safari
+// tints the status bar from the pixels rendered under it; with viewport-fit=
+// cover the page draws up there, so WITHOUT this a sheet's dim backdrop bleeds
+// into the status-bar area and it goes an ugly washed grey. A fixed cap in the
+// app colour, above everything (incl. the modal scrim), keeps the status bar
+// the app colour at all times. pointer-events:none so it never eats taps; it's
+// only env(safe-area-inset-top) tall (0 off-notch), so it's invisible on the
+// home and only does work behind the real status bar.
+function ensureStatusBarCap(bgColor: string) {
+  let cap = document.getElementById('__one_statusbar_cap') as HTMLElement | null;
+  if (!cap) {
+    cap = document.createElement('div');
+    cap.id = '__one_statusbar_cap';
+    cap.style.cssText =
+      'position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);' +
+      'z-index:2147483647;pointer-events:none;';
+    document.body.appendChild(cap);
+  }
+  cap.style.background = bgColor;
+}
+
 let touchIconDone = false;
 function ensureTouchIcon() {
   if (touchIconDone) return;
@@ -82,6 +103,7 @@ export function applyWebHead(bgColor: string) {
   upsertMeta('apple-mobile-web-app-status-bar-style', 'default');
   ensureViewportFlags();
   ensureTouchIcon();
+  ensureStatusBarCap(bgColor);
   // Paint the document itself the app colour so any safe-area band shows cream,
   // not the browser's default white. (No body scroll-lock — it interfered with
   // the on-screen keyboard on iOS; in-app ScrollViews handle their own scroll.)
