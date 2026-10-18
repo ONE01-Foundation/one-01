@@ -222,20 +222,22 @@ export function SettingsSheet({
           {/* Home surface — classic resting broadcast vs. ONE as a continuous
               chat that speaks first. Experimental; default stays classic. */}
           <Group title={he ? 'דף הבית' : 'Home'} colors={colors} he={he}>
-            <SegmentedRow
+            <ChoiceChips
               colors={colors}
+              he={he}
               options={[
-                { value: 'classic' as HomeMode, label: he ? 'קלאסי' : 'Classic' },
-                { value: 'presence' as HomeMode, label: he ? 'נוכחות' : 'Presence' },
-                { value: 'chat' as HomeMode, label: he ? 'שיחה' : 'Chat' },
+                { value: 'classic', label: he ? 'קלאסי' : 'Classic' },
+                { value: 'presence', label: he ? 'נוכחות' : 'Presence' },
+                { value: 'chat', label: he ? 'שיחה' : 'Chat' },
+                { value: 'timeline', label: he ? 'ציר זמן' : 'Timeline' },
               ]}
               selected={homeMode}
-              onChange={(v) => setHomeMode(v)}
+              onChange={(v) => setHomeMode(v as HomeMode)}
             />
             <Text style={[styles.rowLabel, { color: colors.textSecondary, marginTop: 8 }, rtlText(language)]}>
               {he
-                ? 'נוכחות: דמות ממורכזת ומשפט מתחלף, גלילה חושפת את התהליכים. שיחה: ת׳אט מתמשך שבו ONE פונה ראשון. בשניהם ONE מדבר אליך ביוזמתו.'
-                : 'Presence: a centered ONE with one evolving line; scroll reveals your processes. Chat: an ongoing thread where ONE speaks first. In both, ONE reaches out on its own.'}
+                ? 'נוכחות: דמות ממורכזת ומשפט מתחלף, גלילה חושפת את התהליכים. שיחה: ת׳אט מתמשך שבו ONE פונה ראשון. ציר זמן: שיחה שמתקפלת לציר — ה״עכשיו״ במרכז, גלילה למעלה אל העבר ולמטה אל הכרטיסים.'
+                : 'Presence: a centered ONE with one evolving line; scroll reveals your processes. Chat: an ongoing thread where ONE speaks first. Timeline: a conversation that folds into a timeline — now in the middle, scroll up to the past, down to the cards.'}
             </Text>
           </Group>
 

@@ -25,6 +25,7 @@ import { SignInSheet } from '../screens/mvp/SignInSheet';
 import { HomeScreen } from '../screens/mvp/HomeScreen';
 import { ChatHomeScreen } from '../screens/mvp/ChatHomeScreen';
 import { PresenceHomeScreen } from '../screens/mvp/PresenceHomeScreen';
+import { TimelineHomeScreen } from '../screens/mvp/TimelineHomeScreen';
 import { useHomePrefs } from '../stores/homePrefsStore';
 import { UnitProfileSheet } from '../screens/mvp/UnitProfileSheet';
 import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
@@ -276,7 +277,7 @@ function HomeWithOverlays() {
 
   return (
     <>
-      {homeMode === 'chat' || homeMode === 'presence' ? (
+      {homeMode === 'chat' || homeMode === 'presence' || homeMode === 'timeline' ? (
         (() => {
           const homeProps = {
             onCreateProcess: () => s.setQuickActionsOpen(true),
@@ -289,9 +290,9 @@ function HomeWithOverlays() {
               setTimeout(() => useMvpStore.getState().markUnitOpened(id), 0);
             },
           };
-          return homeMode === 'presence'
-            ? <PresenceHomeScreen {...homeProps} />
-            : <ChatHomeScreen {...homeProps} />;
+          if (homeMode === 'presence') return <PresenceHomeScreen {...homeProps} />;
+          if (homeMode === 'timeline') return <TimelineHomeScreen {...homeProps} />;
+          return <ChatHomeScreen {...homeProps} />;
         })()
       ) : (
       <HomeScreen

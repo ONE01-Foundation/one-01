@@ -8,13 +8,19 @@
  *   • 'chat'    — Home is one continuous conversation with ONE, who speaks
  *                 first: a persistent thread where ONE's proactive updates land
  *                 as its own chat bubbles. See ChatHomeScreen.
+ *   • 'presence'— the classic calm hero, with ONE's broadcast as bubbles on the
+ *                 same page and the processes below. See PresenceHomeScreen.
+ *   • 'timeline'— Home is a conversation that COMPACTS into a timeline: NOW sits
+ *                 in the middle (ONE's latest line + the composer), scroll UP to
+ *                 the past condensed to a timeline rail, scroll DOWN to the
+ *                 cards. Experimental. See TimelineHomeScreen.
  */
 
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { storage } from '../utils/session';
 
-export type HomeMode = 'classic' | 'chat' | 'presence';
+export type HomeMode = 'classic' | 'chat' | 'presence' | 'timeline';
 
 interface HomePrefsStore {
   homeMode: HomeMode;
