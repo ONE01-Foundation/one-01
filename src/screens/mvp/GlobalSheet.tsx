@@ -23,6 +23,7 @@ import {
   Alert,
 } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { SpaceSwitcher } from '../../components/mvp/SpaceSwitcher';
 import { type SharedValue } from 'react-native-reanimated';
 import { BottomSheet } from '../../components/mvp/BottomSheet';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
@@ -250,6 +251,10 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Space switcher — Global is scoped to the active space (its feed reads
+            the identity type), same component as the home list. */}
+        <SpaceSwitcher style={styles.globalSpaceSwitcher} />
+
         {/* Provider side: join a process someone shared with you, by code. */}
         {onJoinShared && (
           <Pressable
@@ -706,6 +711,7 @@ const styles = StyleSheet.create({
   // (web/desktop) viewports even though the sheet is full-width. No effect on a
   // phone (screen narrower than the cap).
   content: { paddingHorizontal: 22, paddingTop: 84, paddingBottom: 40, gap: 14, width: '100%', maxWidth: 620, alignSelf: 'center' },
+  globalSpaceSwitcher: { marginBottom: 2 },
 
   // "Join a shared process by code" — the provider entry into the two-sided Unit.
   joinRow: {

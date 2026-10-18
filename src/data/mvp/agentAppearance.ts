@@ -9,7 +9,7 @@
  * character that keep the brand face recognisable.
  */
 
-export type EyeShape = 'round' | 'square';
+export type EyeShape = 'round' | 'oval' | 'square';
 export type Accessory = 'none' | 'glasses' | 'sunglasses' | 'hat' | 'headphones';
 
 export interface OrbSkin {
@@ -26,17 +26,19 @@ export interface OrbSkin {
   face?: string;
 }
 
-/** "classic" is the default — round eyes, no accessory, black face.
+/** "classic" is the default — the softer OVAL eyes, no accessory, black face.
+ *  "round" brings back the earlier perfect-circle eyes as a skin.
  *  Accessories are drawn as clean vector accents and TRACK the face: eyewear
  *  rides the eyes as they glance/look, headwear gets a gentle parallax. */
 export const ORB_SKINS: OrbSkin[] = [
-  { id: 'classic', labelHe: 'קלאסי', labelEn: 'Classic', eyeShape: 'round', accessory: 'none' },
+  { id: 'classic', labelHe: 'קלאסי', labelEn: 'Classic', eyeShape: 'oval', accessory: 'none' },
+  { id: 'round', labelHe: 'עיניים עגולות', labelEn: 'Round eyes', eyeShape: 'round', accessory: 'none' },
   { id: 'square', labelHe: 'מרובע', labelEn: 'Square', eyeShape: 'square', accessory: 'none' },
-  { id: 'glasses', labelHe: 'משקפיים', labelEn: 'Glasses', eyeShape: 'round', accessory: 'glasses', accent: '#60A5FA' },
+  { id: 'glasses', labelHe: 'משקפיים', labelEn: 'Glasses', eyeShape: 'oval', accessory: 'glasses', accent: '#60A5FA' },
   { id: 'scholar', labelHe: 'מלומד', labelEn: 'Scholar', eyeShape: 'square', accessory: 'glasses', accent: '#FBBF24' },
-  { id: 'shades', labelHe: 'משקפי שמש', labelEn: 'Shades', eyeShape: 'round', accessory: 'sunglasses', accent: '#0F172A' },
-  { id: 'headphones', labelHe: 'אוזניות', labelEn: 'Headphones', eyeShape: 'round', accessory: 'headphones', accent: '#CBD5E1' },
-  { id: 'beanie', labelHe: 'ברט', labelEn: 'Beret', eyeShape: 'round', accessory: 'hat', accent: '#EF4444' },
+  { id: 'shades', labelHe: 'משקפי שמש', labelEn: 'Shades', eyeShape: 'oval', accessory: 'sunglasses', accent: '#0F172A' },
+  { id: 'headphones', labelHe: 'אוזניות', labelEn: 'Headphones', eyeShape: 'oval', accessory: 'headphones', accent: '#CBD5E1' },
+  { id: 'beanie', labelHe: 'ברט', labelEn: 'Beret', eyeShape: 'oval', accessory: 'hat', accent: '#EF4444' },
 ];
 
 const DEFAULT_SKIN = ORB_SKINS[0];

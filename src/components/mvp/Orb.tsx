@@ -132,6 +132,10 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
   const eyeColor = colors.circleEye;     // off-white in light, pure white in dark
   const eyeFill = outline ? faceColor : eyeColor;
   const square = skin.eyeShape === 'square';
+  // Eye open-height by shape: 'round' = a perfect circle (the classic look,
+  // now a selectable skin); everything else = the slightly taller oval (the
+  // default face). rx stays put, only the open ry differs.
+  const openRy = skin.eyeShape === 'round' ? EYE_RX : EYE_RY_OPEN;
   const accent = skin.accent ?? eyeColor;
   // Where the accessory is mounted: eyewear rides the eyes, headwear the head.
   const isEyewear = skin.accessory === 'glasses' || skin.accessory === 'sunglasses';
@@ -142,9 +146,11 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
   // Blink: ry oscillates from OPEN → BLINK → OPEN on a randomised cadence.
   // Each Orb instance picks its own first-delay so two faces on screen
   // never blink in lockstep.
-  const ry = useSharedValue(EYE_RY_OPEN);
+  const ry = useSharedValue(openRy);
   useEffect(() => {
-    if (noBlink) return;
+    // Keep the open height in sync with the skin even when blinking is off
+    // (splash mark) or the skin changes.
+    if (noBlink) { ry.value = openRy; return; }
     const initialDelay = 1800 + Math.floor(Math.random() * 2400);
     const period = 4200 + Math.floor(Math.random() * 2800); // 4.2–7 s
     ry.value = withDelay(
@@ -152,9 +158,9 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
       withRepeat(
         withSequence(
           withTiming(EYE_RY_BLINK, { duration: 70, easing: Easing.in(Easing.cubic) }),
-          withTiming(EYE_RY_OPEN, { duration: 110, easing: Easing.out(Easing.cubic) }),
+          withTiming(openRy, { duration: 110, easing: Easing.out(Easing.cubic) }),
           // Hold open for the rest of the period.
-          withTiming(EYE_RY_OPEN, { duration: period }),
+          withTiming(openRy, { duration: period }),
         ),
         -1,
         false,
@@ -162,9 +168,9 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
     );
     return () => {
       // Reset on unmount so a remount doesn't inherit a mid-blink value.
-      ry.value = EYE_RY_OPEN;
+      ry.value = openRy;
     };
-  }, [noBlink, ry]);
+  }, [noBlink, ry, openRy]);
 
   // Autonomous horizontal gaze — ONE occasionally glances to a side, holds,
   // then returns to centre, so the face reads as alive/curious. Each instance

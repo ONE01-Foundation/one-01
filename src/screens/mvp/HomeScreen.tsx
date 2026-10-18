@@ -86,6 +86,7 @@ import { personalityPrompt } from '../../data/mvp/agentAppearance';
 import { generateOneReply } from '../../utils/mvpChatReply';
 import { extractRememberFact } from '../../utils/rememberIntent';
 import { rtlText, rtlRow } from '../../utils/rtl';
+import { SpaceSwitcher } from '../../components/mvp/SpaceSwitcher';
 import { sortByAttention } from '../../core/mvp/attentionScore';
 import { haptic } from '../../utils/haptics';
 import { desireToUnit } from '../../utils/mvpInferUnit';
@@ -653,20 +654,6 @@ export function HomeScreen({
   const identities = useMvpStore((s) => s.identities);
   const activeIdentityId = useMvpStore((s) => s.activeIdentityId);
   const setActiveIdentity = useMvpStore((s) => s.setActiveIdentity);
-  const addIdentity = useMvpStore((s) => s.addIdentity);
-  // Space (identity) labels + emoji by type — shown in the space pill row that
-  // headers the revealed processes list. "+" adds the next missing space type.
-  const SPACE_META: Record<string, { label: string; emoji: string }> = {
-    personal: { label: 'אישי', emoji: '🏠' },
-    business: { label: 'עסקי', emoji: '💼' },
-    family: { label: 'משפחה', emoji: '👨‍👩‍👧' },
-  };
-  const addNextSpace = useCallback(() => {
-    const have = new Set(identities.map((i) => i.type));
-    const next = (['business', 'family', 'personal'] as const).find((t) => !have.has(t)) ?? 'personal';
-    haptic.select();
-    addIdentity(next);
-  }, [identities, addIdentity]);
 
   // First-time users haven't completed onboarding. Their broadcast loop is
   // the "Hi, I'm ONE…" intro that previously lived on WelcomeScreen — the
@@ -3802,16 +3789,23 @@ export function HomeScreen({
       if (prev !== null && blocks !== prev) runOnJS(setCurtainBlocks)(blocks);
     },
   );
-  // Cabinet-open reveal for the processes list. As the figure lifts to the
-  // header and the composer drops (the "doors part"), the list doesn't just
-  // slide up — it FADES in and rises a touch from below, so it reads as being
-  // uncovered in place. Past the reveal it's fully solid and scrolls normally.
-  const REVEAL_RISE = 34;
+  // Cabinet-open reveal for the processes list. The list is PINNED at its
+  // revealed position (the top, just under the collapsed figure-header) through
+  // the whole reveal, so as the figure lifts and the composer drops (the doors
+  // part) the list is UNCOVERED IN PLACE — it doesn't slide the full way up. It
+  // fades in and settles the last few px from below for the effect. Past the
+  // reveal (scroll ≥ SNAP_OPEN) the pin releases and the list scrolls normally.
+  //   pin counter-translates the natural scroll so screen-Y stays constant while
+  //   scrollY ∈ [0, SNAP_OPEN]; at SNAP_OPEN pin = 0 and natural scroll takes over.
+  const REVEAL_RISE = 28;
   const processesRevealStyle = useAnimatedStyle(() => {
-    const p = scrollY.value / Math.max(1, SNAP_OPEN);
+    const s = Math.max(0, scrollY.value);
+    const pin = -Math.max(0, SNAP_OPEN - s);
+    const p = s / Math.max(1, SNAP_OPEN);
+    const rise = interpolate(p, [0, 0.75], [REVEAL_RISE, 0], Extrapolation.CLAMP);
     return {
-      opacity: interpolate(p, [0.08, 0.5], [0, 1], Extrapolation.CLAMP),
-      transform: [{ translateY: interpolate(p, [0, 0.62], [REVEAL_RISE, 0], Extrapolation.CLAMP) }],
+      opacity: interpolate(p, [0.12, 0.55], [0, 1], Extrapolation.CLAMP),
+      transform: [{ translateY: pin + rise }],
     };
   });
 
@@ -4862,32 +4856,10 @@ export function HomeScreen({
                 // the ScrollView from scrolling (scroll lives on the parent), so
                 // you can still scroll down to reveal + then tap the real cards.
                 <Animated.View style={[styles.processesInline, processesRevealStyle]} pointerEvents={curtainBlocks ? 'none' : 'auto'}>
-                  {/* Space (identity) switcher — headers the revealed list. Tapping
-                      a space filters the list to it (units are scoped per identity);
-                      "+ מרחב" adds the next space. */}
-                  <View style={[styles.spaceRow, rtlRow(lang)]}>
-                    {identities.map((idn) => {
-                      const active = idn.id === activeIdentityId;
-                      const meta = SPACE_META[idn.type] ?? { label: 'מרחב', emoji: '•' };
-                      const label = idn.name && idn.name.trim() ? idn.name : meta.label;
-                      return (
-                        <Pressable
-                          key={idn.id}
-                          onPress={() => { haptic.select(); setActiveIdentity(idn.id); }}
-                          style={[
-                            styles.spacePill,
-                            { borderColor: active ? colors.circle : colors.border, backgroundColor: active ? colors.circle : colors.surface },
-                          ]}
-                        >
-                          <Text style={styles.spaceEmoji}>{meta.emoji}</Text>
-                          <Text style={[styles.spacePillTxt, { color: active ? colors.background : colors.text }]}>{label}</Text>
-                        </Pressable>
-                      );
-                    })}
-                    <Pressable onPress={addNextSpace} style={[styles.spaceAdd, { borderColor: colors.border }]}>
-                      <Text style={[styles.spacePillTxt, { color: colors.textSecondary }]}>+ מרחב</Text>
-                    </Pressable>
-                  </View>
+                  {/* Space switcher — headers the revealed list. Switching re-scopes
+                      the list to that space (units are per-identity). Same component
+                      in the ONE profile + Global. */}
+                  <SpaceSwitcher style={styles.homeSpaceSwitcher} />
                   {processesContent}
                 </Animated.View>
               )}
@@ -6153,34 +6125,8 @@ const styles = StyleSheet.create({
     maxWidth: CONTENT_MAX_W,
     alignSelf: 'center',
   },
-  // Space (identity) switcher row at the top of the revealed list.
-  spaceRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
-    paddingHorizontal: 2,
-  },
-  spacePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 13,
-  },
-  spaceAdd: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 13,
-  },
-  spaceEmoji: { fontSize: 13 },
-  spacePillTxt: { fontSize: 13.5, fontWeight: '600' },
+  // Space switcher that headers the revealed list.
+  homeSpaceSwitcher: { marginBottom: 14, paddingHorizontal: 2 },
   emptyCardsState: {
     minHeight: SNAP_OPEN,
     alignItems: 'center',
