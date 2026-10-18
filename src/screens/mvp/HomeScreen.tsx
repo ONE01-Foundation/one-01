@@ -816,7 +816,11 @@ export function HomeScreen({
         (max, u) => Math.max(max, new Date(u.lastUpdatedAt).getTime() || 0),
         0,
       );
+    // Show ONLY the active space's processes — the SpaceSwitcher above the list
+    // is now how you move between spaces, so the list is scoped to the one you're
+    // in (no more a drawer per profile stacked together, which read as clutter).
     return identities
+      .filter((idn) => idn.id === activeIdentityId)
       .map((idn) => ({
         idn,
         items: sortByAttention(
@@ -826,11 +830,8 @@ export function HomeScreen({
           allProfileUnits.filter((u) => u.identityId === idn.id && u.status !== 'completed'),
         ),
       }))
-      // Every profile shows as a drawer — INCLUDING a freshly added, still-empty
-      // one (it was being filtered out, so a new space never appeared). Empty
-      // groups have lastTouched 0, so they sort to the bottom.
       .sort((a, b) => lastTouched(b.items) - lastTouched(a.items));
-  }, [identities, allProfileUnits]);
+  }, [identities, activeIdentityId, allProfileUnits]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set(),
   );
@@ -3789,23 +3790,17 @@ export function HomeScreen({
       if (prev !== null && blocks !== prev) runOnJS(setCurtainBlocks)(blocks);
     },
   );
-  // Cabinet-open reveal for the processes list. The list is PINNED at its
-  // revealed position (the top, just under the collapsed figure-header) through
-  // the whole reveal, so as the figure lifts and the composer drops (the doors
-  // part) the list is UNCOVERED IN PLACE — it doesn't slide the full way up. It
-  // fades in and settles the last few px from below for the effect. Past the
-  // reveal (scroll ≥ SNAP_OPEN) the pin releases and the list scrolls normally.
-  //   pin counter-translates the natural scroll so screen-Y stays constant while
-  //   scrollY ∈ [0, SNAP_OPEN]; at SNAP_OPEN pin = 0 and natural scroll takes over.
-  const REVEAL_RISE = 28;
+  // Cabinet-open reveal for the processes list — kept SIMPLE to avoid fighting
+  // the figure collapse + composer drop. The list just fades in (with a tiny
+  // settle from below) as you scroll past the figure, at its natural scroll
+  // position below the collapsed header — no pinning, no curtain (both caused
+  // overlap/conflicts). The figure lifting + composer dropping do the "doors
+  // part"; this makes the list appear rather than hard-cut in.
   const processesRevealStyle = useAnimatedStyle(() => {
-    const s = Math.max(0, scrollY.value);
-    const pin = -Math.max(0, SNAP_OPEN - s);
-    const p = s / Math.max(1, SNAP_OPEN);
-    const rise = interpolate(p, [0, 0.75], [REVEAL_RISE, 0], Extrapolation.CLAMP);
+    const p = scrollY.value / Math.max(1, SNAP_OPEN);
     return {
-      opacity: interpolate(p, [0.12, 0.55], [0, 1], Extrapolation.CLAMP),
-      transform: [{ translateY: pin + rise }],
+      opacity: interpolate(p, [0.14, 0.52], [0, 1], Extrapolation.CLAMP),
+      transform: [{ translateY: interpolate(p, [0, 0.6], [22, 0], Extrapolation.CLAMP) }],
     };
   });
 
@@ -4566,17 +4561,8 @@ export function HomeScreen({
             </View>
           );
         })}
-        <Pressable
-          onPress={() => { haptic.tap(); onTapHeader?.(); }}
-          style={[styles.addSpaceBtn, { borderColor: colors.border }]}
-          accessibilityRole="button"
-          accessibilityLabel={lang === 'he' ? 'מרחב חדש' : 'New space'}
-        >
-          <PlusIcon size={16} color={colors.textSecondary} />
-          <Text style={[styles.addSpaceText, { color: colors.textSecondary }]}>
-            {lang === 'he' ? 'מרחב חדש' : 'New space'}
-          </Text>
-        </Pressable>
+        {/* ("+ מרחב חדש" removed — the SpaceSwitcher above the list owns adding
+            + switching spaces now, so this was a duplicate affordance.) */}
       </>
     );
 
@@ -4866,19 +4852,11 @@ export function HomeScreen({
             </Animated.ScrollView>
             </GestureDetector>
 
-            {/* List curtain — opaque bg below the resting composer that hides the
-                top of the processes list at rest and slides down as you scroll,
-                so the list is uncovered from the top in one continuous motion.
-                Only on the home rest (not chat/call). Below the EdgeBars (15) and
-                dock (30); above the scrolling list. pointerEvents:none ALWAYS —
-                it's purely visual; it must NOT eat the scroll / Global-pull
-                gesture (tap-blocking is done on the list itself, above). */}
-            {hasOnboarded && !chatActive && !callActive && (
-              <Animated.View
-                pointerEvents="none"
-                style={[styles.listCover, { backgroundColor: colors.background }, listCoverStyle]}
-              />
-            )}
+            {/* (Removed) the opaque list curtain — it fought the reveal + the
+                figure/switcher for the same space. The list now simply fades in
+                at its natural scroll position (processesRevealStyle), so nothing
+                overlaps. Tap-blocking at rest is still handled on the list via
+                curtainBlocks. */}
 
             {/* EdgeBars sit ABOVE the scroll content + bubbles (zIndex 15)
                 but BELOW the orb / broadcast / chat header / input dock

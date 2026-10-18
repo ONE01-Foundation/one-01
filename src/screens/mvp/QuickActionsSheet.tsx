@@ -32,7 +32,12 @@ import { useThemeStore } from '../../stores/themeStore';
 import { useMvpStore } from '../../stores/mvpStore';
 import { useT, useLanguage } from '../../i18n/useT';
 import { BottomSheet } from '../../components/mvp/BottomSheet';
-import { PlusIcon } from '../../components/mvp/icons';
+import {
+  PlusIcon, ImageIcon, CameraIcon, DocIcon, MicIcon, SearchIcon,
+  StarIcon, ClockIcon, ChartIcon,
+} from '../../components/mvp/icons';
+
+type IconCmp = React.ComponentType<{ size?: number; color?: string }>;
 
 interface QuickActionsSheetProps {
   visible: boolean;
@@ -44,22 +49,23 @@ interface QuickActionsSheetProps {
 
 interface Tile {
   id: string;
-  emoji: string;
+  Icon: IconCmp;
   label: string;
   onPress: () => void;
 }
 
 interface ContextAction {
   id: string;
-  emoji: string;
+  Icon: IconCmp;
   label: string;
   sub?: string;
   onPress: () => void;
 }
 
-// Two snap points + content-pan so the user can drag (or scroll) the
-// sheet up. Low snap = compact, high snap = full-card height.
-const SNAP_POINTS = ['44%', '80%'];
+// Opens HIGH by default — top below the figure, above/over the composer — so it
+// reads as ONE handing you actions rather than a small tray at the bottom. Drag
+// up for the full card.
+const SNAP_POINTS = ['64%', '90%'];
 
 export function QuickActionsSheet({
   visible,
@@ -99,11 +105,11 @@ export function QuickActionsSheet({
 
   // Drawer 1 — raw tools, horizontal tiles.
   const tiles: Tile[] = [
-    { id: 'photo', emoji: '🖼', label: he ? 'תמונה' : 'Photo', onPress: () => stub(he ? 'תמונה' : 'Photo') },
-    { id: 'camera', emoji: '📷', label: he ? 'מצלמה' : 'Camera', onPress: () => stub(he ? 'מצלמה' : 'Camera') },
-    { id: 'document', emoji: '📄', label: he ? 'מסמך' : 'Document', onPress: () => stub(he ? 'מסמך' : 'Document') },
-    { id: 'voice', emoji: '🎙', label: he ? 'הקלטה' : 'Voice', onPress: () => stub(he ? 'הקלטה' : 'Voice') },
-    { id: 'scan', emoji: '🔎', label: he ? 'סריקה' : 'Scan', onPress: () => stub(he ? 'סריקה' : 'Scan') },
+    { id: 'photo', Icon: ImageIcon, label: he ? 'תמונה' : 'Photo', onPress: () => stub(he ? 'תמונה' : 'Photo') },
+    { id: 'camera', Icon: CameraIcon, label: he ? 'מצלמה' : 'Camera', onPress: () => stub(he ? 'מצלמה' : 'Camera') },
+    { id: 'document', Icon: DocIcon, label: he ? 'מסמך' : 'Document', onPress: () => stub(he ? 'מסמך' : 'Document') },
+    { id: 'voice', Icon: MicIcon, label: he ? 'הקלטה' : 'Voice', onPress: () => stub(he ? 'הקלטה' : 'Voice') },
+    { id: 'scan', Icon: SearchIcon, label: he ? 'סריקה' : 'Scan', onPress: () => stub(he ? 'סריקה' : 'Scan') },
   ];
 
   // Drawer 2 — context actions. THIS is the part that varies by where the
@@ -111,7 +117,7 @@ export function QuickActionsSheet({
   const contextActions: ContextAction[] = [
     {
       id: 'new',
-      emoji: '✨',
+      Icon: StarIcon,
       label: he ? 'תהליך חדש' : 'New process',
       sub: he ? 'התחל מאפס' : 'Start one from scratch',
       onPress: () => {
@@ -122,7 +128,7 @@ export function QuickActionsSheet({
     },
     {
       id: 'today',
-      emoji: '🗓',
+      Icon: ClockIcon,
       label: he ? 'מה מחכה לי היום' : 'What needs me today',
       sub: he ? 'ONE יסכם לך' : 'ONE sums it up',
       onPress: () => {
@@ -132,7 +138,7 @@ export function QuickActionsSheet({
     },
     {
       id: 'overview',
-      emoji: '📊',
+      Icon: ChartIcon,
       label: he ? 'סקירה מהירה' : 'Quick overview',
       sub: he ? 'מצב כל התהליכים' : 'Across all your processes',
       onPress: () => {
@@ -195,7 +201,7 @@ export function QuickActionsSheet({
               accessibilityRole="button"
               accessibilityLabel={tile.label}
             >
-              <Text style={styles.tileEmoji}>{tile.emoji}</Text>
+              <View style={styles.tileIcon}><tile.Icon size={28} color={colors.text} /></View>
               <Text style={[styles.tileLabel, { color: colors.text }]} numberOfLines={1}>
                 {tile.label}
               </Text>
@@ -224,7 +230,7 @@ export function QuickActionsSheet({
               accessibilityLabel={a.label}
             >
               <View style={styles.rowIcon}>
-                <Text style={styles.rowEmoji}>{a.emoji}</Text>
+                <a.Icon size={20} color={colors.text} />
               </View>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, { color: colors.text }, heText]}>
@@ -366,7 +372,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  tileEmoji: { fontSize: 30 },
+  tileIcon: { height: 30, alignItems: 'center', justifyContent: 'center' },
   tileLabel: { fontSize: 13, fontWeight: '600' },
 
   // Drawer 2 — vertical context list.

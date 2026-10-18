@@ -14,12 +14,14 @@ import { useThemeStore } from '../../stores/themeStore';
 import { useLanguage } from '../../i18n/useT';
 import { haptic } from '../../utils/haptics';
 import { rtlRow } from '../../utils/rtl';
+import { HouseIcon, BriefcaseIcon, UsersIcon } from './icons';
 import type { IdentityType } from '../../core/mvp/types';
 
-const SPACE_META: Record<IdentityType, { he: string; en: string; emoji: string }> = {
-  personal: { he: 'אישי', en: 'Personal', emoji: '🏠' },
-  business: { he: 'עסקי', en: 'Business', emoji: '💼' },
-  family: { he: 'משפחה', en: 'Family', emoji: '👨‍👩‍👧' },
+type IconCmp = React.ComponentType<{ size?: number; color?: string }>;
+const SPACE_META: Record<IdentityType, { he: string; en: string; Icon: IconCmp }> = {
+  personal: { he: 'אישי', en: 'Personal', Icon: HouseIcon },
+  business: { he: 'עסקי', en: 'Business', Icon: BriefcaseIcon },
+  family: { he: 'משפחה', en: 'Family', Icon: UsersIcon },
 };
 const ADD_ORDER: IdentityType[] = ['business', 'family', 'personal'];
 
@@ -43,8 +45,9 @@ export function SpaceSwitcher({ style }: { style?: StyleProp<ViewStyle> }) {
     <View style={[styles.row, rtlRow(lang), style]}>
       {identities.map((idn) => {
         const active = idn.id === activeIdentityId;
-        const meta = SPACE_META[idn.type] ?? { he: 'מרחב', en: 'Space', emoji: '•' };
+        const meta = SPACE_META[idn.type] ?? { he: 'מרחב', en: 'Space', Icon: HouseIcon };
         const label = idn.name && idn.name.trim() ? idn.name : (he ? meta.he : meta.en);
+        const fg = active ? colors.background : colors.text;
         return (
           <Pressable
             key={idn.id}
@@ -56,8 +59,8 @@ export function SpaceSwitcher({ style }: { style?: StyleProp<ViewStyle> }) {
               { borderColor: active ? colors.circle : colors.border, backgroundColor: active ? colors.circle : colors.surface },
             ]}
           >
-            <Text style={styles.emoji}>{meta.emoji}</Text>
-            <Text style={[styles.txt, { color: active ? colors.background : colors.text }]}>{label}</Text>
+            <meta.Icon size={15} color={fg} />
+            <Text style={[styles.txt, { color: fg }]}>{label}</Text>
           </Pressable>
         );
       })}

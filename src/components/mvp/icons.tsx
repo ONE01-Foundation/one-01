@@ -500,3 +500,23 @@ export function VerifiedIcon({ size = 18, color = '#000' }: IconProps) {
     </Svg>
   );
 }
+
+/** Picture — a framed photo with a mountain + sun (image / gallery). */
+export function ImageIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="3.5" y="4.5" width="17" height="15" rx="3" stroke={color} strokeWidth={1.9} fill="none" />
+      <Circle cx="9" cy="9.5" r="1.6" fill={color} />
+      <Path d="M5 17.5l4.5-4.5 3.2 3.2 2.8-2.6 3.5 3.4" stroke={color} strokeWidth={1.9} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** Bar chart — three columns (overview / stats). */
+export function ChartIcon({ size = 18, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M5 20V12M12 20V5M19 20v-6" stroke={color} strokeWidth={2.2} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
