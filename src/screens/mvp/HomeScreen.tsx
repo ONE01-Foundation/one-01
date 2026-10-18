@@ -311,6 +311,10 @@ interface HomeScreenProps {
   onLongPressOrb?: () => void;
   /** Tap on the "+" icon in the input capsule opens "New Process". */
   onCreateProcess?: () => void;
+  /** Tap/focus the composer (once onboarded) → open the dedicated ONE chat
+   *  window. The home itself stays the calm representative surface (no inline
+   *  chat). */
+  onOpenChat?: () => void;
   /** Tap the "Sign in" CTA shown under the input bar when not signed in. */
   onSignIn?: () => void;
   /** Tap the "Upgrade" line under the input → opens plans (Settings). */
@@ -627,6 +631,7 @@ export function HomeScreen({
   onTapOrb,
   onLongPressOrb,
   onCreateProcess,
+  onOpenChat,
   onSignIn,
   onUpgrade,
   onCreatedFromChat,
@@ -1341,6 +1346,17 @@ export function HomeScreen({
   }, [ghostMode, lang]);
 
   const handleInputFocus = useCallback(() => {
+    // The home is the calm REPRESENTATIVE surface — it no longer hosts the chat
+    // thread. Once onboarded, focusing the composer opens the dedicated ONE chat
+    // WINDOW (where the conversation compacts into a timeline); the home never
+    // enters inline chat. During onboarding we keep the inline composer so the
+    // discovery conversation (name etc.) still works in place.
+    if (hasOnboarded && onOpenChat) {
+      Keyboard.dismiss();
+      setInputFocused(false);
+      onOpenChat();
+      return;
+    }
     setInputFocused(true);
     // Back to focus-driven chat state — the + "hold open" bridge is no longer
     // needed once the user is actually in the field again.
@@ -1349,13 +1365,8 @@ export function HomeScreen({
     // becomes visible again, and keeps the chat open (full thread) until the X.
     setChatDismissed(false);
     setChatOpen(true);
-    // Bring the newest turn into focus above the keyboard. On an EMPTY thread
-    // this resolves to the top (hero context — agent + broadcast centered, like
-    // tapping the input at rest); with a conversation it scrolls so the last
-    // bubble / process widget sits just above the keyboard instead of hiding
-    // under it.
     scrollToLatest();
-  }, [scrollToLatest]);
+  }, [scrollToLatest, hasOnboarded, onOpenChat]);
   const handleInputBlur = useCallback(() => setInputFocused(false), []);
 
   // Safety: when the keyboard fully hides, the TextInput can stay "focused" in

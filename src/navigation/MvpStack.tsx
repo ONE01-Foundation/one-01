@@ -23,6 +23,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SignInSheet } from '../screens/mvp/SignInSheet';
 import { HomeScreen } from '../screens/mvp/HomeScreen';
+import { OneChatSheet } from '../screens/mvp/OneChatSheet';
 import { UnitProfileSheet } from '../screens/mvp/UnitProfileSheet';
 import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
 import { OneProfileSheet } from '../screens/mvp/OneProfileSheet';
@@ -123,6 +124,9 @@ type PendingSheet =
 
 function HomeWithOverlays() {
   const s = useOverlayState();
+  // The dedicated ONE chat WINDOW (opened from the home). The home itself is the
+  // calm representative surface — talking happens here, not on the home.
+  const [oneChatOpen, setOneChatOpen] = React.useState(false);
 
   // ONE's heartbeat: surface reminders the moment they come due (toast +
   // timeline + badge), on launch, on foreground, and on a slow interval.
@@ -314,6 +318,7 @@ function HomeWithOverlays() {
           }
         }}
         onCreateProcess={() => s.setQuickActionsOpen(true)}
+        onOpenChat={() => setOneChatOpen(true)}
         onSignIn={() => s.setSignInOpen(true)}
         onUpgrade={() => {
           if (!useMvpStore.getState().hasCompletedOnboarding) {
@@ -350,7 +355,8 @@ function HomeWithOverlays() {
           s.signInOpen ||
           s.globalOpen ||
           !!s.businessId ||
-          s.createBusinessOpen
+          s.createBusinessOpen ||
+          oneChatOpen
         }
         onCallActiveChange={s.setCallActive}
         profileSheetIndex={profileSheetIndex}
@@ -361,6 +367,20 @@ function HomeWithOverlays() {
         onOpenBusiness={(id) => s.setBusinessId(id)}
         openTimelineSignal={timelineSignal}
       />
+      {oneChatOpen && (
+        <OneChatSheet
+          onClose={() => setOneChatOpen(false)}
+          onOpenProfile={() => {
+            if (!useMvpStore.getState().hasCompletedOnboarding) s.setSignInOpen(true);
+            else s.setOneProfileOpen(true);
+          }}
+          onCreateProcess={() => s.setQuickActionsOpen(true)}
+          onOpenUnit={(id: string) => {
+            s.setOpenUnitId(id);
+            setTimeout(() => useMvpStore.getState().markUnitOpened(id), 0);
+          }}
+        />
+      )}
       <GlobalSheet
         visible={s.globalOpen}
         onClose={() => { s.setGlobalOpen(false); openPending(); }}

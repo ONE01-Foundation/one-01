@@ -1,18 +1,16 @@
 /**
- * TimelineHomeScreen — the "conversation that compacts into a timeline" home
- * (behind the 'timeline' home mode; classic/chat/presence left untouched).
+ * OneChatSheet — the dedicated ONE CHAT WINDOW.
  *
- * The home is one ongoing conversation with ONE, but instead of an endless
- * thread it folds TIME into a single surface:
- *   • NOW sits in the middle — ONE's current line(s) in full + the composer.
- *   • SCROLL UP → the past, COMPACTED onto a timeline rail: each older turn is
- *     a one-line entry with a dot + time, grouped by day. The conversation
- *     literally compacts the moment it stops being "now".
- *   • SCROLL DOWN → the cards: the processes worth acting on, right there.
+ * Per the current thesis (docs/spec/ONE_THESIS_CURRENT.md): the home is ONE's
+ * calm REPRESENTATIVE face, not a chat. Talking to ONE happens here, in a window
+ * opened over the home. The conversation COMPACTS into a timeline — NOW in the
+ * middle (ONE's current line + the composer), scroll UP to the past condensed
+ * onto a timeline rail, scroll DOWN to the cards (processes to act on).
  *
- * Reuses every shared primitive (homeChat store, invokeOneIntent, unitFromIntent,
- * the oneHomeMessages opener, Orb, InputBar, ChatProcessCard) so it never forks
- * the core data model — same contract as the other alternate home screens.
+ * Mounted conditionally over Home (so its hooks run only while open); closes via
+ * the back chevron. Backed by the shared `homeChat` thread and reuses the same
+ * primitives as the rest of the app (invokeOneIntent, unitFromIntent, Orb,
+ * InputBar, ChatProcessCard) so it never forks the core data model.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -50,7 +48,8 @@ import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
 import type { ThemeColors } from '../../utils/theme';
 
-interface TimelineHomeScreenProps {
+interface OneChatSheetProps {
+  onClose: () => void;
   onOpenProfile?: () => void;
   onCreateProcess?: () => void;
   onOpenUnit?: (id: string) => void;
@@ -66,7 +65,6 @@ function greetingFor(hour: number, he: boolean): string {
   return he ? 'לילה טוב' : 'Good night';
 }
 
-/** Day bucket label for a timestamp: Today / Yesterday / a date. */
 function dayLabel(ts: number, he: boolean): string {
   const d = new Date(ts);
   const now = new Date();
@@ -89,7 +87,7 @@ function timeLabel(ts: number, he: boolean): string {
   }
 }
 
-export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit }: TimelineHomeScreenProps) {
+export function OneChatSheet({ onClose, onOpenProfile, onCreateProcess, onOpenUnit }: OneChatSheetProps) {
   const { colors } = useThemeStore();
   const lang = useLanguage();
   const he = lang === 'he';
@@ -105,8 +103,6 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  // Y of the NOW divider inside the scroll content, so we can park the viewport
-  // on the present (past above, cards below) — the signature of this home.
   const nowYRef = useRef(0);
   const didScrollRef = useRef(false);
 
@@ -122,7 +118,8 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y, animated }));
   }, []);
 
-  // ── ONE SPEAKS FIRST — there is always a "now" to land on. ────────────────
+  // ── ONE SPEAKS FIRST — there is always a "now" to land on when the window
+  // opens. Runs on mount (the window is mounted only while open). ──────────────
   const didOpenRef = useRef(false);
   useEffect(() => {
     if (didOpenRef.current) return;
@@ -144,9 +141,7 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Split the thread into the compacted PAST and the live PRESENT. The present
-  // is the current exchange — from the last thing you said onward, or ONE's
-  // latest line when it spoke last and you haven't replied yet.
+  // Split the thread into the compacted PAST and the live PRESENT.
   const { past, live } = useMemo(() => {
     const msgs = chat;
     let lastUserIdx = -1;
@@ -157,11 +152,10 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
     return { past: msgs.slice(0, liveStart), live: msgs.slice(liveStart) };
   }, [chat]);
 
-  // Group the past into day buckets for the timeline rail.
   const pastDays = useMemo(() => {
     const groups: Array<{ day: string; items: ChatMessageStored[] }> = [];
     for (const m of past) {
-      if (m.widget && !m.text?.trim()) continue; // skip bare widget placeholders
+      if (m.widget && !m.text?.trim()) continue;
       const day = dayLabel(m.ts, he);
       const tail = groups[groups.length - 1];
       if (tail && tail.day === day) tail.items.push(m);
@@ -226,26 +220,18 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
   const liveWidgetUnitId = (m: ChatMessageStored) => (m.widget?.kind === 'process' ? m.widget.unitId : null);
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-      {/* Header: ONE as the calm face of the home. */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => { haptic.tap(); onOpenProfile?.(); }}
-          style={styles.presence}
-          accessibilityRole="button"
-          accessibilityLabel="ONE"
-        >
-          <Orb size={50} alive noShadow />
-          <Text style={[styles.headerTitle, { color: colors.text }]}>ONE</Text>
+    <View style={[StyleSheet.absoluteFill, styles.host, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      {/* Top bar: back (close) · ONE (→ profile) · + (new process) */}
+      <View style={[styles.topBar, rtlRow(lang)]}>
+        <Pressable onPress={() => { haptic.tap(); onClose(); }} hitSlop={12} style={styles.topBtn} accessibilityRole="button" accessibilityLabel={he ? 'סגור' : 'Back'}>
+          <Text style={[styles.back, { color: colors.text }]}>{he ? '›' : '‹'}</Text>
         </Pressable>
-        <Pressable
-          onPress={() => { haptic.tap(); onCreateProcess?.(); }}
-          hitSlop={12}
-          style={[styles.headerBtn, styles.plusAbs, { backgroundColor: colors.surface }]}
-          accessibilityRole="button"
-          accessibilityLabel={he ? 'תהליך חדש' : 'New process'}
-        >
-          <Text style={[styles.headerPlus, { color: colors.text }]}>+</Text>
+        <Pressable onPress={() => { haptic.tap(); onOpenProfile?.(); }} style={styles.presence} accessibilityRole="button" accessibilityLabel="ONE">
+          <Orb size={34} alive noShadow />
+          <Text style={[styles.title, { color: colors.text }]}>ONE</Text>
+        </Pressable>
+        <Pressable onPress={() => { haptic.tap(); onCreateProcess?.(); }} hitSlop={12} style={styles.topBtn} accessibilityRole="button" accessibilityLabel={he ? 'תהליך חדש' : 'New process'}>
+          <Text style={[styles.plus, { color: colors.text }]}>+</Text>
         </Pressable>
       </View>
 
@@ -261,7 +247,7 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── THE PAST, compacted onto a timeline rail ─────────────────── */}
+          {/* THE PAST — compacted onto a timeline rail */}
           {pastDays.length > 0 && (
             <View style={styles.timeline}>
               <View style={[styles.rail, { backgroundColor: colors.border }]} pointerEvents="none" />
@@ -270,22 +256,9 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
                   <Text style={[styles.dayLabel, { color: colors.textSecondary }, rtlText(he ? 'he' : 'en')]}>{g.day}</Text>
                   {g.items.map((m) => (
                     <View key={m.id} style={[styles.tlRow, rtlRow(lang)]}>
-                      <View
-                        style={[
-                          styles.dot,
-                          {
-                            backgroundColor: m.from === 'one' ? colors.text : colors.surface,
-                            borderColor: colors.text,
-                          },
-                        ]}
-                      />
+                      <View style={[styles.dot, { backgroundColor: m.from === 'one' ? colors.text : colors.surface, borderColor: colors.text }]} />
                       <Text style={[styles.tlTime, { color: colors.textSecondary }]}>{timeLabel(m.ts, he)}</Text>
-                      <Text
-                        style={[styles.tlText, { color: colors.textSecondary }, rtlText(he ? 'he' : 'en')]}
-                        numberOfLines={1}
-                      >
-                        {m.text}
-                      </Text>
+                      <Text style={[styles.tlText, { color: colors.textSecondary }, rtlText(he ? 'he' : 'en')]} numberOfLines={1}>{m.text}</Text>
                     </View>
                   ))}
                 </View>
@@ -293,7 +266,7 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
             </View>
           )}
 
-          {/* ── NOW — the present: ONE's current line(s) in full ─────────── */}
+          {/* NOW — the present */}
           <View style={styles.nowDivider} onLayout={onNowLayout}>
             <View style={[styles.nowLine, { backgroundColor: colors.border }]} />
             <Text style={[styles.nowLabel, { color: colors.textSecondary }]}>{he ? 'עכשיו' : 'Now'}</Text>
@@ -320,7 +293,7 @@ export function TimelineHomeScreen({ onOpenProfile, onCreateProcess, onOpenUnit 
             )}
           </View>
 
-          {/* ── DOWN — the cards: processes worth acting on ──────────────── */}
+          {/* DOWN — the cards */}
           {activeUnits.length > 0 && (
             <View style={styles.cards}>
               <Text style={[styles.cardsLabel, { color: colors.textSecondary }, rtlText(he ? 'he' : 'en')]}>
@@ -371,24 +344,23 @@ function PresentLine({ msg, colors, he }: { msg: ChatMessageStored; colors: Them
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  host: { zIndex: 40, elevation: 40 },
   flex1: { flex: 1 },
-  header: {
-    position: 'relative',
+  topBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
     paddingTop: 4,
     paddingBottom: 8,
   },
-  presence: { alignItems: 'center', gap: 2 },
-  headerTitle: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
-  headerBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  plusAbs: { position: 'absolute', top: 4, insetInlineStart: 14 },
-  headerPlus: { fontSize: 24, fontWeight: '400', lineHeight: 26 },
-  content: { paddingHorizontal: 16, paddingTop: 6 },
+  topBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  back: { fontSize: 30, fontWeight: '400', lineHeight: 32 },
+  plus: { fontSize: 26, fontWeight: '400', lineHeight: 28 },
+  presence: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  content: { paddingHorizontal: 16, paddingTop: 4 },
 
-  // Timeline (the compacted past)
   timeline: { position: 'relative', paddingTop: 4 },
   rail: { position: 'absolute', insetInlineStart: 5, top: 10, bottom: 6, width: 2, borderRadius: 1, opacity: 0.6 },
   dayGroup: { marginBottom: 10 },
@@ -398,7 +370,6 @@ const styles = StyleSheet.create({
   tlTime: { fontSize: 11, fontVariant: ['tabular-nums'], minWidth: 42 },
   tlText: { fontSize: 13, lineHeight: 18, flex: 1 },
 
-  // Now
   nowDivider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, marginBottom: 10 },
   nowLine: { flex: 1, height: StyleSheet.hairlineWidth },
   nowLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
@@ -411,7 +382,6 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: 15, lineHeight: 21 },
   typing: { fontSize: 20, lineHeight: 20, letterSpacing: 2 },
 
-  // Cards (scroll down)
   cards: { paddingTop: 22, gap: 10 },
   cardsLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, marginBottom: 2 },
   cardWrap: { alignSelf: 'stretch' },
