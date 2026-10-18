@@ -23,10 +23,6 @@ import { useSharedValue } from 'react-native-reanimated';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SignInSheet } from '../screens/mvp/SignInSheet';
 import { HomeScreen } from '../screens/mvp/HomeScreen';
-import { ChatHomeScreen } from '../screens/mvp/ChatHomeScreen';
-import { PresenceHomeScreen } from '../screens/mvp/PresenceHomeScreen';
-import { TimelineHomeScreen } from '../screens/mvp/TimelineHomeScreen';
-import { useHomePrefs } from '../stores/homePrefsStore';
 import { UnitProfileSheet } from '../screens/mvp/UnitProfileSheet';
 import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
 import { OneProfileSheet } from '../screens/mvp/OneProfileSheet';
@@ -159,7 +155,6 @@ function HomeWithOverlays() {
   // Live animated index of the ONE profile sheet, shared between the sheet
   // (which writes it as it slides) and HomeScreen (which reads it to bring
   // the home orb back in sync with the close drag). -1 = closed … 1 = full.
-  const homeMode = useHomePrefs((p) => p.homeMode);
   const profileSheetIndex = useSharedValue(-1);
   // Same live-index bridge for the sign-in sheet: SignInSheet writes it as it
   // slides, HomeScreen reads it to drop/return the orb + connect line in sync
@@ -277,24 +272,6 @@ function HomeWithOverlays() {
 
   return (
     <>
-      {homeMode === 'chat' || homeMode === 'presence' || homeMode === 'timeline' ? (
-        (() => {
-          const homeProps = {
-            onCreateProcess: () => s.setQuickActionsOpen(true),
-            onOpenProfile: () => {
-              if (!useMvpStore.getState().hasCompletedOnboarding) s.setSignInOpen(true);
-              else s.setOneProfileOpen(true);
-            },
-            onOpenUnit: (id: string) => {
-              s.setOpenUnitId(id);
-              setTimeout(() => useMvpStore.getState().markUnitOpened(id), 0);
-            },
-          };
-          if (homeMode === 'presence') return <PresenceHomeScreen {...homeProps} />;
-          if (homeMode === 'timeline') return <TimelineHomeScreen {...homeProps} />;
-          return <ChatHomeScreen {...homeProps} />;
-        })()
-      ) : (
       <HomeScreen
         onTapUnit={(id) => {
           setUnitForceChat(false);
@@ -384,7 +361,6 @@ function HomeWithOverlays() {
         onOpenBusiness={(id) => s.setBusinessId(id)}
         openTimelineSignal={timelineSignal}
       />
-      )}
       <GlobalSheet
         visible={s.globalOpen}
         onClose={() => { s.setGlobalOpen(false); openPending(); }}

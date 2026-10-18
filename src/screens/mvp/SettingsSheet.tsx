@@ -23,7 +23,6 @@ import Constants from 'expo-constants';
 import { useThemeStore } from '../../stores/themeStore';
 import { useLocaleStore, type AppLanguage } from '../../stores/localeStore';
 import { useMvpStore } from '../../stores/mvpStore';
-import { useHomePrefs, type HomeMode } from '../../stores/homePrefsStore';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { CloseIcon } from '../../components/mvp/icons';
 import { haptic } from '../../utils/haptics';
@@ -67,8 +66,6 @@ export function SettingsSheet({
 }: SettingsSheetProps) {
   const { colors, preference, setPreference } = useThemeStore();
   const { language, setLanguage } = useLocaleStore();
-  const homeMode = useHomePrefs((p) => p.homeMode);
-  const setHomeMode = useHomePrefs((p) => p.setHomeMode);
   const reset = useMvpStore((s) => s.reset);
   const name = useMvpStore((s) => s.name);
   const units = useMvpStore((s) => s.units);
@@ -217,28 +214,6 @@ export function SettingsSheet({
               selected={language}
               onChange={(v) => setLanguage(v)}
             />
-          </Group>
-
-          {/* Home surface — classic resting broadcast vs. ONE as a continuous
-              chat that speaks first. Experimental; default stays classic. */}
-          <Group title={he ? 'דף הבית' : 'Home'} colors={colors} he={he}>
-            <ChoiceChips
-              colors={colors}
-              he={he}
-              options={[
-                { value: 'classic', label: he ? 'קלאסי' : 'Classic' },
-                { value: 'presence', label: he ? 'נוכחות' : 'Presence' },
-                { value: 'chat', label: he ? 'שיחה' : 'Chat' },
-                { value: 'timeline', label: he ? 'ציר זמן' : 'Timeline' },
-              ]}
-              selected={homeMode}
-              onChange={(v) => setHomeMode(v as HomeMode)}
-            />
-            <Text style={[styles.rowLabel, { color: colors.textSecondary, marginTop: 8 }, rtlText(language)]}>
-              {he
-                ? 'נוכחות: דמות ממורכזת ומשפט מתחלף, גלילה חושפת את התהליכים. שיחה: ת׳אט מתמשך שבו ONE פונה ראשון. ציר זמן: שיחה שמתקפלת לציר — ה״עכשיו״ במרכז, גלילה למעלה אל העבר ולמטה אל הכרטיסים.'
-                : 'Presence: a centered ONE with one evolving line; scroll reveals your processes. Chat: an ongoing thread where ONE speaks first. Timeline: a conversation that folds into a timeline — now in the middle, scroll up to the past, down to the cards.'}
-            </Text>
           </Group>
 
           {/* How ONE addresses you — drives gendered phrasing in Hebrew. */}
