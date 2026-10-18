@@ -4480,7 +4480,11 @@ export function HomeScreen({
     ) : (
       <>
         {cardGroups.map(({ idn, items }) => {
-          const collapsed = collapsedGroups.has(idn.id);
+          // With the SpaceSwitcher above naming the active space, the single
+          // group's own header (name + collapse) is redundant — hide it and show
+          // the cards directly. (The header only appears if ever >1 group shows.)
+          const multiGroup = cardGroups.length > 1;
+          const collapsed = multiGroup && collapsedGroups.has(idn.id);
           const ProfileIcon =
             idn.type === 'business'
               ? BriefcaseIcon
@@ -4489,6 +4493,7 @@ export function HomeScreen({
                 : PersonIcon;
           return (
             <View key={idn.id} style={styles.drawer}>
+              {multiGroup && (
               <Pressable
                 onPress={() => toggleGroup(idn.id)}
                 onLongPress={() => promptDeleteSpace(idn.id, idn.name)}
@@ -4518,6 +4523,7 @@ export function HomeScreen({
                   <ArrowDownIcon size={20} color={colors.textSecondary} />
                 </View>
               </Pressable>
+              )}
               {!collapsed && (
                 <View style={styles.drawerBody}>
                   {items.length === 0 && (
