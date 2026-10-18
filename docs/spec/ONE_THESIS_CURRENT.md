@@ -93,8 +93,11 @@ A **dedicated surface** to talk to ONE:
 - Opened from the **home**; a Unit's own thread is the same conversation renderer
   scoped to that Unit.
 
-(The `TimelineHomeScreen` prototype is the seed for this window — the
-timeline-compaction belongs **here**, not as a home mode.)
+**Implementation status (2026-10):** the chat window is the **intended
+direction**, not yet shipped. A prototype (`OneChatSheet`, with the
+timeline-compaction) was built and then reverted — for now the **classic home
+keeps its existing inline chat unchanged**. Revisit the extraction later;
+current focus is function/architecture (below), not the home refactor.
 
 ## 6. Capabilities — the toolbox
 
