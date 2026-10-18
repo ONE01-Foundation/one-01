@@ -18,7 +18,15 @@ import { useLanguage } from '../../i18n/useT';
 import { TAG_COLORS } from '../../core/mvp/types';
 import { rtlRow, rtlText } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
-import { ArrowDownIcon, ClockIcon } from './icons';
+import { ArrowDownIcon, ClockIcon, HouseIcon, BriefcaseIcon, UsersIcon } from './icons';
+
+// Space (identity) label + icon by type — shows which space ONE filed the
+// process into, so with multiple spaces you trust it went to the right one.
+const SPACE_META = {
+  personal: { he: 'אישי', en: 'Personal', Icon: HouseIcon },
+  business: { he: 'עסקי', en: 'Business', Icon: BriefcaseIcon },
+  family: { he: 'משפחה', en: 'Family', Icon: UsersIcon },
+} as const;
 
 // Channel glyphs for the drafts ONE composed (no icon imports needed).
 const CHANNEL_EMOJI: Record<string, string> = {
@@ -65,8 +73,20 @@ export function ChatProcessCard({
   const unit = useMvpStore((s) => s.units.find((u) => u.id === unitId));
   const updateUnit = useMvpStore((s) => s.updateUnit);
   const markDraftSent = useMvpStore((s) => s.markDraftSent);
+  const identities = useMvpStore((s) => s.identities);
   const [expanded, setExpanded] = useState(defaultExpanded);
   if (!unit) return null;
+
+  // Which space ONE filed this into — shown only when more than one space
+  // exists (otherwise it's obvious).
+  const space = identities.find((i) => i.id === unit.identityId);
+  const spaceMeta = space ? SPACE_META[space.type] : null;
+  const showSpace = identities.length > 1 && !!spaceMeta;
+  const spaceLabel = space?.name?.trim()
+    ? space.name
+    : spaceMeta
+      ? (he ? spaceMeta.he : spaceMeta.en)
+      : '';
 
   const accent = unit.color ?? TAG_COLORS[unit.tagIds?.[0] ?? 'custom'] ?? colors.textSecondary;
   const line =
@@ -130,6 +150,14 @@ export function ChatProcessCard({
           <Text style={[styles.title, { color: colors.text }, rtlText(lang)]} numberOfLines={1}>
             {unit.title}
           </Text>
+          {showSpace && spaceMeta && (
+            <View style={[styles.spaceChip, { borderColor: colors.border, backgroundColor: colors.background }]}>
+              <spaceMeta.Icon size={11} color={colors.textSecondary} />
+              <Text style={[styles.spaceChipText, { color: colors.textSecondary }]} numberOfLines={1}>
+                {spaceLabel}
+              </Text>
+            </View>
+          )}
           <View style={styles.flex1} />
           <Text style={[styles.tag, { color: done ? accent : colors.textSecondary }]}>
             {badge}
@@ -334,6 +362,16 @@ const styles = StyleSheet.create({
   title: { fontSize: 15.5, fontWeight: '700', flexShrink: 1 },
   flex1: { flex: 1 },
   tag: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.3 },
+  spaceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+  },
+  spaceChipText: { fontSize: 11, fontWeight: '600', maxWidth: 80 },
   line: { fontSize: 13.5, lineHeight: 19 },
   drawer: { gap: 10 },
   steps: { gap: 8, marginTop: 2 },
