@@ -1578,6 +1578,16 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
                 ?? 'ONE'
               }
               providerName={unit.people?.[0]?.name}
+              oneContext={{
+                side: unit.sharedRole === 'human' ? 'provider' : 'owner',
+                title: unit.title,
+                status: unitStatusLine(unit, he),
+                openFacts: openDisclosureStrings(disclosureForIdentity(unit.identityId), he),
+                ownerMessage: unit.drafts?.[0]?.body,
+                counterpartName: unit.people?.[0]?.name,
+                voiceStyle: personalityPrompt(useMvpStore.getState().agentPersonality, lang),
+                userDisclosure: openDisclosureStrings(disclosureForIdentity(unit.identityId), he),
+              }}
               onClose={() => setThreadOpen(false)}
               colors={colors}
               lang={lang}

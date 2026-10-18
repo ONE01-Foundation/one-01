@@ -16,7 +16,9 @@ import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
 import { joinSharedUnit, type SharedUnitRow, type SharedSnapshot } from '../../services/cloudShared';
 import { SharedThread } from '../../components/mvp/SharedThread';
-import { useMvpStore } from '../../stores/mvpStore';
+import { useMvpStore, disclosureForIdentity } from '../../stores/mvpStore';
+import { personalityPrompt } from '../../data/mvp/agentAppearance';
+import { openDisclosureStrings } from '../../data/mvp/disclosure';
 
 export function JoinSharedSheet({
   visible,
@@ -157,6 +159,19 @@ export function JoinSharedSheet({
               myName={name}
               role="human"
               active={visible}
+              oneContext={{
+                side: 'provider',
+                title: snap.title || row.title,
+                status: snap.status,
+                openFacts: snap.openFacts,
+                ownerMessage: snap.message,
+                counterpartName: snap.sharedByName,
+                voiceStyle: personalityPrompt(useMvpStore.getState().agentPersonality, lang),
+                userDisclosure: openDisclosureStrings(
+                  disclosureForIdentity(useMvpStore.getState().activeIdentityId),
+                  he,
+                ),
+              }}
               colors={colors}
               lang={lang}
             />

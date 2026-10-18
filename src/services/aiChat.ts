@@ -296,6 +296,62 @@ export interface OneIntent {
 }
 
 /**
+ * Draft ONE's next reply in a SHARED-UNIT thread — the two-sided moat moment.
+ * Either side's ONE reads the disclosure-safe case (what the owner published)
+ * plus the recent conversation and proposes one short, natural message FROM THIS
+ * SIDE, ready to send. It only DRAFTS — the caller fills the composer and the
+ * person reviews and sends; ONE never posts to the other side on its own. ONE
+ * may use only the open-tier facts handed in (`userDisclosure`) and must not
+ * invent details. Returns null on any failure so the composer just stays empty.
+ */
+export async function draftSharedReply(args: {
+  side: 'owner' | 'provider';
+  title: string;
+  status?: string | null;
+  /** The disclosure-safe facts the owner published (context for either side). */
+  openFacts?: string[];
+  /** The owner's original outward message, if any. */
+  ownerMessage?: string;
+  /** The other side's name. */
+  counterpartName?: string;
+  /** Recent thread turns, oldest first; `fromMe` marks this side's own posts. */
+  recent: Array<{ fromMe: boolean; author: string; text: string }>;
+  voiceStyle?: string;
+  /** THIS side's own open-tier facts ONE is authorized to represent. */
+  userDisclosure?: string[];
+  he: boolean;
+}): Promise<string | null> {
+  const { title, status, openFacts, ownerMessage, counterpartName, recent, voiceStyle, userDisclosure, he } = args;
+  const history: AiChatMessage[] = recent
+    .filter((m) => m.text && m.text.trim())
+    .slice(-8)
+    .map((m) => ({ role: m.fromMe ? 'assistant' : 'user', content: m.text.trim() }));
+  const caseLines = [
+    status ? (he ? `מצב: ${status}` : `Status: ${status}`) : '',
+    ownerMessage ? (he ? `הפנייה המקורית: ${ownerMessage}` : `Original request: ${ownerMessage}`) : '',
+    openFacts && openFacts.length
+      ? (he ? `פרטים שנחשפו: ${openFacts.join(' · ')}` : `Disclosed details: ${openFacts.join(' · ')}`)
+      : '',
+  ].filter(Boolean).join('\n');
+  const prompt = he
+    ? `זו שיחה משותפת סביב "${title}"${counterpartName ? ` מול ${counterpartName}` : ''}.${caseLines ? `\n${caseLines}` : ''}\nנסח בשמי תשובה אחת קצרה, טבעית ומנומסת להודעה האחרונה — מוכנה לשליחה, בעברית, בלי להמציא פרטים שלא נמסרו.`
+    : `This is a shared conversation about "${title}"${counterpartName ? ` with ${counterpartName}` : ''}.${caseLines ? `\n${caseLines}` : ''}\nDraft one short, natural, polite reply from me to the latest message — ready to send, and don't invent details that weren't provided.`;
+  try {
+    const intent = await invokeOneIntent(prompt, {
+      history,
+      voiceStyle,
+      userDisclosure,
+      activeUnit: { title, emoji: '🤝', broadcast: ownerMessage },
+    });
+    const reply = (intent.draft?.body ?? intent.reply ?? '').trim();
+    return reply || null;
+  } catch (e) {
+    console.warn('[draftSharedReply] failed:', e);
+    return null;
+  }
+}
+
+/**
  * Same call as invokeAiChat but forces JSON output. Returns a parsed
  * OneIntent. On any parse / network failure throws; caller falls back to
  * plain-text invokeAiChat + heuristics.

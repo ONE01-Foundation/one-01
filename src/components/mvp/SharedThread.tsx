@@ -6,7 +6,7 @@
  * sheet, overlay).
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import type { ThemeColors } from '../../utils/theme';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
@@ -17,6 +17,22 @@ import {
   subscribeSharedMessages,
   type SharedMessage,
 } from '../../services/cloudShared';
+import { draftSharedReply } from '../../services/aiChat';
+
+/** The disclosure-safe context ONE needs to draft a reply in this thread. When
+ *  present, a "✨ ONE drafts" affordance appears; ONE only fills the composer —
+ *  the person always reviews and sends. */
+export interface SharedThreadOneContext {
+  side: 'owner' | 'provider';
+  title: string;
+  status?: string | null;
+  openFacts?: string[];
+  ownerMessage?: string;
+  counterpartName?: string;
+  voiceStyle?: string;
+  /** THIS side's own open-tier facts ONE may represent. */
+  userDisclosure?: string[];
+}
 
 export function SharedThread({
   code,
@@ -24,6 +40,7 @@ export function SharedThread({
   myName,
   role,
   active = true,
+  oneContext,
   colors,
   lang,
 }: {
@@ -35,12 +52,15 @@ export function SharedThread({
   role: 'one' | 'human';
   /** Subscribe/poll only while the view is actually on screen. */
   active?: boolean;
+  /** Pass to enable the "✨ ONE drafts a reply" affordance for this side. */
+  oneContext?: SharedThreadOneContext;
   colors: ThemeColors;
   lang: 'en' | 'he';
 }) {
   const he = lang === 'he';
   const [messages, setMessages] = useState<SharedMessage[]>([]);
   const [text, setText] = useState('');
+  const [drafting, setDrafting] = useState(false);
 
   // Merge in messages by id (so realtime + poll + our own posts never dupe),
   // kept in chronological order.
@@ -82,6 +102,26 @@ export function SharedThread({
     if (posted) upsert([posted]);
   }, [text, code, myName, role, he, upsert]);
 
+  // The two-sided moat moment: ONE reads the disclosure-safe case + the recent
+  // thread and drafts THIS side's next reply into the composer. Never sends on
+  // its own — the person reviews and taps Send.
+  const askOne = useCallback(async () => {
+    if (!oneContext || drafting) return;
+    haptic.tap();
+    setDrafting(true);
+    const recent = messages.map((m) => ({
+      fromMe: m.author === myName && m.role === role,
+      author: m.author,
+      text: m.text,
+    }));
+    const reply = await draftSharedReply({ ...oneContext, recent, he });
+    setDrafting(false);
+    if (reply) {
+      setText(reply);
+      haptic.select();
+    }
+  }, [oneContext, drafting, messages, myName, role, he]);
+
   return (
     <View style={styles.wrap}>
       <View style={styles.thread}>
@@ -109,6 +149,23 @@ export function SharedThread({
         })}
       </View>
 
+      {oneContext && (
+        <Pressable
+          onPress={askOne}
+          disabled={drafting}
+          style={[styles.oneBtn, { borderColor: colors.border, backgroundColor: colors.surface, opacity: drafting ? 0.6 : 1 }, rtlRow(lang)]}
+          accessibilityRole="button"
+        >
+          {drafting ? (
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+          ) : (
+            <Text style={[styles.oneBtnText, { color: colors.text }, rtlText(lang)]}>
+              {he ? '✨ וואן מנסח תשובה' : '✨ Draft a reply with ONE'}
+            </Text>
+          )}
+        </Pressable>
+      )}
+
       <View style={[styles.replyRow, rtlRow(lang)]}>
         <TextInput
           value={text}
@@ -116,6 +173,7 @@ export function SharedThread({
           placeholder={he ? 'כתוב הודעה…' : 'Write a message…'}
           placeholderTextColor={colors.textSecondary}
           onSubmitEditing={send}
+          multiline
           style={[styles.reply, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }, rtlText(lang)]}
         />
         <Pressable onPress={send} style={[styles.sendBtn, { backgroundColor: colors.text }]} accessibilityRole="button">
@@ -135,8 +193,19 @@ const styles = StyleSheet.create({
   msgTheirs: { alignSelf: 'flex-start', borderBottomLeftRadius: 5 },
   author: { fontSize: 11, fontWeight: '700' },
   text: { fontSize: 14.5, lineHeight: 20 },
-  replyRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 4 },
-  reply: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15 },
+  oneBtn: {
+    alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 34,
+  },
+  oneBtnText: { fontSize: 13, fontWeight: '700' },
+  replyRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: 4 },
+  reply: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, maxHeight: 120 },
   sendBtn: { borderRadius: 12, paddingVertical: 11, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   sendText: { fontSize: 15, fontWeight: '700' },
 });

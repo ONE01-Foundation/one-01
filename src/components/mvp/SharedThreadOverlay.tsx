@@ -8,7 +8,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import type { ThemeColors } from '../../utils/theme';
 import { rtlText, rtlRow } from '../../utils/rtl';
-import { SharedThread } from './SharedThread';
+import { SharedThread, type SharedThreadOneContext } from './SharedThread';
 
 export function SharedThreadOverlay({
   visible,
@@ -16,6 +16,7 @@ export function SharedThreadOverlay({
   myName,
   providerName,
   role = 'one',
+  oneContext,
   onClose,
   colors,
   lang,
@@ -26,6 +27,8 @@ export function SharedThreadOverlay({
   providerName?: string;
   /** 'one' = you shared it (ONE represents you); 'human' = you joined it. */
   role?: 'one' | 'human';
+  /** Enables the "✨ ONE drafts a reply" affordance for the owner side. */
+  oneContext?: SharedThreadOneContext;
   onClose: () => void;
   colors: ThemeColors;
   lang: 'en' | 'he';
@@ -60,7 +63,7 @@ export function SharedThreadOverlay({
           {/* Explicit maxHeight bounds the scroll so it renders + scrolls (an
               unbounded ScrollView in a flex column collapses on web). */}
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-            <SharedThread code={code} myName={myName} role={role} active colors={colors} lang={lang} />
+            <SharedThread code={code} myName={myName} role={role} active oneContext={oneContext} colors={colors} lang={lang} />
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
