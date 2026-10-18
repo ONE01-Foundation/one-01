@@ -151,12 +151,26 @@ export function ChatProcessCard({
             {unit.title}
           </Text>
           {showSpace && spaceMeta && (
-            <View style={[styles.spaceChip, { borderColor: colors.border, backgroundColor: colors.background }]}>
+            // Tap to MOVE the process to the next space — correct ONE's filing
+            // right here, at the moment it filed it (toggles between two spaces).
+            <Pressable
+              onPress={() => {
+                const idx = identities.findIndex((i) => i.id === unit.identityId);
+                const next = identities[(idx + 1) % identities.length];
+                if (!next || next.id === unit.identityId) return;
+                haptic.select();
+                updateUnit(unitId, { identityId: next.id, updatedAt: new Date().toISOString() });
+              }}
+              hitSlop={6}
+              style={[styles.spaceChip, { borderColor: colors.border, backgroundColor: colors.background }]}
+              accessibilityRole="button"
+              accessibilityLabel={he ? `מרחב: ${spaceLabel} — הקש להעברה` : `Space: ${spaceLabel} — tap to move`}
+            >
               <spaceMeta.Icon size={11} color={colors.textSecondary} />
               <Text style={[styles.spaceChipText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {spaceLabel}
               </Text>
-            </View>
+            </Pressable>
           )}
           <View style={styles.flex1} />
           <Text style={[styles.tag, { color: done ? accent : colors.textSecondary }]}>

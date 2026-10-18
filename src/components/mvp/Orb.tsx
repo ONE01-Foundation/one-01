@@ -183,9 +183,10 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
   // runs its own irregular schedule.
   const lookX = useSharedValue(0);
   useEffect(() => {
-    // Pointer tracking (below) owns the gaze when on — don't also run the
-    // autonomous glance, or they fight.
-    if (!alive || noBlink || trackPointer) return;
+    // The autonomous glance runs even with pointer tracking — it takes over
+    // whenever the pointer goes idle (blended via ptrActive below), so ONE keeps
+    // looking around freely on its own, then snaps to the cursor when it moves.
+    if (!alive || noBlink) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout>;
     const glance = () => {
@@ -204,12 +205,15 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
       clearTimeout(timer);
       lookX.value = 0;
     };
-  }, [alive, noBlink, trackPointer, lookX]);
+  }, [alive, noBlink, lookX]);
 
   // Pointer gaze (web): the eyes glide toward the cursor / finger, normalised by
-  // distance from ONE's own centre (fully deflected within ~PTR_REF px).
+  // distance from ONE's own centre (fully deflected within ~PTR_REF px). `ptrAct`
+  // is 1 while the pointer is moving and fades to 0 after it goes idle, so the
+  // autonomous glance can take back over — ONE follows you, then wanders freely.
   const ptrX = useSharedValue(0);
   const ptrY = useSharedValue(0);
+  const ptrAct = useSharedValue(0);
   const containerRef = useRef<View>(null);
   useEffect(() => {
     if (!trackPointer || Platform.OS !== 'web' || typeof window === 'undefined') return;
@@ -227,25 +231,31 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
         const ny = Math.max(-1, Math.min(1, (e.clientY - cy) / PTR_REF));
         ptrX.value = withTiming(nx, { duration: 170, easing: Easing.out(Easing.quad) });
         ptrY.value = withTiming(ny, { duration: 170, easing: Easing.out(Easing.quad) });
+        // Active now; fade back to "idle" ~1.4 s after the last move so the
+        // autonomous glance resumes.
+        ptrAct.value = withSequence(
+          withTiming(1, { duration: 120 }),
+          withDelay(1400, withTiming(0, { duration: 700, easing: Easing.inOut(Easing.quad) })),
+        );
       });
     };
     window.addEventListener('pointermove', onMove, { passive: true });
     return () => {
       window.removeEventListener('pointermove', onMove);
       cancelAnimationFrame(raf);
-      ptrX.value = withTiming(0, { duration: 300 });
-      ptrY.value = withTiming(0, { duration: 300 });
+      ptrAct.value = withTiming(0, { duration: 300 });
     };
-  }, [trackPointer, ptrX, ptrY]);
+  }, [trackPointer, ptrX, ptrY, ptrAct]);
 
-  // The eye group carries the FULL gaze — horizontal (pointer or autonomous
-  // glance) AND vertical (eyeLookY scroll + pointer). Everything mounted on the
-  // eyes (the eyes + eyewear) lives inside this group so glasses ride the eyes.
+  // The eye group carries the FULL gaze. Horizontal + vertical BLEND the pointer
+  // gaze (when the pointer is active) with the autonomous glance (when idle), so
+  // ONE both follows the cursor and looks around on its own.
   const eyeGroupProps = useAnimatedProps(() => {
     'worklet';
-    const v = (eyeLookY ? eyeLookY.value : 0) + (trackPointer ? ptrY.value : 0);
+    const a = trackPointer ? ptrAct.value : 0;
+    const px = (trackPointer ? ptrX.value : 0) * a + lookX.value * (1 - a);
+    const v = (eyeLookY ? eyeLookY.value : 0) + (trackPointer ? ptrY.value * a : 0);
     const offset = Math.max(-EYE_TRACK_RANGE, Math.min(EYE_TRACK_RANGE, v * EYE_TRACK_RANGE));
-    const px = trackPointer ? ptrX.value : lookX.value;
     return { transform: [{ translateX: px * EYE_LOOK_X }, { translateY: offset }] };
   });
   // Headwear (hat / headphones) sits on the HEAD, not the eyes — so it only

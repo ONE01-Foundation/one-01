@@ -194,6 +194,9 @@ const HERO_CENTER_TOP = Math.round(SCREEN_H * 0.085);
 // trips it by accident.
 const GLOBAL_PULL_RANGE = 120;
 const GLOBAL_OPEN_THRESHOLD = 74;
+// In CHAT, pulling the thread DOWN at the top (overscroll) closes the chat like
+// a sheet: this is the pull distance (px) for a full dismiss.
+const CHAT_CLOSE_PULL = 150;
 
 // Call-orb floating-bubble geometry. The call face sits in the SAME spot as
 // the resting Home agent (its centre matches), just a touch larger — and the
@@ -3143,19 +3146,38 @@ export function HomeScreen({
   // to scrolling UP into the processes.
   const overscrollMin = useSharedValue(0);
 
+  // 1 while the chat/call thread is open, 0 at home — animated. Declared here,
+  // above the scroll handler, so the scroll worklets can read it without a
+  // decl-order crash (reanimated runs the initial updater synchronously).
+  const chatActiveSV = useSharedValue(chatActive ? 1 : 0);
+  useEffect(() => {
+    chatActiveSV.value = withTiming(chatActive ? 1 : 0, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [chatActive, chatActiveSV]);
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
       scrollY.value = e.contentOffset.y;
       if (e.contentOffset.y < overscrollMin.value) overscrollMin.value = e.contentOffset.y;
-      // Unwind the centred rest pair as the user scrolls up into the processes.
-      // Written here (not a useDerivedValue) so the dock worklets declared above
-      // scrollY can read it without a decl-order crash.
-      scrollRestFactor.value = interpolate(
-        e.contentOffset.y,
-        [0, SNAP_OPEN * 0.25],
-        [1, 0],
-        Extrapolation.CLAMP,
-      );
+      // In CHAT, pulling the thread DOWN past its top (negative offset) closes
+      // the chat like a sheet: scrub chatExitProgress 0→1 with the pull so the
+      // thread slides off + the dim lifts live, reversible until release.
+      if (chatActiveSV.value > 0.5) {
+        const over = Math.max(0, -e.contentOffset.y);
+        chatExitProgress.value = Math.min(1, over / CHAT_CLOSE_PULL);
+      } else {
+        // Unwind the centred rest pair as the user scrolls up into the
+        // processes. Written here (not a useDerivedValue) so the dock worklets
+        // declared above scrollY can read it without a decl-order crash.
+        scrollRestFactor.value = interpolate(
+          e.contentOffset.y,
+          [0, SNAP_OPEN * 0.25],
+          [1, 0],
+          Extrapolation.CLAMP,
+        );
+      }
     },
   });
 
@@ -3175,6 +3197,9 @@ export function HomeScreen({
   // re-centre + eyes-close + text fade below — a live, reversible transition.
   const globalPull = useDerivedValue(() => {
     'worklet';
+    // In chat the same downward overscroll CLOSES the chat (not Global), so the
+    // Global visual stays fully parked while the thread is open.
+    if (chatActiveSV.value > 0.5) return 0;
     return interpolate(
       scrollY.value,
       [-GLOBAL_PULL_RANGE, 0],
@@ -3436,13 +3461,8 @@ export function HomeScreen({
   // when chat opens. The sign-in sheet does NOT lift the hero: the
   // Orb and "Welcome back." line stay at their default Home positions
   // above the sheet (user request).
-  const chatActiveSV = useSharedValue(chatActive ? 1 : 0);
-  useEffect(() => {
-    chatActiveSV.value = withTiming(chatActive ? 1 : 0, {
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [chatActive, chatActiveSV]);
+  // (chatActiveSV is declared above the scroll handler so the scroll worklets
+  // can read it without a decl-order crash.)
 
   // Keyboard-open signal (the TextInput is focused). The header orb SHRINKS
   // only while the keyboard is up — when it closes the orb eases back to its
@@ -4650,6 +4670,17 @@ export function HomeScreen({
               // Drag DOWN past the top (a deliberate overscroll) → open Global —
               // the OPPOSITE-direction gesture to scrolling up into the processes.
               onScrollEndDrag={() => {
+                // In chat, release decides the sheet-style close: past ~a third
+                // of the pull it finishes closing, otherwise it springs back.
+                if (chatActive) {
+                  if (chatExitProgress.value > 0.32) {
+                    dismissChatAnimated();
+                  } else {
+                    chatExitProgress.value = withSpring(0, { damping: 22, stiffness: 240 });
+                  }
+                  overscrollMin.value = 0;
+                  return;
+                }
                 if (
                   overscrollMin.value <= -GLOBAL_OPEN_THRESHOLD &&
                   onOpenGlobal && !chatActive && !callActive && !anySheetOpen && !signInOpen
