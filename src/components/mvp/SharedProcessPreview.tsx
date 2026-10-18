@@ -10,7 +10,7 @@
  * meant for a sheet's screen-pinned `overlay` slot. Renders null when hidden.
  */
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import type { ThemeColors } from '../../utils/theme';
 import { rtlText, rtlRow } from '../../utils/rtl';
 
@@ -25,6 +25,8 @@ export function SharedProcessPreview({
   hiddenCount,
   draftBody,
   shareCode,
+  onConfirm,
+  busy,
   onClose,
   colors,
   lang,
@@ -40,12 +42,18 @@ export function SharedProcessPreview({
   draftBody?: string;
   /** Live join code, once published to the shared backend. */
   shareCode?: string;
+  /** When set, the preview becomes a CONFIRM gate before publishing: it frames
+   *  "this is exactly what will cross" and shows Cancel / Share now. */
+  onConfirm?: () => void;
+  /** Publishing in progress — disables the action row + spins. */
+  busy?: boolean;
   onClose: () => void;
   colors: ThemeColors;
   lang: 'en' | 'he';
 }) {
   const he = lang === 'he';
   if (!visible) return null;
+  const confirming = !!onConfirm;
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.host]}>
@@ -56,7 +64,9 @@ export function SharedProcessPreview({
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={[styles.headRow, rtlRow(lang)]}>
             <Text style={[styles.eyebrow, { color: colors.textSecondary }, rtlText(lang)]}>
-              {he ? '👁 כפי שהצד השני רואה' : '👁 What the other side sees'}
+              {confirming
+                ? he ? '👁 לפני שיתוף — מה ייחשף' : '👁 Before you share — what crosses'
+                : he ? '👁 כפי שהצד השני רואה' : '👁 What the other side sees'}
             </Text>
             <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={he ? 'סגור' : 'Close'}>
               <Text style={[styles.close, { color: colors.textSecondary }]}>✕</Text>
@@ -126,6 +136,33 @@ export function SharedProcessPreview({
                   ? 'רק מה שאישרת לשיתוף מופיע כאן.'
                   : 'Only what you allowed to share is shown here.'}
             </Text>
+
+            {confirming && (
+              <View style={[styles.actions, rtlRow(lang)]}>
+                <Pressable
+                  onPress={onClose}
+                  disabled={busy}
+                  style={[styles.cancelBtn, { borderColor: colors.border }]}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.cancelText, { color: colors.text }]}>{he ? 'ביטול' : 'Cancel'}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={onConfirm}
+                  disabled={busy}
+                  style={[styles.shareBtn, { backgroundColor: colors.text, opacity: busy ? 0.6 : 1 }]}
+                  accessibilityRole="button"
+                >
+                  {busy ? (
+                    <ActivityIndicator size="small" color={colors.background} />
+                  ) : (
+                    <Text style={[styles.shareText, { color: colors.background }]}>
+                      {providerName ? (he ? `שתף עם ${providerName}` : `Share with ${providerName}`) : (he ? 'שתף עכשיו' : 'Share now')}
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -168,4 +205,9 @@ const styles = StyleSheet.create({
   factDot: { width: 7, height: 7, borderRadius: 4 },
   factText: { fontSize: 14, lineHeight: 20, flex: 1 },
   footer: { fontSize: 12, lineHeight: 17, marginTop: 2, fontStyle: 'italic' },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  cancelBtn: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { fontSize: 15, fontWeight: '600' },
+  shareBtn: { flex: 1.4, borderRadius: 14, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', minHeight: 46 },
+  shareText: { fontSize: 15, fontWeight: '700' },
 });

@@ -349,6 +349,11 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
   const [promptConfig, setPromptConfig] = useState<InlinePromptConfig | null>(null);
   // "What the other side sees" preview (shared/public processes) — overlay slot.
   const [previewOpen, setPreviewOpen] = useState(false);
+  // The share-confirm gate: the provider name awaiting a "this is what crosses"
+  // confirmation before anything is published outward. `sharing` spins the
+  // confirm button while the snapshot publishes.
+  const [pendingShareName, setPendingShareName] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   // The owner's view of the shared conversation (when the process has a code).
   const [threadOpen, setThreadOpen] = useState(false);
   // In-process voice call — a self-contained call mode inside this sheet (the
@@ -1228,73 +1233,76 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
   // Share this process WITH ANOTHER ONE — add them as a collaborator on the
   // process. No multiplayer backend yet, so the in-app truth is: they land in
   // People, the process flips to "shared", and ONE logs + announces it.
+  // Step 1: ask who to share with. Publishing does NOT happen here — it waits
+  // for the confirm gate (the preview below) so nothing crosses until the user
+  // has seen exactly what will be exposed.
   const shareWithOne = () => {
     if (!unit) return;
-    const apply = async (raw: string) => {
-      const nm = raw.trim().replace(/^@/, '');
-      if (!nm) return;
-      const store = useMvpStore.getState();
-      const cur = store.units.find((u) => u.id === unit.id);
-      if (!cur) return;
-      const already = (cur.people ?? []).some(
-        (p) => p.name.toLowerCase() === nm.toLowerCase(),
-      );
-      const ts = new Date().toISOString();
-      store.updateUnit(unit.id, {
-        people: already
-          ? cur.people
-          : [
-              ...(cur.people ?? []),
-              { id: `p_${Date.now()}`, name: nm, role: 'Shared ONE', connectionType: 'partner' as const },
-            ],
-        visibility: 'shared',
-        relationLabel: `Shared with ${nm}`,
-        lastUpdatedAt: ts,
-        updatedAt: ts,
-      });
-      store.pushUnitNotification({ unitId: unit.id, text: `Shared with ${nm}`, emoji: '🤝', kind: 'update' });
-
-      // Publish a DISCLOSURE-SAFE snapshot to the shared backend so the other
-      // side can actually join (only open facts + the outward message cross;
-      // ask/private stay local). Degrades to local-only when unreachable.
-      const policy = disclosureForIdentity(cur.identityId);
-      const sharedByName = policy.find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim())?.value?.trim();
-      const row = await shareUnit(
-        {
-          title: cur.title,
-          emoji: cur.emoji,
-          status: unitStatusLine(cur, he),
-          // Everything ONE shares freely — open facts AND open memories; ask /
-          // private stay local.
-          openFacts: [...openDisclosureStrings(policy, he), ...openMemoryStrings(store.memories)],
-          message: cur.drafts?.[0]?.body,
-          sharedByName,
-          providerName: nm,
-        },
-        sharedByName ?? unitIdentity?.name ?? 'ONE',
-      );
-      if (row?.code) {
-        store.updateUnit(unit.id, { shareCode: row.code });
-        store.pushUnitNotification({
-          unitId: unit.id,
-          text: he ? `קוד הצטרפות: ${row.code}` : `Join code: ${row.code}`,
-          emoji: '🔗',
-          kind: 'event',
-        });
-        // Open the conversation: post the outward message (as ONE) so the other
-        // side sees it the moment they join, not just in the static snapshot.
-        const opener = cur.drafts?.[0]?.body?.trim();
-        if (opener) {
-          void postSharedMessage(row.code, sharedByName ?? unitIdentity?.name ?? 'ONE', 'one', opener);
-        }
-      }
-    };
     setPromptConfig({
       title: he ? 'שיתוף עם ONE' : 'Share with a ONE',
       message: he ? 'שם או @כינוי של ה-ONE שתרצה בתהליך הזה.' : 'Name or @handle of the ONE you want on this process.',
       placeholder: he ? 'שם או @כינוי' : 'Name or @handle',
-      onSubmit: (v) => { void apply(v); },
+      onSubmit: (v) => {
+        const nm = v.trim().replace(/^@/, '');
+        if (nm) setPendingShareName(nm);
+      },
     });
+  };
+
+  // Step 2 (only after the user confirms the "what crosses" preview): publish
+  // the DISCLOSURE-SAFE snapshot so the other side can join — only open facts +
+  // open memories + the outward message cross; ask/private stay local. Degrades
+  // to local-only when the backend is unreachable.
+  const publishShare = async (nm: string) => {
+    if (!unit) return;
+    const store = useMvpStore.getState();
+    const cur = store.units.find((u) => u.id === unit.id);
+    if (!cur) return;
+    const already = (cur.people ?? []).some((p) => p.name.toLowerCase() === nm.toLowerCase());
+    const ts = new Date().toISOString();
+    store.updateUnit(unit.id, {
+      people: already
+        ? cur.people
+        : [
+            ...(cur.people ?? []),
+            { id: `p_${Date.now()}`, name: nm, role: 'Shared ONE', connectionType: 'partner' as const },
+          ],
+      visibility: 'shared',
+      relationLabel: `Shared with ${nm}`,
+      lastUpdatedAt: ts,
+      updatedAt: ts,
+    });
+    store.pushUnitNotification({ unitId: unit.id, text: `Shared with ${nm}`, emoji: '🤝', kind: 'update' });
+
+    const policy = disclosureForIdentity(cur.identityId);
+    const sharedByName = policy.find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim())?.value?.trim();
+    const row = await shareUnit(
+      {
+        title: cur.title,
+        emoji: cur.emoji,
+        status: unitStatusLine(cur, he),
+        openFacts: [...openDisclosureStrings(policy, he), ...openMemoryStrings(store.memories)],
+        message: cur.drafts?.[0]?.body,
+        sharedByName,
+        providerName: nm,
+      },
+      sharedByName ?? unitIdentity?.name ?? 'ONE',
+    );
+    if (row?.code) {
+      store.updateUnit(unit.id, { shareCode: row.code });
+      store.pushUnitNotification({
+        unitId: unit.id,
+        text: he ? `קוד הצטרפות: ${row.code}` : `Join code: ${row.code}`,
+        emoji: '🔗',
+        kind: 'event',
+      });
+      // Open the conversation: post the outward message (as ONE) so the other
+      // side sees it the moment they join, not just in the static snapshot.
+      const opener = cur.drafts?.[0]?.body?.trim();
+      if (opener) {
+        void postSharedMessage(row.code, sharedByName ?? unitIdentity?.name ?? 'ONE', 'one', opener);
+      }
+    }
   };
 
   // Deploy a tool from the "+" launcher — build it (tied to this process) and
@@ -1561,6 +1569,43 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
                 draftBody={unit.drafts?.[0]?.body}
                 shareCode={unit.shareCode}
                 onClose={() => setPreviewOpen(false)}
+                colors={colors}
+                lang={lang}
+              />
+            );
+          })()}
+          {/* The share-CONFIRM gate: nothing has crossed yet. Shows exactly what
+              will be exposed to {pendingShareName} and only publishes on confirm. */}
+          {pendingShareName && (() => {
+            const policy = disclosureForIdentity(unit.identityId);
+            const mem = useMvpStore.getState().memories;
+            const openFacts = [...openDisclosureStrings(policy, he), ...openMemoryStrings(mem)];
+            const hiddenCount = countWithheld(policy, mem);
+            const nameFact = policy.find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim());
+            return (
+              <SharedProcessPreview
+                visible
+                emoji={unit.emoji}
+                title={unit.title}
+                status={unitStatusLine(unit, he)}
+                providerName={pendingShareName}
+                sharedByName={nameFact?.value?.trim()}
+                openFacts={openFacts}
+                hiddenCount={hiddenCount}
+                draftBody={unit.drafts?.[0]?.body}
+                busy={sharing}
+                onConfirm={async () => {
+                  if (sharing) return;
+                  setSharing(true);
+                  try {
+                    await publishShare(pendingShareName);
+                  } finally {
+                    setSharing(false);
+                    setPendingShareName(null);
+                    setPreviewOpen(true); // show the live join code to hand over
+                  }
+                }}
+                onClose={() => { if (!sharing) setPendingShareName(null); }}
                 colors={colors}
                 lang={lang}
               />
