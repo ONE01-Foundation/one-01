@@ -87,24 +87,26 @@ const PLANS: PlanDef[] = [
   },
 ];
 
-const ACCENT = '#3B82F6';
+// Plan colours: Pro = silver, Max = gold (matches the ONE profile badge).
+const PLAN_COLOR: Record<PaidTier, string> = { pro: '#9A9CA3', max: '#BF9B30' };
 // How far down you must drag (or how fast you must fling) to dismiss.
 const DISMISS_DISTANCE = 130;
 const DISMISS_VELOCITY = 950;
 
 function PlanIcon({ tier }: { tier: PaidTier }) {
-  // Pro → a filled accent diamond with a spark; Max → a brighter sparkle cluster.
+  const c = PLAN_COLOR[tier];
+  // Pro → a filled silver diamond with a spark; Max → a gold sparkle cluster.
   if (tier === 'max') {
     return (
       <View style={styles.iconWrap}>
-        <Text style={[styles.sparkBig, { color: ACCENT }]}>✦</Text>
-        <Text style={[styles.sparkSmall, { color: ACCENT }]}>✦</Text>
+        <Text style={[styles.sparkBig, { color: c }]}>✦</Text>
+        <Text style={[styles.sparkSmall, { color: c }]}>✦</Text>
       </View>
     );
   }
   return (
     <View style={styles.iconWrap}>
-      <View style={[styles.iconDiamond, { backgroundColor: ACCENT }]} />
+      <View style={[styles.iconDiamond, { backgroundColor: c }]} />
       <Text style={styles.iconDiamondSpark}>✦</Text>
     </View>
   );
@@ -341,7 +343,7 @@ export function SubscriptionPanel({ visible, onClose, reason }: SubscriptionPane
                 <Text style={[styles.featureText, { color: colors.text }, rtlText(lang)]}>
                   {he ? f.he : f.en}
                 </Text>
-                <Text style={[styles.featureCheck, { color: ACCENT }]}>✓</Text>
+                <Text style={[styles.featureCheck, { color: PLAN_COLOR[active.id] }]}>✓</Text>
               </View>
             ))}
           </Animated.View>

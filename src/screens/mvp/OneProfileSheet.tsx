@@ -138,9 +138,9 @@ export function OneProfileSheet({
   // The plan badge shown INLINE next to "ONE" — its own colour per tier.
   const planMeta =
     plan === 'max'
-      ? { word: 'MAX', color: '#8B5CF6' }
+      ? { word: 'MAX', color: '#BF9B30' }   // gold
       : plan === 'pro'
-        ? { word: 'PRO', color: '#3B82F6' }
+        ? { word: 'PRO', color: '#9A9CA3' } // silver
         : { word: 'FREE', color: colors.textSecondary };
   const connectedCount = useMemo(
     () => Object.values(connections).filter(Boolean).length,
@@ -830,6 +830,16 @@ export function OneProfileSheet({
         >
           <CloseIcon size={22} color={colors.text} />
         </Pressable>
+        {/* Settings (gear) — on the corner OPPOSITE the X (trailing side). */}
+        <Pressable
+          onPress={onOpenSettings}
+          hitSlop={10}
+          style={[styles.pillBtn, styles.headerClose, he ? { right: 20 } : { left: 20 }, { backgroundColor: colors.surface }]}
+          accessibilityRole="button"
+          accessibilityLabel={he ? 'הגדרות' : 'Settings'}
+        >
+          <GearIcon size={20} color={colors.text} />
+        </Pressable>
         {/* Compact sticky title — empty at the top (clean header), fades in
             "ONE <PLAN>" once the big title scrolls off. */}
         <Animated.View
@@ -862,26 +872,24 @@ export function OneProfileSheet({
         <View style={styles.heroBlock}>
           <Animated.View style={breathStyle}>
             <View style={styles.oneOrbWrap}>
-              <Orb size={120} eyeLookY={eyeLookY} noShadow />
+              <Orb size={120} eyeLookY={eyeLookY} trackPointer noShadow />
               {/* Live green call ring — shown while a voice call is active, so
                   the call reads as having "moved into" the profile with you.
                   Breathes gently, like the home call ring. */}
               {callActive && (
                 <Animated.View style={[styles.oneCallRing, callRingStyle]} pointerEvents="none" />
               )}
-              {/* ⋯ menu on the orb's corner — opens the options tab (Settings,
-                  Log out, …). MenuIcon is vertical, rotated 90° so it reads as
-                  horizontal dots. */}
+              {/* Pencil on the orb's corner — edit ONE (opens the options tab:
+                  edit profile, customize, …). Settings moved to the gear in the
+                  top header. */}
               <Pressable
                 onPress={() => setMenuOpen(true)}
                 hitSlop={8}
                 style={[styles.editOrbBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 accessibilityRole="button"
-                accessibilityLabel={he ? 'עוד אפשרויות' : 'More options'}
+                accessibilityLabel={he ? 'ערוך' : 'Edit'}
               >
-                <View style={{ transform: [{ rotate: '90deg' }] }}>
-                  <MenuIcon size={17} color={colors.text} />
-                </View>
+                <PencilIcon size={16} color={colors.text} />
               </Pressable>
             </View>
           </Animated.View>
@@ -900,7 +908,7 @@ export function OneProfileSheet({
               accessibilityRole="button"
               accessibilityLabel={planMeta.word}
             >
-              <View style={[styles.planDot, { backgroundColor: planMeta.color }]} />
+              <View style={[styles.planDot, { backgroundColor: colors.text }]} />
               <Text style={[styles.planLabel, { color: planMeta.color }]}>{planMeta.word}</Text>
             </Pressable>
           </View>
@@ -1908,9 +1916,10 @@ const styles = StyleSheet.create({
   },
   spaceActiveName: { fontSize: 14.5, fontWeight: '700', maxWidth: 150 },
   // Plan shown as a coloured dot + word next to ONE (not a boxed badge).
-  planInline: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  planDot: { width: 7, height: 7, borderRadius: 4 },
-  planLabel: { fontSize: 13.5, fontWeight: '700', letterSpacing: 0.3 },
+  planInline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  planDot: { width: 8, height: 8, borderRadius: 4 },
+  // Same size as "ONE", just lighter weight so it reads as secondary.
+  planLabel: { fontSize: 28, fontWeight: '500', letterSpacing: 1 },
   identityLine: {
     fontSize: 14.5,
     fontWeight: '600',

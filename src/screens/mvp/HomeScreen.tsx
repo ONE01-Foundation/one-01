@@ -3798,9 +3798,12 @@ export function HomeScreen({
   // part"; this makes the list appear rather than hard-cut in.
   const processesRevealStyle = useAnimatedStyle(() => {
     const p = scrollY.value / Math.max(1, SNAP_OPEN);
+    // Appear EARLY (by ~30% of the scroll) so there's no long dead stretch of
+    // empty space before the list — it's there as soon as the figure starts
+    // lifting, where the eye already is.
     return {
-      opacity: interpolate(p, [0.14, 0.52], [0, 1], Extrapolation.CLAMP),
-      transform: [{ translateY: interpolate(p, [0, 0.6], [22, 0], Extrapolation.CLAMP) }],
+      opacity: interpolate(p, [0.04, 0.3], [0, 1], Extrapolation.CLAMP),
+      transform: [{ translateY: interpolate(p, [0, 0.4], [18, 0], Extrapolation.CLAMP) }],
     };
   });
 
@@ -4972,6 +4975,8 @@ export function HomeScreen({
                   eyeOpen={heroEyeOpenFinal}
                   outline={ghostMode}
                   alive={!callActive}
+                  // Follow the cursor/finger on web so ONE looks at you.
+                  trackPointer={!callActive}
                   // Before the user connects, ONE wears the DEFAULT face — a
                   // custom skin belongs to a specific account, so it shouldn't
                   // linger into onboarding after a sign-out.
@@ -6086,12 +6091,13 @@ const styles = StyleSheet.create({
   // drops the list clear of the collapsed figure + the top gradient (otherwise
   // the gradient hides the first rows when snapped open).
   processesInline: {
-    // Reserve JUST enough that an empty list can still scroll far enough to reach
-    // SNAP_OPEN and fully collapse the figure — no MORE, so you can't over-scroll
-    // the list up into empty space. (content = HERO_REST_H + this + the dock
-    // paddingBottom must reach SCREEN_H + SNAP_OPEN; SNAP_OPEN = HERO_REST_H − 90
-    // and the dock pad ≈ INPUT_BAR_H + 58, so this ≈ SCREEN_H − 230.)
-    minHeight: SCREEN_H - 230,
+    // Reserve enough to REVEAL + settle the list (and partly collapse the figure),
+    // but NOT the full SNAP_OPEN — so a short list doesn't leave a tall band of
+    // empty space you can scroll into past the content. A long list adds its own
+    // height and collapses the figure the rest of the way. (Full collapse for a
+    // short list is traded away on purpose: there's little to show, so don't make
+    // the user scroll through emptiness to get there.)
+    minHeight: Math.max(240, SCREEN_H - 400),
     paddingHorizontal: 18,
     // A touch more top padding so the FIRST row sits safely behind the composer
     // at rest (the hero spacer is shorter now), then clears the collapsed figure

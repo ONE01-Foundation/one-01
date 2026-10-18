@@ -17,9 +17,9 @@
  *     mechanically synchronised.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Svg, { Circle, Ellipse, Rect, Line, Path, G } from 'react-native-svg';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import Animated, {
   useAnimatedProps,
   useSharedValue,
@@ -120,9 +120,15 @@ export interface OrbProps {
    * only the shadow needs to go. Default false (halo on) for static orbs.
    */
   noShadow?: boolean;
+  /**
+   * Web: the eyes follow the pointer (mouse / touch). ONE looks toward where
+   * the cursor is, relative to its own centre, so the face feels present and
+   * attentive. No-op on native (no global pointer).
+   */
+  trackPointer?: boolean;
 }
 
-export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink, mouth, outline, eyeOpen, alive, skinOverride, noShadow }: OrbProps) {
+export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink, mouth, outline, eyeOpen, alive, skinOverride, noShadow, trackPointer }: OrbProps) {
   const { colors } = useThemeStore();
   // The user's chosen skin (Settings). Skins are accessories + eye-shape, never
   // a colour swap — the face stays the theme's central black.
@@ -177,7 +183,9 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
   // runs its own irregular schedule.
   const lookX = useSharedValue(0);
   useEffect(() => {
-    if (!alive || noBlink) return;
+    // Pointer tracking (below) owns the gaze when on — don't also run the
+    // autonomous glance, or they fight.
+    if (!alive || noBlink || trackPointer) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout>;
     const glance = () => {
@@ -196,16 +204,49 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
       clearTimeout(timer);
       lookX.value = 0;
     };
-  }, [alive, noBlink, lookX]);
-  // The eye group carries the FULL gaze — horizontal glance (lookX) AND the
-  // vertical look (eyeLookY). Everything mounted on the eyes (the eyes
-  // themselves + eyewear like glasses/shades) lives inside this group, so a
-  // pair of glasses rides the eyes instead of hanging fixed while they move.
+  }, [alive, noBlink, trackPointer, lookX]);
+
+  // Pointer gaze (web): the eyes glide toward the cursor / finger, normalised by
+  // distance from ONE's own centre (fully deflected within ~PTR_REF px).
+  const ptrX = useSharedValue(0);
+  const ptrY = useSharedValue(0);
+  const containerRef = useRef<View>(null);
+  useEffect(() => {
+    if (!trackPointer || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const PTR_REF = 190;
+    let raf = 0;
+    const onMove = (e: { clientX: number; clientY: number }) => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = containerRef.current as unknown as { getBoundingClientRect?: () => DOMRect } | null;
+        const rect = el?.getBoundingClientRect?.();
+        if (!rect) return;
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const nx = Math.max(-1, Math.min(1, (e.clientX - cx) / PTR_REF));
+        const ny = Math.max(-1, Math.min(1, (e.clientY - cy) / PTR_REF));
+        ptrX.value = withTiming(nx, { duration: 170, easing: Easing.out(Easing.quad) });
+        ptrY.value = withTiming(ny, { duration: 170, easing: Easing.out(Easing.quad) });
+      });
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      cancelAnimationFrame(raf);
+      ptrX.value = withTiming(0, { duration: 300 });
+      ptrY.value = withTiming(0, { duration: 300 });
+    };
+  }, [trackPointer, ptrX, ptrY]);
+
+  // The eye group carries the FULL gaze — horizontal (pointer or autonomous
+  // glance) AND vertical (eyeLookY scroll + pointer). Everything mounted on the
+  // eyes (the eyes + eyewear) lives inside this group so glasses ride the eyes.
   const eyeGroupProps = useAnimatedProps(() => {
     'worklet';
-    const v = eyeLookY ? eyeLookY.value : 0;
+    const v = (eyeLookY ? eyeLookY.value : 0) + (trackPointer ? ptrY.value : 0);
     const offset = Math.max(-EYE_TRACK_RANGE, Math.min(EYE_TRACK_RANGE, v * EYE_TRACK_RANGE));
-    return { transform: [{ translateX: lookX.value * EYE_LOOK_X }, { translateY: offset }] };
+    const px = trackPointer ? ptrX.value : lookX.value;
+    return { transform: [{ translateX: px * EYE_LOOK_X }, { translateY: offset }] };
   });
   // Headwear (hat / headphones) sits on the HEAD, not the eyes — so it only
   // gets a gentle parallax with the glance (a quarter of the eye travel), which
@@ -277,6 +318,7 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
 
   return (
     <View
+      ref={containerRef}
       style={[
         !noShadow && styles.shadow,
         {
