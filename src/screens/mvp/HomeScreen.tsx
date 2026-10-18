@@ -6092,6 +6092,7 @@ const styles = StyleSheet.create({
   // enough to fully collapse the figure up to the top bar. The top padding
   // drops the list clear of the collapsed figure + the top gradient (otherwise
   // the gradient hides the first rows when snapped open).
+  processesInline: {
     // Reserve just enough that the list can scroll to SNAP_OPEN and land at the
     // top (= SCREEN_H − 230, independent of HERO_REST_H). With the shorter hero
     // spacer the TOTAL scroll to get here is now small (snappy), which is what
