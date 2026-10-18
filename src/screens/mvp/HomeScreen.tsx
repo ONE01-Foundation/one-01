@@ -164,9 +164,11 @@ const TITLE_BAR_H = 78;              // small Orb + identity below it
 // HIGH (right under the composer) yet stay hidden at rest. As the composer drops
 // on scroll the curtain recedes with it, uncovering the list FROM THE TOP — one
 // continuous motion instead of "scroll an empty screen, THEN the list".
-// Hero spacer. Much SHORTER than a screen: the list's first rows start just
-// below the composer, so the home→processes transition is a short single scroll.
-const HERO_REST_H = Math.round(SCREEN_H * 0.6);
+// Hero spacer. Kept SHORT so the home→processes transition is SNAPPY — the list
+// lands in place after a short scroll instead of a long drag through empty space.
+// (The resting figure is an absolute overlay at HERO_CENTER_TOP, independent of
+// this, so shrinking the spacer shortens the scroll without moving the figure.)
+const HERO_REST_H = Math.round(SCREEN_H * 0.46);
 // Full-open scroll distance — coupled to HERO_REST_H so the figure finishes
 // collapsing to the top bar at the SAME point the list lands in its final
 // position (one continuous motion, no snap needed to "complete" it).
@@ -6090,14 +6092,11 @@ const styles = StyleSheet.create({
   // enough to fully collapse the figure up to the top bar. The top padding
   // drops the list clear of the collapsed figure + the top gradient (otherwise
   // the gradient hides the first rows when snapped open).
-  processesInline: {
-    // Reserve enough to REVEAL + settle the list (and partly collapse the figure),
-    // but NOT the full SNAP_OPEN — so a short list doesn't leave a tall band of
-    // empty space you can scroll into past the content. A long list adds its own
-    // height and collapses the figure the rest of the way. (Full collapse for a
-    // short list is traded away on purpose: there's little to show, so don't make
-    // the user scroll through emptiness to get there.)
-    minHeight: Math.max(240, SCREEN_H - 400),
+    // Reserve just enough that the list can scroll to SNAP_OPEN and land at the
+    // top (= SCREEN_H − 230, independent of HERO_REST_H). With the shorter hero
+    // spacer the TOTAL scroll to get here is now small (snappy), which is what
+    // the user picked over "no empty band under a short list".
+    minHeight: SCREEN_H - 230,
     paddingHorizontal: 18,
     // A touch more top padding so the FIRST row sits safely behind the composer
     // at rest (the hero spacer is shorter now), then clears the collapsed figure
