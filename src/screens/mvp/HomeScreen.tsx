@@ -653,6 +653,20 @@ export function HomeScreen({
   const identities = useMvpStore((s) => s.identities);
   const activeIdentityId = useMvpStore((s) => s.activeIdentityId);
   const setActiveIdentity = useMvpStore((s) => s.setActiveIdentity);
+  const addIdentity = useMvpStore((s) => s.addIdentity);
+  // Space (identity) labels + emoji by type — shown in the space pill row that
+  // headers the revealed processes list. "+" adds the next missing space type.
+  const SPACE_META: Record<string, { label: string; emoji: string }> = {
+    personal: { label: 'אישי', emoji: '🏠' },
+    business: { label: 'עסקי', emoji: '💼' },
+    family: { label: 'משפחה', emoji: '👨‍👩‍👧' },
+  };
+  const addNextSpace = useCallback(() => {
+    const have = new Set(identities.map((i) => i.type));
+    const next = (['business', 'family', 'personal'] as const).find((t) => !have.has(t)) ?? 'personal';
+    haptic.select();
+    addIdentity(next);
+  }, [identities, addIdentity]);
 
   // First-time users haven't completed onboarding. Their broadcast loop is
   // the "Hi, I'm ONE…" intro that previously lived on WelcomeScreen — the
@@ -4848,6 +4862,32 @@ export function HomeScreen({
                 // the ScrollView from scrolling (scroll lives on the parent), so
                 // you can still scroll down to reveal + then tap the real cards.
                 <Animated.View style={[styles.processesInline, processesRevealStyle]} pointerEvents={curtainBlocks ? 'none' : 'auto'}>
+                  {/* Space (identity) switcher — headers the revealed list. Tapping
+                      a space filters the list to it (units are scoped per identity);
+                      "+ מרחב" adds the next space. */}
+                  <View style={[styles.spaceRow, rtlRow(lang)]}>
+                    {identities.map((idn) => {
+                      const active = idn.id === activeIdentityId;
+                      const meta = SPACE_META[idn.type] ?? { label: 'מרחב', emoji: '•' };
+                      const label = idn.name && idn.name.trim() ? idn.name : meta.label;
+                      return (
+                        <Pressable
+                          key={idn.id}
+                          onPress={() => { haptic.select(); setActiveIdentity(idn.id); }}
+                          style={[
+                            styles.spacePill,
+                            { borderColor: active ? colors.circle : colors.border, backgroundColor: active ? colors.circle : colors.surface },
+                          ]}
+                        >
+                          <Text style={styles.spaceEmoji}>{meta.emoji}</Text>
+                          <Text style={[styles.spacePillTxt, { color: active ? colors.background : colors.text }]}>{label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                    <Pressable onPress={addNextSpace} style={[styles.spaceAdd, { borderColor: colors.border }]}>
+                      <Text style={[styles.spacePillTxt, { color: colors.textSecondary }]}>+ מרחב</Text>
+                    </Pressable>
+                  </View>
                   {processesContent}
                 </Animated.View>
               )}
@@ -6113,6 +6153,34 @@ const styles = StyleSheet.create({
     maxWidth: CONTENT_MAX_W,
     alignSelf: 'center',
   },
+  // Space (identity) switcher row at the top of the revealed list.
+  spaceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+    paddingHorizontal: 2,
+  },
+  spacePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+  },
+  spaceAdd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+  },
+  spaceEmoji: { fontSize: 13 },
+  spacePillTxt: { fontSize: 13.5, fontWeight: '600' },
   emptyCardsState: {
     minHeight: SNAP_OPEN,
     alignItems: 'center',

@@ -237,6 +237,9 @@ interface MvpStore {
   setAgentSkin: (id: string) => void;
   setAgentPersonality: (id: string) => void;
   setActiveIdentity: (id: string) => void;
+  /** Create a new space (identity) and switch to it. Units are scoped per
+   *  identity, so switching is what filters the home list to that space. */
+  addIdentity: (type: IdentityType, name?: string) => void;
   addUnits: (units: Unit[]) => void;
   addUnit: (unit: Unit) => void;
   updateUnit: (id: string, patch: Partial<Unit>) => void;
@@ -473,6 +476,15 @@ export const useMvpStore = create<MvpStore>()(
       setAgentSkin: (agentSkin) => set({ agentSkin }),
       setAgentPersonality: (agentPersonality) => set({ agentPersonality }),
       setActiveIdentity: (activeIdentityId) => set({ activeIdentityId }),
+      addIdentity: (type, name = '') =>
+        set((s) => {
+          const now = new Date().toISOString();
+          const id = `identity_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+          const ident: Identity = {
+            id, name, type, initials: '', updateCount: 0, createdAt: now, updatedAt: now,
+          };
+          return { identities: [...s.identities, ident], activeIdentityId: id };
+        }),
       addUnits: (incoming) =>
         set((s) => ({ units: sortByAttention([...s.units, ...incoming]) })),
       addUnit: (unit) => set((s) => ({ units: sortByAttention([...s.units, unit]) })),
