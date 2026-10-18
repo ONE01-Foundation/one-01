@@ -3788,6 +3788,18 @@ export function HomeScreen({
       if (prev !== null && blocks !== prev) runOnJS(setCurtainBlocks)(blocks);
     },
   );
+  // Cabinet-open reveal for the processes list. As the figure lifts to the
+  // header and the composer drops (the "doors part"), the list doesn't just
+  // slide up — it FADES in and rises a touch from below, so it reads as being
+  // uncovered in place. Past the reveal it's fully solid and scrolls normally.
+  const REVEAL_RISE = 34;
+  const processesRevealStyle = useAnimatedStyle(() => {
+    const p = scrollY.value / Math.max(1, SNAP_OPEN);
+    return {
+      opacity: interpolate(p, [0.08, 0.5], [0, 1], Extrapolation.CLAMP),
+      transform: [{ translateY: interpolate(p, [0, 0.62], [REVEAL_RISE, 0], Extrapolation.CLAMP) }],
+    };
+  });
 
   /*
    * Fusion animation (Home → Processes):
@@ -4835,9 +4847,9 @@ export function HomeScreen({
                 // underneath and opens it. pointerEvents:none here does NOT stop
                 // the ScrollView from scrolling (scroll lives on the parent), so
                 // you can still scroll down to reveal + then tap the real cards.
-                <View style={styles.processesInline} pointerEvents={curtainBlocks ? 'none' : 'auto'}>
+                <Animated.View style={[styles.processesInline, processesRevealStyle]} pointerEvents={curtainBlocks ? 'none' : 'auto'}>
                   {processesContent}
-                </View>
+                </Animated.View>
               )}
             </Animated.ScrollView>
             </GestureDetector>
