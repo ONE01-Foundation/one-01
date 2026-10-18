@@ -7,7 +7,7 @@
  * user a sensible starting policy they can tune in the ONE profile.
  */
 
-import type { DisclosureField } from '../../core/mvp/types';
+import type { DisclosureField, MemoryItem } from '../../core/mvp/types';
 
 /** System-field key → localized label. User-added fields store a literal label. */
 export const SYSTEM_DISCLOSURE_LABELS: Record<string, { he: string; en: string }> = {
@@ -56,4 +56,32 @@ export function openDisclosureStrings(
   return (fields ?? [])
     .filter((d) => d.tier === 'open' && d.value && d.value.trim())
     .map((d) => `${disclosureLabel(d, he)}: ${d.value!.trim()}`);
+}
+
+/**
+ * The memories ONE may represent freely outward — the 'open' tier only, as the
+ * raw text. Mirrors openDisclosureStrings: this is what may cross into a drafted
+ * message or a shared snapshot. Untiered/older memories read as 'private', so by
+ * default a memory NEVER leaves until the user marks it open — 'ask' (needs
+ * approval) and 'private' (never) are both withheld from outward prose.
+ */
+export function openMemoryStrings(memories: MemoryItem[] | undefined): string[] {
+  return (memories ?? [])
+    .filter((m) => (m.tier ?? 'private') === 'open' && m.text && m.text.trim())
+    .map((m) => m.text.trim());
+}
+
+/**
+ * How many FILLED details ONE is withholding across both facts and memories —
+ * everything with content whose tier is not 'open'. Powers the honest
+ * "N details stay private" line on the shared-process preview so the count
+ * reflects memories too, not just disclosure fields.
+ */
+export function countWithheld(
+  fields: DisclosureField[] | undefined,
+  memories: MemoryItem[] | undefined,
+): number {
+  const f = (fields ?? []).filter((d) => !!d.value?.trim() && d.tier !== 'open').length;
+  const m = (memories ?? []).filter((x) => !!x.text?.trim() && (x.tier ?? 'private') !== 'open').length;
+  return f + m;
 }

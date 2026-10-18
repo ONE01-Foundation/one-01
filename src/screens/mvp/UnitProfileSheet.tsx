@@ -78,7 +78,7 @@ import { BottomSheet } from '../../components/mvp/BottomSheet';
 import { Orb } from '../../components/mvp/Orb';
 import { generateUnitReply } from '../../utils/mvpChatReply';
 import { invokeOneIntent } from '../../services/aiChat';
-import { openDisclosureStrings, disclosureLabel, DEFAULT_DISCLOSURE } from '../../data/mvp/disclosure';
+import { openDisclosureStrings, openMemoryStrings, countWithheld, disclosureLabel, DEFAULT_DISCLOSURE } from '../../data/mvp/disclosure';
 import { unitFromIntent, findSimilarUnit } from '../../utils/intentToUnit';
 import { resolveReminderDue } from '../../utils/reminderTime';
 import { TypingIndicator } from '../../components/mvp/TypingIndicator';
@@ -1181,7 +1181,11 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     try {
       const intent = await invokeOneIntent(prompt, {
         voiceStyle: personalityPrompt(store.agentPersonality, lang),
-        userMemories: store.memories.map((m) => m.text),
+        // A draft is OUTWARD prose to a third party, so only OPEN-tier memories
+        // may inform it — mirrors userDisclosure. This stops a memory the user
+        // marked private/ask from being woven into the body itself (DraftCard's
+        // chip strip only governs the appended details block, not the AI text).
+        userMemories: openMemoryStrings(store.memories),
         userDisclosure: openDisclosureStrings(disclosureForIdentity(cur.identityId), lang === 'he'),
         activeUnit: {
           title: cur.title,
@@ -1260,7 +1264,9 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
           title: cur.title,
           emoji: cur.emoji,
           status: unitStatusLine(cur, he),
-          openFacts: openDisclosureStrings(policy, he),
+          // Everything ONE shares freely — open facts AND open memories; ask /
+          // private stay local.
+          openFacts: [...openDisclosureStrings(policy, he), ...openMemoryStrings(store.memories)],
           message: cur.drafts?.[0]?.body,
           sharedByName,
           providerName: nm,
@@ -1538,8 +1544,9 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
           />
           {previewOpen && (() => {
             const policy = disclosureForIdentity(unit.identityId);
-            const openFacts = openDisclosureStrings(policy, he);
-            const hiddenCount = policy.filter((d) => !!d.value?.trim() && d.tier !== 'open').length;
+            const mem = useMvpStore.getState().memories;
+            const openFacts = [...openDisclosureStrings(policy, he), ...openMemoryStrings(mem)];
+            const hiddenCount = countWithheld(policy, mem);
             const nameFact = policy.find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim());
             return (
               <SharedProcessPreview
