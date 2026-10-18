@@ -39,14 +39,14 @@ const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const AnimatedG = Animated.createAnimatedComponent(G);
 
 // Eye geometry in the 64×64 viewBox.
-// Eyes spread wide (cx 23 / 41) so the face reads less cramped.
-// Eyes pulled in one notch (7 → 6) per latest design — a touch smaller for
-// a cleaner face. ry stays equal to rx so the eye remains a circle when open.
+// Eyes are slightly TALLER than wide (ry > rx) — the softer, more "alive" oval
+// from the concept demo — and sit a touch more centred (cy 31) and a hair closer
+// together than before. Accessories (glasses) derive from these, so they track.
 const EYE_RX = 6;            // horizontal radius (stays put)
-const EYE_RY_OPEN = 6;       // vertical radius when open
+const EYE_RY_OPEN = 7;       // vertical radius when open — taller oval, per demo
 const EYE_RY_BLINK = 0.6;    // vertical radius mid-blink (squashed thin)
-const EYE_CY = 29;
-const EYE_CX_LEFT = 23;
+const EYE_CY = 31;
+const EYE_CX_LEFT = 24;
 const EYE_CX_RIGHT = 41;
 
 // How far the eyes can drift up/down in the viewBox (per unit of eyeLookY).
