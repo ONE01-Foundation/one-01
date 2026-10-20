@@ -232,6 +232,14 @@ export interface OneIntent {
     quickActions?: string[];
     /** Tags for classification (health / learning / business / home / travel / legal). */
     tags?: string[];
+    /**
+     * The SPACE this process belongs to — ONE routes a new intent to the right
+     * context instead of always the active one. 'personal' (default), 'business'
+     * (anything done AS a business / for customers / work), or 'family' (a
+     * household/relative matter). The app maps this to an existing identity of
+     * that type; if none exists it stays in the active space.
+     */
+    space?: 'personal' | 'business' | 'family';
   };
   /** Embedded task. Present iff kind === 'extract_task'. */
   task?: {
@@ -420,6 +428,12 @@ export async function invokeOneIntent(
      * representative core: ONE represents you, it doesn't impersonate you.
      */
     userDisclosure?: string[];
+    /**
+     * The user's SPACES (identities), so ONE can route a new process to the
+     * right context instead of always the active one. The app maps the chosen
+     * `process.space` back to an identity of that type.
+     */
+    spaces?: Array<{ type: 'personal' | 'business' | 'family'; name: string; active?: boolean }>;
   } = {},
 ): Promise<OneIntent> {
   const client = supabaseService.getClient();
@@ -509,12 +523,22 @@ export async function invokeOneIntent(
         : `Details you're authorized to represent on the user's behalf (selective disclosure). Use them when you write or act FOR them toward someone else — e.g. filling in a draft. Never invent details, and never disclose anything not in this list:\n${shareable}`,
     );
   }
+  if (context.spaces && context.spaces.length > 1) {
+    const list = context.spaces
+      .map((sp) => `- ${sp.type}${sp.name ? ` ("${sp.name}")` : ''}${sp.active ? (lang === 'he' ? ' ← פעיל כעת' : ' ← active now') : ''}`)
+      .join('\n');
+    ctxBits.push(
+      lang === 'he'
+        ? `למשתמש יש כמה מרחבים (הקשרים נפרדים):\n${list}\n\nכשאתה יוצר תהליך, קבע את "process.space" למרחב הנכון: 'business' לכל מה שקשור לעסק/לקוחות/עבודה, 'family' לענייני משפחה/בית, אחרת 'personal'. ברירת מחדל = המרחב הפעיל כשאין רמז ברור. בחר מרחב קיים מהרשימה.`
+        : `The user has several spaces (separate contexts):\n${list}\n\nWhen you create a process, set "process.space" to the right one: 'business' for anything work/customer/business-related, 'family' for household/relatives, otherwise 'personal'. Default to the active space when there's no clear signal. Pick an existing space from the list.`,
+    );
+  }
   const schemaInstructions = lang === 'he'
     ? `החזר JSON בלבד עם השדות הבאים:
 {
   "kind": "chat" | "create_process" | "decision" | "extract_task" | "add_reminder" | "missing_info" | "draft_message" | "update_process" | "deploy_tool",
   "reply": "תשובה במשפט אחד, מקסימום שניים, בעברית, מסתיימת בצעד הבא הברור או בשאלה אחת.",
-  "process": { "title": "...", "emoji": "💪", "broadcast": "...", "nextSteps": ["..."], "metrics": [{"label":"עלות משוערת","value":"≈4,000","unit":"₪"},{"label":"זמן רישום","value":"7–14","unit":"ימים"}], "quickActions": ["..."], "tags": ["health"] },
+  "process": { "title": "...", "emoji": "💪", "broadcast": "...", "nextSteps": ["..."], "metrics": [{"label":"עלות משוערת","value":"≈4,000","unit":"₪"},{"label":"זמן רישום","value":"7–14","unit":"ימים"}], "quickActions": ["..."], "tags": ["health"], "space": "personal" },
   "task": { "action": "...", "contact": "...", "when": "...", "processHint": "..." },
   "decision": { "text": "...", "processHint": "..." },
   "reminder": { "text": "להתקשר למורה", "when": "מחר ב-9", "processHint": "..." },
@@ -535,7 +559,7 @@ export async function invokeOneIntent(
 {
   "kind": "chat" | "create_process" | "decision" | "extract_task" | "add_reminder" | "missing_info" | "draft_message" | "update_process" | "deploy_tool",
   "reply": "1–2 short sentences, ends with the next concrete step or a single clarifying question.",
-  "process": { "title": "...", "emoji": "💪", "broadcast": "...", "nextSteps": ["..."], "metrics": [{"label":"Est. cost","value":"≈$1,200","unit":""},{"label":"Time to file","value":"7–14","unit":"days"}], "quickActions": ["..."], "tags": ["health"] },
+  "process": { "title": "...", "emoji": "💪", "broadcast": "...", "nextSteps": ["..."], "metrics": [{"label":"Est. cost","value":"≈$1,200","unit":""},{"label":"Time to file","value":"7–14","unit":"days"}], "quickActions": ["..."], "tags": ["health"], "space": "personal" },
   "task": { "action": "...", "contact": "...", "when": "...", "processHint": "..." },
   "decision": { "text": "...", "processHint": "..." },
   "reminder": { "text": "Call the instructor", "when": "tomorrow 9am", "processHint": "..." },

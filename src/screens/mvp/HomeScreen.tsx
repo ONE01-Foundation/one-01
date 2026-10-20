@@ -94,6 +94,7 @@ import { invokeOneIntent, invokeAttentionLines } from '../../services/aiChat';
 import { openDisclosureStrings } from '../../data/mvp/disclosure';
 import { oneHomeMessages } from '../../utils/oneOpener';
 import { unitFromIntent, findSimilarUnit, buildProcessOpener } from '../../utils/intentToUnit';
+import { resolveSpaceIdentityId, inferSpaceFromText, spaceLabel } from '../../utils/spaceRouting';
 import { matchMetricIndex, completeStepsFromUpdates } from '../../utils/metricMatch';
 import { localOneIntent, cleanProcessTitle, metricQuestion } from '../../utils/localIntent';
 import {
@@ -1821,6 +1822,8 @@ export function HomeScreen({
             emoji: u.emoji,
             tags: u.tagIds,
           })),
+          // The user's spaces, so ONE can ROUTE a new process to the right one.
+          spaces: identities.map((i) => ({ type: i.type, name: i.name, active: i.id === activeIdentityId })),
         });
         reply = intent.reply;
         if (intent.kind === 'create_process') {
@@ -1860,16 +1863,30 @@ export function HomeScreen({
               ? `הוספתי ל-${target.title}. ${intent.reply}`
               : `Added to ${target.title}. ${intent.reply}`;
           } else {
+            // ROUTE to the right space: ONE proposes `process.space`; map it to
+            // an existing identity of that type (else the active one).
+            const activeId = identity?.id ?? activeIdentityId;
+            const targetIdentityId = resolveSpaceIdentityId(intent.process?.space, identities, activeId);
+            const routed = targetIdentityId !== activeId;
             // Born RICH: take the AI's process and enrich the thin sections
             // from the matching domain archetype (a real starter plan, metric
             // scaffolding, advice insights, a just-started progress bar) so a
             // new process never opens as a bare title.
             const base =
-              unitFromIntent(intent, identity?.id ?? '', lang) ??
-              desireToUnit(value, identity?.id ?? undefined);
+              unitFromIntent(intent, targetIdentityId, lang) ??
+              desireToUnit(value, targetIdentityId);
             const created = enrichUnitFromArchetype(base, value, lang);
             addUnit(created);
             createdUnitId = created.id;
+            // When ONE routed the process to a DIFFERENT space, say so (the user
+            // can move it back via the card's space chip).
+            if (routed) {
+              const t = identities.find((i) => i.id === targetIdentityId)?.type ?? 'personal';
+              const sp = spaceLabel(t, /[֐-׿]/.test(value));
+              reply = /[֐-׿]/.test(value)
+                ? `פתחתי את זה במרחב ${sp}. ${intent.reply}`
+                : `Opened this in your ${sp} space. ${intent.reply}`;
+            }
             // Intent → reality: a process was just born. Mark it with a
             // success tap so the moment is felt, not just seen.
             haptic.success();
@@ -2255,11 +2272,17 @@ export function HomeScreen({
           // business / travel) → the FULLY-BILINGUAL archetype so steps+metrics
           // read in the message's language. Otherwise the generic desire→unit
           // path (enriched) for anything unrecognised.
+          // ROUTE to the right space from keywords (no AI here) — business /
+          // family / else the active space.
+          const activeId = identity?.id ?? activeIdentityId;
+          const localSpaceHint = inferSpaceFromText(value);
+          const targetId = resolveSpaceIdentityId(localSpaceHint, identities, activeId);
+          const localRouted = targetId !== activeId;
           const archKey = detectArchetypeStrict(value);
           const enriched = archKey
-            ? generateRichUnit(value, identity?.id ?? 'identity_ariel', cLang)
+            ? generateRichUnit(value, targetId, cLang)
             : enrichUnitFromArchetype(
-                desireToUnit(value, identity?.id ?? undefined),
+                desireToUnit(value, targetId),
                 value,
                 cLang,
               );
@@ -2272,6 +2295,7 @@ export function HomeScreen({
           // through the conversation (matches "build it together").
           const created = {
             ...enriched,
+            identityId: targetId,
             title: cleanProcessTitle(value, contentHe),
             nextSteps: (enriched.nextSteps ?? []).map((s) => ({ ...s, done: false })),
             progress: enriched.progress ? { ...enriched.progress, current: 0 } : enriched.progress,
@@ -2317,9 +2341,15 @@ export function HomeScreen({
             pendingFillRef.current = { unitId: created.id, metricLabel: firstEmptyMetric.label };
           }
           const firstStep = created.nextSteps?.[0]?.title;
+          const routedNote = localRouted
+            ? (() => {
+                const t = identities.find((i) => i.id === targetId)?.type ?? 'personal';
+                return contentHe ? `במרחב ${spaceLabel(t, true)}: ` : `In your ${spaceLabel(t, false)} space: `;
+              })()
+            : '';
           reply = contentHe
-            ? `פתחתי את ${created.emoji} ${created.title} 👇${firstEmptyMetric ? ` בוא נמלא אותו יחד — ${metricQuestion(firstEmptyMetric.label, true)}` : firstStep ? ` התחלתי עם "${firstStep}". נתחיל מזה?` : ' מאיפה נתחיל?'}`
-            : `Opened ${created.emoji} ${created.title} 👇${firstEmptyMetric ? ` Let's fill it in together — ${metricQuestion(firstEmptyMetric.label, false)}` : firstStep ? ` I started with "${firstStep}". Begin there?` : ' Where shall we start?'}`;
+            ? `${routedNote}פתחתי את ${created.emoji} ${created.title} 👇${firstEmptyMetric ? ` בוא נמלא אותו יחד — ${metricQuestion(firstEmptyMetric.label, true)}` : firstStep ? ` התחלתי עם "${firstStep}". נתחיל מזה?` : ' מאיפה נתחיל?'}`
+            : `${routedNote}Opened ${created.emoji} ${created.title} 👇${firstEmptyMetric ? ` Let's fill it in together — ${metricQuestion(firstEmptyMetric.label, false)}` : firstStep ? ` I started with "${firstStep}". Begin there?` : ' Where shall we start?'}`;
         } else if (li.kind === 'draft_message' && li.draft?.body) {
           const draftObj = {
             id: `dr_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
