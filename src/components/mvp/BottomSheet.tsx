@@ -27,6 +27,7 @@ import GorhomBottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { EdgeBars } from './EdgeBars';
 import Animated, {
   useSharedValue,
   useAnimatedReaction,
@@ -469,12 +470,32 @@ export function BottomSheet({
           ]}
         >
           {bypassDefaultView ? (
-            children
+            // Children stay DIRECT children of gorhom (the bypass contract). The
+            // desktop in-card bottom fade is an absolutely-positioned sibling —
+            // it tucks the scroll content under the card's rounded bottom edge,
+            // INSIDE the mask (mobile keeps its screen-pinned overlay fade).
+            <>
+              {children}
+              {isDesktop && !enableDynamicSizing && (
+                <EdgeBars top={false} bottomHeight={84} style={styles.desktopFade} />
+              )}
+            </>
           ) : (
             // Dynamic-sizing sheets must NOT flex:1 (gorhom measures the natural
             // content height); fixed-snap sheets flex:1 to fill the detent.
-            <BottomSheetView style={[enableDynamicSizing ? styles.contentDynamic : styles.content, sheetStyle]}>
+            <BottomSheetView
+              style={[
+                enableDynamicSizing ? styles.contentDynamic : styles.content,
+                // DESKTOP: clip the content to the rounded card so the scroll
+                // content AND the edge-fade gradients live INSIDE the card mask.
+                isDesktop && styles.contentDesktopMask,
+                sheetStyle,
+              ]}
+            >
               {children}
+              {isDesktop && !enableDynamicSizing && (
+                <EdgeBars top={false} bottomHeight={84} style={styles.desktopFade} />
+              )}
             </BottomSheetView>
           )}
         </GorhomBottomSheet>
@@ -523,4 +544,8 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   // Dynamic sizing: no flex, so the view reports its natural content height.
   contentDynamic: {},
+  // Desktop: clip children + fades to the rounded card mask.
+  contentDesktopMask: { overflow: 'hidden', borderRadius: 24 },
+  // The in-card bottom fade sits above the content but below interactive chrome.
+  desktopFade: { zIndex: 6 },
 });

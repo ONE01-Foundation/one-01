@@ -66,6 +66,9 @@ export function SettingsSheet({
 }: SettingsSheetProps) {
   const { colors, preference, setPreference } = useThemeStore();
   const { language, setLanguage } = useLocaleStore();
+  // Desktop shows the sheet as a centered card; the bottom edge-fade then lives
+  // INSIDE the card (via BottomSheet), so skip the screen-pinned one here.
+  const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 768;
   const reset = useMvpStore((s) => s.reset);
   const name = useMvpStore((s) => s.name);
   const units = useMvpStore((s) => s.units);
@@ -162,8 +165,8 @@ export function SettingsSheet({
           <>
             {/* Screen-pinned bottom fade so content scrolls into a soft bar at
                 the sheet's bottom edge — matches the profile / unit / global
-                sheets. */}
-            <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />
+                sheets. On desktop the card gets an in-card fade instead. */}
+            {!isDesktop && <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />}
             <SubscriptionPanel
               visible={subscriptionOpen}
               onClose={() => setSubscriptionOpen(false)}

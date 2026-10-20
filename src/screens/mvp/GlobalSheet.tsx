@@ -21,6 +21,8 @@ import {
   Pressable,
   ScrollView,
   Alert,
+  Platform,
+  Dimensions,
 } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { SpaceSwitcher } from '../../components/mvp/SpaceSwitcher';
@@ -88,6 +90,9 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
   const { colors } = useThemeStore();
   const lang = useLanguage();
   const he = lang === 'he';
+  // Desktop = centered card; its bottom edge-fade lives INSIDE the card (via
+  // BottomSheet), so the screen-pinned one is skipped there.
+  const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 768;
   const identity = useActiveIdentity();
   const activeIdentityId = useMvpStore((s) => s.activeIdentityId);
   const addUnit = useMvpStore((s) => s.addUnit);
@@ -211,10 +216,9 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
       bypassDefaultView={true}
       onDragDismissCross={() => haptic.press()}
       overlay={
-        /* Screen-pinned bottom fade — content scrolls into it. (The floating
-           "talk to ONE" input was removed from Global; you talk to ONE from the
-           Home box — tapping a want/row here still hands it to ONE via askOne.) */
-        <EdgeBars top={false} bottomHeight={110} style={{ zIndex: 5 }} />
+        /* Screen-pinned bottom fade — content scrolls into it. On desktop the
+           card gets an in-card fade instead (via BottomSheet). */
+        !isDesktop ? <EdgeBars top={false} bottomHeight={110} style={{ zIndex: 5 }} /> : null
       }
       sheetStyle={styles.sheet}
     >

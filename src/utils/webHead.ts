@@ -65,6 +65,42 @@ function ensureStatusBarCap(bgColor: string) {
   cap.style.background = bgColor;
 }
 
+// A refined, minimal scrollbar for the desktop web app: just a subtle thin
+// thumb line — no arrow buttons, no track background. Firefox uses the
+// scrollbar-width/color props; WebKit/Blink the ::-webkit-scrollbar rules.
+// The thumb colour is passed per theme (light thumb on dark, dark on light).
+function ensureScrollbarStyle(thumb: string) {
+  let el = document.getElementById('__one_scrollbar') as HTMLStyleElement | null;
+  if (!el) {
+    el = document.createElement('style');
+    el.id = '__one_scrollbar';
+    document.head.appendChild(el);
+  }
+  el.textContent = `
+    * { scrollbar-width: thin; scrollbar-color: ${thumb} transparent; }
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: ${thumb};
+      border-radius: 4px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: ${thumb}; }
+    ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+  `;
+}
+
+/** Rough luminance of a #rrggbb so we can pick a thumb that shows on the bg. */
+function isDarkHex(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+}
+
 let touchIconDone = false;
 function ensureTouchIcon() {
   if (touchIconDone) return;
@@ -104,6 +140,7 @@ export function applyWebHead(bgColor: string) {
   ensureViewportFlags();
   ensureTouchIcon();
   ensureStatusBarCap(bgColor);
+  ensureScrollbarStyle(isDarkHex(bgColor) ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)');
   // Paint the document itself the app colour so any safe-area band shows cream,
   // not the browser's default white. (No body scroll-lock — it interfered with
   // the on-screen keyboard on iOS; in-app ScrollViews handle their own scroll.)

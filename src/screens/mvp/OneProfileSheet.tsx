@@ -21,6 +21,7 @@ import {
   ScrollView,
   Keyboard,
   Platform,
+  Dimensions,
   TextInput,
   Alert,
   type KeyboardEvent,
@@ -109,6 +110,9 @@ export function OneProfileSheet({
   const { colors } = useThemeStore();
   const t = useT();
   const lang = useLanguage();
+  // Desktop = centered card; its bottom edge-fade lives INSIDE the card (via
+  // BottomSheet), so the screen-pinned one is skipped there.
+  const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 768;
   const he = lang === 'he';
   const insets = useSafeAreaInsets();
   const identity = useActiveIdentity();
@@ -793,7 +797,7 @@ export function OneProfileSheet({
               snap (incl. the half card), BEHIND the profile-switcher dock
               (zIndex 10). Rendered in the overlay (not content) so it doesn't
               hang off-screen at the low snap. */}
-          <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />
+          {!isDesktop && <EdgeBars top={false} bottomHeight={130} style={{ zIndex: 5 }} />}
           {switcherDockNode}
           {/* Close is the top-corner Global-style X (see topHeader) — no bottom
               close dock any more. */}
