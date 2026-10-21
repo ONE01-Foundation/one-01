@@ -2376,19 +2376,22 @@ footer {
   margin-top: 0;
   margin-bottom: 76px;
 }
+/* Muted on the black footer — a subtle dark card instead of bright cream, so it
+   sits calmly on #121212 rather than popping. */
 .foot-news .news-card {
-  background: #f5f4f0;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 .foot-news .news-card-title {
-  color: #0a0a0a;
+  color: rgba(245, 244, 240, 0.92);
 }
 .foot-news .news-tag {
-  background: #e7e6e0;
-  color: #5b5b5b;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(245, 244, 240, 0.6);
 }
 .foot-news .news-date {
-  color: #8a8a86;
+  color: rgba(245, 244, 240, 0.4);
 }
 
 /* ─── newsroom marquee — a row of update cards that slides sideways ──────

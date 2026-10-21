@@ -54,8 +54,11 @@ export function Orb({
         </>
       ) : (
         <>
-          <circle className={eyeClass} cx={lx} cy={cy} r={eyeR} fill={eyeColor} />
-          <circle className={eyeClass} cx={rx} cy={cy} r={eyeR} fill={eyeColor} />
+          {/* Taller-than-wide "egg" eyes, matching the mobile product's oval
+              eyes. ellipse keeps cx/cy (so the LivingFigure gaze animation and
+              the blink still drive it). */}
+          <ellipse className={eyeClass} cx={lx} cy={cy} rx={eyeR} ry={eyeR * 1.3} fill={eyeColor} />
+          <ellipse className={eyeClass} cx={rx} cy={cy} rx={eyeR} ry={eyeR * 1.3} fill={eyeColor} />
         </>
       )}
     </svg>
