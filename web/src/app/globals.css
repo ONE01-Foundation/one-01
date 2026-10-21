@@ -133,10 +133,12 @@ html {
 .lhero-chev.down {
   position: absolute;
   left: 50%;
-  margin-left: -17px;
-  width: 34px;
-  height: 34px;
-  color: var(--text-2);
+  margin-left: -22px;
+  width: 44px;
+  height: 44px;
+  /* More prominent — full ink + bigger so the "scroll for more" hint reads
+     clearly instead of a faint grey tick. */
+  color: var(--text);
 }
 /* Gateway hints — pulled in from the screen edge toward the centred hero.
    The BUTTON carries only the scroll fade (it clears early as ONE collapses;

@@ -9,7 +9,7 @@ export function Orb({
   eyeColor = "#F5F4F0",
   look = 0,
   gaze = 0,
-  eyeR = 8,
+  eyeR = 10.7,
   alive = false,
   closed = false,
   blank = false,
@@ -30,12 +30,15 @@ export function Orb({
   blank?: boolean;
   className?: string;
 }) {
-  // Eye geometry in a 100×100 viewBox.
-  const cy = 45 + look * 6;
-  const cx = 16 + gaze * 5;
+  // Eye geometry in a 100×100 viewBox, mapped from the mobile PRODUCT Orb
+  // (64-viewBox, face r=28, eyes rx=6 ry=7 at cx 24/41 cy 31) by the face-radius
+  // ratio 50/28 so the eyes are IDENTICAL in size + position to the product:
+  //   rx≈10.7, ry≈12.5, cy≈48.2, cx≈35.7 / 66.1.
+  const cy = 48.2 + look * 6;
+  const gz = gaze * 5;
   const eyeClass = alive ? "orb-eye" : undefined;
-  const lx = 34 + cx - 16;
-  const rx = 66 + cx - 16;
+  const lx = 35.7 + gz;
+  const rx = 66.1 + gz;
   return (
     <svg
       width={size}
@@ -54,11 +57,11 @@ export function Orb({
         </>
       ) : (
         <>
-          {/* Taller-than-wide "egg" eyes, matching the mobile product's oval
-              eyes. ellipse keeps cx/cy (so the LivingFigure gaze animation and
-              the blink still drive it). */}
-          <ellipse className={eyeClass} cx={lx} cy={cy} rx={eyeR} ry={eyeR * 1.3} fill={eyeColor} />
-          <ellipse className={eyeClass} cx={rx} cy={cy} rx={eyeR} ry={eyeR * 1.3} fill={eyeColor} />
+          {/* Oval eyes IDENTICAL to the product: ry = rx × 7/6 (the product's
+              6×7 oval). ellipse keeps cx/cy so the LivingFigure gaze animation
+              and the blink still drive it. */}
+          <ellipse className={eyeClass} cx={lx} cy={cy} rx={eyeR} ry={eyeR * (7 / 6)} fill={eyeColor} />
+          <ellipse className={eyeClass} cx={rx} cy={cy} rx={eyeR} ry={eyeR * (7 / 6)} fill={eyeColor} />
         </>
       )}
     </svg>
