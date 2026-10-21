@@ -1,12 +1,11 @@
 /**
- * OnboardingOverlay — a first-run (and post-update) explainer shown OVER the
- * home: a dimmed black scrim with a horizontal carousel of cards you swipe
- * sideways, a primary "Next" button and a "Skip" below it. On the last card
- * "Next" becomes the start CTA. Dismissing records the current
- * ONBOARDING_CARDS_VERSION so it re-appears only when that version is bumped
- * (i.e. after a feature update).
- *
- * Kept deliberately on-brand with the home: minimal, theme-aware, one accent.
+ * OnboardingOverlay — a first-run (and post-update) intro where ONE introduces
+ * ITSELF. A clean, full-screen, theme-coloured surface (not a dark scrim): the
+ * living ONE figure centred, and ONE speaking in the FIRST PERSON across a few
+ * lines — who it is, what it does, how — advanced by "Next" (or a sideways
+ * swipe), with "Skip" below. The figure stays put while its lines change, so it
+ * reads as ONE actually talking to you. Dismissing records the current
+ * ONBOARDING_CARDS_VERSION so it re-appears only when that version is bumped.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -22,56 +21,56 @@ import {
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Orb } from '../../components/mvp/Orb';
+import { useThemeStore } from '../../stores/themeStore';
 import { useLanguage } from '../../i18n/useT';
 import { rtlText } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-// The card itself is capped so it never stretches edge-to-edge on desktop.
 const CARD_MAX_W = Math.min(SCREEN_W, 460);
 
-/** Bump this when a new feature warrants re-showing the onboarding cards. */
-export const ONBOARDING_CARDS_VERSION = 1;
+/** Bump when a new feature warrants re-showing the onboarding cards. */
+export const ONBOARDING_CARDS_VERSION = 2;
 
-const ACCENT = '#3B82F6';
-
-interface Card {
-  emoji: string;
-  title: { he: string; en: string };
+interface Line {
+  /** The name token is rendered in full ink; the rest is the lead-in. */
+  lead: { he: string; en: string };
   body: { he: string; en: string };
 }
 
-const CARDS: Card[] = [
+/** ONE speaking, first person. */
+const LINES: Line[] = [
   {
-    emoji: '👤',
-    title: { he: 'ONE מייצג אותך', en: 'ONE represents you' },
+    lead: { he: 'שלום, אני ONE.', en: "Hi, I'm ONE." },
+    body: { he: 'הנציג הדיגיטלי שלך.', en: 'Your digital representative.' },
+  },
+  {
+    lead: { he: 'אני מקדם בשבילך דברים.', en: 'I move things forward for you.' },
     body: {
-      he: 'דבר איתו כמו עם עצמך. הוא זוכר, מבין, ופועל בשמך — מול אנשים, עסקים ומערכות.',
-      en: 'Talk to it like you’d talk to yourself. It remembers, understands and acts on your behalf — with people, businesses and systems.',
+      he: 'תור, מכתב, בקשה, שיפוץ — אתה אומר מה שאתה רוצה, ואני דואג שזה יקרה.',
+      en: 'A booking, a message, a request, a renovation — you say what you want, and I make it happen.',
     },
   },
   {
-    emoji: '✨',
-    title: { he: 'כל דבר הוא תהליך', en: 'Everything is a Process' },
+    lead: { he: 'אני מייצג אותך.', en: 'I represent you.' },
     body: {
-      he: 'משכנתא, תור לרופא, שיפוץ — כל מה שתרצה לקדם נפתח כתהליך ש-ONE מנהל ומקדם בשבילך.',
-      en: 'A mortgage, a doctor’s visit, a renovation — anything you want to get done opens as a Process that ONE carries for you.',
+      he: 'מדבר בשמך מול אנשים ועסקים — וחושף רק מה שתרשה. אתה שולט.',
+      en: 'I speak for you to people and businesses — and share only what you allow. You stay in control.',
     },
   },
   {
-    emoji: '🔑',
-    title: { he: 'אתה בוחר מה לחשוף', en: 'You choose what’s shared' },
+    lead: { he: 'כל דבר הוא תהליך.', en: 'Everything is a process.' },
     body: {
-      he: 'לכל פרט אתה מחליט: פתוח, לפי בקשה, או פרטי. ONE חושף רק את מה שצריך, ורק למי שצריך.',
-      en: 'For every detail you decide: open, on request, or private. ONE reveals only what’s needed, only to who needs it.',
+      he: 'מה שתרצה לקדם נפתח כתהליך שאני מנהל — ואתה רואה בדיוק מה קורה.',
+      en: 'Anything you want to get done opens as a process I run — and you see exactly what’s happening.',
     },
   },
   {
-    emoji: '🌐',
-    title: { he: 'Global — הרשת של ONE', en: 'Global — the network' },
+    lead: { he: 'מוכן כשתהיה.', en: 'Ready when you are.' },
     body: {
-      he: 'ONE מתחבר לרשת של עסקים, נותני שירות וידע משותף — ופועל בתוכה בשבילך.',
-      en: 'ONE connects to a shared network of businesses, providers and knowledge — and acts across it for you.',
+      he: 'בוא נתחיל — ספר לי על משהו שבא לך לקדם.',
+      en: 'Let’s start — tell me something you’d like to move forward.',
     },
   },
 ];
@@ -82,54 +81,52 @@ interface Props {
 }
 
 export function OnboardingOverlay({ visible, onDone }: Props) {
+  const { colors } = useThemeStore();
   const lang = useLanguage();
   const he = lang === 'he';
   const insets = useSafeAreaInsets();
 
   const [index, setIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
-  const last = index >= CARDS.length - 1;
+  const last = index >= LINES.length - 1;
 
   const sv = useSharedValue(0);
   useEffect(() => {
-    sv.value = withTiming(visible ? 1 : 0, { duration: 260, easing: Easing.out(Easing.cubic) });
+    sv.value = withTiming(visible ? 1 : 0, { duration: 300, easing: Easing.out(Easing.cubic) });
     if (visible) {
       setIndex(0);
-      // Reset to the first page when (re)shown.
       requestAnimationFrame(() => scrollRef.current?.scrollTo({ x: 0, animated: false }));
     }
   }, [visible, sv]);
 
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: sv.value }));
-  const cardsStyle = useAnimatedStyle(() => ({
-    opacity: sv.value,
-    transform: [{ translateY: (1 - sv.value) * 24 }],
+  const rootStyle = useAnimatedStyle(() => ({ opacity: sv.value }));
+  const stageStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - sv.value) * 18 }],
   }));
 
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / CARD_MAX_W);
-    if (i !== index) setIndex(i);
+    if (i !== index) { setIndex(i); haptic.select(); }
   }, [index]);
 
   const next = useCallback(() => {
     haptic.tap();
-    if (last) {
-      onDone();
-      return;
-    }
+    if (last) { onDone(); return; }
     scrollRef.current?.scrollTo({ x: (index + 1) * CARD_MAX_W, animated: true });
   }, [last, index, onDone]);
 
   if (!visible) return null;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="auto">
-      {/* Dimmed black scrim — the home shows through. */}
-      <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrimStyle]} pointerEvents="none" />
+    <Animated.View style={[StyleSheet.absoluteFill, styles.root, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 16) }, rootStyle]}>
+      <Animated.View style={[styles.stage, stageStyle]}>
+        {/* ONE — centred, present, speaking. Stays put while its lines change. */}
+        <View style={styles.figure}>
+          <Orb size={112} />
+        </View>
 
-      <Animated.View style={[styles.wrap, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 16) }, cardsStyle]}>
-        {/* Swipeable cards. Hebrew mirrors the row (scaleX:-1) so it reads + starts
-            from the RIGHT; each card is un-mirrored so its content is normal. */}
+        {/* ONE's lines — swipeable; Hebrew mirrors the row so it starts from the
+            right, each page is un-mirrored so its text reads normally. */}
         <ScrollView
           ref={scrollRef}
           horizontal
@@ -137,116 +134,92 @@ export function OnboardingOverlay({ visible, onDone }: Props) {
           showsHorizontalScrollIndicator={false}
           onScroll={onScroll}
           scrollEventThrottle={16}
-          style={[styles.cardsScroll, he && styles.flipX]}
+          style={[styles.linesScroll, he && styles.flipX]}
         >
-          {CARDS.map((c, i) => (
-            <View key={i} style={[styles.card, { width: CARD_MAX_W }, he && styles.flipX]}>
-              <View style={styles.emojiWrap}>
-                <Text style={styles.emoji}>{c.emoji}</Text>
-              </View>
-              <Text style={[styles.title, rtlText(lang)]}>
-                {he ? c.title.he : c.title.en}
+          {LINES.map((l, i) => (
+            <View key={i} style={[styles.line, { width: CARD_MAX_W }, he && styles.flipX]}>
+              <Text style={[styles.lead, { color: colors.text }, rtlText(lang)]}>
+                {he ? l.lead.he : l.lead.en}
               </Text>
-              <Text style={[styles.body, rtlText(lang)]}>
-                {he ? c.body.he : c.body.en}
+              <Text style={[styles.body, { color: colors.textSecondary }, rtlText(lang)]}>
+                {he ? l.body.he : l.body.en}
               </Text>
             </View>
           ))}
         </ScrollView>
 
-        {/* Dots */}
+        {/* Progress dots — subtle, theme-aware. */}
         <View style={styles.dots}>
-          {CARDS.map((_, i) => (
+          {LINES.map((_, i) => (
             <View
               key={i}
               style={[
                 styles.dot,
-                { backgroundColor: i === index ? ACCENT : 'rgba(255,255,255,0.28)' },
+                { backgroundColor: i === index ? colors.text : colors.border },
                 i === index && styles.dotActive,
               ]}
             />
           ))}
         </View>
-
-        {/* Next (primary) + Skip below it. */}
-        <View style={styles.actions}>
-          <Pressable
-            onPress={next}
-            style={({ pressed }) => [styles.nextBtn, { opacity: pressed ? 0.9 : 1 }]}
-            accessibilityRole="button"
-          >
-            <Text style={styles.nextText}>
-              {last
-                ? he ? 'בוא נתחיל' : 'Let’s start'
-                : he ? 'הבא' : 'Next'}
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => { haptic.select(); onDone(); }} hitSlop={10} style={styles.skipBtn} accessibilityRole="button">
-            <Text style={styles.skipText}>
-              {he ? 'דלג' : 'Skip'}
-            </Text>
-          </Pressable>
-        </View>
       </Animated.View>
-    </View>
+
+      {/* Next (primary, ink pill) + Skip below it. */}
+      <View style={styles.actions}>
+        <Pressable
+          onPress={next}
+          style={({ pressed }) => [styles.nextBtn, { backgroundColor: colors.text, opacity: pressed ? 0.9 : 1 }]}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.nextText, { color: colors.background }]}>
+            {last ? (he ? 'בוא נתחיל' : 'Let’s start') : (he ? 'הבא' : 'Next')}
+          </Text>
+        </Pressable>
+        <Pressable onPress={() => { haptic.select(); onDone(); }} hitSlop={10} style={styles.skipBtn} accessibilityRole="button">
+          <Text style={[styles.skipText, { color: colors.textSecondary }]}>
+            {he ? 'דלג' : 'Skip'}
+          </Text>
+        </Pressable>
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { backgroundColor: '#000', opacity: 0.72 },
-  wrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    zIndex: 2,
-  },
-  cardsScroll: { flexGrow: 0, alignSelf: 'center', width: CARD_MAX_W },
+  root: { alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
+  stage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
+  figure: { marginBottom: 34 },
+  linesScroll: { flexGrow: 0, alignSelf: 'center', width: CARD_MAX_W },
   flipX: { transform: [{ scaleX: -1 }] },
-  card: {
-    paddingHorizontal: 30,
+  line: {
+    paddingHorizontal: 34,
     alignItems: 'center',
-    justifyContent: 'center',
-    // Give the cards a tall, centred stage above the controls.
-    minHeight: 360,
+    justifyContent: 'flex-start',
+    minHeight: 120,
   },
-  emojiWrap: {
-    width: 92,
-    height: 92,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 28,
-    // Always on the dark scrim → a light frosted tile, not a theme surface.
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  emoji: { fontSize: 44 },
-  title: {
-    fontSize: 27,
+  lead: {
+    fontSize: 25,
     lineHeight: 33,
     fontWeight: '800',
     letterSpacing: -0.3,
     textAlign: 'center',
-    marginBottom: 12,
-    // Light text — the scrim is always dark regardless of the app theme.
-    color: '#FFFFFF',
+    marginBottom: 8,
   },
   body: {
     fontSize: 16,
-    lineHeight: 23,
+    lineHeight: 24,
     fontWeight: '500',
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.74)',
+    maxWidth: 340,
   },
   dots: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 26,
+    gap: 7,
+    marginTop: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dot: { width: 7, height: 7, borderRadius: 4 },
-  dotActive: { width: 20 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  dotActive: { width: 18 },
   actions: {
     width: '100%',
     maxWidth: CARD_MAX_W,
@@ -259,10 +232,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    // White pill on the dark scrim (high contrast, like the home composer).
-    backgroundColor: '#FFFFFF',
   },
-  nextText: { fontSize: 17, fontWeight: '800', letterSpacing: 0.2, color: '#111111' },
+  nextText: { fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
   skipBtn: { marginTop: 14, paddingVertical: 6, paddingHorizontal: 20 },
-  skipText: { fontSize: 15, fontWeight: '600', color: 'rgba(255,255,255,0.62)' },
+  skipText: { fontSize: 15, fontWeight: '600' },
 });
