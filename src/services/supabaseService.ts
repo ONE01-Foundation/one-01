@@ -10,9 +10,14 @@ import { Platform } from 'react-native';
 import { Agent, Goal, ConversationMessage, Lens } from '../types';
 import type { OneUser } from '../core/types';
 
-// These should be moved to environment variables
-const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim();
-const SUPABASE_ANON_KEY = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
+// Env first; committed PUBLIC fallbacks so a build is never env-less (the anon
+// publishable key is public by design — it already ships in the web bundle).
+// Without this the AI client stays null on an env-less build and every call
+// silently drops to the local responder ("AI doesn't work on web").
+const SUPABASE_URL =
+  (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim() || 'https://dkkxecnfqkcpjjapbesy.supabase.co';
+const SUPABASE_ANON_KEY =
+  (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim() || 'sb_publishable_gDnOUz82cx0AflfmFoTL5A_SNbWeasq';
 
 function isValidSupabaseUrl(url: string): boolean {
   if (!url) return false;
@@ -63,6 +68,15 @@ class SupabaseService {
 
   getClient(): SupabaseClient | null {
     return this.client;
+  }
+
+  /** The project URL + anon key, for raw fetches to Edge Functions that must
+   *  control their own headers (supabase-js's functions.invoke injects
+   *  `x-supabase-client-platform`, which older function CORS allow-lists reject
+   *  on web — see aiChat). Null until initialized. */
+  getConfig(): { url: string; anonKey: string } | null {
+    if (!this.client) return null;
+    return { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY };
   }
 
   // Authentication methods

@@ -50,37 +50,66 @@ export class AiChatNotConfiguredError extends Error {
  * Throws on auth failure, network failure, or non-2xx response so the
  * caller can fall back to a local heuristic.
  */
+/**
+ * POST to the ai-chat Edge Function with a RAW fetch instead of
+ * `supabase-js`'s `functions.invoke`. invoke injects an
+ * `x-supabase-client-platform` header that the function's CORS allow-list
+ * doesn't list, so the browser's preflight REJECTS every call on web (the AI
+ * silently fell back to the local keyword responder). This sends only the three
+ * headers the default allow-list already permits — authorization, apikey,
+ * content-type — so the preflight passes. Uses the session token when signed
+ * in, else the anon key (the function accepts anon). Native is unaffected but
+ * uses the same path for consistency.
+ */
+async function postAiChat<T extends { error?: string }>(body: unknown): Promise<T> {
+  // Initialize on demand (like cloudShared) — postAiChat may be the FIRST
+  // Supabase touch in a session, and without this the client is null and the
+  // call silently falls back to the local responder (the "AI doesn't work on
+  // web" symptom).
+  let client = supabaseService.getClient();
+  if (!client) {
+    supabaseService.initialize();
+    client = supabaseService.getClient();
+  }
+  const cfg = supabaseService.getConfig();
+  if (!client || !cfg) throw new AiChatNotConfiguredError();
+  let token = cfg.anonKey;
+  try {
+    const { data } = await client.auth.getSession();
+    if (data.session?.access_token) token = data.session.access_token;
+  } catch {
+    /* anon — keep the anon key */
+  }
+  const res = await fetch(`${cfg.url}/functions/v1/ai-chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: cfg.anonKey,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => null)) as T | null;
+  if (!res.ok) {
+    throw new Error(`ai-chat HTTP ${res.status}: ${json?.error ?? res.statusText}`);
+  }
+  if (!json) throw new Error('ai-chat: empty response');
+  return json;
+}
+
 export async function invokeAiChat(
   messages: AiChatMessage[],
   options: AiChatOptions = {},
 ): Promise<string> {
-  const client = supabaseService.getClient();
-  if (!client) throw new AiChatNotConfiguredError();
-  // No session check — the function accepts anon-key calls. supabase-js
-  // attaches the publishable anon key as Authorization when no session
-  // exists, which satisfies verify_jwt.
-
-  const { data, error } = await client.functions.invoke<{
-    text: string;
-    model: string;
-    usage: unknown;
-    error?: string;
-  }>('ai-chat', {
-    body: {
-      messages,
-      model: options.model ?? 'gpt-4o-mini',
-      temperature: options.temperature ?? 0.7,
-      max_tokens: options.maxTokens ?? 240,
-    },
+  const data = await postAiChat<{ text: string; model: string; usage: unknown; error?: string }>({
+    messages,
+    model: options.model ?? 'gpt-4o-mini',
+    temperature: options.temperature ?? 0.7,
+    max_tokens: options.maxTokens ?? 240,
   });
-
-  if (error) {
-    console.warn('[aiChat] invoke error:', error.message ?? error);
-    throw new Error(`ai-chat invoke failed: ${error.message}`);
-  }
-  if (!data || typeof data.text !== 'string') {
+  if (typeof data.text !== 'string') {
     console.warn('[aiChat] no text in response:', data);
-    throw new Error(`ai-chat returned no text: ${data?.error ?? 'unknown'}`);
+    throw new Error(`ai-chat returned no text: ${data.error ?? 'unknown'}`);
   }
   return data.text.trim();
 }
@@ -436,9 +465,9 @@ export async function invokeOneIntent(
     spaces?: Array<{ type: 'personal' | 'business' | 'family'; name: string; active?: boolean }>;
   } = {},
 ): Promise<OneIntent> {
-  const client = supabaseService.getClient();
-  if (!client) throw new AiChatNotConfiguredError();
-  // Anon-key calls accepted by ai-chat v2 — no session required.
+  if (!supabaseService.getClient()) throw new AiChatNotConfiguredError();
+  // Anon-key calls accepted by ai-chat v2 — no session required (postAiChat
+  // sends the anon key as the bearer when there's no session).
 
   const baseSys = pickOneSystemPrompt(userText);
   const lang = /[֐-׿]/.test(userText) ? 'he' : 'en';
@@ -583,36 +612,23 @@ export async function invokeOneIntent(
     { role: 'user', content: userText },
   ];
 
-  const { data, error } = await client.functions.invoke<{
-    text: string;
-    model: string;
-    usage: unknown;
-    error?: string;
-  }>('ai-chat', {
-    body: {
-      messages,
-      model: 'gpt-4o-mini',
-      temperature: 0.3,
-      // Auto-fill expects a populated process — title, emoji, broadcast,
-      // 4–7 nextSteps, 2–4 metrics, 3–5 quickActions, 1–2 tags. In
-      // Hebrew the token cost roughly doubles vs English. 700 leaves
-      // comfortable headroom without inviting drift.
-      max_tokens: 700,
-      // Force JSON mode so we don't have to defend against markdown
-      // fences, prose preambles, or trailing notes. If the model
-      // produces something other than JSON, OpenAI itself errors and
-      // we surface a useful message instead of crashing on JSON.parse.
-      response_format: { type: 'json_object' },
-    },
+  const data = await postAiChat<{ text: string; model: string; usage: unknown; error?: string }>({
+    messages,
+    model: 'gpt-4o-mini',
+    temperature: 0.3,
+    // Auto-fill expects a populated process — title, emoji, broadcast,
+    // 4–7 nextSteps, 2–4 metrics, 3–5 quickActions, 1–2 tags. In
+    // Hebrew the token cost roughly doubles vs English. 700 leaves
+    // comfortable headroom without inviting drift.
+    max_tokens: 700,
+    // Force JSON mode so we don't have to defend against markdown
+    // fences, prose preambles, or trailing notes.
+    response_format: { type: 'json_object' },
   });
 
-  if (error) {
-    console.warn('[invokeOneIntent] invoke error:', error.message ?? error);
-    throw new Error(`ai-chat invoke failed: ${error.message}`);
-  }
-  if (!data?.text) {
+  if (!data.text) {
     console.warn('[invokeOneIntent] no text in response:', data);
-    throw new Error(`ai-chat returned no text: ${data?.error ?? 'unknown'}`);
+    throw new Error(`ai-chat returned no text: ${data.error ?? 'unknown'}`);
   }
 
   // The model is asked for raw JSON. Strip any accidental fences just in case.
@@ -663,8 +679,7 @@ export async function invokeAttentionLines(args: {
    *  personal (references what matters to them), not generic. */
   userMemories?: string[];
 }): Promise<string[]> {
-  const client = supabaseService.getClient();
-  if (!client) throw new AiChatNotConfiguredError();
+  if (!supabaseService.getClient()) throw new AiChatNotConfiguredError();
   // Anon-key calls accepted by ai-chat v2 — no session required.
 
   const baseSys =
@@ -718,25 +733,16 @@ No text outside JSON.`;
     },
   ];
 
-  const { data, error } = await client.functions.invoke<{ text: string; error?: string }>(
-    'ai-chat',
-    {
-      body: {
-        messages,
-        model: 'gpt-4o-mini',
-        temperature: 0.4,
-        max_tokens: 360,
-        response_format: { type: 'json_object' },
-      },
-    },
-  );
-  if (error) {
-    console.warn('[invokeAttentionLines] invoke error:', error.message ?? error);
-    throw new Error(`ai-chat invoke failed: ${error.message}`);
-  }
-  if (!data?.text) {
+  const data = await postAiChat<{ text: string; error?: string }>({
+    messages,
+    model: 'gpt-4o-mini',
+    temperature: 0.4,
+    max_tokens: 360,
+    response_format: { type: 'json_object' },
+  });
+  if (!data.text) {
     console.warn('[invokeAttentionLines] no text in response:', data);
-    throw new Error(`ai-chat returned no text: ${data?.error ?? 'unknown'}`);
+    throw new Error(`ai-chat returned no text: ${data.error ?? 'unknown'}`);
   }
 
   let raw = data.text.trim();
