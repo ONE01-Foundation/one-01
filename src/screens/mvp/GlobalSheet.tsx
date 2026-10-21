@@ -212,6 +212,8 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
       onClose={onClose}
       animatedIndex={animatedIndex}
       snapPoints={['92%']}
+      // Global gets a WIDER desktop card than the other sheets.
+      desktopMaxWidth={760}
       enableContentPan={true}
       bypassDefaultView={true}
       onDragDismissCross={() => haptic.press()}

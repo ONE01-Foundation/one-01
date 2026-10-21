@@ -5383,7 +5383,9 @@ export function HomeScreen({
         {!callActive && (
         <Animated.View
           // Flush at the very bottom (the processes sheet slides up OVER it).
-          style={[styles.inputDock, inputDockStyle, inputMountStyle]}
+          // On web give the composer a little breathing room off the bottom edge
+          // (no home-indicator inset there, so it otherwise sits dead flush).
+          style={[styles.inputDock, Platform.OS === 'web' && styles.inputDockWebGap, inputDockStyle, inputMountStyle]}
           // While ONE sleeps the dock is faded away; let the first tap fall
           // through to the passive wake handler instead of focusing the input,
           // so a tap simply wakes ONE (like the splash) rather than opening chat.
@@ -6378,6 +6380,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 29,
   },
+  inputDockWebGap: { bottom: 18 },
   inputDock: {
     position: 'absolute',
     // Flush against the safe-area bottom — sits as low as we can go without

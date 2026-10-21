@@ -54,6 +54,10 @@ interface BottomSheetProps {
    *  should sit as a clear "card over a dimmed background" (e.g. a process
    *  card opened from the list) pass a stronger value. */
   backdropOpacity?: number;
+  /** DESKTOP only: max width of the centered popup card. Default 600. A sheet
+   *  that wants a WIDER frame (e.g. Global) passes a larger value; its own
+   *  content keeps its width. */
+  desktopMaxWidth?: number;
   /** Whether the sheet's handle can be panned. Default true. */
   enablePan?: boolean;
   /** Whether content-area touches drive sheet pan. Default FALSE — the user
@@ -120,6 +124,7 @@ export function BottomSheet({
   enableDynamicSizing = false,
   animatedIndex,
   backdropOpacity = 0.32,
+  desktopMaxWidth = 600,
   onDragDismissCross,
   overlay,
   children,
@@ -155,10 +160,25 @@ export function BottomSheet({
       : Math.round((winH * (1 - DESKTOP_CARD_FRAC)) / 2)
     : 0;
   // gorhom applies this to its outer animated container. maxWidth + auto side
-  // margins center the card on web.
+  // margins center the card on web; the rounded corners + overflow:hidden CLIP
+  // the card's content to the mask so the BOTTOM corners round like the top
+  // (content no longer squares off the rounded bottom). Shadow lives here too
+  // so clipping the content doesn't clip the float shadow.
   const desktopSheetStyle = useMemo(
-    () => ({ maxWidth: 600, width: '100%', marginHorizontal: 'auto' }) as ViewStyle,
-    [],
+    () =>
+      ({
+        maxWidth: desktopMaxWidth,
+        width: '100%',
+        marginHorizontal: 'auto',
+        borderRadius: 24,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOpacity: 0.22,
+        shadowRadius: 40,
+        shadowOffset: { width: 0, height: 14 },
+        elevation: 24,
+      }) as ViewStyle,
+    [desktopMaxWidth],
   );
 
   // The SharedValue gorhom writes the LIVE animated index into. Use the
