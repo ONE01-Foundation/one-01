@@ -219,7 +219,10 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
     if (!trackPointer || Platform.OS !== 'web' || typeof window === 'undefined') return;
     const PTR_REF = 190;
     let raf = 0;
-    const onMove = (e: { clientX: number; clientY: number }) => {
+    const onMove = (e: { clientX: number; clientY: number; pointerType?: string }) => {
+      // MOUSE only. On touch (mobile) the eyes snapping to each tap/drag reads
+      // badly, so ignore touch/pen pointers — the autonomous glance stays.
+      if (e.pointerType && e.pointerType !== 'mouse') return;
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         const el = containerRef.current as unknown as { getBoundingClientRect?: () => DOMRect } | null;

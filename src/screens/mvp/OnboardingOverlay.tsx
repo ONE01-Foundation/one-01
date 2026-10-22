@@ -122,7 +122,7 @@ export function OnboardingOverlay({ visible, onDone }: Props) {
       <Animated.View style={[styles.stage, stageStyle]}>
         {/* ONE — centred, present, speaking. Stays put while its lines change. */}
         <View style={styles.figure}>
-          <Orb size={112} />
+          <Orb size={112} noShadow />
         </View>
 
         {/* ONE's lines — swipeable; Hebrew mirrors the row so it starts from the

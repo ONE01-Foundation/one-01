@@ -62,10 +62,10 @@ interface ContextAction {
   onPress: () => void;
 }
 
-// Opens HIGH by default — top below the figure, above/over the composer — so it
-// reads as ONE handing you actions rather than a small tray at the bottom. Drag
-// up for the full card.
-const SNAP_POINTS = ['64%', '90%'];
+// Opens with its top BELOW the resting figure (the home orb sits ~29–41% down,
+// so a 64% sheet used to cut across it). 52% leaves the figure fully visible
+// above the sheet with a comfortable gap; drag up to 90% for the full card.
+const SNAP_POINTS = ['52%', '90%'];
 
 export function QuickActionsSheet({
   visible,
