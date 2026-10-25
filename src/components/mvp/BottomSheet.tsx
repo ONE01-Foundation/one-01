@@ -58,6 +58,13 @@ interface BottomSheetProps {
    *  that wants a WIDER frame (e.g. Global) passes a larger value; its own
    *  content keeps its width. */
   desktopMaxWidth?: number;
+  /** DESKTOP only: card height as a fraction of the viewport. Default 0.86. A
+   *  SHORTER card (e.g. the + sheet) can sit BELOW the home figure. */
+  desktopHeightFrac?: number;
+  /** DESKTOP only: 'center' (default) vertically centers the card; 'bottom'
+   *  anchors it near the bottom edge — so with a shorter height the home figure
+   *  stays visible ABOVE it. */
+  desktopAnchor?: 'center' | 'bottom';
   /** Whether the sheet's handle can be panned. Default true. */
   enablePan?: boolean;
   /** Whether content-area touches drive sheet pan. Default FALSE — the user
@@ -125,6 +132,8 @@ export function BottomSheet({
   animatedIndex,
   backdropOpacity = 0.32,
   desktopMaxWidth = 600,
+  desktopHeightFrac,
+  desktopAnchor = 'center',
   onDragDismissCross,
   overlay,
   children,
@@ -147,8 +156,11 @@ export function BottomSheet({
   // On desktop a fixed-height card reads best — one tall detent, vertically
   // centered via bottomInset = (100% - cardHeight) / 2. Dynamic-sizing sheets
   // keep measuring their own height and just float off the bottom.
-  const DESKTOP_CARD_FRAC = 0.86;
-  const desktopSnaps = useMemo(() => [`${Math.round(DESKTOP_CARD_FRAC * 100)}%`], []);
+  const DESKTOP_CARD_FRAC = desktopHeightFrac ?? 0.86;
+  const desktopSnaps = useMemo(
+    () => [`${Math.round(DESKTOP_CARD_FRAC * 100)}%`],
+    [DESKTOP_CARD_FRAC],
+  );
   const snapsForGorhom = enableDynamicSizing
     ? undefined
     : isDesktop
@@ -157,7 +169,11 @@ export function BottomSheet({
   const bottomInset = isDesktop
     ? enableDynamicSizing
       ? Math.round(winH * 0.1)
-      : Math.round((winH * (1 - DESKTOP_CARD_FRAC)) / 2)
+      : desktopAnchor === 'bottom'
+        ? // Anchored near the bottom (a short lift off the edge) so a shorter
+          // card leaves the home figure visible above it.
+          Math.round(winH * 0.05)
+        : Math.round((winH * (1 - DESKTOP_CARD_FRAC)) / 2)
     : 0;
   // gorhom applies this to its outer animated container. maxWidth + auto side
   // margins center the card on web; the rounded corners + overflow:hidden CLIP

@@ -12,7 +12,7 @@
  *      this second drawer adapts.
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   Pressable,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -89,6 +90,20 @@ export function QuickActionsSheet({
   const heText = he ? ({ direction: 'rtl', writingDirection: 'rtl' } as const) : null;
   const setPendingHomeInput = useMvpStore((s) => s.setPendingHomeInput);
 
+  // The tools carousel. In Hebrew the tiles are REVERSED (so Photo ends up at
+  // the RIGHT edge) and the row starts scrolled to the right — this works on
+  // BOTH native and web, unlike the old scaleX:-1 mirror which only flipped on
+  // web (on Expo Go it left the row LTR, so it started with Scan).
+  const tilesRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (!visible || !he) return;
+    requestAnimationFrame(() => tilesRef.current?.scrollToEnd({ animated: false }));
+  }, [visible, he]);
+  // Web: gorhom/RNGH stamps touch-action:none on its container, which killed the
+  // carousel's sideways touch-scroll on mobile browsers. Force pan-x on the row
+  // so a horizontal drag scrolls it (vertical still pans the sheet).
+  const webTouch = Platform.OS === 'web' ? ({ touchAction: 'pan-x' } as object) : null;
+
   // Live snap index (0 = low/44%, 1 = full/80%). Drives the floating
   // "Add action" button — it fades in only once the sheet is fully open.
   const sheetIndex = useSharedValue(0);
@@ -111,6 +126,9 @@ export function QuickActionsSheet({
     { id: 'voice', Icon: MicIcon, label: he ? 'הקלטה' : 'Voice', onPress: () => stub(he ? 'הקלטה' : 'Voice') },
     { id: 'scan', Icon: SearchIcon, label: he ? 'סריקה' : 'Scan', onPress: () => stub(he ? 'סריקה' : 'Scan') },
   ];
+  // Hebrew reads right-to-left, so render the tiles reversed → Photo lands on
+  // the right (first), Scan on the left (last).
+  const displayTiles = he ? [...tiles].reverse() : tiles;
 
   // Drawer 2 — context actions. THIS is the part that varies by where the
   // sheet was opened from (Home, for now).
@@ -157,6 +175,11 @@ export function QuickActionsSheet({
       visible={visible}
       onClose={onClose}
       snapPoints={SNAP_POINTS}
+      // Desktop: a shorter card anchored near the bottom, so it opens BELOW the
+      // home figure instead of a tall centered card covering it (mirrors the
+      // mobile 52% snap).
+      desktopHeightFrac={0.6}
+      desktopAnchor="bottom"
       enableContentPan={true}
       bypassDefaultView={true}
       animatedIndex={sheetIndex}
@@ -176,23 +199,26 @@ export function QuickActionsSheet({
             card up/down). `overflow:hidden` on the row masks tiles at the screen
             edges so they never spill outside. */}
         <ScrollView
+          ref={tilesRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           nestedScrollEnabled
           directionalLockEnabled
-          // Hebrew (RTL): mirror the whole row (scaleX:-1) so the carousel STARTS
-          // from the RIGHT — the first tile (תמונה / picture) sits on the right.
-          // Each tile is un-mirrored below so its emoji + label read normally.
-          style={[styles.tilesScroll, he && styles.flipX]}
+          // Hebrew (RTL): the tiles are reversed (Photo rightmost) and we start
+          // scrolled to the right end, so Photo shows first and you scroll left
+          // for the rest — reliable on native AND web.
+          onContentSizeChange={() => {
+            if (he) tilesRef.current?.scrollToEnd({ animated: false });
+          }}
+          style={[styles.tilesScroll, webTouch]}
           contentContainerStyle={styles.tilesRow}
         >
-          {tiles.map((tile) => (
+          {displayTiles.map((tile) => (
             <Pressable
               key={tile.id}
               onPress={tile.onPress}
               style={({ pressed }) => [
                 styles.tile,
-                he && styles.flipX,
                 {
                   backgroundColor: colors.surface,
                   opacity: pressed ? 0.82 : 1,
