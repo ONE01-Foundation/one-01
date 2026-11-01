@@ -469,7 +469,7 @@ export function OneProfileSheet({
   // FIRST metric (Processes) at the right edge — but a horizontal ScrollView
   // still rests at offset 0 (the LEFT edge = the last metric, Plan). Snap it to
   // the right on open so the reading starts from Processes, as it should.
-  const metricsScrollRef = React.useRef<ScrollView>(null);
+  const metricsScrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const metricsSnappedRef = React.useRef(false);
   useEffect(() => {
     if (visible) metricsSnappedRef.current = false;

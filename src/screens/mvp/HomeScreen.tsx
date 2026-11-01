@@ -846,7 +846,7 @@ export function HomeScreen({
   // Pulling the hero DOWN at the top reveals a chronological ledger of ONE's
   // updates across every process — the intent→reality history.
   const [timelineOpen, setTimelineOpen] = useState(false);
-  const timelineScrollRef = useRef<ScrollView>(null);
+  const timelineScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   // Opened from ONE's profile menu: the navigator bumps `openTimelineSignal`
   // (after closing the profile), and we raise the timeline drawer. Skip the
   // first render (0 / undefined) so it only reacts to real bumps.

@@ -285,7 +285,7 @@ export function InputBar({
   // iOS users zero-step access to the system keyboard's built-in
   // dictation mic when the field is empty. (Real on-device speech-
   // to-text would need a custom dev client and is out of scope here.)
-  const inputRef = React.useRef<TextInput>(null);
+  const inputRef = React.useRef<React.ComponentRef<typeof TextInput>>(null);
   // One-shot focus: when the parent bumps `focusSignal`, open the keyboard.
   // A small delay lets a host sheet finish its open/snap animation before the
   // keyboard pushes up, so the layout settles in one motion instead of two.

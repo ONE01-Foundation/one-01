@@ -87,7 +87,7 @@ export function OnboardingOverlay({ visible, onDone }: Props) {
   const insets = useSafeAreaInsets();
 
   const [index, setIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const last = index >= LINES.length - 1;
 
   const sv = useSharedValue(0);

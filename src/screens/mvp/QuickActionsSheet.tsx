@@ -94,7 +94,7 @@ export function QuickActionsSheet({
   // the RIGHT edge) and the row starts scrolled to the right — this works on
   // BOTH native and web, unlike the old scaleX:-1 mirror which only flipped on
   // web (on Expo Go it left the row LTR, so it started with Scan).
-  const tilesRef = useRef<ScrollView>(null);
+  const tilesRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   useEffect(() => {
     if (!visible || !he) return;
     requestAnimationFrame(() => tilesRef.current?.scrollToEnd({ animated: false }));

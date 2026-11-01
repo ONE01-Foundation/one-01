@@ -410,7 +410,7 @@ export function UnitProfileSheet({ unitId, onClose, onOpenIdentitySwitch, onNewP
     [unitId, appendUnitChat, clearUnitChatAction],
   );
   const [isTyping, setIsTyping] = useState(false);
-  const chatRef = useRef<ScrollView>(null);
+  const chatRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   // Tracks which unit the render-phase open-detent decision was made for, and
   // whether that open should land in chat (full snap). Drives `initialSnap`
   // synchronously so the sheet presents at the right height on the first frame.
@@ -2697,7 +2697,7 @@ function ChatView({
   colors: ThemeColors;
   messages: ChatMessage[];
   isTyping: boolean;
-  chatRef: React.RefObject<ScrollView | null>;
+  chatRef: React.RefObject<React.ComponentRef<typeof ScrollView> | null>;
   /** Keyboard height — added to the scroll content's bottom padding so the
    *  last message stays above the keyboard. */
   bottomInset: number;

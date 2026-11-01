@@ -214,7 +214,7 @@ export function Orb({ size, eyesOpacity = 1, eyesOpacityAnim, eyeLookY, noBlink,
   const ptrX = useSharedValue(0);
   const ptrY = useSharedValue(0);
   const ptrAct = useSharedValue(0);
-  const containerRef = useRef<View>(null);
+  const containerRef = useRef<React.ComponentRef<typeof View>>(null);
   useEffect(() => {
     if (!trackPointer || Platform.OS !== 'web' || typeof window === 'undefined') return;
     const PTR_REF = 190;
