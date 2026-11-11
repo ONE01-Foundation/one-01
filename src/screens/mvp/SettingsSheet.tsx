@@ -87,6 +87,7 @@ export function SettingsSheet({
   const setAgentPersonality = useMvpStore((s) => s.setAgentPersonality);
   const homeMode = useMvpStore((s) => s.homeMode);
   const setHomeMode = useMvpStore((s) => s.setHomeMode);
+  const replayMeetOne = useMvpStore((s) => s.replayMeetOne);
 
   const he = language === 'he';
 
@@ -225,6 +226,20 @@ export function SettingsSheet({
               options={homeModeOptions}
               selected={homeMode}
               onChange={(v) => setHomeMode(v)}
+            />
+            <ActionRow
+              label={he ? 'ראה שוב את ההיכרות עם ONE' : 'Replay the ONE intro'}
+              onPress={() => {
+                replayMeetOne();
+                onClose();
+              }}
+              colors={colors}
+              hint={
+                he
+                  ? 'מריץ מחדש את שיחת ההיכרות. הנתונים שלך נשמרים.'
+                  : 'Re-runs the meet-ONE conversation. Your data is kept.'
+              }
+              he={he}
             />
           </Group>
 

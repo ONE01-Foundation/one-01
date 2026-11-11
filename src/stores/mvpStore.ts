@@ -364,6 +364,8 @@ interface MvpStore {
   markOnboardingComplete: () => void;
   /** Finish the MeetOne intro — marks the user as having met ONE AND onboarded. */
   completeMeetOne: () => void;
+  /** Re-run the MeetOne intro (keeps all data) — "replay the intro" affordance. */
+  replayMeetOne: () => void;
   /** Record that the user has seen the onboarding cards up to version `v`. */
   setOnboardingCardsSeen: (v: number) => void;
   /** Reset back to seeded mock data — used by "clear state" dev affordance. */
@@ -891,6 +893,7 @@ export const useMvpStore = create<MvpStore>()(
       markDigestDelivered: (isoDate) => set({ lastDigestDate: isoDate }),
       markOnboardingComplete: () => set({ hasCompletedOnboarding: true }),
       completeMeetOne: () => set({ metOne: true, hasCompletedOnboarding: true }),
+      replayMeetOne: () => set({ metOne: false }),
       setOnboardingCardsSeen: (v) => set({ onboardingCardsSeen: v }),
       reset: () =>
         set({
@@ -924,8 +927,10 @@ export const useMvpStore = create<MvpStore>()(
       // v2 stripped the old demo account. v3: disclosure moved from a single
       // global array to PER-SPACE (keyed by identityId) — an old flat array is
       // migrated onto the active/first space so a user's existing policy carries
-      // over, and the rest of the spaces seed defaults on first access.
-      version: 3,
+      // over, and the rest of the spaces seed defaults on first access. v4: the
+      // Meet-ONE conversation became the first-run entry, gated on `metOne`;
+      // back-fill it true for anyone already established so they don't re-onboard.
+      version: 4,
       migrate: (persisted: any, _version: number) => {
         if (!persisted) return persisted;
         const demoIds = new Set(DEMO_IDENTITY_IDS);
@@ -942,6 +947,13 @@ export const useMvpStore = create<MvpStore>()(
         let disclosure = persisted.disclosure;
         if (Array.isArray(disclosure)) disclosure = { [activeIdentityId]: disclosure };
         else if (!disclosure || typeof disclosure !== 'object') disclosure = {};
+        // An "established" install already has a real presence — it should not be
+        // dropped back into the first-run intro. Fresh installs (no name, no
+        // units, never onboarded) have metOne stay false → they meet ONE.
+        const established =
+          persisted.hasCompletedOnboarding === true ||
+          units.length > 0 ||
+          !!(persisted.name && persisted.name !== 'Ariel');
         return {
           ...persisted,
           identities,
@@ -949,6 +961,7 @@ export const useMvpStore = create<MvpStore>()(
           units,
           disclosure,
           name: persisted.name === 'Ariel' ? '' : persisted.name,
+          metOne: persisted.metOne === true || established,
         };
       },
       // Persist user-facing state. Methods/functions are skipped automatically.

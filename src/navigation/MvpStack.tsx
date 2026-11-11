@@ -283,10 +283,18 @@ function HomeWithOverlays() {
     }, 40);
   }, [pendingSheet, s]);
 
+  // First run — whichever home mode — STARTS by meeting ONE: a short
+  // conversation that learns who you are (person or business), sets up your
+  // space, and opens your first process. Gated on `metOne` (auth-proof — anon
+  // auth flips hasCompletedOnboarding too early to use here). completeMeetOne
+  // flips metOne in-store, which re-renders into the real home below.
+  if (!metOne) {
+    return <MeetOne onDone={() => { /* flags flip in-store → home shows */ }} />;
+  }
+
   return (
     <>
       {homeMode === 'focus' ? (
-        metOne ? (
         <HomeFocus
           onTapUnit={(id) => {
             s.setOpenUnitId(id);
@@ -316,9 +324,6 @@ function HomeWithOverlays() {
             else s.setUpgradeOpen(true);
           }}
         />
-        ) : (
-          <MeetOne onDone={() => { /* onboarding flags flip in-store → HomeFocus shows */ }} />
-        )
       ) : (
       <HomeScreen
         onTapUnit={(id) => {
