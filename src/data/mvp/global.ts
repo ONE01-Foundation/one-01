@@ -285,6 +285,22 @@ export function buildGlobalFeed(
       status: t('3 trips this month', '3 טיולים החודש'),
       cat: 'travel',
     },
+    {
+      id: 'off_insurance',
+      emoji: '🛡️',
+      name: t('Derech Insurance', 'דרך ביטוח'),
+      category: t('Car · home · health insurance', 'ביטוח רכב · דירה · בריאות'),
+      status: t('Replies within an hour', 'מגיב תוך שעה'),
+      cat: 'bureaucracy',
+    },
+    {
+      id: 'off_driving',
+      emoji: '🚗',
+      name: t('Pro Driving School', 'בית ספר לנהיגה פרו'),
+      category: t('Lessons · theory · test booking', 'שיעורים · תיאוריה · קביעת טסט'),
+      status: t('Booking this week', 'נרשמים השבוע'),
+      cat: 'bureaucracy',
+    },
   ];
 
   const publicProcesses: PublicProcessCard[] = [

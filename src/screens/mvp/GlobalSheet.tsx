@@ -60,6 +60,23 @@ function hashStr(s: string): number {
   return h;
 }
 
+/** Infer a desire's world from its title, so ONE can match it to the right
+ *  providers in Global. Order matters (fitness before health; bureaucracy
+ *  catches license/insurance/passport). */
+const CAT_PATTERNS: [CategoryKey, RegExp][] = [
+  ['fitness', /כושר|אימון|שריר|מסה|fitness|gym|workout/i],
+  ['health', /רופא|עור|מרפאה|בריאות|שיניים|doctor|clinic|health|dentist|dermatolog/i],
+  ['learning', /ללמוד|לימוד|קורס|מורה|תואר|learn|course|tutor|study|degree/i],
+  ['home', /דירה|מעבר|שיפוץ|הובלה|home|moving|renovat|handyman|movers/i],
+  ['travel', /טיול|נסיעה|טיסה|חופשה|מלון|travel|trip|flight|vacation|hotel/i],
+  ['business', /עסק|לקוחות|חברה|business|clients|company/i],
+  ['bureaucracy', /רישיון|רשיון|רשות|ביטוח|דרכון|ממשל|עירייה|license|insurance|passport|government|tax|permit|visa/i],
+];
+function desireCategory(title: string): CategoryKey {
+  for (const [cat, re] of CAT_PATTERNS) if (re.test(title)) return cat;
+  return 'all';
+}
+
 interface GlobalSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -118,15 +135,22 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
     return mine.slice(0, 8).map((u) => {
       const n = 3 + (hashStr(u.title) % 46);
       const frame = frames[hashStr(u.id) % frames.length];
+      const cat = desireCategory(u.title);
+      // The supply side: providers in Global who can take this desire on.
+      const helpers = cat === 'all' ? [] : feed.officials.filter((o) => o.cat === cat);
       return {
         id: u.id,
         emoji: u.emoji,
         title: u.title,
         aggregate: he ? `את/ה ו-${n} אחרים · ${frame}` : `you and ${n} others · ${frame}`,
-        ask: he ? `מי עוד מחפש ${u.title}?` : `Who else wants ${u.title}?`,
+        helpers,
       };
     });
-  }, [allUnits, activeIdentityId, he]);
+  }, [allUnits, activeIdentityId, he, feed.officials]);
+
+  // Which desire's "who can help" panel is expanded (tap a desire card).
+  const [selectedDesireId, setSelectedDesireId] = useState<string | null>(null);
+  const selectedDesire = myDesires.find((d) => d.id === selectedDesireId) ?? null;
 
   const credits = 1240;
   const rtl = rtlText(lang);
@@ -160,6 +184,7 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
     if (visible) {
       setSelectedCat('all');
       setQuery('');
+      setSelectedDesireId(null);
       setOpenDrawers({ business: true, processes: true, templates: true, insights: true });
     }
   }, [visible]);
@@ -192,6 +217,35 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
       onClose();
     },
     [setPendingHomeInput, onClose],
+  );
+
+  // Reach a provider on a desire's behalf — through ONE, disclosure-safe. The
+  // real outreach (share the process / open a thread) rides the existing
+  // two-sided Unit; here ONE confirms it will represent you and share only what
+  // you allowed, then hands the outreach to the home conversation.
+  const reachProvider = useCallback(
+    (providerName: string, desireTitle: string) => {
+      haptic.tap();
+      Alert.alert(
+        he ? 'לפנות דרך ONE' : 'Reach via ONE',
+        he
+          ? `ONE יפנה ל${providerName} בשם "${desireTitle}" — ויחשוף רק מה שאישרת.`
+          : `ONE will reach ${providerName} about "${desireTitle}" — sharing only what you allowed.`,
+        [
+          { text: he ? 'ביטול' : 'Cancel', style: 'cancel' },
+          {
+            text: he ? 'שלח' : 'Send',
+            onPress: () =>
+              askOne(
+                he
+                  ? `פנה בשמי ל${providerName} לגבי ${desireTitle}`
+                  : `Reach out to ${providerName} about ${desireTitle} for me`,
+              ),
+          },
+        ],
+      );
+    },
+    [he, askOne],
   );
 
   // ── The wants loop (top banner) ────────────────────────────────────────────
@@ -305,33 +359,79 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
               contentContainerStyle={styles.mineRow}
               keyboardShouldPersistTaps="handled"
             >
-              {myDesires.map((d) => (
-                <Pressable
-                  key={d.id}
-                  onPress={() => { haptic.tap(); askOne(d.ask); }}
-                  style={({ pressed }) => [
-                    styles.mineCard,
-                    { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={d.title}
-                >
-                  <View style={[styles.mineTag, rtlRow(lang)]}>
-                    <Text style={styles.mineLock}>🔒</Text>
-                    <Text style={[styles.mineTagText, { color: colors.textSecondary }]}>
-                      {he ? 'אנונימי' : 'anonymous'}
+              {myDesires.map((d) => {
+                const open = selectedDesireId === d.id;
+                return (
+                  <Pressable
+                    key={d.id}
+                    onPress={() => { haptic.select(); setSelectedDesireId(open ? null : d.id); }}
+                    style={({ pressed }) => [
+                      styles.mineCard,
+                      { backgroundColor: colors.surface, borderColor: open ? colors.text : colors.border, opacity: pressed ? 0.85 : 1 },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={d.title}
+                  >
+                    <View style={[styles.mineTag, rtlRow(lang)]}>
+                      <Text style={styles.mineLock}>🔒</Text>
+                      <Text style={[styles.mineTagText, { color: colors.textSecondary }]}>
+                        {he ? 'אנונימי' : 'anonymous'}
+                      </Text>
+                    </View>
+                    <Text style={styles.mineEmoji}>{d.emoji}</Text>
+                    <Text style={[styles.mineCardTitle, { color: colors.text }, rtl]} numberOfLines={2}>
+                      {d.title}
                     </Text>
-                  </View>
-                  <Text style={styles.mineEmoji}>{d.emoji}</Text>
-                  <Text style={[styles.mineCardTitle, { color: colors.text }, rtl]} numberOfLines={2}>
-                    {d.title}
-                  </Text>
-                  <Text style={[styles.mineAgg, { color: colors.textSecondary }, rtl]} numberOfLines={2}>
-                    {d.aggregate}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text style={[styles.mineAgg, { color: colors.textSecondary }, rtl]} numberOfLines={1}>
+                      {d.aggregate}
+                    </Text>
+                    <Text style={[styles.mineHelp, { color: colors.text }, rtl]} numberOfLines={1}>
+                      {d.helpers.length > 0
+                        ? (he ? `👥 ${d.helpers.length} יכולים לעזור` : `👥 ${d.helpers.length} can help`)
+                        : (he ? '✨ ONE ימצא' : '✨ ONE will find')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
+
+            {/* WHO CAN HELP — the supply side for the selected desire. Reaching a
+                provider goes THROUGH ONE, disclosure-safe. */}
+            {selectedDesire && (
+              <View style={[styles.helpPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.helpPanelTitle, { color: colors.text }, rtl]} numberOfLines={1}>
+                  {he ? `מי יכול לעזור · ${selectedDesire.title}` : `Who can help · ${selectedDesire.title}`}
+                </Text>
+                {selectedDesire.helpers.length === 0 ? (
+                  <Pressable
+                    onPress={() => askOne(he ? `מצא מי שיכול לעזור עם ${selectedDesire.title}` : `Find who can help with ${selectedDesire.title}`)}
+                    style={styles.helpFind}
+                  >
+                    <Text style={[styles.helpFindText, { color: colors.text }, rtl]}>
+                      {he ? 'שאל את ONE למצוא עבורך ›' : 'Ask ONE to find for you ›'}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  selectedDesire.helpers.slice(0, 5).map((o) => (
+                    <View key={o.id} style={[styles.helpRow, rtlRow(lang)]}>
+                      <Text style={styles.helpEmoji}>{o.emoji}</Text>
+                      <View style={styles.flex1}>
+                        <Text style={[styles.helpName, { color: colors.text }, rtl]} numberOfLines={1}>{o.name}</Text>
+                        <Text style={[styles.helpCat, { color: colors.textSecondary }, rtl]} numberOfLines={1}>{o.category}</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => reachProvider(o.name, selectedDesire.title)}
+                        style={[styles.helpReach, { backgroundColor: colors.text }]}
+                      >
+                        <Text style={[styles.helpReachText, { color: colors.background }]}>
+                          {he ? 'פנה דרך ONE' : 'Reach via ONE'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
           </View>
         )}
 
@@ -803,6 +903,17 @@ const styles = StyleSheet.create({
   mineEmoji: { fontSize: 22, marginTop: 2 },
   mineCardTitle: { fontSize: 14.5, fontWeight: '700', lineHeight: 19 },
   mineAgg: { fontSize: 12, lineHeight: 16 },
+  mineHelp: { fontSize: 12, fontWeight: '700', marginTop: 3 },
+  helpPanel: { marginTop: 10, borderWidth: 1, borderRadius: 16, padding: 13, gap: 10 },
+  helpPanelTitle: { fontSize: 13.5, fontWeight: '800' },
+  helpFind: { paddingVertical: 4 },
+  helpFindText: { fontSize: 13.5, fontWeight: '700' },
+  helpRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  helpEmoji: { fontSize: 20 },
+  helpName: { fontSize: 14, fontWeight: '700' },
+  helpCat: { fontSize: 11.5, marginTop: 1 },
+  helpReach: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  helpReachText: { fontSize: 12.5, fontWeight: '700' },
 
   // "Join a shared process by code" — the provider entry into the two-sided Unit.
   joinRow: {
