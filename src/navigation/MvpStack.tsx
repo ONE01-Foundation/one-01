@@ -23,6 +23,9 @@ import { useSharedValue } from 'react-native-reanimated';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SignInSheet } from '../screens/mvp/SignInSheet';
 import { HomeScreen } from '../screens/mvp/HomeScreen';
+import { HomeFocus } from '../screens/mvp/HomeFocus';
+import { MeetOne } from '../screens/mvp/MeetOne';
+import { ProfileFocus } from '../screens/mvp/ProfileFocus';
 import { UnitProfileSheet } from '../screens/mvp/UnitProfileSheet';
 import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
 import { OneProfileSheet } from '../screens/mvp/OneProfileSheet';
@@ -88,6 +91,8 @@ function useOverlayState() {
   const [createBusinessOpen, setCreateBusinessOpen] = useState(false);
   // The pricing / upgrade sheet (opened from the home "שדרג" line).
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  // The clean focus-mode profile (orb tap in focus mode).
+  const [profileFocusOpen, setProfileFocusOpen] = useState(false);
 
   return {
     openUnitId, setOpenUnitId,
@@ -105,6 +110,7 @@ function useOverlayState() {
     businessId, setBusinessId,
     createBusinessOpen, setCreateBusinessOpen,
     upgradeOpen, setUpgradeOpen,
+    profileFocusOpen, setProfileFocusOpen,
   };
 }
 
@@ -146,6 +152,13 @@ function HomeWithOverlays() {
   // persisted version so it only re-appears when ONBOARDING_CARDS_VERSION bumps.
   // A short delay lets the home splash play before the scrim fades in.
   const onboardingCardsSeen = useMvpStore((st) => st.onboardingCardsSeen);
+  // Which Home layout to render — switched from Settings → "מסך הבית".
+  const homeMode = useMvpStore((st) => st.homeMode);
+  // In focus mode, first-run is the MeetOne conversation (not the classic
+  // explainer cards). Gated on `metOne` (NOT hasCompletedOnboarding, which an
+  // anonymous auth sign-in flips on its own). Reactive so the stack swaps to
+  // HomeFocus the moment the intro completes.
+  const metOne = useMvpStore((st) => st.metOne);
   const [onboardingReady, setOnboardingReady] = React.useState(false);
   React.useEffect(() => {
     const t = setTimeout(() => setOnboardingReady(true), 900);
@@ -272,6 +285,41 @@ function HomeWithOverlays() {
 
   return (
     <>
+      {homeMode === 'focus' ? (
+        metOne ? (
+        <HomeFocus
+          onTapUnit={(id) => {
+            s.setOpenUnitId(id);
+            setTimeout(() => useMvpStore.getState().markUnitOpened(id), 0);
+          }}
+          onLongPressUnit={(id) => {
+            setUnitForceChat(true);
+            s.setOpenUnitId(id);
+            setTimeout(() => useMvpStore.getState().markUnitOpened(id), 0);
+          }}
+          onTapOrb={() => {
+            if (!useMvpStore.getState().hasCompletedOnboarding) s.setSignInOpen(true);
+            else s.setProfileFocusOpen(true);
+          }}
+          onLongPressOrb={() => {
+            if (!useMvpStore.getState().hasCompletedOnboarding) s.setSignInOpen(true);
+            else s.setSettingsOpen(true);
+          }}
+          onTapHeader={() => {
+            if (!useMvpStore.getState().hasCompletedOnboarding) s.setSignInOpen(true);
+            else s.setIdentityOpen(true);
+          }}
+          onCreateProcess={() => s.setQuickActionsOpen(true)}
+          onSignIn={() => s.setSignInOpen(true)}
+          onUpgrade={() => {
+            if (!useMvpStore.getState().hasCompletedOnboarding) s.setSignInOpen(true);
+            else s.setUpgradeOpen(true);
+          }}
+        />
+        ) : (
+          <MeetOne onDone={() => { /* onboarding flags flip in-store → HomeFocus shows */ }} />
+        )
+      ) : (
       <HomeScreen
         onTapUnit={(id) => {
           setUnitForceChat(false);
@@ -361,6 +409,7 @@ function HomeWithOverlays() {
         onOpenBusiness={(id) => s.setBusinessId(id)}
         openTimelineSignal={timelineSignal}
       />
+      )}
       <GlobalSheet
         visible={s.globalOpen}
         onClose={() => { s.setGlobalOpen(false); openPending(); }}
@@ -538,10 +587,19 @@ function HomeWithOverlays() {
       {/* Pricing / upgrade sheet — a screen-pinned slide-up (not a Modal), so it
           overlays the home directly when the user taps "שדרג". */}
       <SubscriptionPanel visible={s.upgradeOpen} onClose={() => s.setUpgradeOpen(false)} />
+      {/* Clean focus-mode profile — identity + selective disclosure. Opening
+          Settings / Upgrade closes it first (it's a full-screen Modal). */}
+      <ProfileFocus
+        visible={s.profileFocusOpen}
+        onClose={() => s.setProfileFocusOpen(false)}
+        onOpenSettings={() => { s.setProfileFocusOpen(false); setTimeout(() => s.setSettingsOpen(true), 60); }}
+        onUpgrade={() => { s.setProfileFocusOpen(false); setTimeout(() => s.setUpgradeOpen(true), 60); }}
+      />
       {/* First-run / post-update onboarding cards over the home. */}
       <OnboardingOverlay
         visible={
           onboardingReady &&
+          homeMode !== 'focus' &&
           onboardingCardsSeen < ONBOARDING_CARDS_VERSION &&
           !s.signInOpen &&
           !s.openUnitId

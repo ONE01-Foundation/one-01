@@ -104,6 +104,11 @@ export interface ChatMessageStored {
 /** Subscription tiers. 'free' is the default; 'pro' and 'max' are paid. */
 export type PlanTier = 'free' | 'pro' | 'max';
 
+/** Which Home layout to render. 'classic' = the animated default home
+ *  (HomeScreen); 'focus' = the clean launcher (HomeFocus). Switchable from
+ *  Settings → "מסך הבית". */
+export type HomeMode = 'classic' | 'focus';
+
 interface MvpStore {
   /** Optional name the user chose; spec puts the name question post-value, so this can be empty. */
   name: string;
@@ -133,6 +138,13 @@ interface MvpStore {
    * so it re-appears after a feature update that bumps the version.
    */
   onboardingCardsSeen: number;
+  /**
+   * True once the user finished the MeetOne first-run CONVERSATION (focus mode).
+   * Gates MeetOne vs HomeFocus INDEPENDENTLY of `hasCompletedOnboarding`, which
+   * an anonymous auth sign-in flips on its own (OneContext) — so the intro still
+   * shows for a brand-new user. Persisted.
+   */
+  metOne: boolean;
   /**
    * Toast queue. Head of the list is rendered as a banner under the status
    * bar. Auto-dismissed by the Toast component when its slide-out finishes.
@@ -187,6 +199,9 @@ interface MvpStore {
    * behind the same `setPlan`.
    */
   plan: PlanTier;
+  /** Which Home layout to render ('classic' animated default / 'focus' clean
+   *  launcher). Persisted; switched from Settings → "מסך הבית". */
+  homeMode: HomeMode;
   /**
    * Connected sources (email / calendar / bank / …), keyed by connector id →
    * connected boolean. Mock for now (no real OAuth); it's what makes ONE a
@@ -227,6 +242,8 @@ interface MvpStore {
   setName: (name: string) => void;
   /** Set the subscription tier (mock upgrade for now — see `plan`). */
   setPlan: (plan: PlanTier) => void;
+  /** Switch the Home layout mode (classic animated / focus launcher). */
+  setHomeMode: (mode: HomeMode) => void;
   /** Connect / disconnect a source by connector id. */
   setConnection: (id: string, connected: boolean) => void;
   /** Turn one of ONE's tools on/off. */
@@ -345,6 +362,8 @@ interface MvpStore {
   /** Mark today's digest as delivered (stores YYYY-MM-DD). */
   markDigestDelivered: (isoDate: string) => void;
   markOnboardingComplete: () => void;
+  /** Finish the MeetOne intro — marks the user as having met ONE AND onboarded. */
+  completeMeetOne: () => void;
   /** Record that the user has seen the onboarding cards up to version `v`. */
   setOnboardingCardsSeen: (v: number) => void;
   /** Reset back to seeded mock data — used by "clear state" dev affordance. */
@@ -395,6 +414,7 @@ export const useMvpStore = create<MvpStore>()(
       units: [],
       hasCompletedOnboarding: false,
       onboardingCardsSeen: 0,
+      metOne: false,
       notifications: [],
       homeChat: [],
       unitChats: {},
@@ -404,6 +424,7 @@ export const useMvpStore = create<MvpStore>()(
       pendingHomeInput: null,
       celebration: null,
       plan: 'free',
+      homeMode: 'classic',
       connections: {},
       enabledTools: {},
       memories: [],
@@ -469,6 +490,7 @@ export const useMvpStore = create<MvpStore>()(
         }),
       setUserGender: (userGender) => set({ userGender }),
       setPlan: (plan) => set({ plan }),
+      setHomeMode: (homeMode) => set({ homeMode }),
       setConnection: (id, connected) =>
         set((s) => ({ connections: { ...s.connections, [id]: connected } })),
       setToolEnabled: (id, enabled) =>
@@ -868,6 +890,7 @@ export const useMvpStore = create<MvpStore>()(
         }),
       markDigestDelivered: (isoDate) => set({ lastDigestDate: isoDate }),
       markOnboardingComplete: () => set({ hasCompletedOnboarding: true }),
+      completeMeetOne: () => set({ metOne: true, hasCompletedOnboarding: true }),
       setOnboardingCardsSeen: (v) => set({ onboardingCardsSeen: v }),
       reset: () =>
         set({
@@ -938,6 +961,7 @@ export const useMvpStore = create<MvpStore>()(
         units: state.units,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         onboardingCardsSeen: state.onboardingCardsSeen,
+        metOne: state.metOne,
         homeChat: state.homeChat,
         unitChats: state.unitChats,
         quizRuns: state.quizRuns,
@@ -945,6 +969,7 @@ export const useMvpStore = create<MvpStore>()(
         formRuns: state.formRuns,
         lastDigestDate: state.lastDigestDate,
         plan: state.plan,
+        homeMode: state.homeMode,
         connections: state.connections,
         enabledTools: state.enabledTools,
         memories: state.memories,

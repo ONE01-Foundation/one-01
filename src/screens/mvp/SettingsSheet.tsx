@@ -85,6 +85,8 @@ export function SettingsSheet({
   const setAgentSkin = useMvpStore((s) => s.setAgentSkin);
   const agentPersonality = useMvpStore((s) => s.agentPersonality);
   const setAgentPersonality = useMvpStore((s) => s.setAgentPersonality);
+  const homeMode = useMvpStore((s) => s.homeMode);
+  const setHomeMode = useMvpStore((s) => s.setHomeMode);
 
   const he = language === 'he';
 
@@ -101,6 +103,13 @@ export function SettingsSheet({
     { value: 'unknown', label: he ? 'נֵיטרלי' : 'Neutral' },
     { value: 'male', label: he ? 'לשון זכר' : 'He' },
     { value: 'female', label: he ? 'לשון נקבה' : 'She' },
+  ];
+
+  // Which Home layout to render: the animated classic home, or my clean
+  // launcher ("focus"). Switching takes effect immediately on the Home.
+  const homeModeOptions: { value: 'classic' | 'focus'; label: string }[] = [
+    { value: 'classic', label: he ? 'קלאסי' : 'Classic' },
+    { value: 'focus', label: he ? 'פוקוס' : 'Focus' },
   ];
 
   // Dev/testing: generate a full, richly-populated process (rotating through
@@ -206,6 +215,16 @@ export function SettingsSheet({
               options={themeOptions}
               selected={preference}
               onChange={(v) => setPreference(v)}
+            />
+          </Group>
+
+          {/* Home screen — classic animated home vs the clean "focus" launcher. */}
+          <Group title={he ? 'מסך הבית' : 'Home screen'} colors={colors} he={he}>
+            <SegmentedRow
+              colors={colors}
+              options={homeModeOptions}
+              selected={homeMode}
+              onChange={(v) => setHomeMode(v)}
             />
           </Group>
 
