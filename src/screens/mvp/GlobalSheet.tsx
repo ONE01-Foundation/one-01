@@ -52,6 +52,14 @@ import { useMvpStore, useActiveIdentity } from '../../stores/mvpStore';
 import { buildGlobalFeed, type CategoryKey } from '../../data/mvp/global';
 import { generateRichUnitByKey, type ArchetypeKey } from '../../data/mvp/unitArchetype';
 
+/** A stable hash of a string → a deterministic pseudo-count, so a desire's
+ *  anonymous "aggregate" reads the same every time (not a flickering random). */
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 interface GlobalSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -99,6 +107,26 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
   const setPendingHomeInput = useMvpStore((s) => s.setPendingHomeInput);
 
   const feed = useMemo(() => buildGlobalFeed(lang, identity?.type), [lang, identity?.type]);
+
+  // The user's OWN active desires, shown as ANONYMOUS AGGREGATE posts — their
+  // private processes join the collective ("you and N others…"), the human-layer
+  // vision made concrete. Counts are deterministic (hashed), so they stay stable.
+  const allUnits = useMvpStore((s) => s.units);
+  const myDesires = useMemo(() => {
+    const mine = allUnits.filter((u) => u.identityId === activeIdentityId && u.status !== 'completed');
+    const frames = he ? ['החודש', 'השבוע', 'לידך', 'בימים אלה'] : ['this month', 'this week', 'near you', 'these days'];
+    return mine.slice(0, 8).map((u) => {
+      const n = 3 + (hashStr(u.title) % 46);
+      const frame = frames[hashStr(u.id) % frames.length];
+      return {
+        id: u.id,
+        emoji: u.emoji,
+        title: u.title,
+        aggregate: he ? `את/ה ו-${n} אחרים · ${frame}` : `you and ${n} others · ${frame}`,
+        ask: he ? `מי עוד מחפש ${u.title}?` : `Who else wants ${u.title}?`,
+      };
+    });
+  }, [allUnits, activeIdentityId, he]);
 
   const credits = 1240;
   const rtl = rtlText(lang);
@@ -260,6 +288,52 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
         {/* Space switcher — Global is scoped to the active space (its feed reads
             the identity type), same component as the home list. */}
         <SpaceSwitcher style={styles.globalSpaceSwitcher} />
+
+        {/* YOUR desires, as anonymous aggregate posts — your private processes
+            joining the collective. The bridge between you and the network. */}
+        {myDesires.length > 0 && (
+          <View style={styles.mineSection}>
+            <Text style={[styles.mineTitle, { color: colors.text }, rtl]}>
+              {he ? 'הרצונות שלך ב-Global' : 'Your desires in Global'}
+            </Text>
+            <Text style={[styles.mineSub, { color: colors.textSecondary }, rtl]}>
+              {he ? 'מצטרפים לכולם — באופן אנונימי.' : 'Joined to everyone — anonymously.'}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.mineRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              {myDesires.map((d) => (
+                <Pressable
+                  key={d.id}
+                  onPress={() => { haptic.tap(); askOne(d.ask); }}
+                  style={({ pressed }) => [
+                    styles.mineCard,
+                    { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={d.title}
+                >
+                  <View style={[styles.mineTag, rtlRow(lang)]}>
+                    <Text style={styles.mineLock}>🔒</Text>
+                    <Text style={[styles.mineTagText, { color: colors.textSecondary }]}>
+                      {he ? 'אנונימי' : 'anonymous'}
+                    </Text>
+                  </View>
+                  <Text style={styles.mineEmoji}>{d.emoji}</Text>
+                  <Text style={[styles.mineCardTitle, { color: colors.text }, rtl]} numberOfLines={2}>
+                    {d.title}
+                  </Text>
+                  <Text style={[styles.mineAgg, { color: colors.textSecondary }, rtl]} numberOfLines={2}>
+                    {d.aggregate}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Provider side: join a process someone shared with you, by code. */}
         {onJoinShared && (
@@ -718,6 +792,17 @@ const styles = StyleSheet.create({
   // phone (screen narrower than the cap).
   content: { paddingHorizontal: 22, paddingTop: 84, paddingBottom: 40, gap: 14, width: '100%', maxWidth: 620, alignSelf: 'center' },
   globalSpaceSwitcher: { marginBottom: 2 },
+  mineSection: { marginTop: 6, marginBottom: 14 },
+  mineTitle: { fontSize: 15, fontWeight: '800' },
+  mineSub: { fontSize: 12.5, marginTop: 2, marginBottom: 10 },
+  mineRow: { gap: 10, paddingVertical: 2, paddingHorizontal: 2 },
+  mineCard: { width: 158, borderWidth: 1, borderRadius: 16, padding: 13, gap: 5 },
+  mineTag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  mineLock: { fontSize: 10 },
+  mineTagText: { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.2 },
+  mineEmoji: { fontSize: 22, marginTop: 2 },
+  mineCardTitle: { fontSize: 14.5, fontWeight: '700', lineHeight: 19 },
+  mineAgg: { fontSize: 12, lineHeight: 16 },
 
   // "Join a shared process by code" — the provider entry into the two-sided Unit.
   joinRow: {
