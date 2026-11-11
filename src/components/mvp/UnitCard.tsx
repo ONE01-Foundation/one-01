@@ -62,26 +62,24 @@ interface UnitCardProps {
 
 const PROGRESS_GREEN = '#10B981';
 
-function formatTimestamp(iso: string, yesterdayLabel: string, now: number = Date.now()): string {
+// Relative "when" — reads like a live feed ("now", "5m", "2h", "yesterday"), so a
+// card feels like something that MOVED, not a static timestamp.
+function formatTimestamp(iso: string, he: boolean, now: number = Date.now()): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return '';
-  const diffH = (now - t) / (1000 * 60 * 60);
-  if (diffH < 24) {
-    try {
-      // Locale-aware: en-US gets "2:20 PM", he/en-GB get "14:20", etc.
-      return new Date(t).toLocaleTimeString(undefined, {
-        hour: 'numeric',
-        minute: '2-digit',
-      });
-    } catch {
-      const d = new Date(t);
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      return `${hh}:${mm}`;
-    }
+  const m = Math.floor((now - t) / 60000);
+  if (m < 1) return he ? 'עכשיו' : 'now';
+  if (m < 60) return he ? `${m} ד׳` : `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return he ? `${h} ש׳` : `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return he ? 'אתמול' : 'yesterday';
+  if (d < 7) return he ? `${d} י׳` : `${d}d`;
+  try {
+    return new Date(t).toLocaleDateString();
+  } catch {
+    return '';
   }
-  if (diffH < 48) return yesterdayLabel;
-  return new Date(t).toLocaleDateString();
 }
 
 export function UnitCard({
@@ -99,8 +97,11 @@ export function UnitCard({
   const he = lang === 'he';
   const secondary = unit.latestBroadcastText[1];
   const live = unitStatusLine(unit, he);
-  const timestamp = formatTimestamp(unit.lastUpdatedAt, t('card_timestamp_yesterday'));
+  const timestamp = formatTimestamp(unit.lastUpdatedAt, he);
   const hasUnread = unit.unreadUpdates > 0;
+  // The "other side" ONE is dealing with (provider / person), when there is one —
+  // shown on the card so you see WHO, not just what.
+  const party = unit.people && unit.people.length > 0 ? unit.people[0].name : undefined;
 
   // Visibility caption — private / public / shared (+N). Falls back to the
   // unit's relationLabel for shared processes ("Shared +2" etc.).
@@ -274,6 +275,11 @@ export function UnitCard({
             <Text style={[styles.visibility, { color: colors.textSecondary }]} numberOfLines={1}>
               {visibilityLabel}
             </Text>
+            {!!party && (
+              <Text style={[styles.visibility, { color: colors.textSecondary }]} numberOfLines={1}>
+                {`· ${party}`}
+              </Text>
+            )}
           </View>
         </View>
 

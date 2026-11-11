@@ -67,7 +67,7 @@ import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, s
 import { Orb } from '../../components/mvp/Orb';
 import { UnitCard } from '../../components/mvp/UnitCard';
 import { InputBar } from '../../components/mvp/InputBar';
-import { ArrowDownIcon, PlusThinIcon, StackedCardsIcon, GhostModeIcon, MicIcon, MicOffIcon, CameraIcon, SpeakerIcon, PersonIcon, BriefcaseIcon, HouseIcon, PlusIcon, CloseIcon } from '../../components/mvp/icons';
+import { ArrowDownIcon, PlusThinIcon, StackedCardsIcon, GhostModeIcon, MicIcon, MicOffIcon, CameraIcon, SpeakerIcon, PersonIcon, BriefcaseIcon, HouseIcon, PlusIcon, CloseIcon, GlobeIcon } from '../../components/mvp/icons';
 import { EdgeBars } from '../../components/mvp/EdgeBars';
 import { useThemeStore } from '../../stores/themeStore';
 import { useT, useLanguage } from '../../i18n/useT';
@@ -169,7 +169,12 @@ const TITLE_BAR_H = 78;              // small Orb + identity below it
 // lands in place after a short scroll instead of a long drag through empty space.
 // (The resting figure is an absolute overlay at HERO_CENTER_TOP, independent of
 // this, so shrinking the spacer shortens the scroll without moving the figure.)
-const HERO_REST_H = Math.round(SCREEN_H * 0.46);
+// Flat home: the figure rests at the TOP (HERO_CENTER_TOP) and the processes
+// list shows IMMEDIATELY right under it — so the hero spacer is just tall enough
+// to clear the resting orb (HERO_CENTER_TOP ≈ 0.085·H + the 100px orb + a small
+// gap), NOT a full screen. The figure is an absolute overlay independent of this,
+// so this only governs where the list starts.
+const HERO_REST_H = Math.round(SCREEN_H * 0.085) + 88;
 // Full-open scroll distance — coupled to HERO_REST_H so the figure finishes
 // collapsing to the top bar at the SAME point the list lands in its final
 // position (one continuous motion, no snap needed to "complete" it).
@@ -2701,7 +2706,10 @@ export function HomeScreen({
   // moment a thread exists it steps aside for the inline chat (which lives in
   // the same home scroll), so at rest you see the CONVERSATION, not a separate
   // broadcast line. One continuous surface, no mode switch.
-  const broadcastShouldHide = activeCount > 0;
+  // The under-figure greeting (heroLines) now shows at REST even when a chat
+  // history exists — it's ONE's persistent presence line, not a one-off CTA. Only
+  // hide it when the chat is actually OPEN (the thread takes over the surface).
+  const broadcastShouldHide = chatActive;
 
   // ONE's own clock/status — date + live time. Shown in the hero sequence at
   // rest AND kept under the collapsed orb in the cards view (the system status
@@ -2780,14 +2788,35 @@ export function HomeScreen({
         { text: he ? 'מה בא לך שאנהל או אייצג בשבילך?' : 'What would you like me to manage or represent for you?', kind: 'beat' as const },
       ];
     }
-    // Clean rest home: the figure sits alone over the composer — NO broadcast
-    // bubbles. ONE speaks through the under-box channel line now (and through the
-    // chat once you open it), so the resting home stays quiet and uncrowded
-    // (matches the target home mock). The first-run discovery beats above are
-    // kept — onboarding still needs ONE to introduce itself.
-    return [];
+    // ONE REPORTS IN — the under-figure line reads from the real process state so
+    // it feels like a representative, not a prompt. It rotates (30s clock) through:
+    // a time-aware greeting → what needs you / what ONE is handling → a soft invite.
+    const he = lang === 'he';
+    const greet = timeGreeting(lang, nowTick, identity?.name);
+    const active = realUnits.filter((u) => u.status !== 'completed');
+    const needsYou = active.filter(
+      (u) =>
+        u.unreadUpdates > 0 ||
+        (u.broadcast?.[0] && ['attention', 'missing_info', 'waiting'].includes(u.broadcast[0].type)),
+    ).length;
+    const status =
+      needsYou > 0
+        ? he
+          ? `${needsYou} ${needsYou === 1 ? 'דבר צריך' : 'דברים צריכים'} אותך — השאר אצלי.`
+          : `${needsYou} ${needsYou === 1 ? 'thing needs' : 'things need'} you — I've got the rest.`
+        : active.length > 0
+          ? he ? 'הכול בטיפול. אני על זה.' : "Everything's handled. I'm on it."
+          : null;
+    // The line may be TWO lines: greeting + a live status; it then rotates to the
+    // short greeting and a soft invite.
+    const pool: string[] = [];
+    if (status) pool.push(`${greet}\n${status}`);
+    pool.push(greet);
+    pool.push(he ? 'מה שתצטרך — אני כאן.' : "Whatever you need — I'm here.");
+    const idx = Math.floor(nowTick / 30000) % pool.length;
+    return [{ text: pool[idx], kind: 'greeting' as const }];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasOnboarded, onboardStep, userName, lang, identity?.id, identity?.name, allProfileUnits, nowTick, heroStatus, greetingRot, headlineStage, hintRot]);
+  }, [hasOnboarded, onboardStep, userName, lang, identity?.id, identity?.name, allProfileUnits, realUnits, nowTick, heroStatus, greetingRot, headlineStage, hintRot]);
 
   // Broadcast interaction:
   //   • Tap — cycle to the next broadcast line.
@@ -3033,11 +3062,10 @@ export function HomeScreen({
     // the very top (on first mount they're already here).
     setStatusBarHidden(true);
     orbEnterScale.value = 0;
-    // Start at SLEEP_ORB_RAISE so the dot grows in at TRUE screen-centre (the
-    // rest-pair offset lands the figure a touch ABOVE centre, so +raise cancels
-    // that back to dead-centre); it then RISES by `raise` into the figure's
-    // paired resting spot — "a dot that comes up into the figure".
-    orbMountY.value = SLEEP_ORB_RAISE;
+    // Flat home: the dot grows in at TRUE screen-centre (orbMountY =
+    // ORB_FROM_CENTER_OFFSET), then RISES to its resting spot at the TOP
+    // (orbMountY → 0 = HERO_CENTER_TOP) as the splash hands off to the home.
+    orbMountY.value = ORB_FROM_CENTER_OFFSET;
     eyesOpacityMount.value = 0;
     elementsMountOpacity.value = 0;
     elementsMountY.value = 16;
@@ -3119,7 +3147,7 @@ export function HomeScreen({
         easing: Easing.out(Easing.cubic),
       }),
     );
-  }, [orbMountY, orbEnterScale, elementsMountY, elementsMountOpacity, inputMountY, inputMountOpacity, eyesOpacityMount, SLEEP_ORB_RAISE]);
+  }, [orbMountY, orbEnterScale, elementsMountY, elementsMountOpacity, inputMountY, inputMountOpacity, eyesOpacityMount, ORB_FROM_CENTER_OFFSET]);
 
   // Play the opening once on mount.
   useEffect(() => {
@@ -3156,7 +3184,11 @@ export function HomeScreen({
     // Lift to the centred pair whenever EITHER ONE is dozing (1-sleepSV) OR the
     // home is simply at rest (restPairGate × scrollRestFactor) — the latter is
     // the new default so the composer sits just under the figure at steady rest.
-    const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
+    // Flat home: the figure + composer do NOT gather into a centred pair at rest
+    // (that was the old "mic handoff" pose). The figure stays at the TOP and the
+    // composer stays docked at the BOTTOM. The pair still gathers only when ONE
+    // DOZES (1 - sleepSV), for the calm sleep screen.
+    const centerAmt = 1 - sleepSV.value;
     const sleepLift = centerAmt * SLEEP_INPUT_LIFT * sleepCenterOK.value;
     return {
       // The composer FADES OUT as ONE dozes (sleepChromeSV) — on sleep the home
@@ -3319,7 +3351,9 @@ export function HomeScreen({
       : ["I'm here", 'Listening', 'Here for you', "What's on your mind?", 'We can talk about anything', 'ONE'];
   }, [lang]);
   const [idleLineIdx, setIdleLineIdx] = useState(0);
-  const idleLineActive = hasOnboarded && !chatActive && !inCards;
+  // In-box rotating line REMOVED per user — ONE speaks UNDER the figure now (the
+  // rotating greeting in heroLines). The composer stays a plain input.
+  const idleLineActive = false;
   useEffect(() => {
     if (!idleLineActive) return;
     // A calm, slow cadence — ONE isn't announcing, just quietly there.
@@ -3708,14 +3742,22 @@ export function HomeScreen({
     // Rest-pair lift — carried in BOTH dock transforms so the input rises to the
     // centred pair no matter which style wins the flatten. Active at steady rest
     // (restPairGate × scrollRestFactor) as well as while dozing (1-sleepSV).
-    const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
+    // Flat home: the figure + composer do NOT gather into a centred pair at rest
+    // (that was the old "mic handoff" pose). The figure stays at the TOP and the
+    // composer stays docked at the BOTTOM. The pair still gathers only when ONE
+    // DOZES (1 - sleepSV), for the calm sleep screen.
+    const centerAmt = 1 - sleepSV.value;
     const sleepLift = centerAmt * SLEEP_INPUT_LIFT * sleepCenterOK.value;
+    // On scroll into the processes, the composer DROPS the last bit to the very
+    // bottom (it rests a touch raised; scrolling pushes it ~24px down). scrollRestFactor
+    // is 1 at rest → 0 as you scroll up, so (1 - it) ramps the drop in.
+    const drop = (1 - scrollRestFactor.value) * 24;
     if (isAndroid) {
       const kb = keyboardHeight.value;
       const lift = kb > 1 ? kb + KB_GAP : insetsBottom;
-      return { transform: [{ translateY: -lift - sleepLift }] };
+      return { transform: [{ translateY: -lift - sleepLift + drop }] };
     }
-    return { transform: [{ translateY: inputKeyboardLift.value - sleepLift }] };
+    return { transform: [{ translateY: inputKeyboardLift.value - sleepLift + drop }] };
   });
 
   // A bottom gradient fade that RIDES UP with the keyboard (like the home's
@@ -3826,22 +3868,18 @@ export function HomeScreen({
   // scroll the composer drops to the bottom so the curtain recedes with it and
   // the list is uncovered from the top — one motion, aligned with the gradient.
   const listCoverStyle = useAnimatedStyle(() => {
-    const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
+    // Flat home: the figure + composer do NOT gather into a centred pair at rest
+    // (that was the old "mic handoff" pose). The figure stays at the TOP and the
+    // composer stays docked at the BOTTOM. The pair still gathers only when ONE
+    // DOZES (1 - sleepSV), for the calm sleep screen.
+    const centerAmt = 1 - sleepSV.value;
     const sleepLift = centerAmt * SLEEP_INPUT_LIFT * sleepCenterOK.value;
     // Overlap the composer a touch (−50) so there's no seam between them.
     return { transform: [{ translateY: SCREEN_H - sleepLift - 50 }] };
   });
-  // The curtain must CAPTURE taps while it's covering the hidden list at rest —
-  // otherwise a tap lands on a process card lying underneath and opens it. Block
-  // while at rest (scroll ≈ 0); let taps through once the list is scrolled into
-  // view so the real cards are tappable again.
-  const [curtainBlocks, setCurtainBlocks] = useState(true);
-  useAnimatedReaction(
-    () => scrollY.value < 12,
-    (blocks, prev) => {
-      if (prev !== null && blocks !== prev) runOnJS(setCurtainBlocks)(blocks);
-    },
-  );
+  // Flat home: the processes list is always visible + tappable at rest, so there
+  // is no curtain to block taps anymore (the list is no longer hidden behind the
+  // composer at rest).
   // Cabinet-open reveal for the processes list — kept SIMPLE to avoid fighting
   // the figure collapse + composer drop. The list just fades in (with a tiny
   // settle from below) as you scroll past the figure, at its natural scroll
@@ -3849,15 +3887,23 @@ export function HomeScreen({
   // overlap/conflicts). The figure lifting + composer dropping do the "doors
   // part"; this makes the list appear rather than hard-cut in.
   const processesRevealStyle = useAnimatedStyle(() => {
-    const p = scrollY.value / Math.max(1, SNAP_OPEN);
-    // Appear EARLY (by ~30% of the scroll) so there's no long dead stretch of
-    // empty space before the list — it's there as soon as the figure starts
-    // lifting, where the eye already is.
+    // Flat home: the list is visible at rest, but it fades IN with the mount
+    // cascade (elementsMountOpacity) so on the splash it enters IN TIME with the
+    // figure + composer, not a beat BEFORE them. (sleepChromeSV kept for safety,
+    // though doze is now disabled.)
     return {
-      opacity: interpolate(p, [0.04, 0.3], [0, 1], Extrapolation.CLAMP),
-      transform: [{ translateY: interpolate(p, [0, 0.4], [18, 0], Extrapolation.CLAMP) }],
+      opacity: sleepChromeSV.value * elementsMountOpacity.value,
+      transform: [{ translateY: 0 }],
     };
   });
+
+  // The anchored space row RIDES UP with the scroll, then PINS below the figure
+  // (stops after ~95px). It enters with the mount cascade (opacity + elementsMountY).
+  // NO opaque bg — the top EdgeBars gradient fades the cards passing behind it.
+  const switcherAnchorStyle = useAnimatedStyle(() => ({
+    opacity: elementsMountOpacity.value,
+    transform: [{ translateY: elementsMountY.value - Math.min(scrollY.value, 135) }],
+  }));
 
   /*
    * Fusion animation (Home → Processes):
@@ -3970,7 +4016,11 @@ export function HomeScreen({
     // the composer) only applies while awake — as ONE dozes (sleepSV→0) the
     // figure settles to TRUE centre, back to the bare splash dot, as the
     // composer fades away.
-    const centerAmt = Math.max(1 - sleepSV.value, restPairGate.value * scrollRestFactor.value);
+    // Flat home: the figure + composer do NOT gather into a centred pair at rest
+    // (that was the old "mic handoff" pose). The figure stays at the TOP and the
+    // composer stays docked at the BOTTOM. The pair still gathers only when ONE
+    // DOZES (1 - sleepSV), for the calm sleep screen.
+    const centerAmt = 1 - sleepSV.value;
     const pairRaise = SLEEP_ORB_RAISE * sleepSV.value;
     const sleepDrop = centerAmt * (ORB_FROM_CENTER_OFFSET - pairRaise - REST_PAIR_LIFT) * (1 - f);
     // As it settles asleep in the centre, the bare black dot swells a touch —
@@ -4147,20 +4197,9 @@ export function HomeScreen({
   // overlay sheet is up (a process card, profile, settings, global, +, …).
   const homeAtRest = !chatActive && !callActive && !anySheetOpen;
   const scheduleSleep = useCallback(() => {
-    // Sleep used to be native-only — its transform-heavy centre-drop mis-rendered
-    // on web (orb vanished). The figure now rests centred already (rest-pair), so
-    // sleep no longer moves it — it just closes the eyes to a bare dot in place —
-    // which is web-safe, so it runs on every platform now.
+    // Sleep / idle-doze DISABLED per user request — ONE no longer falls asleep to
+    // a bare dot. Clear any pending timer; never schedule a new one.
     if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-    sleepTimerRef.current = setTimeout(() => {
-      // If ONE dozed off while scrolled into the processes list, glide back to
-      // the Home rest position FIRST, then fall asleep — so it always sleeps as
-      // the bare dot at Home, never stranded up in the list. The centre-drop is
-      // gated on the scroll fraction, so it engages cleanly once we're back at
-      // the top.
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
-      setOrbAsleep(true);
-    }, IDLE_SLEEP_MS);
   }, []);
 
   // Any touch on the home surface wakes the chevrons, wakes ONE (and restarts
@@ -4594,29 +4633,56 @@ export function HomeScreen({
                       </Text>
                     </Pressable>
                   )}
-                  {items.map((u, ci) => (
-                    <Animated.View key={u.id} entering={FadeIn.duration(240).delay(ci * 40)}>
-                      <UnitCard
-                        unit={u}
-                        onPress={() => onTapUnit(u.id)}
-                        onLongPress={() => onLongPressUnit?.(u.id)}
-                        onDelete={() => removeUnit(u.id)}
-                        onPin={() =>
-                          updateUnit(u.id, { unreadUpdates: (u.unreadUpdates ?? 0) + 1 })
-                        }
-                        onShare={() => {
-                          const summary = [
-                            `${u.emoji} ${u.title}`,
-                            u.latestBroadcastText?.[0] ?? '',
-                            lang === 'he' ? '\nנשלח מ-ONE' : '\nShared from ONE',
-                          ]
-                            .filter(Boolean)
-                            .join('\n');
-                          Share.share({ message: summary }).catch(() => {});
-                        }}
-                      />
-                    </Animated.View>
-                  ))}
+                  {(() => {
+                    // Split the (already attention-sorted) list into the few things
+                    // that NEED the user vs what ONE is handling — so the home reads
+                    // as a representative's desk, not a flat to-do list.
+                    const he2 = lang === 'he';
+                    const needsAttn = (u: Unit) =>
+                      u.unreadUpdates > 0 ||
+                      (!!u.broadcast?.[0] && ['attention', 'missing_info', 'waiting'].includes(u.broadcast[0].type));
+                    const needs = items.filter(needsAttn);
+                    const rest = items.filter((u) => !needsAttn(u));
+                    const renderCard = (u: Unit, ci: number) => (
+                      <Animated.View key={u.id} entering={FadeIn.duration(240).delay(ci * 40)}>
+                        <UnitCard
+                          unit={u}
+                          onPress={() => onTapUnit(u.id)}
+                          onLongPress={() => onLongPressUnit?.(u.id)}
+                          onDelete={() => removeUnit(u.id)}
+                          onPin={() =>
+                            updateUnit(u.id, { unreadUpdates: (u.unreadUpdates ?? 0) + 1 })
+                          }
+                          onShare={() => {
+                            const summary = [
+                              `${u.emoji} ${u.title}`,
+                              u.latestBroadcastText?.[0] ?? '',
+                              he2 ? '\nנשלח מ-ONE' : '\nShared from ONE',
+                            ]
+                              .filter(Boolean)
+                              .join('\n');
+                            Share.share({ message: summary }).catch(() => {});
+                          }}
+                        />
+                      </Animated.View>
+                    );
+                    return (
+                      <>
+                        {needs.length > 0 && (
+                          <Text style={[styles.cardSectionLabel, { color: colors.text }, rtlText(lang)]}>
+                            {he2 ? 'צריך ממך' : 'Needs you'}
+                          </Text>
+                        )}
+                        {needs.map(renderCard)}
+                        {rest.length > 0 && needs.length > 0 && (
+                          <Text style={[styles.cardSectionLabel, { color: colors.textSecondary }, rtlText(lang)]}>
+                            {he2 ? 'בטיפול' : 'In progress'}
+                          </Text>
+                        )}
+                        {rest.map(renderCard)}
+                      </>
+                    );
+                  })()}
                 </View>
               )}
             </View>
@@ -4913,11 +4979,10 @@ export function HomeScreen({
                 // underneath and opens it. pointerEvents:none here does NOT stop
                 // the ScrollView from scrolling (scroll lives on the parent), so
                 // you can still scroll down to reveal + then tap the real cards.
-                <Animated.View style={[styles.processesInline, processesRevealStyle]} pointerEvents={curtainBlocks ? 'none' : 'auto'}>
-                  {/* Space switcher — headers the revealed list. Switching re-scopes
-                      the list to that space (units are per-identity). Same component
-                      in the ONE profile + Global. */}
-                  <SpaceSwitcher style={styles.homeSpaceSwitcher} />
+                <Animated.View style={[styles.processesInline, processesRevealStyle]} pointerEvents="auto">
+                  {/* Space switcher moved OUT to a fixed anchor overlay below the
+                      figure (see switcherAnchor) so it stays put on scroll instead
+                      of sliding up under the figure. */}
                   {processesContent}
                 </Animated.View>
               )}
@@ -4951,8 +5016,7 @@ export function HomeScreen({
               // bottom fade is off during a call (the call dock renders its own).
               top
               bottom={!callActive}
-              // Fade ends around the orb's bottom edge — covers behind the orb
-              // without dimming the first drawer below it.
+              // Fades the cards out behind the figure at the top edge.
               topHeight={HERO_CENTER_TOP + HOME_ORB_SIZE - 16}
             />
 
@@ -4965,6 +5029,27 @@ export function HomeScreen({
                 style={[StyleSheet.absoluteFill, styles.kbFadeHost, kbBottomFadeStyle]}
               >
                 <EdgeBars top={false} bottom bottomHeight={150} />
+              </Animated.View>
+            )}
+
+            {/* Top bar — Global (globe) on the LEFT, the space switcher on the
+                RIGHT — a fixed header ABOVE the figure (per the user's mock). */}
+            {hasOnboarded && !chatActive && !callActive && (
+              <Animated.View style={[styles.topBar, elementsMountStyle]} pointerEvents="box-none">
+                {onOpenGlobal ? (
+                  <Pressable
+                    onPress={() => { haptic.press(); seenGlobalRef.current = true; onOpenGlobal(); }}
+                    hitSlop={14}
+                    accessibilityRole="button"
+                    accessibilityLabel={lang === 'he' ? 'ONE01 גלובל' : 'ONE01 Global'}
+                    style={styles.globeBtn}
+                  >
+                    <GlobeIcon size={24} color={colors.textSecondary} />
+                  </Pressable>
+                ) : (
+                  <View style={styles.globeBtn} />
+                )}
+                <SpaceSwitcher style={styles.homeSpaceSwitcherTop} />
               </Animated.View>
             )}
 
@@ -4985,7 +5070,8 @@ export function HomeScreen({
             {/* Global "up" chevron — hints "pull DOWN for ONE01 Global". Lives
                 at the very top; same brief reveal + idle reminder as the
                 bottom chevron. Hidden in chat / call / sign-in. */}
-            {onOpenGlobal && !chatActive && !callActive && !signInOpen && (
+            {/* Up chevron hidden per user request (the pull-to-Global gesture still works). */}
+            {false && onOpenGlobal && !chatActive && !callActive && !signInOpen && (
               <Animated.View
                 // box-none: only the centred arrow Pressable captures taps; the
                 // rest of the full-width strip passes touches through.
@@ -5329,7 +5415,8 @@ export function HomeScreen({
         {/* Down-chevron → scrolls the home DOWN into the inline process list
             (no sheet). box-none so only the small arrow captures taps; it fades
             out on scroll, while typing, etc. */}
-        {hasOnboarded && !callActive && (
+        {/* Down chevron hidden per user request (scrolling into processes still works). */}
+        {false && hasOnboarded && !callActive && (
           <Animated.View
             pointerEvents="box-none"
             style={[styles.processesChevron, { bottom: Math.round(SCREEN_H / 2) - CHEVRON_CENTER_GAP + REST_PAIR_LIFT }, processesChevronStyle]}
@@ -6168,10 +6255,9 @@ const styles = StyleSheet.create({
     // the user picked over "no empty band under a short list".
     minHeight: SCREEN_H - 230,
     paddingHorizontal: 18,
-    // A touch more top padding so the FIRST row sits safely behind the composer
-    // at rest (the hero spacer is shorter now), then clears the collapsed figure
-    // + top bar once scrolled open.
-    paddingTop: 72,
+    // The space row is now a TOP BAR (above the figure), so the list starts just
+    // below the (up to 2-line) greeting under the figure.
+    paddingTop: 92,
     // Cap + centre the list column on wide (web/desktop) viewports so the process
     // rows don't stretch edge-to-edge (same cap as the composer / chat).
     width: '100%',
@@ -6180,6 +6266,18 @@ const styles = StyleSheet.create({
   },
   // Space switcher that headers the revealed list.
   homeSpaceSwitcher: { marginBottom: 14, paddingHorizontal: 2 },
+  // Top-bar variant — no bottom margin so it aligns with the globe in the row.
+  homeSpaceSwitcherTop: { paddingHorizontal: 0 },
+  // Fixed top bar: globe (left) + space switcher (right), above the figure.
+  topBar: { position: 'absolute', left: 0, right: 0, top: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, zIndex: 20 },
+  globeBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  // "צריך ממך" / "בטיפול" section labels above the process cards.
+  cardSectionLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3, marginTop: 10, marginBottom: 6, paddingHorizontal: 4 },
+  // Opaque top band so cards scroll UNDER the figure + space row (below EdgeBars
+  // 15 / figure 20, above the scroll content).
+  headerMask: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10 },
+  // The space row, pinned below the figure (above the mask, below the figure).
+  switcherAnchor: { position: 'absolute', left: 0, right: 0, paddingHorizontal: 18, zIndex: 16 },
   emptyCardsState: {
     minHeight: SNAP_OPEN,
     alignItems: 'center',
@@ -6380,14 +6478,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 29,
   },
-  inputDockWebGap: { bottom: 18 },
+  inputDockWebGap: { bottom: 30 },
   inputDock: {
     position: 'absolute',
     // Flush against the safe-area bottom — sits as low as we can go without
     // overlapping the home indicator. When the keyboard opens, inputDockStyle
     // slides it up by the LIVE keyboard height (useAnimatedKeyboard), so it
     // rides the keyboard top with a small KB_GAP.
-    bottom: 0,
+    // Raised a touch off the very bottom so the composer + upgrade line sit a
+    // little higher on the home (user request).
+    bottom: 24,
     left: 0,
     right: 0,
     // Centre the capsule on wide (web/desktop) viewports — the inner wrapper

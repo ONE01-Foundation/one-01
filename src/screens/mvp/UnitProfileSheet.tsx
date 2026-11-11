@@ -2031,6 +2031,54 @@ function ProfileView({
         {lines[lineIdx % lines.length]}
       </Animated.Text>
 
+      {/* NEEDS-YOU banner — when this process is waiting on the user (an unread
+          update or an attention/waiting/missing-info broadcast), the ONE thing to
+          do is pulled to the top with a tap that opens the conversation to act. */}
+      {unit.sharedRole !== 'human' &&
+        unit.status !== 'completed' &&
+        ((unit.unreadUpdates ?? 0) > 0 ||
+          (!!unit.broadcast?.[0] &&
+            ['attention', 'missing_info', 'waiting'].includes(unit.broadcast[0].type))) &&
+        !!unit.latestBroadcastText?.[0] && (
+          <Pressable
+            onPress={() => { haptic.tap(); onOpenThread?.(); }}
+            style={({ pressed }) => [
+              {
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 11,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
+                borderRadius: 14,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                marginTop: 10,
+                opacity: pressed ? 0.9 : 1,
+              },
+              rtlRow(lang),
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={he ? 'צריך ממך' : 'Needs you'}
+          >
+            <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#10B981' }} />
+            <View style={styles.flex1}>
+              <Text style={[{ fontSize: 11, fontWeight: '800', color: '#10B981', marginBottom: 2 }, rtlText(lang)]}>
+                {he ? 'צריך ממך' : 'Needs you'}
+              </Text>
+              <Text
+                style={[{ fontSize: 13.5, lineHeight: 19, fontWeight: '600', color: colors.text }, rtlText(lang)]}
+                numberOfLines={2}
+              >
+                {unit.latestBroadcastText[0]}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
+              {he ? 'טפל ‹' : 'Handle ›'}
+            </Text>
+          </Pressable>
+        )}
+
       {/* JOINED process (you're the provider): the conversation IS the point —
           lead with it, since the owner's steps/drafts aren't yours to fill. */}
       {unit.sharedRole === 'human' && !!unit.shareCode && (
@@ -2712,6 +2760,14 @@ function ChatView({
   const he = lang === 'he';
   // Starters guide a fresh conversation, then step aside once it's under way.
   const showSuggestions = suggestions.length > 0 && messages.length < 3;
+  // When ONE opened this process straight into chat because it needs the user,
+  // don't land them on a blank thread — surface ONE's actual ask up top so the
+  // conversation starts WITH context, in ONE's own voice.
+  const needsAsk =
+    unit.status !== 'completed' &&
+    ((unit.unreadUpdates ?? 0) > 0 ||
+      (!!unit.broadcast?.[0] && ['attention', 'missing_info', 'waiting'].includes(unit.broadcast[0].type)));
+  const askText = unit.latestBroadcastText?.[0];
   return (
     <>
       {/* The unit's emoji + title now live in the sticky header bar above —
@@ -2765,9 +2821,24 @@ function ChatView({
         nestedScrollEnabled
       >
         {messages.length === 0 && !isTyping ? (
-          <Text style={[styles.empty, { color: colors.textSecondary, padding: 24 }, rtlText(lang)]}>
-            {he ? 'נתחיל לדבר…' : 'Start the conversation…'}
-          </Text>
+          needsAsk && askText ? (
+            // Land on ONE's ask, flat and in its voice — then an open prompt.
+            <View style={styles.chatAskIntro}>
+              <Text selectable style={[styles.chatOneFlat, { color: colors.text }, rtlText(lang)]}>
+                {askText}
+              </Text>
+              <Text
+                selectable
+                style={[styles.chatOneFlat, { color: colors.textSecondary, marginTop: 6 }, rtlText(lang)]}
+              >
+                {he ? 'מה תרצה לעשות?' : 'What would you like to do?'}
+              </Text>
+            </View>
+          ) : (
+            <Text style={[styles.empty, { color: colors.textSecondary, padding: 24 }, rtlText(lang)]}>
+              {he ? 'נתחיל לדבר…' : 'Start the conversation…'}
+            </Text>
+          )
         ) : (
           <>
             {messages.map((m) => {
@@ -3679,4 +3750,5 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   unitWidgetWrap: { alignSelf: 'stretch', marginVertical: 8 },
+  chatAskIntro: { alignSelf: 'stretch', paddingTop: 4 },
 });
