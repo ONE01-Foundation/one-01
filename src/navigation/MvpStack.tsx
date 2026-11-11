@@ -45,7 +45,6 @@ import { LegalSheet, type LegalDoc } from '../screens/mvp/LegalSheet';
 import { useMvpStore } from '../stores/mvpStore';
 import { NotificationToast } from '../components/mvp/NotificationToast';
 import { SubscriptionPanel } from '../screens/mvp/SubscriptionPanel';
-import { OnboardingOverlay, ONBOARDING_CARDS_VERSION } from '../screens/mvp/OnboardingOverlay';
 import { CompletionCelebration } from '../components/mvp/CompletionCelebration';
 import { useDueReminderWatcher } from '../hooks/useDueReminderWatcher';
 
@@ -148,22 +147,20 @@ function HomeWithOverlays() {
     void useBusinessStore.getState().refresh();
   }, []);
 
-  // First-run (and post-update) onboarding cards over the home. Gate on the
-  // persisted version so it only re-appears when ONBOARDING_CARDS_VERSION bumps.
-  // A short delay lets the home splash play before the scrim fades in.
-  const onboardingCardsSeen = useMvpStore((st) => st.onboardingCardsSeen);
   // Which Home layout to render — switched from Settings → "מסך הבית".
   const homeMode = useMvpStore((st) => st.homeMode);
-  // In focus mode, first-run is the MeetOne conversation (not the classic
-  // explainer cards). Gated on `metOne` (NOT hasCompletedOnboarding, which an
-  // anonymous auth sign-in flips on its own). Reactive so the stack swaps to
-  // HomeFocus the moment the intro completes.
+  // First-run is the MeetOne conversation (early-returned below). Gated on
+  // `metOne` (NOT hasCompletedOnboarding, which an anonymous auth sign-in flips
+  // on its own). Reactive so the stack swaps to the home the moment it completes.
   const metOne = useMvpStore((st) => st.metOne);
-  const [onboardingReady, setOnboardingReady] = React.useState(false);
+  // Keep the two onboarding flags from ever disagreeing: if the user has met ONE
+  // (or was grandfathered past it), they are onboarded — otherwise the classic
+  // home would fall back to its old inline "discovery" state. One-time repair.
   React.useEffect(() => {
-    const t = setTimeout(() => setOnboardingReady(true), 900);
-    return () => clearTimeout(t);
-  }, []);
+    if (metOne && !useMvpStore.getState().hasCompletedOnboarding) {
+      useMvpStore.getState().markOnboardingComplete();
+    }
+  }, [metOne]);
 
   // Live animated index of the ONE profile sheet, shared between the sheet
   // (which writes it as it slides) and HomeScreen (which reads it to bring
@@ -600,17 +597,8 @@ function HomeWithOverlays() {
         onOpenSettings={() => { s.setProfileFocusOpen(false); setTimeout(() => s.setSettingsOpen(true), 60); }}
         onUpgrade={() => { s.setProfileFocusOpen(false); setTimeout(() => s.setUpgradeOpen(true), 60); }}
       />
-      {/* First-run / post-update onboarding cards over the home. */}
-      <OnboardingOverlay
-        visible={
-          onboardingReady &&
-          homeMode !== 'focus' &&
-          onboardingCardsSeen < ONBOARDING_CARDS_VERSION &&
-          !s.signInOpen &&
-          !s.openUnitId
-        }
-        onDone={() => useMvpStore.getState().setOnboardingCardsSeen(ONBOARDING_CARDS_VERSION)}
-      />
+      {/* First-run onboarding is the Meet-ONE conversation (early-returned above
+          when !metOne) — the old swipe-through OnboardingOverlay is retired. */}
     </>
   );
 }

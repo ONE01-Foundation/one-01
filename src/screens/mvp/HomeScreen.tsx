@@ -672,7 +672,10 @@ export function HomeScreen({
   // the "Hi, I'm ONE…" intro that previously lived on WelcomeScreen — the
   // home itself does the introduction now. Returning / signed-in users get
   // the time-aware greeting + identity-driven lines.
-  const hasOnboarded = useMvpStore((s) => s.hasCompletedOnboarding);
+  // A user who has met ONE (the MeetOne intro, which gates entry) is onboarded —
+  // the classic home must never fall back to its old inline "discovery" state or
+  // explainer, which are superseded by MeetOne. metOne is the auth-proof signal.
+  const hasOnboarded = useMvpStore((s) => s.hasCompletedOnboarding || s.metOne);
   const plan = useMvpStore((s) => s.plan);
   const isPaid = plan === 'pro' || plan === 'max';
   const userName = useMvpStore((s) => s.name);

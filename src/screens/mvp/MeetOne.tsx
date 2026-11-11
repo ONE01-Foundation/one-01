@@ -319,13 +319,13 @@ export function MeetOne({ onDone }: MeetOneProps) {
                 styles.bubble,
                 t.from === 'one'
                   ? [styles.one, { backgroundColor: colors.surface }]
-                  : [styles.you, { backgroundColor: colors.text }],
+                  : [styles.you, { backgroundColor: colors.circle }],
               ]}
             >
               <Text
                 style={[
                   styles.bubbleText,
-                  { color: t.from === 'one' ? colors.text : colors.background },
+                  { color: t.from === 'one' ? colors.text : colors.circleEye },
                   rtlText(lang),
                 ]}
               >
@@ -447,8 +447,8 @@ const styles = StyleSheet.create({
   brand: { fontSize: 15, fontWeight: '800', letterSpacing: 1 },
   thread: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 14, gap: 9 },
   bubble: { maxWidth: '86%', paddingVertical: 11, paddingHorizontal: 14, borderRadius: 18 },
-  one: { alignSelf: 'flex-start', borderBottomLeftRadius: 5 },
-  you: { alignSelf: 'flex-end', borderBottomRightRadius: 5 },
+  one: { alignSelf: 'flex-start', borderBottomStartRadius: 6 },
+  you: { alignSelf: 'flex-end', borderBottomEndRadius: 6 },
   bubbleText: { fontSize: 14.5, lineHeight: 21 },
   typing: { paddingVertical: 8 },
   tiers: { flexDirection: 'row', gap: 8, alignSelf: 'flex-start', marginTop: 4 },
