@@ -36,6 +36,11 @@ export interface GuidedDesire {
   /** The base noun that leads the process title, e.g. "רישיון" / "License". */
   noun: { he: string; en: string };
   emoji?: string;
+  /** How the process TITLE is formed. 'firstStep' (default): noun + the first
+   *  choice, e.g. "רישיון נהיגה" — use when the first step is a category. 'noun':
+   *  the noun alone, e.g. "מעבר דירה" — use when the noun already IS the subject
+   *  and every step is just a detail. */
+  titleLead?: 'noun' | 'firstStep';
   steps: GuidedStep[];
 }
 
@@ -114,7 +119,8 @@ export const GUIDED_DESIRES: GuidedDesire[] = [
   },
   {
     key: 'insurance',
-    match: /(ביטוח|insurance)/i,
+    // "ביטוח" but NOT "ביטוח לאומי" (social security → the government desire).
+    match: /(ביטוח(?!\s*לאומי)|insurance)/i,
     noun: { he: 'ביטוח', en: 'Insurance' },
     emoji: '🛡️',
     steps: [
@@ -136,6 +142,90 @@ export const GUIDED_DESIRES: GuidedDesire[] = [
           { value: 'cheaper', emoji: '💸', label: { he: 'זול יותר', en: 'Cheaper' } },
           { value: 'new', emoji: '🆕', label: { he: 'פוליסה חדשה', en: 'New policy' } },
           { value: 'claim', emoji: '📩', label: { he: 'תביעה', en: 'A claim' } },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'moving',
+    match: /(מעבר דירה|עובר דירה|עוברת דירה|מעבר לדירה|relocat|moving (?:house|home)|move apartment)/i,
+    noun: { he: 'מעבר דירה', en: 'Moving home' },
+    emoji: '📦',
+    titleLead: 'noun',
+    steps: [
+      {
+        id: 'when',
+        prompt: { he: 'מתי המעבר?', en: 'When is the move?' },
+        options: [
+          { value: 'month', emoji: '📆', label: { he: 'החודש', en: 'This month' } },
+          { value: 'soon', emoji: '🗓️', label: { he: 'חודש–חודשיים', en: '1–2 months' } },
+          { value: 'later', emoji: '🕰️', label: { he: 'בהמשך', en: 'Later' } },
+        ],
+      },
+      {
+        id: 'help',
+        prompt: { he: 'במה שאטפל?', en: 'What should I handle?' },
+        options: [
+          { value: 'movers', emoji: '🚚', label: { he: 'הובלה', en: 'Movers' } },
+          { value: 'utilities', emoji: '💡', label: { he: 'חשמל/מים/ארנונה', en: 'Utilities' } },
+          { value: 'clean', emoji: '🧽', label: { he: 'ניקיון', en: 'Cleaning' } },
+          { value: 'pack', emoji: '📦', label: { he: 'אריזה', en: 'Packing' } },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'job',
+    match: /(חיפוש עבודה|מחפש עבודה|מחפשת עבודה|עבודה חדשה|קורות חיים|קו"ח|job (?:search|hunt)|find a job|new job|resume|cv)/i,
+    noun: { he: 'חיפוש עבודה', en: 'Job search' },
+    emoji: '💼',
+    titleLead: 'noun',
+    steps: [
+      {
+        id: 'field',
+        prompt: { he: 'באיזה תחום?', en: 'Which field?' },
+        options: [
+          { value: 'tech', emoji: '💻', label: { he: 'הייטק', en: 'Tech' } },
+          { value: 'service', emoji: '🧾', label: { he: 'שירות/מכירות', en: 'Service / Sales' } },
+          { value: 'edu', emoji: '📚', label: { he: 'חינוך', en: 'Education' } },
+          { value: 'other', emoji: '✨', label: { he: 'אחר', en: 'Other' } },
+        ],
+      },
+      {
+        id: 'stage',
+        prompt: { he: 'איפה אתה עומד?', en: 'Where are you at?' },
+        options: [
+          { value: 'cv', emoji: '📝', label: { he: 'בונה קו״ח', en: 'Building a CV' } },
+          { value: 'applying', emoji: '📤', label: { he: 'שולח מועמדויות', en: 'Applying' } },
+          { value: 'interview', emoji: '🎤', label: { he: 'בראיונות', en: 'Interviewing' } },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'government',
+    match: /(רשויות|רשות|ביטוח לאומי|משרד הפנים|מס הכנסה|עירייה|מועצה|ממשל|government|municipality|tax authority|social security)/i,
+    noun: { he: 'מול', en: 'With' },
+    emoji: '🏛️',
+    steps: [
+      {
+        id: 'office',
+        prompt: { he: 'מול איזה גוף?', en: 'Which office?' },
+        options: [
+          { value: 'bituah', emoji: '🏦', label: { he: 'ביטוח לאומי', en: 'Social Security' } },
+          { value: 'pnim', emoji: '🪪', label: { he: 'משרד הפנים', en: 'Interior Ministry' } },
+          { value: 'tax', emoji: '🧾', label: { he: 'מס הכנסה', en: 'Tax Authority' } },
+          { value: 'city', emoji: '🏙️', label: { he: 'עירייה', en: 'Municipality' } },
+        ],
+      },
+      {
+        id: 'what',
+        prompt: { he: 'מה צריך?', en: 'What do you need?' },
+        options: [
+          { value: 'pay', emoji: '💳', label: { he: 'תשלום', en: 'A payment' } },
+          { value: 'doc', emoji: '📄', label: { he: 'אישור/מסמך', en: 'A document' } },
+          { value: 'request', emoji: '✍️', label: { he: 'בקשה', en: 'A request' } },
+          { value: 'appeal', emoji: '⚖️', label: { he: 'ערעור', en: 'An appeal' } },
         ],
       },
     ],
@@ -177,23 +267,29 @@ export function pickedLabel(step: GuidedStep, value: string, he: boolean): strin
 }
 
 /** The process TITLE once the desire is specific — "רישיון נהיגה", "ביטוח רכב",
- *  "כושר עלייה במסה". Leads with the noun + the PRIMARY (first) choice. */
+ *  "כושר עלייה במסה", "מעבר דירה". `titleLead` decides whether the first choice
+ *  joins the noun. */
 export function guidedTitle(desire: GuidedDesire, answers: Record<string, string>, he: boolean): string {
   const noun = he ? desire.noun.he : desire.noun.en;
+  if (desire.titleLead === 'noun') return noun;
   const primary = desire.steps[0];
   const opt = primary.options.find((o) => o.value === answers[primary.id]);
   const label = opt ? (he ? opt.label.he : opt.label.en) : '';
   return label ? `${noun} ${label}` : noun;
 }
 
-/** A one-line human summary of the remaining choices — fed into the opened topic
- *  as context so nothing the user told ONE is lost. The PRIMARY (first) choice is
- *  skipped (it already leads the title) to avoid "רישיון נהיגה · נהיגה". */
+/** A one-line human summary of the choices (NO emoji — clean recap), fed into the
+ *  opened topic as context so nothing the user told ONE is lost. Skips the first
+ *  choice when it already leads the title (to avoid "רישיון נהיגה · נהיגה"). */
 export function guidedSummary(desire: GuidedDesire, answers: Record<string, string>, he: boolean): string {
+  const skipFirst = desire.titleLead !== 'noun';
   const primaryId = desire.steps[0].id;
   const parts = visibleSteps(desire, answers)
-    .filter((s) => s.id !== primaryId)
-    .map((s) => (answers[s.id] ? pickedLabel(s, answers[s.id], he) : null))
+    .filter((s) => !(skipFirst && s.id === primaryId))
+    .map((s) => {
+      const opt = s.options.find((o) => o.value === answers[s.id]);
+      return opt ? (he ? opt.label.he : opt.label.en) : null;
+    })
     .filter(Boolean) as string[];
   return parts.join(' · ');
 }
