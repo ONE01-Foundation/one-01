@@ -799,13 +799,18 @@ export const useMvpStore = create<MvpStore>()(
             date: new Date(now).toISOString(),
             kind: n.kind,
           };
+          // A 'created' notification marks a process the USER just started (often
+          // WITH ONE, in the intro or the composer) — it is NOT an unseen update
+          // that needs their attention, so it must not land the brand-new process
+          // under "Needs you". Every other kind IS an unseen update → bump unread.
+          const bumpUnread = n.kind === 'created' ? 0 : 1;
           return {
             notifications: [...s.notifications, note],
             units: s.units.map((u) =>
               u.id === n.unitId
                 ? {
                     ...u,
-                    unreadUpdates: (u.unreadUpdates ?? 0) + 1,
+                    unreadUpdates: (u.unreadUpdates ?? 0) + bumpUnread,
                     // A notification IS an update — bump lastUpdatedAt so the
                     // card floats to the top of the list (chat-app behaviour).
                     lastUpdatedAt: new Date(now).toISOString(),

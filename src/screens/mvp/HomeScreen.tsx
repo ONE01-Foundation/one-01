@@ -1308,7 +1308,7 @@ export function HomeScreen({
     const store = useMvpStore.getState();
     const last = store.homeChat[store.homeChat.length - 1] as InlineMessage | undefined;
     if (last && last.from === 'one' && last.id.startsWith('one_opener_')) return;
-    const greeting = timeGreeting(lang, Date.now(), identity?.name, 0);
+    const greeting = timeGreeting(lang, Date.now(), store.name || identity?.name, 0);
     const text = lang === 'he' ? `${greeting} במה אפשר לעזור?` : `${greeting} How can I help?`;
     store.appendHomeChat({ id: `one_opener_${Date.now()}`, from: 'one', text, ts: Date.now() });
     // Bring the fresh greeting into view (above the keyboard if it's open).
@@ -2792,7 +2792,11 @@ export function HomeScreen({
     // it feels like a representative, not a prompt. It rotates (30s clock) through:
     // a time-aware greeting → what needs you / what ONE is handling → a soft invite.
     const he = lang === 'he';
-    const greet = timeGreeting(lang, nowTick, identity?.name);
+    // Greet the PERSON by the name they gave ONE (top-level `name`, set in the
+    // Meet-ONE intro), not the active space's label — so a business space still
+    // greets "Good morning, Dana", not "…, Levi Clinic", and a fresh personal
+    // space (identity name empty) still gets the name.
+    const greet = timeGreeting(lang, nowTick, userName || identity?.name);
     const active = realUnits.filter((u) => u.status !== 'completed');
     const needsYou = active.filter(
       (u) =>
