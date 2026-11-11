@@ -7,6 +7,10 @@ export type Lang = "en" | "he";
 export interface LandingCopy {
   dir: "ltr" | "rtl";
   nav: { one: string; life: string; business: string; pricing: string; enter: string };
+  /** The "Solutions" nav dropdown — a list of ONE use-cases that deep-link into
+      the app with a starter intent (q), or jump to a section (href), plus a
+      footer link to explore the rest. */
+  solutions: { items: { label: string; q?: string; href?: string }[]; all: string };
   hero: {
     greetings: { morning: string; afternoon: string; evening: string; hello: string };
     prompts: string[];
@@ -157,7 +161,18 @@ export interface LandingCopy {
 export const LANDING_COPY: Record<Lang, LandingCopy> = {
   en: {
     dir: "ltr",
-    nav: { one: "ONE", life: "Solutions", business: "Network", pricing: "Plans", enter: "Enter" },
+    nav: { one: "ONE", life: "Solutions", business: "Network", pricing: "Plans", enter: "Try ONE" },
+    solutions: {
+      items: [
+        { label: "Appointments & bookings", q: "Book an appointment for me" },
+        { label: "Forms & paperwork", q: "Help me fill out a form" },
+        { label: "Government & services", q: "Deal with a government office for me" },
+        { label: "Everyday errands", q: "Take care of an everyday errand" },
+        { label: "Health & care", q: "Sort out a medical appointment" },
+        { label: "For business", href: "#connections" },
+      ],
+      all: "Explore all solutions",
+    },
     hero: {
       greetings: {
         morning: "Good morning.",
@@ -470,7 +485,18 @@ export const LANDING_COPY: Record<Lang, LandingCopy> = {
 
   he: {
     dir: "rtl",
-    nav: { one: "ONE", life: "פתרונות", business: "רשת", pricing: "מסלולים", enter: "כניסה" },
+    nav: { one: "ONE", life: "פתרונות", business: "רשת", pricing: "מסלולים", enter: "Try ONE" },
+    solutions: {
+      items: [
+        { label: "תורים והזמנות", q: "לקבוע לי תור" },
+        { label: "טפסים וניירת", q: "לעזור לי למלא טופס" },
+        { label: "מול רשויות", q: "להסתדר מול רשות ממשלתית" },
+        { label: "סידורים יומיומיים", q: "לטפל בסידור יומיומי" },
+        { label: "בריאות ותורים", q: "לתאם תור רפואי" },
+        { label: "לעסקים", href: "#connections" },
+      ],
+      all: "לכל הפתרונות",
+    },
     hero: {
       greetings: {
         morning: "בוקר טוב.",

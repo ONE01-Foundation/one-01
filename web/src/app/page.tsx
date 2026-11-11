@@ -646,9 +646,12 @@ function LivingFigure() {
               tx = vw * best.x;
               ty = vh * best.y;
             }
-          } else if (best.sel === "#identity") {
-            // Sits ON the core card (grown a bit), text below it; rides the card
-            // as you scroll and only leaves when the next section arrives.
+          } else if (best.sel === "#identity" || best.sel === "#problem") {
+            // Over the film AND on into the identity section the figure heads for
+            // the same home — the core card below. So at the film it never darts off
+            // to the side or blinks out; it simply keeps travelling to its place in
+            // the section just under the video, arriving as that section scrolls up
+            // (it rides the card, only leaving when the next section arrives).
             const core = qs(".bento-core-orb")?.getBoundingClientRect();
             if (core && core.width > 0) {
               tx = core.left + core.width / 2;
@@ -656,21 +659,9 @@ function LivingFigure() {
               ts = 1.15;
               glued = true;
             } else {
-              tx = vw * best.x;
-              ty = vh * best.y;
-            }
-          } else if (best.sel === "#problem") {
-            // Shrinks and lands on the active mock's focus row (e.g. "Your ONE
-            // — reaching out"), moving as the story steps through each panel.
-            const slot = qs(".meet-figure-slot")?.getBoundingClientRect();
-            if (slot && slot.width > 0) {
-              tx = slot.left + 20;
-              ty = slot.top + slot.height / 2;
-              ts = 0.6;
-              glued = true;
-            } else {
-              tx = vw * best.x;
-              ty = vh * best.y;
+              const home = stations[1]; // #identity coords
+              tx = vw * home.x;
+              ty = vh * home.y;
             }
           } else {
             tx = vw * best.x;
@@ -745,143 +736,78 @@ function LivingFigure() {
   );
 }
 
-/* "Meet ONE" — a feature list whose active row drives a mock panel beside it.
-   Hover or focus a feature to swap the panel; keyboard-reachable via <button>. */
-const MEET_STEP_MS = 4800;
-function MeetShowcase({ copy, lang }: { copy: LandingCopy["thesis"]; lang: Lang }) {
-  const [active, setActive] = useState(0);
-  const [inView, setInView] = useState(false);
-  // The reveal is owned in React (latched once seen) so the frequent story
-  // re-renders don't strip the scroll-reveal's `.in` class off this section
-  // (which made it blank + jump every step).
-  const [revealed, setRevealed] = useState(false);
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const n = copy.features.length;
-  const d = copy.demos;
-  // The story only plays while the section is on screen — no wasted animation
-  // (and the progress bars freeze) when you're elsewhere on the page.
+/** The hero demo film, shown in the growing screen below the hero. EMPTY ON
+    PURPOSE until the footage lands — drop the file into web/public/ and set its
+    path here (poster optional). While empty, the box shows a play-glyph
+    placeholder, so the layout is already final and only the video is missing. */
+const HERO_VIDEO_SRC: string = "";
+const HERO_VIDEO_POSTER: string = "";
+
+/* The section under the hero: one rounded "screen" that holds the product film
+   and GROWS as it scrolls into view. A --grow (0→1) CSS variable drives a scale
+   on the box, set from a rAF-throttled scroll listener so the growth runs in CSS
+   with no React re-render per frame (same approach as the hero's --p). */
+function HeroVideo() {
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const el = sectionRef.current;
-    if (!el || typeof IntersectionObserver === "undefined") {
-      setInView(true);
-      setRevealed(true);
+    const el = ref.current;
+    if (typeof window === "undefined" || !el) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      el.style.setProperty("--grow", "1");
       return;
     }
-    const io = new IntersectionObserver(
-      ([e]) => {
-        setInView(e.isIntersecting);
-        if (e.isIntersecting) setRevealed(true);
-      },
-      { threshold: 0.2 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      // Measure the (full-screen) SECTION, not the box itself: the box carries the
+      // grow transform, so measuring it would feed its own scale back into the
+      // reading. The section is untransformed, giving a clean scroll position.
+      const section = el.closest(".video-section") || el;
+      const r = section.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const center = r.top + r.height / 2;
+      // 0 when the section's centre sits a full viewport below the middle of the
+      // screen, 1 the moment it rises to the middle — so the film finishes growing
+      // exactly as it lands centred, then holds. One viewport of scroll = full
+      // growth: it tracks the wheel 1:1 and never feels like forced scrolling.
+      const p = Math.min(1, Math.max(0, 1 - (center - vh / 2) / vh));
+      el.style.setProperty("--grow", p.toFixed(4));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    apply();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
-  // Auto-advance after each bar fills — only while in view. Hover/click jumps
-  // to a step and restarts its timer from there.
-  useEffect(() => {
-    if (!inView) return;
-    const t = window.setTimeout(() => setActive((a) => (a + 1) % n), MEET_STEP_MS);
-    return () => window.clearTimeout(t);
-  }, [active, n, inView]);
   return (
-    <section
-      ref={sectionRef}
-      className={`section center reveal meet-section${revealed ? " in" : ""}${inView ? "" : " is-paused"}`}
-      id="problem"
-    >
-      <div className="shell meet-grid">
-        <div className="meet-copy">
-          <h2 className="meet-title">{copy.title}</h2>
-          <div className="meet-feats" role="tablist" aria-label={copy.title}>
-            {copy.features.map((f, i) => (
-              <button
-                key={i}
-                type="button"
-                role="tab"
-                aria-selected={active === i}
-                className={`meet-feat${active === i ? " is-active" : ""}`}
-                onMouseEnter={() => setActive(i)}
-                onFocus={() => setActive(i)}
-                onClick={() => setActive(i)}
-              >
-                <span className="meet-feat-head">
-                  <i className={`fi ${f.icon} meet-feat-ico`} aria-hidden="true" />
-                  <span className="meet-feat-title">{f.title}</span>
-                </span>
-                <span className="meet-feat-desc">{f.desc}</span>
-                {/* Story progress line: full for done steps, filling for the
-                    active one (over the step), empty for upcoming. */}
-                <span className="meet-feat-bar" aria-hidden="true">
-                  <span
-                    key={i === active ? `run-${active}-${inView}` : `s-${i}`}
-                    className={`meet-feat-bar-fill${i < active ? " is-done" : i === active ? " is-run" : ""}`}
-                    style={i === active ? { animationDuration: `${MEET_STEP_MS}ms` } : undefined}
-                  />
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="meet-panel" aria-live="polite">
-          <div className="meet-card" key={active}>
-            {active === 0 && (
-              <div className="meet-mock">
-                <div className="meet-mock-head">{d.plan.title}</div>
-                <ul className="meet-steps">
-                  {d.plan.steps.map((s, i) => (
-                    <li
-                      key={i}
-                      className={`${i === 0 ? "is-done" : ""}${i === 1 ? " meet-figure-slot" : ""}`}
-                    >
-                      <span className="meet-step-box" aria-hidden="true" />
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {active === 1 && (
-              <div className="meet-mock">
-                <div className="meet-mock-head">{d.act.title}</div>
-                <ul className="meet-rows">
-                  {d.act.rows.map((r, i) => (
-                    <li key={i} className={i === 0 ? "meet-figure-slot" : ""}>
-                      {/* First avatar is empty — the living figure sits here. */}
-                      <span className={`meet-row-orb${i === 0 ? " is-you" : ""}`} aria-hidden="true" />
-                      <span className="meet-row-name">{r.name}</span>
-                      <span className="meet-row-status">{r.status}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {active === 2 && (
-              <div className="meet-mock">
-                <div className="meet-mock-head">{d.disclose.title}</div>
-                <ul className="meet-toggles">
-                  {d.disclose.items.map((it, i) => (
-                    <li key={i} className={i === 2 ? "meet-figure-slot" : ""}>
-                      <span className="meet-toggle-label">{it.label}</span>
-                      <span
-                        className={`meet-toggle${it.on ? " is-on" : ""}`}
-                        role="img"
-                        aria-label={
-                          it.on
-                            ? lang === "he"
-                              ? "משותף"
-                              : "shared"
-                            : lang === "he"
-                              ? "מוסתר"
-                              : "hidden"
-                        }
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+    <section className="section center reveal video-section" id="problem">
+      <div className="shell video-shell">
+        <div className="hero-video" ref={ref}>
+          {HERO_VIDEO_SRC ? (
+            <video
+              className="hero-video-el"
+              src={HERO_VIDEO_SRC}
+              poster={HERO_VIDEO_POSTER || undefined}
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
+          ) : (
+            <div className="hero-video-ph">
+              <span className="hero-video-play" aria-hidden="true">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                  <path d="M8 5v14l11-7z" fill="currentColor" />
+                </svg>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -961,6 +887,167 @@ function AliveOrb({ size = 64, eyeR = 8 }: { size?: number; eyeR?: number }) {
         faceColor="var(--orb)"
         eyeColor="var(--orb-eye)"
       />
+    </div>
+  );
+}
+
+/** The nav CTA — "Try ONE" as a split pill: the label links straight into the
+    web app, and a chevron beside it opens a small QR panel on hover — scan to
+    open ONE on the phone (iOS & Android) — mirroring the split Try control on
+    xAI. Hover opens it (mouse); click toggles; outside-click / Escape close. */
+function TryOne({ get, label }: { get: LandingCopy["download"]["get"]; label: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 160);
+  };
+  useEffect(() => () => cancelClose(), []);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <div className="try-one" ref={ref}>
+      <div className="try-one-pill">
+        <Link className="try-one-main" href="/app">
+          {label}
+        </Link>
+        <button
+          type="button"
+          className="try-one-caret"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={get.platforms}
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") {
+              cancelClose();
+              setOpen(true);
+            }
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === "mouse") scheduleClose();
+          }}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+      {open && (
+        <div
+          className="get-pop get-pop-qr try-one-pop"
+          role="menu"
+          onPointerEnter={cancelClose}
+          onPointerLeave={scheduleClose}
+        >
+          <div className="qr-tile">
+            <AppQR />
+          </div>
+          <div className="get-qr-cap">{get.scan}</div>
+          <div className="get-qr-platforms">{get.platforms}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The "Solutions" nav item — a text trigger that opens a dropdown of ONE
+    use-cases on hover. Each row deep-links into the app with a starter intent
+    (/app?q=…) or jumps to a section; a footer row explores the rest. Hover opens
+    it (mouse); click toggles; outside-click / Escape close. Theme-aware panel
+    (light card in light mode, dark in dark mode). */
+function NavSolutions({ label, menu }: { label: string; menu: LandingCopy["solutions"] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 160);
+  };
+  useEffect(() => () => cancelClose(), []);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <div
+      className="nav-solutions"
+      ref={ref}
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") {
+          cancelClose();
+          setOpen(true);
+        }
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") scheduleClose();
+      }}
+    >
+      <button
+        type="button"
+        className="nav-link nav-sol-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {label}
+      </button>
+      {open && (
+        <div className="nav-mega" role="menu" onPointerEnter={cancelClose} onPointerLeave={scheduleClose}>
+          {menu.items.map((it) => (
+            <Link
+              key={it.label}
+              className="nav-mega-item"
+              role="menuitem"
+              href={it.q ? `/app?q=${encodeURIComponent(it.q)}` : it.href ?? "/app"}
+              onClick={() => setOpen(false)}
+            >
+              {it.label}
+            </Link>
+          ))}
+          <Link className="nav-mega-all" href="#identity" role="menuitem" onClick={() => setOpen(false)}>
+            <span>{menu.all}</span>
+            <span className="get-opt-arrow" aria-hidden="true">→</span>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -1282,13 +1369,18 @@ export default function LandingPage() {
     };
   }, []);
 
-  // Nav pill reveals a little AFTER you leave the hero — not the instant it
-  // scrolls out — so the gateway stays clean and the pill feels intentional.
+  // The menu is present from the hero on — it fades in just after ONE's awakening
+  // settles (or immediately if the page didn't play the intro), then stays put so
+  // the nav is always there to reach, not something that appears only once you've
+  // scrolled down to the film.
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > window.innerHeight * 1.15);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || window.scrollY > 4) {
+      setScrolled(true);
+      return;
+    }
+    const t = window.setTimeout(() => setScrolled(true), 1150);
+    return () => window.clearTimeout(t);
   }, []);
 
   // Nav "arrived" state: watch the transparent foot-spacer (whose height mirrors
@@ -1363,8 +1455,7 @@ export default function LandingPage() {
             <Logo height={22} interactive />
           </Link>
           <div className="nav-links">
-            <a className="nav-link" href="#problem">{t.nav.one}</a>
-            <a className="nav-link" href="#identity">{t.nav.life}</a>
+            <NavSolutions label={t.nav.life} menu={t.solutions} />
             <a className="nav-link" href="#connections">{t.nav.business}</a>
             <a className="nav-link" href="#pricing">{t.nav.pricing}</a>
           </div>
@@ -1376,9 +1467,7 @@ export default function LandingPage() {
               menuLabel={t.aria.langMenu}
               soonLabel={t.aria.langSoon}
             />
-            <Link className="btn btn-primary" href="/app">
-              {t.nav.enter}
-            </Link>
+            <TryOne get={t.download.get} label={t.nav.enter} />
           </div>
         </div>
       </nav>
@@ -1490,9 +1579,9 @@ export default function LandingPage() {
         </div>
       </Sheet>
 
-      {/* ── meet ONE — interactive showcase: feature list + a mock panel that
-             swaps with the active feature (no video) ── */}
-      <MeetShowcase copy={t.thesis} lang={lang} />
+      {/* ── the screen under the hero — a rounded product film that grows as it
+             scrolls into view ── */}
+      <HeroVideo />
 
       {/* ── the whole idea as three themed bentos, stacked: what ONE does
              (capabilities) → the worlds it represents you across → the network

@@ -742,6 +742,80 @@ button {
   gap: 12px;
   align-items: center;
 }
+/* "Solutions" trigger + its dropdown (reuses .nav-link look for the label). */
+.nav-solutions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.nav-sol-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.nav-sol-caret {
+  margin-top: 1px;
+  opacity: 0.7;
+  transition: transform 180ms ease, opacity 160ms ease;
+}
+.nav-sol-trigger:hover .nav-sol-caret,
+.nav-sol-trigger[aria-expanded="true"] .nav-sol-caret {
+  opacity: 1;
+}
+.nav-sol-trigger[aria-expanded="true"] .nav-sol-caret {
+  transform: rotate(180deg);
+}
+.nav-mega {
+  position: absolute;
+  top: calc(100% + 14px);
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  min-width: 248px;
+  padding: 8px;
+  background: var(--bg-card);
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(10, 10, 10, 0.22);
+  z-index: 40;
+  animation: langMenuIn 140ms ease;
+}
+.nav-mega-item {
+  display: block;
+  padding: 10px 13px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-align: start;
+  transition: background 120ms ease, color 120ms ease;
+}
+.nav-mega-item:hover,
+.nav-mega-item:focus-visible {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+  outline: none;
+}
+.nav-mega-all {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 11px 13px;
+  border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  border-radius: 0 0 10px 10px;
+  transition: background 120ms ease;
+}
+.nav-mega-all:hover,
+.nav-mega-all:focus-visible {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  outline: none;
+}
 /* Centre menu items: pure text, never a chip. No frame, no fill, no underline —
    the ONLY feedback is the text's colour strength: muted at rest, full on
    hover/focus, and briefly dimmed while held. */
@@ -9426,6 +9500,177 @@ a.get-opt:hover {
 .get-qr-platforms {
   font-size: 12px;
   color: var(--text-3);
+}
+
+/* ─── nav "Try ONE" split CTA (label + chevron → download menu) ─── */
+.try-one {
+  position: relative;
+  display: inline-flex;
+}
+.try-one-pill {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+/* Fills solid when the control is hovered/focused (matches the old nav CTA). */
+.try-one:hover .try-one-pill,
+.try-one:focus-within .try-one-pill {
+  background: var(--text);
+  border-color: var(--text);
+}
+.try-one-main {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 15px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+.try-one-caret {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px 0 9px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  border-inline-start: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+.try-one-caret svg {
+  transition: transform 180ms ease;
+}
+.try-one-caret[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.try-one:hover .try-one-main,
+.try-one:hover .try-one-caret,
+.try-one:focus-within .try-one-main,
+.try-one:focus-within .try-one-caret {
+  color: var(--bg);
+}
+.try-one:hover .try-one-caret,
+.try-one:focus-within .try-one-caret {
+  border-inline-start-color: color-mix(in srgb, var(--bg) 28%, transparent);
+}
+.try-one-caret:focus-visible {
+  outline: none;
+}
+/* The menu reuses .get-pop/.get-opt, but anchors to the control's inline-end so
+   it never overflows the viewport edge, and opens just below the pill. */
+.try-one-pop {
+  top: calc(100% + 10px);
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  min-width: 232px;
+}
+/* The Try-ONE QR panel opens DOWNWARD, so its little tab points UP at the
+   chevron (the base .get-pop-qr tab points down, for the mobile menu). */
+.try-one-pop.get-pop-qr::after {
+  top: -7px;
+  bottom: auto;
+  inset-inline-start: auto;
+  inset-inline-end: 22px;
+  border-inline-end: none;
+  border-bottom: none;
+  border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-inline-start: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-end-end-radius: 0;
+  border-start-start-radius: 3px;
+}
+/* At the footer reveal the split pill fills solid too (parity with the old CTA). */
+.nav.is-footer .try-one-pill {
+  background: var(--text);
+  border-color: var(--text);
+}
+.nav.is-footer .try-one-main,
+.nav.is-footer .try-one-caret {
+  color: var(--bg);
+}
+.nav.is-footer .try-one-caret {
+  border-inline-start-color: color-mix(in srgb, var(--bg) 28%, transparent);
+}
+
+/* ─── hero video — a rounded "screen" below the hero that grows on scroll ─── */
+.video-section {
+  /* A full-screen stage: the film sits dead-centre and grows into place as you
+     scroll through it, with clearance so the grown screen never crowds the nav. */
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-block: clamp(76px, 11vh, 132px);
+}
+.video-shell {
+  /* Wide, but contained — it reads as a big centred screen, not edge-to-edge.
+     The explicit width is essential now the section is a flex (centring) box:
+     without it the shell shrinks to content and the aspect-ratio screen
+     collapses to nothing. */
+  width: 100%;
+  max-width: min(1120px, 92vw);
+}
+.hero-video {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: clamp(20px, 3vw, 40px);
+  overflow: hidden;
+  background: #0e0e0e;
+  border: 1px solid var(--line);
+  box-shadow: 0 50px 120px -46px rgba(10, 10, 10, 0.55);
+  /* Clearly visible from the start, then grows the last bit, centred, as it
+     scrolls in: 0.82 → 1 (--grow 0→1). */
+  --grow: 0;
+  transform: scale(calc(0.82 + 0.18 * var(--grow)));
+  transform-origin: center center;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-video {
+    transform: none;
+  }
+}
+.hero-video-el {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.hero-video-ph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(130% 130% at 50% 0%, #1d1d1d, #0b0b0b 72%);
+}
+.hero-video-play {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  transition: transform 180ms ease, background 180ms ease;
+}
+.hero-video:hover .hero-video-play {
+  transform: scale(1.06);
+  background: rgba(255, 255, 255, 0.18);
+}
+@media (max-width: 880px) {
+  .hero-video {
+    border-radius: 18px;
+  }
 }
 
 /* ─── mobile "get the app" banner ───────────────────────────────────────── */
