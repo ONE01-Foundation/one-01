@@ -1521,15 +1521,20 @@ export function HomeScreen({
       if (gd) {
         const gHe = /[֐-׿]/.test(value) || lang === 'he';
         const runId = `gr_${now}`;
+        const ots = now + 1;
+        const promptId = `o${ots}`;
+        const widgetId = `w${ots + 1}`;
         useMvpStore.getState().startGuidedRun({
           id: runId, desireKey: gd.key, stepIndex: 0, answers: {}, status: 'active', lang: gHe ? 'he' : 'en',
+          // Track every message this flow puts in the home thread, so when the
+          // process opens the whole Q&A moves into it and clears from home.
+          homeMsgIds: [userMsg.id, promptId, widgetId],
         });
         const first = gd.steps[0];
-        const ots = now + 1;
         setChatMessages((m) => [
           ...m,
-          { id: `o${ots}`, from: 'one' as const, text: gHe ? first.prompt.he : first.prompt.en, ts: ots },
-          { id: `w${ots + 1}`, from: 'one' as const, text: '', ts: ots + 2, widget: { kind: 'choice', runId, step: 0 } },
+          { id: promptId, from: 'one' as const, text: gHe ? first.prompt.he : first.prompt.en, ts: ots },
+          { id: widgetId, from: 'one' as const, text: '', ts: ots + 2, widget: { kind: 'choice', runId, step: 0 } },
         ]);
         return;
       }
@@ -1662,7 +1667,6 @@ export function HomeScreen({
         setChatMessages((m) => [
           ...m,
           { id: `o${ots}`, from: 'one' as const, text: ack, ts: ots, unitId: target.id },
-          { id: `w${ots + 1}`, from: 'one' as const, text: '', ts: ots + 2, widget: { kind: 'process', unitId: target.id }, unitId: target.id },
         ]);
         return;
       }
@@ -2381,8 +2385,8 @@ export function HomeScreen({
               })()
             : '';
           reply = contentHe
-            ? `${routedNote}פתחתי את ${created.emoji} ${created.title} 👇${firstEmptyMetric ? ` בוא נמלא אותו יחד — ${metricQuestion(firstEmptyMetric.label, true)}` : firstStep ? ` התחלתי עם "${firstStep}". נתחיל מזה?` : ' מאיפה נתחיל?'}`
-            : `${routedNote}Opened ${created.emoji} ${created.title} 👇${firstEmptyMetric ? ` Let's fill it in together — ${metricQuestion(firstEmptyMetric.label, false)}` : firstStep ? ` I started with "${firstStep}". Begin there?` : ' Where shall we start?'}`;
+            ? `${routedNote}פתחתי את ${created.emoji} ${created.title}.${firstEmptyMetric ? ` בוא נמלא אותו יחד — ${metricQuestion(firstEmptyMetric.label, true)}` : firstStep ? ` התחלתי עם "${firstStep}". נתחיל מזה?` : ' מאיפה נתחיל?'}`
+            : `${routedNote}Opened ${created.emoji} ${created.title}.${firstEmptyMetric ? ` Let's fill it in together — ${metricQuestion(firstEmptyMetric.label, false)}` : firstStep ? ` I started with "${firstStep}". Begin there?` : ' Where shall we start?'}`;
         } else if (li.kind === 'draft_message' && li.draft?.body) {
           const draftObj = {
             id: `dr_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
@@ -2494,11 +2498,9 @@ export function HomeScreen({
           ...m,
           { id: `o${replyTs}`, from: 'one' as const, text: reply, ts: replyTs, ...(widgetUnitId ? { unitId: widgetUnitId } : {}) },
         ];
-        // ONE sends the process it just opened OR updated as an interactive
-        // drawer in-thread — you keep working it in the same conversation.
-        if (widgetUnitId) {
-          next.push({ id: `w${replyTs}`, from: 'one' as const, text: '', ts: replyTs + 1, widget: { kind: 'process', unitId: widgetUnitId }, unitId: widgetUnitId });
-        }
+        // No big process CARD in the thread anymore — ONE keeps the home chat a
+        // conversation and does the detailed work WITH you inside the process
+        // (its own chat is seeded above; it also shows in the home list).
         // A tool widget ONE chose to deploy (deploy_tool) — drop it in-thread.
         if (toolWidget) {
           next.push({ id: `wt${replyTs}`, from: 'one' as const, text: '', ts: replyTs + 2, widget: toolWidget, ...(toolWidgetUnitId ? { unitId: toolWidgetUnitId } : {}) });

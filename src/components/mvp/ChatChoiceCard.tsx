@@ -58,30 +58,30 @@ export function ChatChoiceCard({ runId, step }: { runId: string; step: number })
     const answers = { ...run.answers, [stepDef.id]: opt.value };
     const nextIndex = step + 1;
     const nextSteps = visibleSteps(desire, answers);
+    const pickText = `${opt.emoji ? opt.emoji + ' ' : ''}${he ? opt.label.he : opt.label.en}`;
     let ts = Date.now();
-    const push = (m: { from: 'one' | 'user'; text: string; widget?: any }) =>
-      st.appendHomeChat({ id: `g_${ts}_${Math.floor(Math.random() * 1e6)}`, ts: ts++, ...m });
-
-    // The user's choice, echoed as their turn.
-    push({ from: 'user', text: `${opt.emoji ? opt.emoji + ' ' : ''}${he ? opt.label.he : opt.label.en}` });
-
-    // After the FIRST choice, quietly OPEN THE TOPIC (a marker, not a card yet).
-    if (step === 0) {
-      push({
-        from: 'one',
-        text: he ? 'נפתח נושא — נשלים פרטים ✍️' : "Topic opened — let's fill in the details ✍️",
-      });
-    }
-
-    st.updateGuidedRun(runId, { answers, stepIndex: nextIndex });
+    const newIds: string[] = [];
+    const push = (m: { from: 'one' | 'user'; text: string; widget?: any }) => {
+      const id = `g_${ts}_${Math.floor(Math.random() * 1e6)}`;
+      newIds.push(id);
+      st.appendHomeChat({ id, ts: ts++, ...m });
+    };
 
     if (nextIndex < nextSteps.length) {
-      // Ask the next question: an ONE prompt line + a fresh pill row below it.
+      // STILL BUILDING — echo the choice, (after the first) open the topic marker,
+      // then ask the next question as a fresh pill row. All stays in the home
+      // thread for now; it moves into the process once the desire is specific.
+      push({ from: 'user', text: pickText });
+      if (step === 0) {
+        push({ from: 'one', text: he ? 'נפתח נושא — נשלים פרטים ✍️' : "Topic opened — let's fill in the details ✍️" });
+      }
       const next = nextSteps[nextIndex];
       push({ from: 'one', text: he ? next.prompt.he : next.prompt.en });
       push({ from: 'one', text: '', widget: { kind: 'choice', runId, step: nextIndex } });
+      st.updateGuidedRun(runId, { answers, stepIndex: nextIndex, homeMsgIds: [...(run.homeMsgIds ?? []), ...newIds] });
     } else {
-      // Specific enough → OPEN THE REAL PROCESS now.
+      // SPECIFIC ENOUGH → open the real process, MOVE the whole Q&A into its own
+      // chat, and clear it from the home thread (leaving one short breadcrumb).
       const title = guidedTitle(desire, answers, he);
       const summary = guidedSummary(desire, answers, he);
       const created = buildLocalProcess(title, st.identities, st.activeIdentityId);
@@ -92,13 +92,35 @@ export function ChatChoiceCard({ runId, step }: { runId: string; step: number })
         emoji: created.emoji,
         kind: 'created',
       });
-      st.updateGuidedRun(runId, { status: 'done', createdUnitId: created.id, stepIndex: nextIndex });
       haptic.success();
-      push({
+      // Seed the PROCESS's own chat so opening it continues the conversation.
+      const firstStep = created.nextSteps?.[0]?.title;
+      let uts = Date.now();
+      st.appendUnitChat(created.id, {
+        id: `us_${uts}`,
+        from: 'user',
+        text: summary ? `${title} · ${summary}` : title,
+        ts: uts++,
+      });
+      st.appendUnitChat(created.id, {
+        id: `uo_${uts}`,
         from: 'one',
         text: he
-          ? `פתחתי את זה: ${created.emoji} ${title} · ${summary}. אני על זה — ואמשיך לשאול מה שצריך.`
-          : `Opened it: ${created.emoji} ${title} · ${summary}. I'm on it — and I'll keep asking as needed.`,
+          ? `${created.emoji} ${title}. ${firstStep ? `מתחילים מ: ${firstStep}. ` : ''}אני על זה — נמשיך כאן.`
+          : `${created.emoji} ${title}. ${firstStep ? `Starting with: ${firstStep}. ` : ''}I'm on it — let's continue here.`,
+        ts: uts++,
+      });
+      // The Q&A now lives in the process → clear it from the home thread.
+      st.removeHomeChat([...(run.homeMsgIds ?? [])]);
+      st.updateGuidedRun(runId, { status: 'done', createdUnitId: created.id, stepIndex: nextIndex });
+      // One short breadcrumb back in home.
+      st.appendHomeChat({
+        id: `gdone_${Date.now()}`,
+        from: 'one',
+        text: he
+          ? `פתחתי את ${created.emoji} ${title}${summary ? ' · ' + summary : ''} — זה אצלי.`
+          : `Opened ${created.emoji} ${title}${summary ? ' · ' + summary : ''} — I've got it.`,
+        ts: Date.now(),
       });
     }
   };

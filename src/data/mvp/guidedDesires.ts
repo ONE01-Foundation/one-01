@@ -77,6 +77,42 @@ export const GUIDED_DESIRES: GuidedDesire[] = [
     ],
   },
   {
+    key: 'fitness',
+    match: /(כושר|אימון|אימונים|להתאמן|לרזות|לרדת במשקל|לעלות במשקל|שריר|מסה|fitness|workout|gym|lose weight|gain (?:weight|muscle)|get fit)/i,
+    noun: { he: 'כושר', en: 'Fitness' },
+    emoji: '💪',
+    steps: [
+      {
+        id: 'goal',
+        prompt: { he: 'מה המטרה?', en: 'What’s the goal?' },
+        options: [
+          { value: 'lose', emoji: '🔥', label: { he: 'ירידה במשקל', en: 'Lose weight' } },
+          { value: 'gain', emoji: '💪', label: { he: 'עלייה במסה', en: 'Build muscle' } },
+          { value: 'tone', emoji: '✨', label: { he: 'חיטוב', en: 'Tone up' } },
+          { value: 'health', emoji: '❤️', label: { he: 'בריאות כללית', en: 'General health' } },
+        ],
+      },
+      {
+        id: 'freq',
+        prompt: { he: 'כמה פעמים בשבוע?', en: 'How many times a week?' },
+        options: [
+          { value: 'x2_3', emoji: '🟢', label: { he: '2–3 בשבוע', en: '2–3 / week' } },
+          { value: 'x4_5', emoji: '🟡', label: { he: '4–5 בשבוע', en: '4–5 / week' } },
+          { value: 'daily', emoji: '🔴', label: { he: 'כל יום', en: 'Daily' } },
+        ],
+      },
+      {
+        id: 'where',
+        prompt: { he: 'איפה?', en: 'Where?' },
+        options: [
+          { value: 'gym', emoji: '🏋️', label: { he: 'חדר כושר', en: 'Gym' } },
+          { value: 'home', emoji: '🏠', label: { he: 'בית', en: 'Home' } },
+          { value: 'outdoor', emoji: '🌳', label: { he: 'בחוץ', en: 'Outdoors' } },
+        ],
+      },
+    ],
+  },
+  {
     key: 'insurance',
     match: /(ביטוח|insurance)/i,
     noun: { he: 'ביטוח', en: 'Insurance' },
@@ -114,13 +150,12 @@ export function matchGuidedDesire(text: string): GuidedDesire | undefined {
   const lower = t.toLowerCase();
   const desire = GUIDED_DESIRES.find((d) => d.match.test(t));
   if (!desire) return undefined;
-  // Already specific? If the text already names a primary 'type' (e.g. "car
+  // Already specific? If the text already names the PRIMARY choice (e.g. "car
   // insurance", "ביטוח רכב"), there's nothing to ask — let the normal pipeline
   // build that exact process directly.
-  const typeStep = desire.steps.find((s) => s.id === 'type');
+  const primary = desire.steps[0];
   if (
-    typeStep &&
-    typeStep.options.some(
+    primary.options.some(
       (o) => (o.label.en.length > 2 && lower.includes(o.label.en.toLowerCase())) || t.includes(o.label.he),
     )
   ) {
@@ -141,23 +176,23 @@ export function pickedLabel(step: GuidedStep, value: string, he: boolean): strin
   return `${opt.emoji ? opt.emoji + ' ' : ''}${he ? opt.label.he : opt.label.en}`;
 }
 
-/** The process TITLE once the desire is specific — "רישיון נהיגה", "ביטוח רכב".
- *  Leads with the noun + the primary 'type' choice; stays clean. */
+/** The process TITLE once the desire is specific — "רישיון נהיגה", "ביטוח רכב",
+ *  "כושר עלייה במסה". Leads with the noun + the PRIMARY (first) choice. */
 export function guidedTitle(desire: GuidedDesire, answers: Record<string, string>, he: boolean): string {
   const noun = he ? desire.noun.he : desire.noun.en;
-  const typeStep = desire.steps.find((s) => s.id === 'type');
-  const typeVal = answers.type;
-  const typeOpt = typeStep?.options.find((o) => o.value === typeVal);
-  const typeLabel = typeOpt ? (he ? typeOpt.label.he : typeOpt.label.en) : '';
-  return typeLabel ? `${noun} ${typeLabel}` : noun;
+  const primary = desire.steps[0];
+  const opt = primary.options.find((o) => o.value === answers[primary.id]);
+  const label = opt ? (he ? opt.label.he : opt.label.en) : '';
+  return label ? `${noun} ${label}` : noun;
 }
 
-/** A one-line human summary of the choices — fed into the opened topic as
- *  context so nothing the user told ONE is lost. The primary 'type' choice is
+/** A one-line human summary of the remaining choices — fed into the opened topic
+ *  as context so nothing the user told ONE is lost. The PRIMARY (first) choice is
  *  skipped (it already leads the title) to avoid "רישיון נהיגה · נהיגה". */
 export function guidedSummary(desire: GuidedDesire, answers: Record<string, string>, he: boolean): string {
+  const primaryId = desire.steps[0].id;
   const parts = visibleSteps(desire, answers)
-    .filter((s) => s.id !== 'type')
+    .filter((s) => s.id !== primaryId)
     .map((s) => (answers[s.id] ? pickedLabel(s, answers[s.id], he) : null))
     .filter(Boolean) as string[];
   return parts.join(' · ');

@@ -99,6 +99,9 @@ export interface GuidedRun {
   createdUnitId?: string;
   /** Content language of the run, so re-renders stay consistent. */
   lang: 'he' | 'en';
+  /** Ids of the home-chat messages this run created — so when the process opens,
+   *  the whole Q&A can move into the unit's chat and clear from the home thread. */
+  homeMsgIds?: string[];
 }
 
 /**
@@ -359,6 +362,9 @@ interface MvpStore {
   updateHomeChatMessage: (id: string, patch: Partial<ChatMessageStored>) => void;
   /** Wipe the home chat (e.g. when user closes the chat with X). */
   clearHomeChat: () => void;
+  /** Remove specific home-chat messages by id (used to move a guided Q&A into
+   *  the process it opened). */
+  removeHomeChat: (ids: string[]) => void;
   /** Register a tool run ONE just deployed (e.g. a quiz). */
   startGuidedRun: (run: GuidedRun) => void;
   updateGuidedRun: (id: string, patch: Partial<GuidedRun>) => void;
@@ -858,6 +864,11 @@ export const useMvpStore = create<MvpStore>()(
       updateHomeChatMessage: (id, patch) =>
         set((s) => ({ homeChat: s.homeChat.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
       clearHomeChat: () => set({ homeChat: [] }),
+      removeHomeChat: (ids) =>
+        set((s) => {
+          const drop = new Set(ids);
+          return { homeChat: s.homeChat.filter((m) => !drop.has(m.id)) };
+        }),
       startGuidedRun: (run) =>
         set((s) => ({ guidedRuns: { ...s.guidedRuns, [run.id]: run } })),
       updateGuidedRun: (id, patch) =>
