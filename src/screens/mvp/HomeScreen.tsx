@@ -77,6 +77,8 @@ import { ChatProcessCard } from '../../components/mvp/ChatProcessCard';
 import { ChatQuizCard } from '../../components/mvp/ChatQuizCard';
 import { ChatBookingCard } from '../../components/mvp/ChatBookingCard';
 import { ChatFormCard } from '../../components/mvp/ChatFormCard';
+import { ChatChoiceCard } from '../../components/mvp/ChatChoiceCard';
+import { matchGuidedDesire } from '../../data/mvp/guidedDesires';
 import { quizForText, buildQuizRun } from '../../data/mvp/quizBank';
 import { bookingForText, buildBookingRun } from '../../data/mvp/booking';
 import { formForText, buildFormRun } from '../../data/mvp/forms';
@@ -1506,6 +1508,29 @@ export function HomeScreen({
     const now = Date.now();
     const userMsg: InlineMessage = { id: `u${now}`, from: 'user', text: value, ts: now };
     setChatMessages((m) => [...m, userMsg]);
+
+    // GUIDED DESIRE — a broad intent ("I want a license") is NOT turned straight
+    // into a process. ONE asks a short series of CHOICE-PILL questions and opens
+    // the real process only once the desire is specific. The pills drive the rest
+    // (ChatChoiceCard); here we just open the first question.
+    {
+      const gd = matchGuidedDesire(value);
+      if (gd) {
+        const gHe = /[֐-׿]/.test(value) || lang === 'he';
+        const runId = `gr_${now}`;
+        useMvpStore.getState().startGuidedRun({
+          id: runId, desireKey: gd.key, stepIndex: 0, answers: {}, status: 'active', lang: gHe ? 'he' : 'en',
+        });
+        const first = gd.steps[0];
+        const ots = now + 1;
+        setChatMessages((m) => [
+          ...m,
+          { id: `o${ots}`, from: 'one' as const, text: gHe ? first.prompt.he : first.prompt.en, ts: ots },
+          { id: `w${ots + 1}`, from: 'one' as const, text: '', ts: ots + 2, widget: { kind: 'choice', runId, step: 0 } },
+        ]);
+        return;
+      }
+    }
 
     // TOOL — deploy a QUIZ. When the user asks to practice / be tested and ONE
     // has a quiz for the topic (the active process, or the message itself), ONE
@@ -4893,6 +4918,13 @@ export function HomeScreen({
                         return (
                           <View key={m.id} style={styles.chatWidgetWrap}>
                             <ChatFormCard runId={m.widget.runId} />
+                          </View>
+                        );
+                      }
+                      if (m.widget?.kind === 'choice') {
+                        return (
+                          <View key={m.id} style={styles.chatWidgetWrap}>
+                            <ChatChoiceCard runId={m.widget.runId} step={m.widget.step} />
                           </View>
                         );
                       }

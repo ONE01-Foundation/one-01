@@ -75,7 +75,31 @@ export type ChatWidget =
   // renderer; the payload points at the tool's live state (e.g. a quiz run).
   | { kind: 'quiz'; runId: string }
   | { kind: 'booking'; runId: string }
-  | { kind: 'form'; runId: string };
+  | { kind: 'form'; runId: string }
+  // A guided CHOICE step (pills) in a "fill the desire with you" flow. `step`
+  // pins this widget to one question in the run, so earlier pills stay answered
+  // while a new question appears below. See `guidedDesires` + `ChatChoiceCard`.
+  | { kind: 'choice'; runId: string; step: number };
+
+/**
+ * A live "fill the desire with you" run — ONE narrows a broad intent (e.g.
+ * "I want a license") into a specific process through guided choice questions,
+ * only opening the process once it's specific enough.
+ */
+export interface GuidedRun {
+  id: string;
+  /** Which GUIDED_DESIRES entry drives this run. */
+  desireKey: string;
+  /** Index into the run's VISIBLE steps — the question currently awaiting an answer. */
+  stepIndex: number;
+  /** Collected slot answers, keyed by step id. */
+  answers: Record<string, string>;
+  status: 'active' | 'done';
+  /** The process opened when the desire became specific. */
+  createdUnitId?: string;
+  /** Content language of the run, so re-renders stay consistent. */
+  lang: 'he' | 'en';
+}
 
 /**
  * A persisted chat message in the home-level conversation with ONE.
@@ -169,6 +193,8 @@ interface MvpStore {
   bookingRuns: Record<string, BookingRun>;
   /** Live form widgets ONE deployed in a thread (keyed by run id). */
   formRuns: Record<string, FormRun>;
+  /** Live "fill the desire with you" guided runs (keyed by run id). */
+  guidedRuns: Record<string, GuidedRun>;
   /**
    * ISO date (YYYY-MM-DD) on which we last greeted the user with the
    * "what's waiting" digest. Prevents the welcome message from firing
@@ -334,6 +360,8 @@ interface MvpStore {
   /** Wipe the home chat (e.g. when user closes the chat with X). */
   clearHomeChat: () => void;
   /** Register a tool run ONE just deployed (e.g. a quiz). */
+  startGuidedRun: (run: GuidedRun) => void;
+  updateGuidedRun: (id: string, patch: Partial<GuidedRun>) => void;
   startQuizRun: (run: QuizRun) => void;
   /** Record the user's answer to one quiz question; sets finishedAt when the
    *  last one is answered. */
@@ -421,6 +449,7 @@ export const useMvpStore = create<MvpStore>()(
       homeChat: [],
       unitChats: {},
       quizRuns: {},
+      guidedRuns: {},
       bookingRuns: {},
       formRuns: {},
       pendingHomeInput: null,
@@ -829,6 +858,14 @@ export const useMvpStore = create<MvpStore>()(
       updateHomeChatMessage: (id, patch) =>
         set((s) => ({ homeChat: s.homeChat.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
       clearHomeChat: () => set({ homeChat: [] }),
+      startGuidedRun: (run) =>
+        set((s) => ({ guidedRuns: { ...s.guidedRuns, [run.id]: run } })),
+      updateGuidedRun: (id, patch) =>
+        set((s) => {
+          const run = s.guidedRuns[id];
+          if (!run) return {};
+          return { guidedRuns: { ...s.guidedRuns, [id]: { ...run, ...patch } } };
+        }),
       startQuizRun: (run) =>
         set((s) => ({ quizRuns: { ...s.quizRuns, [run.id]: run } })),
       answerQuizQuestion: (runId, qIndex, optionIndex) =>
@@ -983,6 +1020,7 @@ export const useMvpStore = create<MvpStore>()(
         homeChat: state.homeChat,
         unitChats: state.unitChats,
         quizRuns: state.quizRuns,
+        guidedRuns: state.guidedRuns,
         bookingRuns: state.bookingRuns,
         formRuns: state.formRuns,
         lastDigestDate: state.lastDigestDate,
