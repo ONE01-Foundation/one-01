@@ -48,9 +48,12 @@ import type { ThemeColors } from '../../utils/theme';
 import { useLanguage } from '../../i18n/useT';
 import { rtlText, rtlRow } from '../../utils/rtl';
 import { haptic } from '../../utils/haptics';
-import { useMvpStore, useActiveIdentity } from '../../stores/mvpStore';
+import { useMvpStore, useActiveIdentity, disclosureForIdentity } from '../../stores/mvpStore';
 import { buildGlobalFeed, type CategoryKey } from '../../data/mvp/global';
 import { generateRichUnitByKey, type ArchetypeKey } from '../../data/mvp/unitArchetype';
+import { shareUnit, postSharedMessage } from '../../services/cloudShared';
+import { openDisclosureStrings, openMemoryStrings } from '../../data/mvp/disclosure';
+import { unitStatusLine } from '../../utils/unitStatusLine';
 
 /** A stable hash of a string → a deterministic pseudo-count, so a desire's
  *  anonymous "aggregate" reads the same every time (not a flickering random). */
@@ -219,33 +222,122 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
     [setPendingHomeInput, onClose],
   );
 
-  // Reach a provider on a desire's behalf — through ONE, disclosure-safe. The
-  // real outreach (share the process / open a thread) rides the existing
-  // two-sided Unit; here ONE confirms it will represent you and share only what
-  // you allowed, then hands the outreach to the home conversation.
+  // Reach a provider on a desire's behalf — through ONE, disclosure-safe, and
+  // it actually PERFORMS: ONE composes the outward message, publishes a
+  // disclosure-safe snapshot (open facts + open memories + the message only —
+  // never ask/private), and opens a live shared thread the provider can join by
+  // code. The proof of the wedge: ONE does something real for you, with no
+  // network of users required. Degrades to a local-only draft if the backend is
+  // unreachable.
+  const doReach = useCallback(
+    async (providerName: string, unitId: string) => {
+      const store = useMvpStore.getState();
+      const unit = store.units.find((u) => u.id === unitId);
+      if (!unit) return;
+      const policy = disclosureForIdentity(unit.identityId);
+      const sharedByName =
+        policy.find((d) => d.key === 'name' && d.tier === 'open' && !!d.value?.trim())?.value?.trim() ||
+        store.name;
+
+      // 1) The actual outward message ONE sends — addressed to the provider.
+      const body = he
+        ? `שלום ${providerName},\n${sharedByName ? `מדבר ${sharedByName}` : 'פונה אליך'} דרך ONE בנוגע ל${unit.title}.\nאשמח לתאם — אשתף רק את מה שאישרתי. תודה.`
+        : `Hi ${providerName},\n${sharedByName ? `${sharedByName} here` : 'Reaching out'} via ONE about ${unit.title}.\nHappy to set it up — I'll share only what I approved. Thanks.`;
+      store.addDraft(
+        unit.id,
+        {
+          id: `dr_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
+          channel: 'whatsapp',
+          to: providerName,
+          body,
+          status: 'draft',
+          createdAt: new Date().toISOString(),
+        },
+        lang,
+      );
+
+      // 2) Record the provider on the process + flip it to shared.
+      const ts = new Date().toISOString();
+      const hasPerson = (unit.people ?? []).some((p) => p.name.toLowerCase() === providerName.toLowerCase());
+      store.updateUnit(unit.id, {
+        people: hasPerson
+          ? unit.people
+          : [
+              ...(unit.people ?? []),
+              { id: `p_${Date.now()}`, name: providerName, role: he ? 'ספק' : 'Provider', connectionType: 'partner' as const },
+            ],
+        visibility: 'shared',
+        relationLabel: he ? `דרך ONE · ${providerName}` : `Via ONE · ${providerName}`,
+        lastUpdatedAt: ts,
+        updatedAt: ts,
+      });
+
+      // 3) Publish the disclosure-safe snapshot → a live join code.
+      const row = await shareUnit(
+        {
+          title: unit.title,
+          emoji: unit.emoji,
+          status: unitStatusLine(unit, he),
+          openFacts: [...openDisclosureStrings(policy, he), ...openMemoryStrings(store.memories)],
+          message: body,
+          sharedByName,
+          providerName,
+        },
+        sharedByName || 'ONE',
+      );
+
+      if (row?.code) {
+        store.updateUnit(unit.id, { shareCode: row.code });
+        // Open the conversation: the provider sees ONE's message the moment they join.
+        void postSharedMessage(row.code, sharedByName || 'ONE', 'one', body);
+        store.pushUnitNotification({
+          unitId: unit.id,
+          text: he ? `פניתי ל${providerName} · קוד: ${row.code}` : `Reached ${providerName} · code: ${row.code}`,
+          emoji: '🔗',
+          kind: 'event',
+        });
+        Alert.alert(
+          he ? 'ONE יצר קשר' : 'ONE reached out',
+          he
+            ? `פתחתי שיחה עם ${providerName} על "${unit.title}".\nקוד הצטרפות: ${row.code}\nהוא רואה רק מה שאישרת.`
+            : `I opened a thread with ${providerName} about "${unit.title}".\nJoin code: ${row.code}\nThey see only what you allowed.`,
+        );
+      } else {
+        // Backend unreachable — the draft still exists locally, nothing crossed.
+        store.pushUnitNotification({
+          unitId: unit.id,
+          text: he ? `ניסחתי פנייה ל${providerName}` : `Drafted a message to ${providerName}`,
+          emoji: '✍️',
+          kind: 'update',
+        });
+        Alert.alert(
+          he ? 'הכנתי פנייה' : 'Draft ready',
+          he
+            ? `ניסחתי את ההודעה ל${providerName} בתהליך "${unit.title}". פתח אותה כדי לשלוח.`
+            : `I drafted the message to ${providerName} in "${unit.title}". Open it to send.`,
+        );
+      }
+    },
+    [he, lang],
+  );
+
   const reachProvider = useCallback(
-    (providerName: string, desireTitle: string) => {
+    (providerName: string, unitId: string) => {
       haptic.tap();
+      const unit = useMvpStore.getState().units.find((u) => u.id === unitId);
+      const title = unit?.title ?? '';
       Alert.alert(
         he ? 'לפנות דרך ONE' : 'Reach via ONE',
         he
-          ? `ONE יפנה ל${providerName} בשם "${desireTitle}" — ויחשוף רק מה שאישרת.`
-          : `ONE will reach ${providerName} about "${desireTitle}" — sharing only what you allowed.`,
+          ? `ONE ינסח הודעה ל${providerName} על "${title}", יפתח קישור משותף — ויחשוף רק מה שאישרת.`
+          : `ONE will draft a message to ${providerName} about "${title}" and open a shared link — revealing only what you allowed.`,
         [
           { text: he ? 'ביטול' : 'Cancel', style: 'cancel' },
-          {
-            text: he ? 'שלח' : 'Send',
-            onPress: () =>
-              askOne(
-                he
-                  ? `פנה בשמי ל${providerName} לגבי ${desireTitle}`
-                  : `Reach out to ${providerName} about ${desireTitle} for me`,
-              ),
-          },
+          { text: he ? 'פנה' : 'Reach', onPress: () => void doReach(providerName, unitId) },
         ],
       );
     },
-    [he, askOne],
+    [he, doReach],
   );
 
   // ── The wants loop (top banner) ────────────────────────────────────────────
@@ -420,7 +512,7 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
                         <Text style={[styles.helpCat, { color: colors.textSecondary }, rtl]} numberOfLines={1}>{o.category}</Text>
                       </View>
                       <Pressable
-                        onPress={() => reachProvider(o.name, selectedDesire.title)}
+                        onPress={() => reachProvider(o.name, selectedDesire.id)}
                         style={[styles.helpReach, { backgroundColor: colors.text }]}
                       >
                         <Text style={[styles.helpReachText, { color: colors.background }]}>
