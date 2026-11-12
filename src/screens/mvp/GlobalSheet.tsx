@@ -154,6 +154,13 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
   // Which desire's "who can help" panel is expanded (tap a desire card).
   const [selectedDesireId, setSelectedDesireId] = useState<string | null>(null);
   const selectedDesire = myDesires.find((d) => d.id === selectedDesireId) ?? null;
+  // The live process behind the selected desire — so the "who can help" panel can
+  // reflect whom ONE has already reached (persisted on the unit's people).
+  const selectedUnit = selectedDesire ? allUnits.find((u) => u.id === selectedDesire.id) ?? null : null;
+  const reachedNames = useMemo(
+    () => new Set((selectedUnit?.people ?? []).map((p) => p.name.toLowerCase())),
+    [selectedUnit],
+  );
 
   const credits = 1240;
   const rtl = rtlText(lang);
@@ -340,6 +347,22 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
     [he, doReach],
   );
 
+  // Already reached — surface the live join code again (to pass to the provider).
+  const showReached = useCallback(
+    (providerName: string, unitId: string) => {
+      haptic.select();
+      const unit = useMvpStore.getState().units.find((u) => u.id === unitId);
+      const code = unit?.shareCode;
+      Alert.alert(
+        he ? `פנית ל${providerName}` : `Reached ${providerName}`,
+        code
+          ? (he ? `שיחה פתוחה · קוד הצטרפות: ${code}` : `Thread open · join code: ${code}`)
+          : (he ? 'ההודעה מוכנה בתהליך — פתח אותה כדי לשלוח.' : 'The message is ready in the process — open it to send.'),
+      );
+    },
+    [he],
+  );
+
   // ── The wants loop (top banner) ────────────────────────────────────────────
   const loopCards: LoopCard[] = useMemo(
     () =>
@@ -511,14 +534,25 @@ export function GlobalSheet({ visible, onClose, onJoinShared, animatedIndex }: G
                         <Text style={[styles.helpName, { color: colors.text }, rtl]} numberOfLines={1}>{o.name}</Text>
                         <Text style={[styles.helpCat, { color: colors.textSecondary }, rtl]} numberOfLines={1}>{o.category}</Text>
                       </View>
-                      <Pressable
-                        onPress={() => reachProvider(o.name, selectedDesire.id)}
-                        style={[styles.helpReach, { backgroundColor: colors.text }]}
-                      >
-                        <Text style={[styles.helpReachText, { color: colors.background }]}>
-                          {he ? 'פנה דרך ONE' : 'Reach via ONE'}
-                        </Text>
-                      </Pressable>
+                      {reachedNames.has(o.name.toLowerCase()) ? (
+                        <Pressable
+                          onPress={() => showReached(o.name, selectedDesire.id)}
+                          style={[styles.helpReached, { borderColor: colors.border }]}
+                        >
+                          <Text style={[styles.helpReachedText, { color: colors.textSecondary }]}>
+                            {he ? '✓ פנית' : '✓ Reached'}
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={() => reachProvider(o.name, selectedDesire.id)}
+                          style={[styles.helpReach, { backgroundColor: colors.text }]}
+                        >
+                          <Text style={[styles.helpReachText, { color: colors.background }]}>
+                            {he ? 'פנה דרך ONE' : 'Reach via ONE'}
+                          </Text>
+                        </Pressable>
+                      )}
                     </View>
                   ))
                 )}
@@ -1006,6 +1040,8 @@ const styles = StyleSheet.create({
   helpCat: { fontSize: 11.5, marginTop: 1 },
   helpReach: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   helpReachText: { fontSize: 12.5, fontWeight: '700' },
+  helpReached: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1 },
+  helpReachedText: { fontSize: 12.5, fontWeight: '700' },
 
   // "Join a shared process by code" — the provider entry into the two-sided Unit.
   joinRow: {
