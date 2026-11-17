@@ -25,6 +25,7 @@ import { SignInSheet } from '../screens/mvp/SignInSheet';
 import { HomeScreen } from '../screens/mvp/HomeScreen';
 import { HomeFocus } from '../screens/mvp/HomeFocus';
 import { MeetOne } from '../screens/mvp/MeetOne';
+import { One01Studio } from '../screens/mvp/One01Studio';
 import { ProfileFocus } from '../screens/mvp/ProfileFocus';
 import { UnitProfileSheet } from '../screens/mvp/UnitProfileSheet';
 import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
@@ -287,6 +288,13 @@ function HomeWithOverlays() {
   // flips metOne in-store, which re-renders into the real home below.
   if (!metOne) {
     return <MeetOne onDone={() => { /* flags flip in-store → home shows */ }} />;
+  }
+
+  // ONE01 "company" / venture-factory demo — a full-surface mode (Settings →
+  // ONE01). The consumer ONE app (classic/focus) is untouched; exit returns
+  // to the classic home.
+  if (homeMode === 'one01') {
+    return <One01Studio onExit={() => useMvpStore.getState().setHomeMode('classic')} />;
   }
 
   return (

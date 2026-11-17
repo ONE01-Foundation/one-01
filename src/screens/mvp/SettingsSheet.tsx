@@ -243,6 +243,24 @@ export function SettingsSheet({
             />
           </Group>
 
+          {/* ONE01 — the company / venture-factory demo (separate surface). */}
+          <Group title="ONE01" colors={colors} he={he}>
+            <ActionRow
+              label={he ? 'פתח את ONE01 (דמו)' : 'Open ONE01 (demo)'}
+              onPress={() => {
+                setHomeMode('one01');
+                onClose();
+              }}
+              colors={colors}
+              hint={
+                he
+                  ? 'חברת המיזמים — צור מיזם, קנה שבלונה, נהל. אפליקציית ONE לא מושפעת.'
+                  : 'The venture company — create a venture, buy a template, manage. The ONE app is untouched.'
+              }
+              he={he}
+            />
+          </Group>
+
           {/* Language */}
           <Group title={he ? 'שפה' : 'Language'} colors={colors} he={he}>
             <SegmentedRow

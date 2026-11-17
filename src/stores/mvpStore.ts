@@ -134,7 +134,7 @@ export type PlanTier = 'free' | 'pro' | 'max';
 /** Which Home layout to render. 'classic' = the animated default home
  *  (HomeScreen); 'focus' = the clean launcher (HomeFocus). Switchable from
  *  Settings → "מסך הבית". */
-export type HomeMode = 'classic' | 'focus';
+export type HomeMode = 'classic' | 'focus' | 'one01';
 
 interface MvpStore {
   /** Optional name the user chose; spec puts the name question post-value, so this can be empty. */
