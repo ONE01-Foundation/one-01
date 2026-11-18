@@ -64,6 +64,8 @@ export interface Venture {
   status: VentureStatus;
   emoji: string;
   accent: string;
+  /** One-line pitch shown on the project card / store page. */
+  tagline?: string;
   /** Optional connected custom domain. */
   domain?: string;
   /** Virtual balances/metrics — demo stubs, no crypto. */
@@ -86,13 +88,18 @@ function slugify(name: string): string {
 const SEED_VENTURES: Venture[] = [
   {
     id: 'vt_one', name: 'ONE', slug: 'one', kind: 'app', templateId: 'one-clone',
-    status: 'live', emoji: '◉', accent: '#10B981', tokens: 1200, users: 1, revenue: 0,
-    createdAt: nowIso(), isCore: true,
+    status: 'live', emoji: '◉', accent: '#10B981', tagline: 'הנציג האישי שלך',
+    tokens: 1200, users: 1, revenue: 0, createdAt: nowIso(), isCore: true,
   },
   {
     id: 'vt_winzi', name: 'Winzi', slug: 'winzi', kind: 'app', templateId: 'market',
-    status: 'building', emoji: '👑', accent: '#F9D800', tokens: 300, users: 0, revenue: 0,
-    createdAt: nowIso(),
+    status: 'building', emoji: '👑', accent: '#F9D800', tagline: 'שחק, זכה בכסף',
+    tokens: 300, users: 0, revenue: 0, createdAt: nowIso(),
+  },
+  {
+    id: 'vt_mixstar', name: 'MixStar', slug: 'mixstar', kind: 'app', templateId: 'matching',
+    status: 'building', emoji: '✦', accent: '#8B5CF6', tagline: 'ריאליטי AI',
+    tokens: 150, users: 0, revenue: 0, createdAt: nowIso(),
   },
 ];
 
@@ -115,7 +122,7 @@ export const useOne01Store = create<One01State>()(
   persist(
     (set, get) => ({
       companyName: 'ONE01',
-      companyTokens: 5000,
+      companyTokens: 3500,
       ventures: SEED_VENTURES,
 
       createVenture: ({ name, kind, templateId }) => {
@@ -157,7 +164,7 @@ export const useOne01Store = create<One01State>()(
 
       addCompanyTokens: (n) => set((s) => ({ companyTokens: Math.max(0, s.companyTokens + n) })),
 
-      resetDemo: () => set({ companyName: 'ONE01', companyTokens: 5000, ventures: SEED_VENTURES }),
+      resetDemo: () => set({ companyName: 'ONE01', companyTokens: 3500, ventures: SEED_VENTURES }),
     }),
     {
       name: 'one01_v1',
