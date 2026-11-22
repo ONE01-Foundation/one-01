@@ -36,6 +36,8 @@ import {
   SodexMark,
   CategoryIcon,
 } from '../../components/one01/brand';
+import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
+import { onboardingFor } from '../../data/one01/onboarding';
 import {
   PRODUCTS,
   PRODUCT_ORDER,
@@ -84,25 +86,45 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
 
+  const [entered, setEntered] = useState(false);
   const [productId, setProductId] = useState<ProductId | null>(null);
   const [tab, setTab] = useState<Tab>('home');
+  const [onboardFor, setOnboardFor] = useState<ProductId | null>(null);
+  const [onboarded, setOnboarded] = useState<Set<string>>(() => new Set());
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
 
-  const openApp = (app: EcosystemApp) => {
-    haptic.press();
-    if (app.product) {
-      setProductId(app.product);
-      setTab('home');
-    } else {
-      setExternalApp(app);
-    }
+  const enterProduct = (id: ProductId) => {
+    setOnboarded((prev) => new Set(prev).add(id));
+    setOnboardFor(null);
+    setProductId(id);
+    setTab('home');
   };
 
   const openProduct = (id: ProductId) => {
     haptic.select();
-    setProductId(id);
-    setTab('home');
+    if (onboarded.has(id)) {
+      setProductId(id);
+      setTab('home');
+    } else {
+      setOnboardFor(id);
+    }
   };
+
+  const openApp = (app: EcosystemApp) => {
+    haptic.press();
+    if (app.product) openProduct(app.product);
+    else setExternalApp(app);
+  };
+
+  // 1) ONE01 platform-entry onboarding (once per mount — re-open from Settings to replay).
+  if (!entered) {
+    return <ProductOnboarding config={onboardingFor('one01')} onFinish={() => setEntered(true)} />;
+  }
+
+  // 2) Per-product onboarding (first time a product is opened this session).
+  if (onboardFor) {
+    return <ProductOnboarding config={onboardingFor(onboardFor)} onFinish={() => enterProduct(onboardFor)} />;
+  }
 
   if (productId) {
     return (
