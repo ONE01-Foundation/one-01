@@ -292,6 +292,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
       </View>
 
+      {/* concave "VR" curve — soft edge vignette over the content (desktop only) */}
+      {wide && <ScreenCurve th={th} />}
+
       {/* bottom bar sits below the detail overlay */}
       {!wide && <MobileBottomBar th={th} tab={tab} setTab={setTab} onSwitch={() => setSheet('switch')} bottomInset={insets.bottom} />}
 
@@ -317,7 +320,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         </View>
       )}
 
-      <SheetWindow visible={sheet === 'profile'} wide={wide} th={th} onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'profile'} wide={wide} th={th} dock onClose={() => setSheet(null)}>
         {(close, onScroll) => (
           <ProfilePage
             th={th}
@@ -334,13 +337,13 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
           />
         )}
       </SheetWindow>
-      <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} dock onClose={() => setSheet(null)}>
         {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
-      <SheetWindow visible={sheet === 'network'} wide={wide} th={th} onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'network'} wide={wide} th={th} dock onClose={() => setSheet(null)}>
         {(close, onScroll) => <NetworkPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
-      <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} dock onClose={() => setSheet(null)}>
         {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
       <SheetWindow visible={!!bannerSlide} wide={wide} th={th} onClose={() => setBannerSlide(null)}>
@@ -351,6 +354,21 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       </SheetWindow>
       <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
+    </View>
+  );
+}
+
+/* ─────────────────────────────── screen curve (VR concavity) ─────────────────────────────── */
+
+/** A soft left/right edge vignette so the flat page reads like the centre of a
+ *  gently concave, curved screen — the edges fall away from the viewer. Desktop only. */
+function ScreenCurve({ th }: { th: ShellTheme }) {
+  const edge = th.mode === 'dark' ? 'rgba(0,0,0,0.30)' : 'rgba(10,12,20,0.07)';
+  const clear = 'rgba(0,0,0,0)';
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <LinearGradient colors={[edge, clear]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={[styles.curveEdge, { left: 0 }]} />
+      <LinearGradient colors={[clear, edge]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={[styles.curveEdge, { right: 0 }]} />
     </View>
   );
 }
@@ -461,10 +479,10 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { 
       <View style={styles.desktopRow}>
         <Pressable onPress={() => { haptic.select(); onSwitch(); }} style={styles.desktopLogo}>
           {th.homeId === 'one01' ? (
-            <One01Wordmark height={26} color={th.text} />
+            <One01Wordmark height={38} color={th.text} />
           ) : (
             <View style={styles.row}>
-              <Mark mark={th.mark} size={30} accent={th.accent} />
+              <Mark mark={th.mark} size={34} accent={th.accent} />
               <Text style={[styles.navWordmark, { color: th.text }]}>{th.name}</Text>
             </View>
           )}
@@ -486,6 +504,19 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { 
 }
 
 /* ─────────────────────────────── home content ─────────────────────────────── */
+
+/** A horizontal shelf with a fade mask on its right edge, where cards run off the
+ *  side of the screen (same idea as the bottom-bar gradient, turned sideways). */
+function Shelf({ th, gap = 12, children }: { th: ShellTheme; gap?: number; children: React.ReactNode }) {
+  return (
+    <View style={styles.shelf}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap, paddingRight: 8 }} style={styles.shelfScroll}>
+        {children}
+      </ScrollView>
+      <LinearGradient pointerEvents="none" colors={[`${th.bg}00`, th.bg]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.shelfFade} />
+    </View>
+  );
+}
 
 function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpenBanner, onOpenSearch, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void; onOpenBanner: (s: ShellHero) => void; onOpenSearch: () => void; lang: Lang }) {
   const home = HOME[th.homeId];
@@ -599,7 +630,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
             ))}
           </View>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }} style={{ overflow: 'visible' }}>
+          <Shelf th={th} gap={12}>
             {items.map((it) => (
               it.mark ? (
                 /* project "cube" — square brand tile with a label below */
@@ -628,7 +659,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
                 </Pressable>
               )
             ))}
-          </ScrollView>
+          </Shelf>
         )}
 
         {/* per-product drawers: people · events · stats · live feed */}
@@ -666,7 +697,7 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer, lang }: { th: ShellTheme;
     <>
       {/* people */}
       <DrawerHead th={th} kind="people" title={tr(lang, extras.people.label)} count={extras.people.items.length} onOpen={() => onOpenDrawer('people')} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 8 }} style={{ overflow: 'visible' }}>
+      <Shelf th={th} gap={10}>
         {extras.people.items.map((p) => (
           <View key={p.id} style={[styles.personCard, { backgroundColor: th.surface, borderColor: th.border }]}>
             <View style={[styles.personAv, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 26 }}>{p.emoji}</Text></View>
@@ -674,11 +705,11 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer, lang }: { th: ShellTheme;
             <Text style={[styles.personMeta, { color: th.muted }]} numberOfLines={1}>{p.meta}</Text>
           </View>
         ))}
-      </ScrollView>
+      </Shelf>
 
       {/* events */}
       <DrawerHead th={th} kind="events" title={tr(lang, extras.events.label)} count={extras.events.items.length} onOpen={() => onOpenDrawer('events')} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }} style={{ overflow: 'visible' }}>
+      <Shelf th={th} gap={12}>
         {extras.events.items.map((e) => (
           <LinearGradient key={e.id} colors={e.bg ?? [`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.eventCard}>
             {e.live && <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>LIVE</Text></View>}
@@ -689,7 +720,7 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer, lang }: { th: ShellTheme;
             </View>
           </LinearGradient>
         ))}
-      </ScrollView>
+      </Shelf>
 
       {/* stats + live feed combined (the separate Live drawer was folded in here) */}
       <DrawerHead th={th} kind="stats" title={tr(lang, extras.stats.label)} onOpen={() => onOpenDrawer('stats')} />
@@ -1421,6 +1452,14 @@ const styles = StyleSheet.create({
   navWordmark: { fontSize: 20, fontWeight: '900', letterSpacing: 1 },
   desktopLinks: { flexDirection: 'row', gap: 26 },
   navLink: { fontSize: 15, fontWeight: '600' },
+
+  /* horizontal shelf + right-edge fade mask */
+  shelf: { position: 'relative' },
+  shelfScroll: { overflow: 'visible' },
+  shelfFade: { position: 'absolute', top: 0, bottom: 0, right: -18, width: 56 },
+
+  /* concave screen-curve edges */
+  curveEdge: { position: 'absolute', top: 0, bottom: 0, width: '15%', maxWidth: 220 },
 
   /* banner */
   banner: { height: 240, borderRadius: 22, padding: 22, marginRight: 12, justifyContent: 'space-between' },

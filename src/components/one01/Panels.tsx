@@ -102,7 +102,7 @@ function Mark({ mark, size }: { mark: MarkId; size: number }) {
 
 /* ─────────────────────────────── SheetWindow ─────────────────────────────── */
 
-export function SheetWindow({ visible, wide, th, onClose, children }: { visible: boolean; wide: boolean; th: ShellTheme; onClose: () => void; children: (close: () => void, onScroll: ScrollHandler) => React.ReactNode }) {
+export function SheetWindow({ visible, wide, th, onClose, children, dock }: { visible: boolean; wide: boolean; th: ShellTheme; onClose: () => void; children: (close: () => void, onScroll: ScrollHandler) => React.ReactNode; dock?: boolean }) {
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const prog = useRef(new Animated.Value(0)).current;
@@ -133,7 +133,7 @@ export function SheetWindow({ visible, wide, th, onClose, children }: { visible:
     }),
   ).current;
 
-  const scrimOpacity = prog.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] });
+  const scrimOpacity = prog.interpolate({ inputRange: [0, 1], outputRange: [0, dock ? 0.3 : 0.5] });
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={requestClose}>
@@ -143,11 +143,20 @@ export function SheetWindow({ visible, wide, th, onClose, children }: { visible:
         </Pressable>
 
         {wide ? (
+          dock ? (
+            /* a regular docked window — slides in from the right, full height, not a centered popup */
+            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+              <Animated.View style={[styles.winDock, { backgroundColor: th.bg, borderColor: th.border, paddingTop: insets.top, transform: [{ translateX: prog.interpolate({ inputRange: [0, 1], outputRange: [480, 0] }) }] }]}>
+                {children(requestClose, onScroll)}
+              </Animated.View>
+            </View>
+          ) : (
           <View style={styles.winCenter} pointerEvents="box-none">
             <Animated.View style={[styles.window, { backgroundColor: th.bg, borderColor: th.border, opacity: prog, transform: [{ scale: prog.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}>
               {children(requestClose, onScroll)}
             </Animated.View>
           </View>
+          )
         ) : (
           <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: Animated.add(prog.interpolate({ inputRange: [0, 1], outputRange: [sheetH, 0] }), drag) }] }]}>
             <View style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
@@ -654,6 +663,7 @@ const styles = StyleSheet.create({
   grab: { width: 44, height: 5, borderRadius: 3 },
   winCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   window: { width: '100%', maxWidth: 460, height: '82%', borderRadius: 24, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  winDock: { position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: 452, borderLeftWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
 
   head: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 10 },
   round: { width: 38, height: 38, borderRadius: 19, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
