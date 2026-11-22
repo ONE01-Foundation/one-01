@@ -47,7 +47,7 @@ export const ONBOARDING: Record<OnboardConfig['id'], OnboardConfig> = {
     name: 'ONE01',
     mode: 'light',
     accent: '#111318',
-    glow: '#6366F1',
+    glow: '#E8B923',
     mark: 'one01',
     logo: 'horizontal',
     connectTagline: 'START YOUR VENTURE',

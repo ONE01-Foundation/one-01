@@ -9,7 +9,7 @@
  * paragraph, and a kind-specific section + ratings. Themed by the current shell.
  */
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -45,7 +45,7 @@ function Stars({ value, color }: { value: number; color: string }) {
   return <Text style={{ color, fontSize: 13, letterSpacing: 1 }}>{'★★★★★'.slice(0, full)}{'☆☆☆☆☆'.slice(0, 5 - full)}</Text>;
 }
 
-export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, topPad = 0 }: { th: ShellTheme; kind: DetailKind; item: HomeItem; onBack: () => void; onPrimary: () => void; wide?: boolean; topPad?: number }) {
+export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, topPad = 0, onScroll }: { th: ShellTheme; kind: DetailKind; item: HomeItem; onBack: () => void; onPrimary: () => void; wide?: boolean; topPad?: number; onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void }) {
   const insets = useSafeAreaInsets();
   const accent = item.product ? PRODUCTS[item.product].accent : th.accent;
   const accentFg = accent === '#F9D800' ? '#000' : '#fff';
@@ -97,7 +97,7 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
         <View style={wide ? styles.colWide : styles.flex}>
         {/* hero */}
         <View style={styles.hero}>

@@ -65,7 +65,7 @@ import {
 type HomeId = 'one01' | ProductId;
 type Tab = 'home' | 'market' | 'create';
 
-const GLOWS: Record<HomeId, string> = { one01: '#6366F1', one: '#6B7280', winzi: '#3B5BDB', mixstar: '#8B5CF6' };
+const GLOWS: Record<HomeId, string> = { one01: '#E8B923', one: '#6B7280', winzi: '#3B5BDB', mixstar: '#8B5CF6' };
 const DARK_TILE = '#131317';
 const CW = 700; // desktop content column
 const WIDE_AT = 900;
@@ -226,11 +226,15 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   const badgeFg = th.accent === '#F9D800' ? '#000' : '#fff';
   return (
     <Pressable onPress={onPress} style={styles.profileBtn} hitSlop={8}>
-      <View style={[styles.avatar, { borderColor: th.accent, backgroundColor: th.surface2 }]}>
-        <UserIcon size={22} color={th.muted} />
+      <View style={[styles.lvlPill, { backgroundColor: th.surface, borderColor: th.border }]}>
+        <Text style={[styles.lvlTxt, { color: th.text }]}>LVL 13</Text>
       </View>
-      <View style={[styles.avBadge, { backgroundColor: th.accent }]}><Text style={[styles.avBadgeTxt, { color: badgeFg }]}>4</Text></View>
-      <View style={[styles.avCount, { backgroundColor: th.accent }]}><Text style={[styles.avCountTxt, { color: badgeFg }]}>13</Text></View>
+      <View style={styles.avatarWrap}>
+        <View style={[styles.avatar, { borderColor: th.accent, backgroundColor: th.surface2 }]}>
+          <UserIcon size={22} color={th.muted} />
+        </View>
+        <View style={[styles.avBadge, { backgroundColor: th.accent }]}><Text style={[styles.avBadgeTxt, { color: badgeFg }]}>4</Text></View>
+      </View>
     </Pressable>
   );
 }
@@ -498,6 +502,14 @@ function WalletSheet({ visible, th, onClose }: { visible: boolean; th: ShellThem
 }
 
 function AppSwitcher({ visible, wide, th, current, onClose, onPick }: { visible: boolean; wide: boolean; th: ShellTheme; current: HomeId; onClose: () => void; onPick: (id: string) => void }) {
+  const prog = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!visible || wide) return;
+    prog.setValue(0);
+    Animated.spring(prog, { toValue: 1, useNativeDriver: true, bounciness: 4, speed: 12 }).start();
+  }, [visible, wide, prog]);
+  const requestClose = (cb: () => void) => Animated.timing(prog, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => cb());
+
   if (wide) {
     const rows: { id: HomeId; label: string; mark: MarkId }[] = [
       { id: 'one01', label: 'ONE01', mark: 'one01' },
@@ -531,27 +543,33 @@ function AppSwitcher({ visible, wide, th, current, onClose, onPick }: { visible:
       </Modal>
     );
   }
+  const scrimOpacity = prog.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
+  const sheetTy = prog.interpolate({ inputRange: [0, 1], outputRange: [600, 0] });
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.switchRoot}>
-        <Pressable style={styles.flex} onPress={onClose} />
-        <View style={styles.switchSheet}>
-          <View style={styles.switchGrab} />
-          <Pressable onPress={() => onPick('one01')} style={styles.switchTop}>
-            <View style={[styles.appTile, styles.appTileBig, { backgroundColor: '#fff', borderColor: current === 'one01' ? '#fff' : 'transparent' }]}><One01Mark size={38} color="#111318" /></View>
-            <Text style={styles.appLabel}>One01</Text>
-          </Pressable>
-          <View style={styles.switchGrid}>
-            {SWITCHER_APPS.map((a) => (
-              <Pressable key={a.id} onPress={() => onPick(a.id)} style={styles.switchItem}>
-                <View style={[styles.appTile, { backgroundColor: DARK_TILE, borderColor: current === a.id ? a.mark === 'winzi' ? '#F9D800' : '#8B5CF6' : 'transparent' }]}>
-                  <Mark mark={a.mark} size={32} accent={markAccent(a.mark)} eye={DARK_TILE} />
-                </View>
-                <Text style={styles.appLabel}>{a.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Pressable onPress={onClose} style={styles.switchClose} hitSlop={12}><Text style={styles.switchCloseTxt}>✕</Text></Pressable>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={() => requestClose(onClose)}>
+      <View style={styles.flex}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => requestClose(onClose)}>
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: scrimOpacity }]} pointerEvents="none" />
+        </Pressable>
+        <View style={styles.switchBottom} pointerEvents="box-none">
+          <Animated.View style={[styles.switchSheet, { transform: [{ translateY: sheetTy }] }]}>
+            <View style={styles.switchGrab} />
+            <Pressable onPress={() => requestClose(() => onPick('one01'))} style={styles.switchTop}>
+              <View style={[styles.appTile, styles.appTileBig, { backgroundColor: '#fff', borderColor: current === 'one01' ? '#fff' : 'transparent' }]}><One01Mark size={38} color="#111318" /></View>
+              <Text style={styles.appLabel}>One01</Text>
+            </Pressable>
+            <View style={styles.switchGrid}>
+              {SWITCHER_APPS.map((a) => (
+                <Pressable key={a.id} onPress={() => requestClose(() => onPick(a.id))} style={styles.switchItem}>
+                  <View style={[styles.appTile, { backgroundColor: DARK_TILE, borderColor: current === a.id ? a.mark === 'winzi' ? '#F9D800' : '#8B5CF6' : 'transparent' }]}>
+                    <Mark mark={a.mark} size={32} accent={markAccent(a.mark)} eye={DARK_TILE} />
+                  </View>
+                  <Text style={styles.appLabel}>{a.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable onPress={() => requestClose(onClose)} style={styles.switchClose} hitSlop={12}><Text style={styles.switchCloseTxt}>✕</Text></Pressable>
+          </Animated.View>
         </View>
       </View>
     </Modal>
@@ -584,18 +602,23 @@ function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary }: { 
   const sheetTop = topInset + 74;
   const sheetH = winH - sheetTop;
   const ty = useRef(new Animated.Value(sheetH)).current;
+  const scrollY = useRef(0);
 
   useEffect(() => {
     if (wide) return;
     Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 3, speed: 13 }).start();
   }, [wide, ty]);
 
+  // close = slide the sheet down (the scrim fades with it via interpolation), then unmount
+  const close = () => Animated.timing(ty, { toValue: sheetH, duration: 220, useNativeDriver: true }).start(() => onBack());
+
+  // drag to dismiss from anywhere on the card — but only once the content is scrolled to the top
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && g.dy > Math.abs(g.dx),
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5 && scrollY.current <= 2,
       onPanResponderMove: (_, g) => { if (g.dy > 0) ty.setValue(g.dy); },
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 130 || g.vy > 0.8) Animated.timing(ty, { toValue: sheetH, duration: 200, useNativeDriver: true }).start(() => onBack());
+        if (g.dy > 130 || g.vy > 0.8) close();
         else Animated.spring(ty, { toValue: 0, useNativeDriver: true }).start();
       },
     }),
@@ -610,15 +633,19 @@ function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary }: { 
     );
   }
 
-  // mobile: a sheet that rises from the bottom and can be dragged down to close
+  const scrimOpacity = ty.interpolate({ inputRange: [0, sheetH], outputRange: [0.42, 0], extrapolate: 'clamp' });
+
+  // mobile: sheet rises from the bottom; the scrim behind FADES (opacity), never slides
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} onPress={onBack} />
-      <Animated.View style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
-        <View {...pan.panHandlers} style={styles.detailDrag}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={close}>
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: scrimOpacity }]} pointerEvents="none" />
+      </Pressable>
+      <Animated.View {...pan.panHandlers} style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
+        <View style={styles.detailDrag}>
           <View style={[styles.detailGrab, { backgroundColor: th.border }]} />
         </View>
-        <DetailPage th={th} kind={kind} item={item} onBack={onBack} onPrimary={onPrimary} />
+        <DetailPage th={th} kind={kind} item={item} onBack={close} onPrimary={onPrimary} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} />
       </Animated.View>
     </View>
   );
@@ -638,12 +665,13 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14 },
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  profileBtn: { width: 52, alignItems: 'center' },
+  profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lvlPill: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  lvlTxt: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3, fontVariant: ['tabular-nums'] },
+  avatarWrap: { width: 44, height: 44 },
   avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  avBadge: { position: 'absolute', top: -2, right: 0, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  avBadge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   avBadgeTxt: { fontSize: 11, fontWeight: '800' },
-  avCount: { marginTop: 2, minWidth: 22, borderRadius: 7, alignItems: 'center', paddingHorizontal: 5, paddingVertical: 1 },
-  avCountTxt: { fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'] },
 
   /* mobile bottom bar */
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingTop: 22, paddingHorizontal: 24 },
@@ -750,6 +778,7 @@ const styles = StyleSheet.create({
 
   /* app switcher */
   switchRoot: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  switchBottom: { flex: 1, justifyContent: 'flex-end' },
   switchSheet: { backgroundColor: '#17181D', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingBottom: 40, paddingHorizontal: 24, alignItems: 'center' },
   switchGrab: { width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.22)', marginBottom: 18 },
   switchTop: { alignItems: 'center', gap: 8, marginBottom: 22 },
