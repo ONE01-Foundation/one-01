@@ -46,7 +46,6 @@ import {
   CreateIcon,
   SearchIcon,
   FilterIcon,
-  BellIcon,
   PeopleIcon,
   CalendarIcon,
   ChartIcon,
@@ -156,8 +155,14 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const debit = useOne01PlatformStore((s) => s.debit);
   const publishCreation = useOne01PlatformStore((s) => s.publishCreation);
   const markNotifsSeen = useOne01PlatformStore((s) => s.markNotifsSeen);
-  const openProfile = () => { setProfileTab('posts'); setSheet('profile'); };
-  const openNotifs = () => { markNotifsSeen(); setProfileTab('notifs'); setSheet('profile'); };
+  const openProfile = () => {
+    const { transactions, notifsSeenAt } = useOne01PlatformStore.getState();
+    const unread = buildNotifs(transactions).filter((n) => n.ts > notifsSeenAt).length;
+    // the profile avatar now carries the unread dot — if there's anything new,
+    // open straight on Notifications and clear it; otherwise land on Posts
+    if (unread > 0) { markNotifsSeen(); setProfileTab('notifs'); } else setProfileTab('posts');
+    setSheet('profile');
+  };
 
   const [homeId, setHomeId] = useState<HomeId>('one01');
   const [tab, setTab] = useState<Tab>('home');
@@ -300,9 +305,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       )}
 
       {wide ? (
-        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={openProfile} onSwitch={() => setSheet('switch')} onNotifs={openNotifs} lang={lang} />
+        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={openProfile} onSwitch={() => setSheet('switch')} lang={lang} />
       ) : (
-        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={openProfile} onNotifs={openNotifs} topInset={insets.top} />
+        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={openProfile} topInset={insets.top} />
       )}
 
       {toast && (
@@ -378,7 +383,12 @@ function WalletChip({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   );
 }
 
+/** Profile button — its avatar carries the unread-notifications dot. */
 function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
+  const transactions = useOne01PlatformStore((s) => s.transactions);
+  const seenAt = useOne01PlatformStore((s) => s.notifsSeenAt);
+  const unread = useMemo(() => buildNotifs(transactions).filter((n) => n.ts > seenAt).length, [transactions, seenAt]);
+  const badgeFg = th.accent === '#F9D800' ? '#000' : '#fff';
   return (
     <Pressable onPress={onPress} style={styles.profileBtn} hitSlop={8}>
       <View style={[styles.lvlPill, { backgroundColor: th.surface, borderColor: th.border }]}>
@@ -386,37 +396,23 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
       </View>
       <View style={[styles.avatar, { borderColor: th.accent, backgroundColor: th.surface2 }]}>
         <UserIcon size={22} color={th.muted} />
+        {unread > 0 && (
+          <View style={[styles.profileBadge, { backgroundColor: th.accent, borderColor: th.bg }]}>
+            <Text style={[styles.profileBadgeTxt, { color: badgeFg }]}>{unread > 9 ? '9+' : unread}</Text>
+          </View>
+        )}
       </View>
     </Pressable>
   );
 }
 
-/** Bell with an unread badge driven by real activity. */
-function NotifBell({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
-  const transactions = useOne01PlatformStore((s) => s.transactions);
-  const seenAt = useOne01PlatformStore((s) => s.notifsSeenAt);
-  const unread = useMemo(() => buildNotifs(transactions).filter((n) => n.ts > seenAt).length, [transactions, seenAt]);
-  const badgeFg = th.accent === '#F9D800' ? '#000' : '#fff';
-  return (
-    <Pressable onPress={onPress} style={styles.bellBtn} hitSlop={8}>
-      <BellIcon size={23} color={th.text} />
-      {unread > 0 && (
-        <View style={[styles.bellBadge, { backgroundColor: th.accent, borderColor: th.bg }]}>
-          <Text style={[styles.bellBadgeTxt, { color: badgeFg }]}>{unread > 9 ? '9+' : unread}</Text>
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
-function MobileTopBar({ th, onWallet, onProfile, onNotifs, topInset }: { th: ShellTheme; onWallet: () => void; onProfile: () => void; onNotifs: () => void; topInset: number }) {
+function MobileTopBar({ th, onWallet, onProfile, topInset }: { th: ShellTheme; onWallet: () => void; onProfile: () => void; topInset: number }) {
   return (
     // the absolute bar must clear the status bar itself (root padding doesn't offset absolute children)
     <LinearGradient colors={[th.bg, th.bg, `${th.bg}00`]} locations={[0, 0.58, 1]} style={[styles.topBar, { paddingTop: topInset }]} pointerEvents="box-none">
       <View style={styles.topRow}>
         <WalletChip th={th} onPress={onWallet} />
         <View style={styles.topRight}>
-          <NotifBell th={th} onPress={onNotifs} />
           <ProfileBtn th={th} onPress={onProfile} />
         </View>
       </View>
@@ -449,7 +445,7 @@ function MobileBottomBar({ th, tab, setTab, onSwitch, bottomInset }: { th: Shell
 
 /* ─────────────────────────────── desktop nav ─────────────────────────────── */
 
-function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, onNotifs, lang }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onWallet: () => void; onProfile: () => void; onSwitch: () => void; onNotifs: () => void; lang: Lang }) {
+function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onWallet: () => void; onProfile: () => void; onSwitch: () => void; lang: Lang }) {
   const links: { k: Tab; label: string }[] = [
     { k: 'home', label: tr(lang, 'Home') },
     { k: 'market', label: tr(lang, 'Market') },
@@ -477,9 +473,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, onNotifs, 
         </View>
         <View style={styles.flex} />
         <WalletChip th={th} onPress={onWallet} />
-        <View style={{ width: 18 }} />
-        <NotifBell th={th} onPress={onNotifs} />
-        <View style={{ width: 12 }} />
+        <View style={{ width: 16 }} />
         <ProfileBtn th={th} onPress={onProfile} />
       </View>
     </LinearGradient>
@@ -1394,9 +1388,8 @@ const styles = StyleSheet.create({
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  bellBtn: { width: 38, height: 44, alignItems: 'center', justifyContent: 'center' },
-  bellBadge: { position: 'absolute', top: 2, right: 0, minWidth: 17, height: 17, borderRadius: 9, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
-  bellBadgeTxt: { fontSize: 10, fontWeight: '800' },
+  profileBadge: { position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  profileBadgeTxt: { fontSize: 10, fontWeight: '800' },
   notifTitle: { fontSize: 20, fontWeight: '800' },
   notifRow: { flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, padding: 12 },
   notifTile: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
