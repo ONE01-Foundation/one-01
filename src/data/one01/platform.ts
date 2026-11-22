@@ -415,6 +415,173 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
   },
 };
 
+/* ───────────────────────────── Home drawers (per product shelves) ─────────────────────────────
+ * Below the main section each home shows extra "drawers": People, Events, Stats, and a
+ * live-cycling Feed — content tuned to how each product is used. */
+
+export interface PersonChip { id: string; emoji: string; name: string; meta: string; }
+export interface EventChip { id: string; emoji: string; title: string; meta: string; bg?: [string, string]; live?: boolean; }
+export interface StatTile { k: string; label: string; value: string; delta?: string; }
+export interface FeedLine { id: string; emoji: string; text: string; }
+
+export interface HomeExtras {
+  people: { label: string; items: PersonChip[] };
+  events: { label: string; items: EventChip[] };
+  stats: { label: string; tiles: StatTile[] };
+  feed: { label: string; lines: FeedLine[] };
+}
+
+export const HOME_EXTRAS: Record<'one01' | ProductId, HomeExtras> = {
+  one01: {
+    people: {
+      label: 'Makers', items: [
+        { id: 'm1', emoji: '🧑‍💻', name: 'devk', meta: '3 products' },
+        { id: 'm2', emoji: '👩‍🎨', name: 'lune', meta: 'Creator · ⟡21k' },
+        { id: 'm3', emoji: '🧑‍🚀', name: 'orbit', meta: 'Agents' },
+        { id: 'm4', emoji: '👩‍💼', name: 'mira', meta: 'Org · verified' },
+        { id: 'm5', emoji: '🧑‍🔧', name: 'bolt', meta: 'Protocols' },
+      ],
+    },
+    events: {
+      label: 'Launches', items: [
+        { id: 'e1', emoji: '🚀', title: 'Winzi season reset', meta: 'Monday · UTC', bg: ['#3B5BDB', '#1E2A6B'], live: true },
+        { id: 'e2', emoji: '🏝️', title: 'MixStar S1 finale', meta: 'Sunday night', bg: ['#6D28D9', '#2E1065'] },
+        { id: 'e3', emoji: '🛒', title: 'New Market feeds', meta: 'Live now', bg: ['#0E7C5A', '#06331F'], live: true },
+        { id: 'e4', emoji: '🪪', title: 'Verified orgs wave', meta: 'This week', bg: ['#B45309', '#5C2A06'] },
+      ],
+    },
+    stats: {
+      label: 'Platform stats', tiles: [
+        { k: 'flow', label: 'Credits flowing', value: '⟡3.1M', delta: '+4.2%' },
+        { k: 'accounts', label: 'Accounts', value: '128k', delta: '+1.1%' },
+        { k: 'active', label: 'Active now', value: '6,240', delta: '+3.0%' },
+        { k: 'products', label: 'Live products', value: '4' },
+      ],
+    },
+    feed: {
+      label: 'Across ONE01', lines: [
+        { id: 'f1', emoji: '🏓', text: 'ace_27 won ⟡840 on Winzi' },
+        { id: 'f2', emoji: '📺', text: 'a MixStar bet settled ⟡294' },
+        { id: 'f3', emoji: '◎', text: 'a process reached a provider' },
+        { id: 'f4', emoji: '🧱', text: 'a creation earned ⟡30' },
+        { id: 'f5', emoji: '🪙', text: 'lune topped up ⟡1,000' },
+        { id: 'f6', emoji: '📈', text: 'Winzi shares up 7.5%' },
+        { id: 'f7', emoji: '🤖', text: 'orbit published an Agent' },
+      ],
+    },
+  },
+  one: {
+    people: {
+      label: 'Providers', items: [
+        { id: 'p1', emoji: '🏛️', name: 'City Licensing', meta: '★ 4.8' },
+        { id: 'p2', emoji: '🚗', name: 'AutoDeal Co', meta: '★ 4.6' },
+        { id: 'p3', emoji: '🔧', name: 'QuickFix', meta: '★ 4.9' },
+        { id: 'p4', emoji: '🏥', name: 'HealthLine', meta: '★ 4.7' },
+        { id: 'p5', emoji: '📑', name: 'TaxDesk', meta: '★ 4.5' },
+      ],
+    },
+    events: {
+      label: 'Coming up', items: [
+        { id: 'e1', emoji: '🪪', title: 'License — step 2', meta: 'Provider replying', bg: ['#065F46', '#032A20'], live: true },
+        { id: 'e2', emoji: '🚗', title: 'Car viewing', meta: 'Tomorrow · 16:00', bg: ['#1E40AF', '#0F1F4D'] },
+        { id: 'e3', emoji: '🔧', title: 'Handyman quote', meta: 'Due today', bg: ['#374151', '#1F2937'] },
+      ],
+    },
+    stats: {
+      label: 'Your ONE', tiles: [
+        { k: 'active', label: 'Active processes', value: '3' },
+        { k: 'reached', label: 'Providers reached', value: '7', delta: '+2' },
+        { k: 'saved', label: 'Saved via ONE', value: '⟡2,400' },
+        { k: 'priv', label: 'Kept private', value: '92%' },
+      ],
+    },
+    feed: {
+      label: 'Live', lines: [
+        { id: 'f1', emoji: '📨', text: 'your ONE reached a provider' },
+        { id: 'f2', emoji: '🔒', text: 'only city + budget were shared' },
+        { id: 'f3', emoji: '💬', text: 'a quote came back' },
+        { id: 'f4', emoji: '✅', text: 'a step completed' },
+        { id: 'f5', emoji: '🪪', text: 'license renewal advanced' },
+        { id: 'f6', emoji: '🤝', text: 'a provider accepted' },
+      ],
+    },
+  },
+  winzi: {
+    people: {
+      label: 'Top players', items: [
+        { id: 'p1', emoji: '🥇', name: 'ace_27', meta: '⟡12,480' },
+        { id: 'p2', emoji: '🥈', name: 'nova', meta: '⟡11,905' },
+        { id: 'p3', emoji: '🥉', name: 'k1ng', meta: '⟡10,772' },
+        { id: 'p4', emoji: '🎮', name: 'zephyr', meta: '⟡9,310' },
+        { id: 'p5', emoji: '⚡', name: 'pulse', meta: '⟡8,540' },
+      ],
+    },
+    events: {
+      label: 'Tournaments', items: [
+        { id: 'e1', emoji: '🏆', title: 'Neon Cup', meta: '⟡50k pool · starts 2h', bg: ['#3B5BDB', '#1E2A6B'], live: true },
+        { id: 'e2', emoji: '⚔️', title: 'Duel ladder', meta: 'Live now', bg: ['#14532D', '#0A2A17'], live: true },
+        { id: 'e3', emoji: '🎟️', title: 'Bracket night', meta: 'Tonight · 21:00', bg: ['#7C2D12', '#3B1206'] },
+        { id: 'e4', emoji: '🏓', title: 'Pong rush', meta: 'Weekend', bg: ['#3730A3', '#1E1B4B'] },
+      ],
+    },
+    stats: {
+      label: 'Winzi stats', tiles: [
+        { k: 'play', label: 'Credits in play', value: '⟡1.2M', delta: '+6.1%' },
+        { k: 'players', label: 'Players', value: '48k' },
+        { k: 'live', label: 'Live matches', value: '312', delta: '+18' },
+        { k: 'pots', label: 'Pots today', value: '⟡86k' },
+      ],
+    },
+    feed: {
+      label: 'Live on Winzi', lines: [
+        { id: 'f1', emoji: '🏓', text: 'ace_27 won ⟡840 in Pong' },
+        { id: 'f2', emoji: '⚔️', text: 'a duel started for ⟡200' },
+        { id: 'f3', emoji: '🎯', text: 'nova entered Neon Cup' },
+        { id: 'f4', emoji: '💎', text: 'k1ng climbed to Diamond' },
+        { id: 'f5', emoji: '🏆', text: 'Bracket night filled up' },
+        { id: 'f6', emoji: '💰', text: 'pulse cashed out ⟡1,120' },
+        { id: 'f7', emoji: '🔥', text: 'zephyr on a 7 win streak' },
+      ],
+    },
+  },
+  mixstar: {
+    people: {
+      label: 'Contestants', items: [
+        { id: 'c1', emoji: '🧑‍🎤', name: 'Remy', meta: '28% · 3.6×' },
+        { id: 'c2', emoji: '👩‍🎤', name: 'Nalee', meta: '34% · 2.9×' },
+        { id: 'c3', emoji: '🧑‍🎨', name: 'Kofi', meta: '21% · 4.8×' },
+        { id: 'c4', emoji: '👨‍🚀', name: 'Vex', meta: '17% · 5.9×' },
+      ],
+    },
+    events: {
+      label: 'Airing now', items: [
+        { id: 'e1', emoji: '🔴', title: 'Episode 4 — Immunity', meta: 'Voting open', bg: ['#9D174D', '#4A0E27'], live: true },
+        { id: 'e2', emoji: '🎬', title: 'Backstage cut', meta: 'In 20 min', bg: ['#5B21B6', '#2E1065'] },
+        { id: 'e3', emoji: '🏝️', title: 'Villa finale', meta: 'Sunday', bg: ['#166534', '#0A2A17'] },
+      ],
+    },
+    stats: {
+      label: 'Show stats', tiles: [
+        { k: 'watch', label: 'Watching now', value: '13k', delta: '+1.4k' },
+        { k: 'votes', label: 'Votes cast', value: '2.4M' },
+        { k: 'pool', label: 'Prize pool', value: '⟡40k' },
+        { k: 'live', label: 'Live shows', value: '6' },
+      ],
+    },
+    feed: {
+      label: 'Live on MixStar', lines: [
+        { id: 'f1', emoji: '🗳️', text: 'someone bet ⟡50 on Vex' },
+        { id: 'f2', emoji: '📈', text: 'Nalee took the lead' },
+        { id: 'f3', emoji: '🛡️', text: 'a save token was used' },
+        { id: 'f4', emoji: '🔴', text: 'Episode 4 is live' },
+        { id: 'f5', emoji: '💸', text: 'a ⟡294 bet just paid out' },
+        { id: 'f6', emoji: '🌟', text: 'Remy trending in Comedy' },
+        { id: 'f7', emoji: '🎭', text: 'Kofi pulled an upset' },
+      ],
+    },
+  },
+};
+
 /* ───────────────────────────── Hub (ONE01 landing) copy ───────────────────────────── */
 
 export const HUB = {

@@ -57,7 +57,9 @@ import {
   MARKET,
   CREATOR,
   HOME,
+  HOME_EXTRAS,
   SWITCHER_APPS,
+  type HomeExtras,
   type ProductId,
   type MarkId,
   type HomeItem,
@@ -376,6 +378,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch }: { th: Sh
 
 function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void }) {
   const home = HOME[th.homeId];
+  const extras = HOME_EXTRAS[th.homeId];
   const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
   const { width } = useWindowDimensions();
   const colW = wide ? CW : Math.min(width, 600) - 36;
@@ -470,8 +473,105 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; 
             ))}
           </ScrollView>
         )}
+
+        {/* per-product drawers: people · events · stats · live feed */}
+        {extras && <HomeDrawers th={th} extras={extras} wide={wide} />}
       </View>
     </ScrollView>
+  );
+}
+
+/* ─────────────────────────────── home drawers (shelves) ─────────────────────────────── */
+
+function DrawerHead({ th, icon, title, count }: { th: ShellTheme; icon: string; title: string; count?: number }) {
+  return (
+    <View style={styles.sectionHead}>
+      <Text style={styles.sectionIcon}>{icon}</Text>
+      <Text style={[styles.sectionTitle, { color: th.text }]}>{title}</Text>
+      {count != null && <Text style={[styles.sectionCount, { color: th.muted }]}>({count})</Text>}
+      <View style={styles.flex} />
+      <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
+    </View>
+  );
+}
+
+function HomeDrawers({ th, extras, wide }: { th: ShellTheme; extras: HomeExtras; wide: boolean }) {
+  return (
+    <>
+      {/* people */}
+      <DrawerHead th={th} icon="👥" title={extras.people.label} count={extras.people.items.length} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 8 }} style={{ overflow: 'visible' }}>
+        {extras.people.items.map((p) => (
+          <View key={p.id} style={[styles.personCard, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <View style={[styles.personAv, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 26 }}>{p.emoji}</Text></View>
+            <Text style={[styles.personName, { color: th.text }]} numberOfLines={1}>{p.name}</Text>
+            <Text style={[styles.personMeta, { color: th.muted }]} numberOfLines={1}>{p.meta}</Text>
+          </View>
+        ))}
+      </ScrollView>
+
+      {/* events */}
+      <DrawerHead th={th} icon="📅" title={extras.events.label} count={extras.events.items.length} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }} style={{ overflow: 'visible' }}>
+        {extras.events.items.map((e) => (
+          <LinearGradient key={e.id} colors={e.bg ?? [`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.eventCard}>
+            {e.live && <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>LIVE</Text></View>}
+            <Text style={styles.eventEmoji}>{e.emoji}</Text>
+            <View>
+              <Text style={styles.eventTitle} numberOfLines={1}>{e.title}</Text>
+              <Text style={styles.eventMeta} numberOfLines={1}>{e.meta}</Text>
+            </View>
+          </LinearGradient>
+        ))}
+      </ScrollView>
+
+      {/* stats */}
+      <DrawerHead th={th} icon="📊" title={extras.stats.label} />
+      <View style={styles.statGrid}>
+        {extras.stats.tiles.map((t) => (
+          <View key={t.k} style={[styles.statTile, wide && styles.statTileWide, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <Text style={[styles.statBig, { color: th.text }]} numberOfLines={1}>{t.value}</Text>
+            <Text style={[styles.statLabel, { color: th.muted }]} numberOfLines={1}>{t.label}</Text>
+            {t.delta ? <Text style={[styles.statDelta, { color: t.delta.startsWith('-') ? '#ef4444' : '#22c55e' }]}>{t.delta}</Text> : null}
+          </View>
+        ))}
+      </View>
+
+      {/* live feed */}
+      <DrawerHead th={th} icon="⚡" title={extras.feed.label} />
+      <FeedDrawer th={th} lines={extras.feed.lines} />
+    </>
+  );
+}
+
+function FeedDrawer({ th, lines }: { th: ShellTheme; lines: { id: string; emoji: string; text: string }[] }) {
+  const [shown, setShown] = useState(() => lines.slice(0, 3).map((l, i) => ({ ...l, key: `${l.id}_${i}` })));
+  const next = useRef(3 % Math.max(1, lines.length));
+  const fade = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (lines.length < 2) return;
+    const t = setInterval(() => {
+      const l = lines[next.current % lines.length];
+      next.current += 1;
+      setShown((prev) => [{ ...l, key: `${l.id}_${Date.now()}` }, ...prev].slice(0, 3));
+      fade.setValue(0);
+      Animated.timing(fade, { toValue: 1, duration: 420, useNativeDriver: true }).start();
+    }, 2200);
+    return () => clearInterval(t);
+  }, [lines, fade]);
+
+  return (
+    <View style={{ gap: 8 }}>
+      {shown.map((l, i) => (
+        <Animated.View key={l.key} style={[styles.feedPill, { backgroundColor: th.surface, borderColor: th.border, opacity: i === 0 ? fade : 1 }]}>
+          {i === 0 ? <View style={styles.feedDot} /> : <View style={[styles.feedDot, { backgroundColor: th.muted, opacity: 0.4 }]} />}
+          <Text style={{ fontSize: 15 }}>{l.emoji}</Text>
+          <Text style={[styles.feedTxt, { color: th.text }]} numberOfLines={1}>{l.text}</Text>
+          <View style={styles.flex} />
+          <Text style={[styles.feedTime, { color: th.muted }]}>{i === 0 ? 'now' : `${i * 4}s`}</Text>
+        </Animated.View>
+      ))}
+    </View>
   );
 }
 
@@ -894,6 +994,32 @@ const styles = StyleSheet.create({
   liveBadge: { position: 'absolute', top: 10, left: 10, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 7, paddingHorizontal: 7, paddingVertical: 3 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22c55e' },
   liveTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },
+
+  /* drawers: people */
+  personCard: { width: 108, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 12, alignItems: 'center', gap: 4 },
+  personAv: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  personName: { fontSize: 14, fontWeight: '800' },
+  personMeta: { fontSize: 11.5, fontWeight: '600' },
+
+  /* drawers: events */
+  eventCard: { width: 190, height: 116, borderRadius: 18, padding: 14, justifyContent: 'space-between', overflow: 'hidden' },
+  eventEmoji: { fontSize: 30 },
+  eventTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  eventMeta: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.82)', marginTop: 2 },
+
+  /* drawers: stats */
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  statTile: { width: '48%', borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 14, gap: 3 },
+  statTileWide: { width: '23.5%' },
+  statBig: { fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  statLabel: { fontSize: 12, fontWeight: '600' },
+  statDelta: { fontSize: 12, fontWeight: '800', marginTop: 2 },
+
+  /* drawers: live feed */
+  feedPill: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 13, paddingHorizontal: 14, paddingVertical: 11 },
+  feedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' },
+  feedTxt: { fontSize: 13.5, fontWeight: '600' },
+  feedTime: { fontSize: 11.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
 
   /* surface view */
   surfaceHead: { fontSize: 22, fontWeight: '800' },
