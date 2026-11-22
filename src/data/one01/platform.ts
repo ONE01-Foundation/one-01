@@ -638,22 +638,26 @@ export interface Person {
   followsYou: boolean;
   /** Seed: you follow them by default (store overrides can change it). */
   followsBack: boolean;
+  /** One-line bio shown on their ONE (person profile). */
+  bio?: string;
+  /** Products / roles they're known for — rendered as chips on their profile. */
+  tags?: string[];
 }
 
 /** A curated slice of the people around your ONE (the "128" is the full community). */
 export const NETWORK: Person[] = [
-  { id: 'nova', name: 'nova', handle: '@nova', emoji: '🛰️', accent: '#6366F1', meta: 'Just followed your ONE', followsYou: true, followsBack: false },
-  { id: 'lune', name: 'lune', handle: '@lune', emoji: '👩‍🎨', accent: '#8B5CF6', meta: 'Creator · ⟡21k earned', followsYou: true, followsBack: true },
-  { id: 'bolt', name: 'bolt', handle: '@bolt', emoji: '🧑‍🔧', accent: '#F59E0B', meta: 'Builds protocols', followsYou: true, followsBack: false },
-  { id: 'remy', name: 'Remy', handle: '@remy', emoji: '🎭', accent: '#8B5CF6', meta: 'MixStar · Comedy', followsYou: true, followsBack: true },
-  { id: 'kofi', name: 'Kofi', handle: '@kofi', emoji: '🏓', accent: '#F9D800', meta: 'Winzi · Gold I', followsYou: true, followsBack: false },
-  { id: 'mira', name: 'mira', handle: '@mira', emoji: '👩‍💼', accent: '#10B981', meta: 'Verified org', followsYou: true, followsBack: true },
-  { id: 'orbit', name: 'orbit', handle: '@orbit', emoji: '🧑‍🚀', accent: '#6366F1', meta: 'Agents & automations', followsYou: true, followsBack: false },
-  { id: 'vex', name: 'Vex', handle: '@vex', emoji: '🔥', accent: '#EF4444', meta: 'MixStar · Survive', followsYou: true, followsBack: false },
-  { id: 'devk', name: 'devk', handle: '@devk', emoji: '🧑‍💻', accent: '#10B981', meta: 'Ships 3 products', followsYou: false, followsBack: true },
-  { id: 'zara', name: 'Zara', handle: '@zara', emoji: '🎤', accent: '#8B5CF6', meta: 'MixStar · Music', followsYou: false, followsBack: true },
-  { id: 'pulse', name: 'pulse', handle: '@pulse', emoji: '⚡', accent: '#F59E0B', meta: 'Winzi streamer', followsYou: false, followsBack: true },
-  { id: 'sol', name: 'sol', handle: '@sol', emoji: '🌞', accent: '#10B981', meta: 'ONE power user', followsYou: false, followsBack: true },
+  { id: 'nova', name: 'nova', handle: '@nova', emoji: '🛰️', accent: '#6366F1', meta: 'Just followed your ONE', followsYou: true, followsBack: false, bio: 'Signal-hunter. Maps new ONEs the day they go live.', tags: ['ONE', 'Xit'] },
+  { id: 'lune', name: 'lune', handle: '@lune', emoji: '👩‍🎨', accent: '#8B5CF6', meta: 'Creator · ⟡21k earned', followsYou: true, followsBack: true, bio: 'Illustrator building a MixStar show one frame at a time.', tags: ['MixStar', 'Creator'] },
+  { id: 'bolt', name: 'bolt', handle: '@bolt', emoji: '🧑‍🔧', accent: '#F59E0B', meta: 'Builds protocols', followsYou: true, followsBack: false, bio: 'Writes the rails everyone else builds on.', tags: ['ONE', 'Sodex'] },
+  { id: 'remy', name: 'Remy', handle: '@remy', emoji: '🎭', accent: '#8B5CF6', meta: 'MixStar · Comedy', followsYou: true, followsBack: true, bio: 'Stand-up on MixStar. Here for the bits.', tags: ['MixStar'] },
+  { id: 'kofi', name: 'Kofi', handle: '@kofi', emoji: '🏓', accent: '#F9D800', meta: 'Winzi · Gold I', followsYou: true, followsBack: false, bio: 'Table-tennis grinder. Gold I and climbing.', tags: ['Winzi'] },
+  { id: 'mira', name: 'mira', handle: '@mira', emoji: '👩‍💼', accent: '#10B981', meta: 'Verified org', followsYou: true, followsBack: true, bio: 'Verified org running real processes through ONE.', tags: ['ONE', 'Sodex'] },
+  { id: 'orbit', name: 'orbit', handle: '@orbit', emoji: '🧑‍🚀', accent: '#6366F1', meta: 'Agents & automations', followsYou: true, followsBack: false, bio: 'Ships little agents that do the boring parts.', tags: ['ONE', 'Xit'] },
+  { id: 'vex', name: 'Vex', handle: '@vex', emoji: '🔥', accent: '#EF4444', meta: 'MixStar · Survive', followsYou: true, followsBack: false, bio: 'Survival-mode regular. Never folds.', tags: ['MixStar', 'Winzi'] },
+  { id: 'devk', name: 'devk', handle: '@devk', emoji: '🧑‍💻', accent: '#10B981', meta: 'Ships 3 products', followsYou: false, followsBack: true, bio: 'Three products live, two more in the oven.', tags: ['Creator', 'Xit'] },
+  { id: 'zara', name: 'Zara', handle: '@zara', emoji: '🎤', accent: '#8B5CF6', meta: 'MixStar · Music', followsYou: false, followsBack: true, bio: 'Makes music on MixStar. Loud.', tags: ['MixStar'] },
+  { id: 'pulse', name: 'pulse', handle: '@pulse', emoji: '⚡', accent: '#F59E0B', meta: 'Winzi streamer', followsYou: false, followsBack: true, bio: 'Streams Winzi runs most nights.', tags: ['Winzi'] },
+  { id: 'sol', name: 'sol', handle: '@sol', emoji: '🌞', accent: '#10B981', meta: 'ONE power user', followsYou: false, followsBack: true, bio: 'Power-uses ONE for everything. Early.', tags: ['ONE'] },
 ];
 
 /* ───────────────────────────── Hub (ONE01 landing) copy ───────────────────────────── */

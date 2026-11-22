@@ -159,11 +159,11 @@ export function SheetWindow({ visible, wide, th, onClose, children }: { visible:
   );
 }
 
-function PanelHead({ th, title, onClose, right }: { th: ShellTheme; title: string; onClose: () => void; right?: React.ReactNode }) {
+function PanelHead({ th, title, onClose, right, back }: { th: ShellTheme; title: string; onClose: () => void; right?: React.ReactNode; back?: () => void }) {
   return (
     <View style={styles.head}>
-      <Pressable onPress={onClose} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
-        <Text style={[styles.x, { color: th.text }]}>✕</Text>
+      <Pressable onPress={back ?? onClose} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
+        <Text style={[styles.x, { color: th.text, fontSize: back ? 22 : 17 }]}>{back ? '‹' : '✕'}</Text>
       </Pressable>
       <Text style={[styles.headTitle, { color: th.text }]}>{title}</Text>
       <View style={styles.flex} />
@@ -298,11 +298,98 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
 
 /* ─────────────────────────────── NetworkPage ─────────────────────────────── */
 
+/** Deterministic per-person numbers so a profile reads the same every visit. */
+function phash(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h ^ id.charCodeAt(i), 16777619)) >>> 0;
+  return h;
+}
+function fmtK(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : `${n}`;
+}
+function personStats(p: Person): { followers: string; following: string; creations: string } {
+  const h = phash(p.id);
+  return {
+    followers: fmtK(180 + (h % 9000)),
+    following: fmtK(40 + ((h >> 5) % 600)),
+    creations: `${(h >> 11) % 34}`,
+  };
+}
+
+/** A person's ONE — the mini-profile you reach by tapping someone in the network. */
+function PersonDetail({ th, person, lang, onBack }: { th: ShellTheme; person: Person; lang: Lang; onBack: () => void }) {
+  const insets = useSafeAreaInsets();
+  const t = (en: string) => tr(lang, en);
+  const follows = useOne01PlatformStore((s) => s.follows);
+  const setFollow = useOne01PlatformStore((s) => s.setFollow);
+  const followed = follows[person.id] ?? person.followsBack;
+  const fg = th.accent === '#F9D800' ? '#000' : '#fff';
+  const stats = personStats(person);
+  const statCells: { v: string; l: string }[] = [
+    { v: stats.followers, l: 'Followers' },
+    { v: stats.following, l: 'Following' },
+    { v: stats.creations, l: 'Creations' },
+  ];
+
+  return (
+    <View style={styles.flex}>
+      <PanelHead th={th} title={person.name} onClose={onBack} back={onBack} />
+      <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
+        <View style={{ alignItems: 'center', gap: 10 }}>
+          <View style={[styles.personHero, { backgroundColor: `${person.accent}22`, borderColor: person.accent }]}>
+            <Text style={{ fontSize: 40 }}>{person.emoji}</Text>
+          </View>
+          <View style={{ alignItems: 'center', gap: 2 }}>
+            <Text style={[styles.pName, { color: th.text }]}>{person.name}</Text>
+            <Text style={[styles.pHandle, { color: th.muted }]}>{person.handle} · {t('on ONE01')}</Text>
+          </View>
+          {person.followsYou && (
+            <View style={[styles.followsYouChip, { backgroundColor: th.surface2, borderColor: th.border }]}>
+              <Text style={[styles.followsYouTxt, { color: th.muted }]}>{t('Follows you')}</Text>
+            </View>
+          )}
+        </View>
+
+        {person.bio ? <Text style={[styles.personBio, { color: th.text }]}>{person.bio}</Text> : null}
+
+        {person.tags && person.tags.length > 0 && (
+          <View style={styles.personTags}>
+            {person.tags.map((tag) => (
+              <View key={tag} style={[styles.personTag, { backgroundColor: th.surface, borderColor: th.border }]}>
+                <Text style={[styles.personTagTxt, { color: th.muted }]}>{tag}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={[styles.statRow, { borderColor: th.border }]}>
+          {statCells.map((s, i) => (
+            <View key={s.l} style={[styles.stat, i < statCells.length - 1 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: th.border }]}>
+              <Text style={[styles.statV, { color: th.text }]}>{s.v}</Text>
+              <Text style={[styles.statL, { color: th.muted }]}>{t(s.l)}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Pressable
+          onPress={() => { haptic.select(); setFollow(person.id, !followed); }}
+          style={[styles.personCta, followed ? { backgroundColor: th.surface2, borderColor: th.border, borderWidth: StyleSheet.hairlineWidth } : { backgroundColor: th.accent, borderColor: th.accent }]}
+        >
+          <Text style={[styles.personCtaTxt, { color: followed ? th.text : fg }]}>
+            {followed ? t('Following') : person.followsYou ? t('Follow back') : t('Follow')}
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+}
+
 /** Followers / Following lists around your ONE — real follow/unfollow toggles. */
 export function NetworkPage({ th, close, onScroll, lang, initialTab = 'followers' }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'followers' | 'following' }) {
   const insets = useSafeAreaInsets();
   const t = (en: string) => tr(lang, en);
   const [tab, setTab] = useState<'followers' | 'following'>(initialTab);
+  const [selected, setSelected] = useState<Person | null>(null);
   const follows = useOne01PlatformStore((s) => s.follows);
   const setFollow = useOne01PlatformStore((s) => s.setFollow);
   const isFollowing = (p: Person) => follows[p.id] ?? p.followsBack;
@@ -311,6 +398,8 @@ export function NetworkPage({ th, close, onScroll, lang, initialTab = 'followers
   const following = useMemo(() => NETWORK.filter(isFollowing), [follows]);
   const list = tab === 'followers' ? followers : following;
   const fg = th.accent === '#F9D800' ? '#000' : '#fff';
+
+  if (selected) return <PersonDetail th={th} person={selected} lang={lang} onBack={() => setSelected(null)} />;
 
   return (
     <View style={styles.flex}>
@@ -329,7 +418,7 @@ export function NetworkPage({ th, close, onScroll, lang, initialTab = 'followers
         {list.map((p) => {
           const followed = isFollowing(p);
           return (
-            <View key={p.id} style={[styles.personRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <Pressable key={p.id} onPress={() => { haptic.select(); setSelected(p); }} style={({ pressed }) => [styles.personRow, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.75 }]}>
               <View style={[styles.personAv, { backgroundColor: `${p.accent}22` }]}><Text style={{ fontSize: 20 }}>{p.emoji}</Text></View>
               <View style={styles.flex}>
                 <View style={styles.row}>
@@ -346,7 +435,7 @@ export function NetworkPage({ th, close, onScroll, lang, initialTab = 'followers
                   {followed ? t('Following') : p.followsYou ? t('Follow back') : t('Follow')}
                 </Text>
               </Pressable>
-            </View>
+            </Pressable>
           );
         })}
         {list.length === 0 && <Text style={[styles.about, { color: th.muted }]}>{t('No one here yet')}</Text>}
@@ -620,6 +709,17 @@ const styles = StyleSheet.create({
   personMeta: { fontSize: 12.5, marginTop: 2 },
   followBtn: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
   followTxt: { fontSize: 12.5, fontWeight: '800' },
+
+  /* person detail (their ONE) */
+  personHero: { width: 88, height: 88, borderRadius: 44, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+  followsYouChip: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
+  followsYouTxt: { fontSize: 11.5, fontWeight: '700' },
+  personBio: { fontSize: 15, lineHeight: 21, marginTop: 20, textAlign: 'center' },
+  personTags: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 14 },
+  personTag: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  personTagTxt: { fontSize: 12.5, fontWeight: '700' },
+  personCta: { borderRadius: 999, paddingVertical: 14, alignItems: 'center', marginTop: 22 },
+  personCtaTxt: { fontSize: 15, fontWeight: '800' },
 
   /* wallet */
   balCard: { borderRadius: 20, padding: 22, marginTop: 4 },

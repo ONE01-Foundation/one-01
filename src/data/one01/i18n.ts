@@ -32,6 +32,7 @@ const HE: Record<string, string> = {
   // network
   Network: 'רשת', Followers: 'עוקבים', Following: 'נעקבים', Follow: 'עקוב', 'Follow back': 'עקוב בחזרה',
   'No one here yet': 'אין כאן אף אחד עדיין',
+  'Follows you': 'עוקב אחריך', Creations: 'יצירות', 'on ONE01': 'ב-ONE01',
   // settings
   Settings: 'הגדרות', Preferences: 'העדפות', Account: 'חשבון',
   Notifications: 'התראות', 'Face ID': 'זיהוי פנים', 'Sounds & haptics': 'צלילים ורטט',

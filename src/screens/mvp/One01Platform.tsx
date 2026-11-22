@@ -561,7 +561,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
             {home.categories.map((c) => {
               const on = c.id === cat;
               return (
-                <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: on ? 'transparent' : th.border }]}>
+                <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: 'transparent' }]}>
                   {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
                   <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{tr(lang, c.label)}</Text>
                 </Pressable>
@@ -969,7 +969,7 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
           {cats.map((c) => {
             const on = c.id === cat;
             return (
-              <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: on ? 'transparent' : th.border }]}>
+              <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: 'transparent' }]}>
                 {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
                 <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{tr(lang, c.label)}</Text>
               </Pressable>
