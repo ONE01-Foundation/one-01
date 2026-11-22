@@ -357,13 +357,14 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
     ],
     sectionIcon: '🚀',
     sectionTitle: 'Projects',
-    sectionCount: 4,
-    layout: 'rows',
+    sectionCount: 5,
+    layout: 'cards',
     items: [
-      { id: 'winzi', title: 'Winzi', subtitle: 'Play Games, Win Money', mark: 'winzi', product: 'winzi', cta: 'Play' },
-      { id: 'mixstar', title: 'MixStar', subtitle: 'AI Reality TV', mark: 'mixstar', product: 'mixstar', cta: 'Watch' },
-      { id: 'xit', title: 'Xit', subtitle: 'News & trends coins', mark: 'xit', cta: 'Open' },
-      { id: 'sodex', title: 'Sodex', subtitle: 'Spiritual intelligence', mark: 'sodex', cta: 'Open' },
+      { id: 'one', title: 'ONE', subtitle: 'Your representative', mark: 'one', product: 'one', cta: 'Open', bg: ['#123A2E', '#071A14'] },
+      { id: 'winzi', title: 'Winzi', subtitle: 'Play Games, Win Money', mark: 'winzi', product: 'winzi', cta: 'Play', bg: ['#3A3312', '#171205'] },
+      { id: 'mixstar', title: 'MixStar', subtitle: 'AI Reality TV', mark: 'mixstar', product: 'mixstar', cta: 'Watch', bg: ['#2A1A4D', '#140A26'] },
+      { id: 'xit', title: 'Xit', subtitle: 'News & trends coins', mark: 'xit', cta: 'Open', bg: ['#103826', '#07160F'] },
+      { id: 'sodex', title: 'Sodex', subtitle: 'Spiritual intelligence', mark: 'sodex', cta: 'Open', bg: ['#26282B', '#131416'] },
     ],
   },
   one: {
@@ -379,6 +380,7 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
       { id: 'license', title: 'Renew license', emoji: '🪪', bg: ['#065F46', '#032A20'], metric: '3' },
       { id: 'car', title: 'Car deal', emoji: '🚗', bg: ['#1E40AF', '#0F1F4D'], metric: '2' },
       { id: 'handyman', title: 'Handyman', emoji: '🔧', bg: ['#374151', '#1F2937'], metric: '1' },
+      { id: 'moving', title: 'Moving home', emoji: '📦', bg: ['#6D28D9', '#2E1065'], metric: '2' },
     ],
   },
   winzi: {
@@ -411,6 +413,7 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
       { id: 'survive', title: 'Survive', emoji: '💀', bg: ['#166534', '#0A2A17'], metric: '13k', live: true },
       { id: 'villa', title: 'Villa', emoji: '🏝️', bg: ['#9D174D', '#4A0E27'], metric: '8k', live: true },
       { id: 'studio', title: 'Studio', emoji: '🎬', bg: ['#5B21B6', '#2E1065'], metric: '21k', live: true },
+      { id: 'cookoff', title: 'Cook Off', emoji: '🍳', bg: ['#B45309', '#5C2A06'], metric: '9k', live: true },
     ],
   },
 };

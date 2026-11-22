@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { haptic } from '../../utils/haptics';
 import {
@@ -203,7 +204,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 
   // the main section ("Projects"/"Games"/…) as a focused drawer page
   const homeCfg = HOME[homeId];
-  const mainCardKind: DetailKind = homeId === 'winzi' ? 'game' : homeId === 'mixstar' ? 'show' : homeId === 'one' ? 'process' : 'game';
+  const mainCardKind: DetailKind = homeId === 'winzi' ? 'game' : homeId === 'mixstar' ? 'show' : homeId === 'one' ? 'process' : 'project';
   const drawerMain: MainDrawer = {
     label: homeCfg.sectionTitle,
     icon: homeCfg.sectionIcon,
@@ -338,7 +339,8 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
 
 function MobileTopBar({ th, onWallet, onProfile }: { th: ShellTheme; onWallet: () => void; onProfile: () => void }) {
   return (
-    <LinearGradient colors={[th.bg, `${th.bg}00`]} style={styles.topBar} pointerEvents="box-none">
+    // stays solid th.bg through the bar, then fades — so scrolling content is hidden near the clock
+    <LinearGradient colors={[th.bg, th.bg, `${th.bg}00`]} locations={[0, 0.5, 1]} style={styles.topBar} pointerEvents="box-none">
       <MicroBanner th={th} />
       <View style={styles.topRow}>
         <WalletChip th={th} onPress={onWallet} />
@@ -418,7 +420,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer }: { th
   const { width } = useWindowDimensions();
   const colW = wide ? CW : Math.min(width, 600) - 36;
   const [cat, setCat] = useState('all');
-  const cardKind: DetailKind = th.homeId === 'winzi' ? 'game' : th.homeId === 'mixstar' ? 'show' : th.homeId === 'one' ? 'process' : 'game';
+  const cardKind: DetailKind = th.homeId === 'winzi' ? 'game' : th.homeId === 'mixstar' ? 'show' : th.homeId === 'one' ? 'process' : 'project';
 
   return (
     <ScrollView contentContainerStyle={{ paddingTop: topPad, paddingBottom: bottomPad, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
@@ -496,11 +498,13 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer }: { th
                   {it.live && (
                     <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{it.metric}</Text></View>
                   )}
-                  <Text style={styles.artEmoji}>{it.emoji}</Text>
+                  {it.mark ? <View style={styles.artMark}><Mark mark={it.mark} size={46} accent={markAccent(it.mark)} eye={DARK_TILE} /></View> : <Text style={styles.artEmoji}>{it.emoji}</Text>}
                   <View style={styles.artFooter}>
                     <Text style={styles.artTitle}>{it.title}</Text>
                     {!it.live && it.metric ? (
                       <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View>
+                    ) : it.cta ? (
+                      <View style={styles.artCta}><Text style={styles.artCtaTxt}>{it.cta}</Text></View>
                     ) : null}
                   </View>
                 </LinearGradient>
@@ -640,10 +644,10 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
                   <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={styles.drawerCardWrap}>
                     <LinearGradient colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.drawerArtCard}>
                       {it.live && <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{it.metric}</Text></View>}
-                      <Text style={styles.artEmoji}>{it.emoji}</Text>
+                      {it.mark ? <View style={styles.artMark}><Mark mark={it.mark} size={46} accent={markAccent(it.mark)} eye={DARK_TILE} /></View> : <Text style={styles.artEmoji}>{it.emoji}</Text>}
                       <View style={styles.artFooter}>
                         <Text style={styles.artTitle}>{it.title}</Text>
-                        {!it.live && it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : null}
+                        {!it.live && it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : it.cta ? <View style={styles.artCta}><Text style={styles.artCtaTxt}>{it.cta}</Text></View> : null}
                       </View>
                     </LinearGradient>
                   </Pressable>
@@ -760,27 +764,42 @@ function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack }: { th:
   );
 }
 
-function FeedDrawer({ th, lines }: { th: ShellTheme; lines: { id: string; emoji: string; text: string }[] }) {
-  const [shown, setShown] = useState(() => lines.slice(0, 3).map((l, i) => ({ ...l, key: `${l.id}_${i}` })));
-  const next = useRef(3 % Math.max(1, lines.length));
-  const fade = useRef(new Animated.Value(1)).current;
+type FeedLineLite = { id: string; emoji: string; text: string };
+
+function FeedDrawer({ th, lines }: { th: ShellTheme; lines: FeedLineLite[] }) {
+  const MAX = 5;
+  const seq = useRef(0);
+  const take = (l: FeedLineLite) => ({ ...l, key: `f${seq.current++}` });
+  // start with a few, then let new ones pile up to MAX so it reads as a live feed
+  const [shown, setShown] = useState(() => lines.slice(0, 3).map(take));
+  const nextIdx = useRef(3 % Math.max(1, lines.length));
+  const enter = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
     if (lines.length < 2) return;
     const t = setInterval(() => {
-      const l = lines[next.current % lines.length];
-      next.current += 1;
-      setShown((prev) => [{ ...l, key: `${l.id}_${Date.now()}` }, ...prev].slice(0, 3));
-      fade.setValue(0);
-      Animated.timing(fade, { toValue: 1, duration: 420, useNativeDriver: true }).start();
-    }, 2200);
+      const l = lines[nextIdx.current % lines.length];
+      nextIdx.current += 1;
+      setShown((prev) => [take(l), ...prev].slice(0, MAX));
+      enter.setValue(0);
+      Animated.timing(enter, { toValue: 1, duration: 440, useNativeDriver: true }).start();
+    }, 2300);
     return () => clearInterval(t);
-  }, [lines, fade]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines]);
 
   return (
     <View style={{ gap: 8 }}>
       {shown.map((l, i) => (
-        <Animated.View key={l.key} style={[styles.feedPill, { backgroundColor: th.surface, borderColor: th.border, opacity: i === 0 ? fade : 1 }]}>
-          {i === 0 ? <View style={styles.feedDot} /> : <View style={[styles.feedDot, { backgroundColor: th.muted, opacity: 0.4 }]} />}
+        <Animated.View
+          key={l.key}
+          style={[
+            styles.feedPill,
+            { backgroundColor: th.surface, borderColor: th.border },
+            i === 0 && { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) }] },
+          ]}
+        >
+          <View style={[styles.feedDot, i > 0 && { backgroundColor: th.muted, opacity: 0.4 }]} />
           <Text style={{ fontSize: 15 }}>{l.emoji}</Text>
           <Text style={[styles.feedTxt, { color: th.text }]} numberOfLines={1}>{l.text}</Text>
           <View style={styles.flex} />
@@ -978,12 +997,25 @@ function WalletSheet({ visible, th, onClose }: { visible: boolean; th: ShellThem
 
 function AppSwitcher({ visible, wide, th, current, onClose, onPick }: { visible: boolean; wide: boolean; th: ShellTheme; current: HomeId; onClose: () => void; onPick: (id: string) => void }) {
   const prog = useRef(new Animated.Value(0)).current;
+  const drag = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!visible || wide) return;
-    prog.setValue(0);
+    prog.setValue(0); drag.setValue(0);
     Animated.spring(prog, { toValue: 1, useNativeDriver: true, bounciness: 4, speed: 12 }).start();
-  }, [visible, wide, prog]);
+  }, [visible, wide, prog, drag]);
   const requestClose = (cb: () => void) => Animated.timing(prog, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => cb());
+
+  // drag the glass sheet down to dismiss
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5,
+      onPanResponderMove: (_, g) => { if (g.dy > 0) drag.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 110 || g.vy > 0.8) requestClose(onClose);
+        else Animated.spring(drag, { toValue: 0, useNativeDriver: true }).start();
+      },
+    }),
+  ).current;
 
   if (wide) {
     const rows: { id: HomeId; label: string; mark: MarkId }[] = [
@@ -1027,23 +1059,26 @@ function AppSwitcher({ visible, wide, th, current, onClose, onPick }: { visible:
           <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: scrimOpacity }]} pointerEvents="none" />
         </Pressable>
         <View style={styles.switchBottom} pointerEvents="box-none">
-          <Animated.View style={[styles.switchSheet, { transform: [{ translateY: sheetTy }] }]}>
-            <View style={styles.switchGrab} />
-            <Pressable onPress={() => requestClose(() => onPick('one01'))} style={styles.switchTop}>
-              <View style={[styles.appTile, styles.appTileBig, { backgroundColor: '#fff', borderColor: current === 'one01' ? '#fff' : 'transparent' }]}><One01Mark size={38} color="#111318" /></View>
-              <Text style={styles.appLabel}>One01</Text>
-            </Pressable>
-            <View style={styles.switchGrid}>
-              {SWITCHER_APPS.map((a) => (
-                <Pressable key={a.id} onPress={() => requestClose(() => onPick(a.id))} style={styles.switchItem}>
-                  <View style={[styles.appTile, { backgroundColor: DARK_TILE, borderColor: current === a.id ? a.mark === 'winzi' ? '#F9D800' : '#8B5CF6' : 'transparent' }]}>
-                    <Mark mark={a.mark} size={32} accent={markAccent(a.mark)} eye={DARK_TILE} />
-                  </View>
-                  <Text style={styles.appLabel}>{a.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable onPress={() => requestClose(onClose)} style={styles.switchClose} hitSlop={12}><Text style={styles.switchCloseTxt}>✕</Text></Pressable>
+          <Animated.View {...pan.panHandlers} style={{ transform: [{ translateY: Animated.add(sheetTy, drag) }] }}>
+            <BlurView intensity={48} tint="dark" style={styles.switchSheet}>
+              <View style={styles.switchGlass} pointerEvents="none" />
+              <View style={styles.switchGrab} />
+              <Pressable onPress={() => requestClose(() => onPick('one01'))} style={styles.switchTop}>
+                <View style={[styles.appTile, styles.appTileBig, { backgroundColor: '#fff', borderColor: current === 'one01' ? '#fff' : 'transparent' }]}><One01Mark size={38} color="#111318" /></View>
+                <Text style={styles.appLabel}>One01</Text>
+              </Pressable>
+              <View style={styles.switchGrid}>
+                {SWITCHER_APPS.map((a) => (
+                  <Pressable key={a.id} onPress={() => requestClose(() => onPick(a.id))} style={styles.switchItem}>
+                    <View style={[styles.appTile, { backgroundColor: DARK_TILE, borderColor: current === a.id ? a.mark === 'winzi' ? '#F9D800' : '#8B5CF6' : 'transparent' }]}>
+                      <Mark mark={a.mark} size={32} accent={markAccent(a.mark)} eye={DARK_TILE} />
+                    </View>
+                    <Text style={styles.appLabel}>{a.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable onPress={() => requestClose(onClose)} style={styles.switchClose} hitSlop={12}><Text style={styles.switchCloseTxt}>✕</Text></Pressable>
+            </BlurView>
           </Animated.View>
         </View>
       </View>
@@ -1136,11 +1171,11 @@ const styles = StyleSheet.create({
   toast: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
   toastTxt: { fontSize: 13.5, fontWeight: '700' },
 
-  micro: { fontSize: 11, textAlign: 'center', paddingTop: 10 },
+  micro: { fontSize: 11, textAlign: 'center', paddingTop: 6 },
 
   /* mobile top bar */
-  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 18 },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14 },
+  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 30 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8 },
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1202,6 +1237,9 @@ const styles = StyleSheet.create({
   /* artwork cards */
   artCard: { width: 168, height: 196, borderRadius: 18, padding: 14, justifyContent: 'space-between', overflow: 'hidden' },
   artEmoji: { fontSize: 54, textAlign: 'center', marginTop: 16 },
+  artMark: { alignItems: 'center', justifyContent: 'center', marginTop: 24 },
+  artCta: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
+  artCtaTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },
   artFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   artTitle: { fontSize: 16, fontWeight: '800', color: '#fff', textTransform: 'uppercase', letterSpacing: 0.3 },
   artMetric: { flexDirection: 'row', alignItems: 'center', gap: 5 },
@@ -1238,7 +1276,7 @@ const styles = StyleSheet.create({
   feedTime: { fontSize: 11.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
 
   /* drawer header (shelf) — more space above each */
-  drawerHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 34, marginBottom: 14 },
+  drawerHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 42, marginBottom: 16 },
   drawerHeadIcon: { width: 22, alignItems: 'center', justifyContent: 'center' },
 
   /* drawer detail (focused page / sheet) */
@@ -1307,8 +1345,9 @@ const styles = StyleSheet.create({
   /* app switcher */
   switchRoot: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
   switchBottom: { flex: 1, justifyContent: 'flex-end' },
-  switchSheet: { backgroundColor: '#17181D', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingBottom: 40, paddingHorizontal: 24, alignItems: 'center' },
-  switchGrab: { width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.22)', marginBottom: 18 },
+  switchSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingBottom: 40, paddingHorizontal: 24, alignItems: 'center', overflow: 'hidden' },
+  switchGlass: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(18,18,24,0.42)', borderTopWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.12)' },
+  switchGrab: { width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)', marginBottom: 18 },
   switchTop: { alignItems: 'center', gap: 8, marginBottom: 22 },
   switchGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 18, maxWidth: 320 },
   switchItem: { width: 86, alignItems: 'center', gap: 8 },
