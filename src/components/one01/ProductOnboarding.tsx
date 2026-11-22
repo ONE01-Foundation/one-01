@@ -2,28 +2,34 @@
  * ProductOnboarding — one reusable 3-screen skeleton used by every ONE01
  * product. Driven entirely by an `OnboardConfig` (see data/one01/onboarding.ts):
  *
- *   1. Splash  — product mark centered, a rounded gradient glow rising from the
+ *   1. Splash  — product mark centered, a rounded gradient glow hugging the
  *                bottom (glow color per product). Auto-advances (tap to skip).
- *   2. Welcome — a carousel explaining the product: mark + title + subtitle +
- *                progress dots, two floating emoji, a primary CTA, and a
- *                dismiss (✕ or "Skip").
- *   3. Connect — the logo + tagline over a bottom sheet with Continue with
- *                Google / Apple / Email and a legal line.
+ *   2. Welcome — a SWIPEABLE carousel: mark + title + subtitle + progress dots,
+ *                two floating emoji, a primary CTA, and a "Skip" link.
+ *   3. Connect — logo + tagline + sign-in (Continue with Google / Apple /
+ *                Email). On phones it's a bottom sheet that rises up; on wide
+ *                screens it's a centered popup.
  *
  * Background is white ('light') or black ('dark') per the product's mode; the
- * only chromatic element is the per-product glow. Auth is mocked — any button
- * (and Skip) calls `onFinish`.
+ * only chromatic element is the per-product glow, which fades to fully
+ * transparent so it blends into the background. On desktop the whole flow is
+ * constrained to a centered phone-width column (never stretched full-width).
+ * Auth is mocked — any button (and Skip) calls `onFinish`.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
+  ScrollView,
+  Animated,
   useWindowDimensions,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
 import { haptic } from '../../utils/haptics';
 import {
   One01Mark,
@@ -38,7 +44,8 @@ import {
 import type { OnboardConfig, OnboardMode } from '../../data/one01/onboarding';
 import type { MarkId } from '../../data/one01/platform';
 
-/* ─────────────────────────── palette per mode ─────────────────────────── */
+const FRAME_MAX = 440; // phone-width column on wide screens
+const WIDE_AT = 600;
 
 function palette(mode: OnboardMode) {
   const dark = mode === 'dark';
@@ -46,12 +53,12 @@ function palette(mode: OnboardMode) {
     dark,
     bg: dark ? '#000000' : '#FFFFFF',
     text: dark ? '#FFFFFF' : '#0A0A0A',
-    muted: dark ? 'rgba(255,255,255,0.56)' : 'rgba(10,10,10,0.5)',
-    sheet: dark ? '#141414' : '#F4F5F7',
-    sheetBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(10,10,10,0.06)',
-    ink: dark ? '#FFFFFF' : '#0A0A0A', // primary button fill
+    muted: dark ? 'rgba(255,255,255,0.55)' : 'rgba(10,10,10,0.5)',
+    sheet: dark ? '#111113' : '#FFFFFF',
+    sheetBorder: dark ? 'rgba(255,255,255,0.09)' : 'rgba(10,10,10,0.08)',
+    ink: dark ? '#FFFFFF' : '#0A0A0A',
     inkText: dark ? '#0A0A0A' : '#FFFFFF',
-    grabber: dark ? 'rgba(255,255,255,0.22)' : 'rgba(10,10,10,0.18)',
+    grabber: dark ? 'rgba(255,255,255,0.22)' : 'rgba(10,10,10,0.16)',
   };
 }
 
@@ -69,20 +76,26 @@ function Mark({ mark, size, accent }: { mark: MarkId; size: number; accent: stri
   }
 }
 
-/** Rounded gradient glow anchored at the bottom-center. */
-function Glow({ color, mode, id }: { color: string; mode: OnboardMode; id: string }) {
+/** Rounded gradient glow, brightest at the bottom-center and fading to fully
+ *  transparent so it blends into the background. userSpaceOnUse for exact
+ *  bottom-anchored geometry on both native and web. */
+function Glow({ color, mode, w, h, id }: { color: string; mode: OnboardMode; w: number; h: number; id: string }) {
   const gid = `glow_${id}`;
+  const dark = mode === 'dark';
   return (
-    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" pointerEvents="none">
-      <Defs>
-        <RadialGradient id={gid} cx="50%" cy="98%" rx="78%" ry="56%" gradientUnits="objectBoundingBox">
-          <Stop offset="0" stopColor={color} stopOpacity={mode === 'dark' ? 0.55 : 0.2} />
-          <Stop offset="0.55" stopColor={color} stopOpacity={mode === 'dark' ? 0.16 : 0.06} />
-          <Stop offset="1" stopColor={color} stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${gid})`} />
-    </Svg>
+    <View pointerEvents="none" style={[styles.glowWrap, { height: h }]}>
+      <Svg width={w} height={h}>
+        <Defs>
+          <RadialGradient id={gid} cx={w / 2} cy={h} rx={w * 0.82} ry={h * 0.92} fx={w / 2} fy={h} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={color} stopOpacity={dark ? 0.5 : 0.18} />
+            <Stop offset="0.4" stopColor={color} stopOpacity={dark ? 0.16 : 0.06} />
+            <Stop offset="0.72" stopColor={color} stopOpacity={dark ? 0.04 : 0.015} />
+            <Stop offset="1" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx={w / 2} cy={h} rx={w * 0.82} ry={h * 0.92} fill={`url(#${gid})`} />
+      </Svg>
+    </View>
   );
 }
 
@@ -95,21 +108,17 @@ export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig;
   const [slide, setSlide] = useState(0);
   const p = palette(config.mode);
   const insets = useSafeAreaInsets();
+  const { width: winW, height: winH } = useWindowDimensions();
 
-  // Splash auto-advances.
+  const wide = winW >= WIDE_AT;
+  const frameW = wide ? FRAME_MAX : winW;
+  const glowH = Math.round(winH * 0.52);
+
   useEffect(() => {
     if (step !== 'splash') return;
     const t = setTimeout(() => setStep('welcome'), 1300);
     return () => clearTimeout(t);
   }, [step]);
-
-  const isLast = slide >= config.slides.length - 1;
-
-  const advance = () => {
-    haptic.tap();
-    if (!isLast) setSlide((s) => s + 1);
-    else setStep('connect');
-  };
 
   const finish = () => {
     haptic.success();
@@ -118,38 +127,41 @@ export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig;
 
   return (
     <View style={[styles.root, { backgroundColor: p.bg, paddingTop: insets.top }]}>
-      <Glow color={config.glow} mode={config.mode} id={config.id} />
+      <View style={[styles.frame, { width: frameW }]}>
+        <Glow color={config.glow} mode={config.mode} w={frameW} h={glowH} id={config.id} />
 
-      {step === 'splash' && (
-        <Pressable style={styles.splash} onPress={() => setStep('welcome')}>
-          <View style={styles.splashMark}>
-            <Mark mark={config.mark} size={84} accent={config.accent} />
-          </View>
-        </Pressable>
-      )}
+        {step === 'splash' && (
+          <Pressable style={styles.splash} onPress={() => setStep('welcome')}>
+            <View style={styles.splashMark}>
+              <Mark mark={config.mark} size={84} accent={config.accent} />
+            </View>
+          </Pressable>
+        )}
 
-      {step === 'welcome' && (
-        <Welcome
-          config={config}
-          p={p}
-          slide={slide}
-          setSlide={setSlide}
-          isLast={isLast}
-          onAdvance={advance}
-          onDismiss={finish}
-          bottomInset={insets.bottom}
-        />
-      )}
+        {step === 'welcome' && (
+          <Welcome
+            config={config}
+            p={p}
+            frameW={frameW}
+            slide={slide}
+            setSlide={setSlide}
+            onConnect={() => setStep('connect')}
+            onSkip={finish}
+            bottomInset={insets.bottom}
+          />
+        )}
 
-      {step === 'connect' && (
-        <Connect
-          config={config}
-          p={p}
-          onBack={() => setStep('welcome')}
-          onFinish={finish}
-          bottomInset={insets.bottom}
-        />
-      )}
+        {step === 'connect' && (
+          <Connect
+            config={config}
+            p={p}
+            wide={wide}
+            onBack={() => setStep('welcome')}
+            onFinish={finish}
+            bottomInset={insets.bottom}
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -159,66 +171,89 @@ export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig;
 function Welcome({
   config,
   p,
+  frameW,
   slide,
   setSlide,
-  isLast,
-  onAdvance,
-  onDismiss,
+  onConnect,
+  onSkip,
   bottomInset,
 }: {
   config: OnboardConfig;
   p: ReturnType<typeof palette>;
+  frameW: number;
   slide: number;
   setSlide: (n: number) => void;
-  isLast: boolean;
-  onAdvance: () => void;
-  onDismiss: () => void;
+  onConnect: () => void;
+  onSkip: () => void;
   bottomInset: number;
 }) {
-  const s = config.slides[slide];
-  const { height } = useWindowDimensions();
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
+  const pageH = winH - insets.top; // each slide fills the frame so content centers
+  const count = config.slides.length;
+  const isLast = slide >= count - 1;
+
+  const syncIndex = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const i = Math.round(e.nativeEvent.contentOffset.x / frameW);
+    if (i !== slide && i >= 0 && i < count) setSlide(i);
+  };
+
+  const goTo = (i: number) => {
+    const n = Math.max(0, Math.min(count - 1, i));
+    scrollRef.current?.scrollTo({ x: n * frameW, animated: true });
+    setSlide(n);
+  };
+
+  const onCta = () => {
+    haptic.tap();
+    if (!isLast) goTo(slide + 1);
+    else onConnect();
+  };
 
   return (
     <View style={styles.flex}>
-      {/* floating emoji */}
-      <Text style={[styles.emojiTop, { fontSize: 42 }]}>{s.emojiTop}</Text>
-      <Text style={[styles.emojiBottom, { fontSize: 42, top: height * 0.56 }]}>{s.emojiBottom}</Text>
+      {/* swipeable full-page slides (emoji + mark + copy move together) */}
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={syncIndex}
+        onMomentumScrollEnd={syncIndex}
+        style={styles.flex}
+      >
+        {config.slides.map((item, i) => (
+          <View key={i} style={[styles.page, { width: frameW, height: pageH }]}>
+            <Text style={styles.emojiTop}>{item.emojiTop}</Text>
+            <Text style={styles.emojiBottom}>{item.emojiBottom}</Text>
+            <View style={styles.pageCenter}>
+              <View style={{ marginBottom: 26 }}>
+                <Mark mark={config.mark} size={54} accent={config.accent} />
+              </View>
+              <Text style={[styles.welcomeTitle, { color: p.text }]}>{item.title}</Text>
+              <Text style={[styles.welcomeSub, { color: p.muted }]}>{item.subtitle}</Text>
+              <View style={styles.dots}>
+                {config.slides.map((_, d) => (
+                  <View
+                    key={d}
+                    style={[styles.dot, { backgroundColor: d === i ? p.text : p.muted, opacity: d === i ? 1 : 0.45, width: d === i ? 18 : 6 }]}
+                  />
+                ))}
+              </View>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
 
-      {/* centered content */}
-      <View style={styles.welcomeCenter}>
-        <View style={{ marginBottom: 22 }}>
-          <Mark mark={config.mark} size={54} accent={config.accent} />
-        </View>
-        <Text style={[styles.welcomeTitle, { color: p.text }]}>{s.title}</Text>
-        <Text style={[styles.welcomeSub, { color: p.muted }]}>{s.subtitle}</Text>
-        <View style={styles.dots}>
-          {config.slides.map((_, i) => (
-            <Pressable key={i} onPress={() => setSlide(i)} hitSlop={8}>
-              <View
-                style={[
-                  styles.dot,
-                  { backgroundColor: i === slide ? p.text : p.muted, opacity: i === slide ? 1 : 0.4, width: i === slide ? 18 : 6 },
-                ]}
-              />
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      {/* CTA + dismiss */}
-      <View style={[styles.welcomeFooter, { paddingBottom: Math.max(bottomInset, 18) + 10 }]}>
-        <Pressable
-          onPress={onAdvance}
-          style={({ pressed }) => [styles.cta, { backgroundColor: p.ink }, pressed && { opacity: 0.85 }]}
-        >
+      {/* fixed footer */}
+      <View style={[styles.footerOverlay, { paddingBottom: Math.max(bottomInset, 18) + 10 }]}>
+        <Pressable onPress={onCta} style={({ pressed }) => [styles.cta, { backgroundColor: p.ink }, pressed && { opacity: 0.85 }]}>
           <Text style={[styles.ctaTxt, { color: p.inkText }]}>{isLast ? config.ctaLabel : 'Next'}</Text>
         </Pressable>
-        <Pressable onPress={onDismiss} hitSlop={10} style={styles.dismiss}>
-          {config.dismiss === 'skip' ? (
-            <Text style={[styles.skipTxt, { color: p.muted }]}>Skip</Text>
-          ) : (
-            <Text style={[styles.closeTxt, { color: p.muted }]}>✕</Text>
-          )}
+        <Pressable onPress={onSkip} hitSlop={10} style={styles.dismiss}>
+          <Text style={[styles.skipTxt, { color: p.muted }]}>Skip</Text>
         </Pressable>
       </View>
     </View>
@@ -230,56 +265,93 @@ function Welcome({
 function Connect({
   config,
   p,
+  wide,
   onBack,
   onFinish,
   bottomInset,
 }: {
   config: OnboardConfig;
   p: ReturnType<typeof palette>;
+  wide: boolean;
   onBack: () => void;
   onFinish: () => void;
   bottomInset: number;
 }) {
+  // Rise-up / fade-in on mount.
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+  }, [anim]);
+
+  const LogoInner = (
+    <View style={styles.logoInner}>
+      {config.logo === 'horizontal' ? (
+        <One01Wordmark height={40} color={p.text} />
+      ) : (
+        <>
+          <Mark mark={config.mark} size={54} accent={config.accent} />
+          <Text style={[styles.connectName, { color: p.text }]}>{config.name}</Text>
+        </>
+      )}
+      <Text style={[styles.connectTagline, { color: config.mode === 'dark' ? config.accent : p.muted }]}>
+        {config.connectTagline}
+      </Text>
+    </View>
+  );
+
+  const authButtons = (
+    <>
+      <AuthButton provider="google" mode={config.mode} onPress={onFinish} />
+      <AuthButton provider="apple" mode={config.mode} onPress={onFinish} />
+      <AuthButton provider="email" mode={config.mode} onPress={onFinish} />
+      <Text style={[styles.legal, { color: p.muted }]}>
+        By continuing, you acknowledge ONE01{' '}
+        <Text style={{ textDecorationLine: 'underline' }}>Privacy Policy</Text> and agree to get occasional promotional emails and notifications.
+      </Text>
+    </>
+  );
+
   return (
     <View style={styles.flex}>
       <Pressable onPress={onBack} hitSlop={10} style={styles.connectBack}>
-        <Text style={[styles.closeTxt, { color: p.muted, fontSize: 26 }]}>‹</Text>
+        <Text style={[styles.backChevron, { color: p.muted }]}>‹</Text>
       </Pressable>
 
-      {/* logo + tagline */}
-      <View style={styles.connectLogo}>
-        {config.logo === 'horizontal' ? (
-          <One01Wordmark height={40} color={p.text} />
-        ) : (
-          <>
-            <Mark mark={config.mark} size={54} accent={config.accent} />
-            <Text style={[styles.connectName, { color: p.text }]}>{config.name}</Text>
-          </>
-        )}
-        <Text style={[styles.connectTagline, { color: config.mode === 'dark' ? config.accent : p.muted }]}>
-          {config.connectTagline}
-        </Text>
-      </View>
-
-      {/* bottom sheet */}
-      <View style={[styles.sheet, { backgroundColor: p.sheet, borderColor: p.sheetBorder, paddingBottom: Math.max(bottomInset, 18) + 14 }]}>
-        <View style={[styles.grabber, { backgroundColor: p.grabber }]} />
-        <AuthButton provider="google" mode={config.mode} onPress={onFinish} />
-        <AuthButton provider="apple" mode={config.mode} onPress={onFinish} />
-        <AuthButton provider="email" mode={config.mode} onPress={onFinish} />
-        <Text style={[styles.legal, { color: p.muted }]}>
-          By continuing, you acknowledge ONE01{' '}
-          <Text style={{ textDecorationLine: 'underline' }}>Privacy Policy</Text> and agree to get occasional promotional emails and notifications.
-        </Text>
-      </View>
+      {wide ? (
+        /* desktop: centered popup containing logo + sign-in */
+        <View style={styles.popupCenter}>
+          <Animated.View
+            style={[
+              styles.popup,
+              { backgroundColor: p.sheet, borderColor: p.sheetBorder, opacity: anim, transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] },
+            ]}
+          >
+            {LogoInner}
+            <View style={{ height: 14 }} />
+            {authButtons}
+          </Animated.View>
+        </View>
+      ) : (
+        /* mobile: logo above, sign-in rises from the bottom */
+        <>
+          <View style={styles.connectLogo}>{LogoInner}</View>
+          <Animated.View
+            style={[
+              styles.sheet,
+              { backgroundColor: p.sheet, borderColor: p.sheetBorder, paddingBottom: Math.max(bottomInset, 18) + 14, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }] },
+            ]}
+          >
+            <View style={[styles.grabber, { backgroundColor: p.grabber }]} />
+            {authButtons}
+          </Animated.View>
+        </>
+      )}
     </View>
   );
 }
 
 function AuthButton({ provider, mode, onPress }: { provider: 'google' | 'apple' | 'email'; mode: OnboardMode; onPress: () => void }) {
   const dark = mode === 'dark';
-  // Google: always white. Apple: black-on-light / white-on-dark (Apple guideline).
-  // Email (primary): ink on light, near-black-with-border on dark.
   let bg = '#FFFFFF';
   let fg = '#1F1F23';
   let border: string | undefined = dark ? undefined : 'rgba(10,10,10,0.1)';
@@ -288,7 +360,7 @@ function AuthButton({ provider, mode, onPress }: { provider: 'google' | 'apple' 
     fg = dark ? '#0A0A0A' : '#FFFFFF';
     border = undefined;
   } else if (provider === 'email') {
-    bg = dark ? '#111114' : '#0A0A0A';
+    bg = dark ? '#1C1C20' : '#0A0A0A';
     fg = '#FFFFFF';
     border = dark ? 'rgba(255,255,255,0.14)' : undefined;
   }
@@ -317,36 +389,51 @@ function AuthButton({ provider, mode, onPress }: { provider: 'google' | 'apple' 
 /* ═══════════════════════════════ styles ═══════════════════════════════ */
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, alignItems: 'center' },
+  frame: { flex: 1, alignSelf: 'center', overflow: 'hidden' },
   flex: { flex: 1 },
+
+  glowWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
 
   /* splash */
   splash: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   splashMark: { marginTop: -20 },
 
   /* welcome */
-  emojiTop: { position: 'absolute', top: '16%', right: '15%' },
-  emojiBottom: { position: 'absolute', left: '13%' },
-  welcomeCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 34 },
-  welcomeTitle: { fontSize: 22, fontWeight: '800', textAlign: 'center', letterSpacing: -0.3 },
-  welcomeSub: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 8, maxWidth: 300 },
-  dots: { flexDirection: 'row', gap: 6, marginTop: 22, alignItems: 'center' },
+  page: { alignItems: 'center', justifyContent: 'center' },
+  pageCenter: { alignItems: 'center', paddingHorizontal: 34 },
+  emojiTop: { position: 'absolute', top: '16%', right: '15%', fontSize: 42 },
+  emojiBottom: { position: 'absolute', top: '60%', left: '13%', fontSize: 42 },
+  welcomeTitle: { fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: -0.4 },
+  welcomeSub: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 10, maxWidth: 300 },
+  dots: { flexDirection: 'row', gap: 6, marginTop: 20, alignItems: 'center' },
   dot: { height: 6, borderRadius: 3 },
-  welcomeFooter: { paddingHorizontal: 34, alignItems: 'center', gap: 16 },
-  cta: { width: '100%', maxWidth: 360, borderRadius: 16, paddingVertical: 17, alignItems: 'center' },
+  footerOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 30, alignItems: 'center', gap: 14 },
+  cta: { width: '100%', maxWidth: 380, borderRadius: 16, paddingVertical: 17, alignItems: 'center' },
   ctaTxt: { fontSize: 16, fontWeight: '700' },
   dismiss: { padding: 6 },
   skipTxt: { fontSize: 15, fontWeight: '600' },
-  closeTxt: { fontSize: 18, fontWeight: '400' },
 
-  /* connect */
-  connectBack: { position: 'absolute', top: 6, left: 14, zIndex: 2, padding: 8 },
-  connectLogo: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 30 },
+  /* connect — shared */
+  connectBack: { position: 'absolute', top: 6, left: 14, zIndex: 3, padding: 8 },
+  backChevron: { fontSize: 28, fontWeight: '400' },
+  connectLogo: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 30 },
+  logoInner: { alignItems: 'center', gap: 12 },
   connectName: { fontSize: 34, fontWeight: '900', letterSpacing: 2, marginTop: 4 },
   connectTagline: { fontSize: 13, fontWeight: '700', letterSpacing: 2.5, marginTop: 2 },
 
+  /* connect — mobile bottom sheet */
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: 12, gap: 12 },
   grabber: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center', marginBottom: 8 },
+
+  /* connect — desktop popup */
+  popupCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  popup: {
+    width: '100%', maxWidth: 380, borderRadius: 26, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 22, paddingTop: 26, paddingBottom: 22, gap: 12,
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 30, shadowOffset: { width: 0, height: 16 }, elevation: 12,
+  },
+
+  /* auth buttons */
   authBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingVertical: 15, gap: 10 },
   authIcon: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   authTxt: { fontSize: 15.5, fontWeight: '600' },
