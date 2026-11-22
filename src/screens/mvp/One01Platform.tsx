@@ -75,7 +75,9 @@ import {
 
 type HomeId = 'one01' | ProductId;
 type Tab = 'home' | 'market' | 'create';
-type DrawerKind = 'people' | 'events' | 'stats' | 'feed';
+type DrawerKind = 'main' | 'people' | 'events' | 'stats' | 'feed';
+/** Descriptor for the main-section ("Projects"/"Games"/…) focused drawer page. */
+type MainDrawer = { label: string; icon: string; items: HomeItem[]; layout: 'rows' | 'cards'; onOpenItem: (item: HomeItem) => void };
 
 const GLOWS: Record<HomeId, string> = { one01: '#E8B923', one: '#6B7280', winzi: '#3B5BDB', mixstar: '#8B5CF6' };
 const DARK_TILE = '#131317';
@@ -199,6 +201,17 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const topPad = wide ? 96 : 104;
   const bottomPad = (wide ? 40 : 104) + insets.bottom;
 
+  // the main section ("Projects"/"Games"/…) as a focused drawer page
+  const homeCfg = HOME[homeId];
+  const mainCardKind: DetailKind = homeId === 'winzi' ? 'game' : homeId === 'mixstar' ? 'show' : homeId === 'one' ? 'process' : 'game';
+  const drawerMain: MainDrawer = {
+    label: homeCfg.sectionTitle,
+    icon: homeCfg.sectionIcon,
+    items: homeCfg.items,
+    layout: homeCfg.layout,
+    onOpenItem: (item) => { setDrawer(null); openDetail(homeCfg.layout === 'rows' ? 'project' : mainCardKind, item); },
+  };
+
   if (play) {
     return (
       <>
@@ -229,7 +242,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 
       {/* a focused drawer: desktop = full page, mobile = bottom sheet */}
       {drawer && tab === 'home' && (
-        <DrawerOverlay th={th} wide={wide} kind={drawer.kind} extras={HOME_EXTRAS[homeId]} topInset={insets.top} onBack={() => setDrawer(null)} />
+        <DrawerOverlay th={th} wide={wide} kind={drawer.kind} extras={HOME_EXTRAS[homeId]} main={drawerMain} topInset={insets.top} onBack={() => setDrawer(null)} />
       )}
 
       {wide ? (
@@ -245,10 +258,11 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       )}
 
       <SheetWindow visible={sheet === 'profile'} wide={wide} th={th} onClose={() => setSheet(null)}>
-        {(close) => (
+        {(close, onScroll) => (
           <ProfilePage
             th={th}
             close={close}
+            onScroll={onScroll}
             onExit={onExit}
             onCreate={() => { setTab('create'); close(); }}
             onSettings={() => setSheet('settings')}
@@ -257,10 +271,10 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         )}
       </SheetWindow>
       <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} onClose={() => setSheet(null)}>
-        {(close) => <WalletPage th={th} close={close} />}
+        {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} />}
       </SheetWindow>
       <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
-        {(close) => <SettingsPage th={th} close={close} />}
+        {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} />}
       </SheetWindow>
       <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
@@ -447,14 +461,14 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer }: { th
           {wide && <View style={[styles.catIcon, { backgroundColor: th.surface }]}><FilterIcon size={16} color={th.muted} /></View>}
         </View>
 
-        {/* section header */}
-        <View style={styles.sectionHead}>
+        {/* section header — opens the main section as a focused drawer page */}
+        <Pressable onPress={() => onOpenDrawer('main')} style={({ pressed }) => [styles.sectionHead, pressed && { opacity: 0.6 }]}>
           <Text style={styles.sectionIcon}>{home.sectionIcon}</Text>
           <Text style={[styles.sectionTitle, { color: th.text }]}>{home.sectionTitle}</Text>
           {home.sectionCount != null && <Text style={[styles.sectionCount, { color: th.muted }]}>({home.sectionCount})</Text>}
           <View style={styles.flex} />
           <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
-        </View>
+        </Pressable>
 
         {/* items */}
         {home.layout === 'rows' ? (
@@ -576,9 +590,9 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer }: { th: ShellTheme; extra
 
 /* ─────────────────────────────── drawer detail (focused view) ─────────────────────────────── */
 
-function DrawerContent({ th, kind, extras, wide = false, topPad = 0, onBack, onScroll }: { th: ShellTheme; kind: DrawerKind; extras: HomeExtras; wide?: boolean; topPad?: number; onBack: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
+function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBack, onScroll }: { th: ShellTheme; kind: DrawerKind; extras: HomeExtras; main?: MainDrawer; wide?: boolean; topPad?: number; onBack: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
   const insets = useSafeAreaInsets();
-  const title = kind === 'people' ? extras.people.label : kind === 'events' ? extras.events.label : kind === 'stats' ? extras.stats.label : extras.feed.label;
+  const title = kind === 'main' ? (main?.label ?? '') : kind === 'people' ? extras.people.label : kind === 'events' ? extras.events.label : kind === 'stats' ? extras.stats.label : extras.feed.label;
 
   return (
     <View style={styles.flex}>
@@ -598,9 +612,45 @@ function DrawerContent({ th, kind, extras, wide = false, topPad = 0, onBack, onS
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: wide ? topPad + 52 : 4, paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }}>
         <View style={[styles.drawerBody, wide && styles.drawerBodyWide]}>
           <View style={styles.drawerTitleRow}>
-            <View style={styles.drawerHeadIcon}>{drawerIcon(kind, th.text, 22)}</View>
+            <View style={styles.drawerHeadIcon}>{kind === 'main' ? <Text style={{ fontSize: 20 }}>{main?.icon}</Text> : drawerIcon(kind, th.text, 22)}</View>
             <Text style={[styles.drawerBigTitle, { color: th.text }]}>{title}</Text>
           </View>
+
+          {kind === 'main' && main && (
+            main.layout === 'rows' ? (
+              <View style={styles.drawerList}>
+                {main.items.map((it) => (
+                  <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={({ pressed }) => [styles.drawerRow, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
+                    <View style={[styles.projTile, { backgroundColor: DARK_TILE }]}>
+                      <Mark mark={it.mark ?? 'one01'} size={32} accent={markAccent(it.mark ?? 'one01')} eye={DARK_TILE} />
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{it.title}</Text>
+                      <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{it.subtitle}</Text>
+                    </View>
+                    <View style={[styles.ctaPill, { backgroundColor: th.mode === 'dark' ? th.surface2 : '#0E1116' }]}>
+                      <Text style={[styles.ctaPillTxt, { color: th.mode === 'dark' ? th.text : '#fff' }]}>{it.cta ?? 'Open'}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.drawerCardGrid}>
+                {main.items.map((it) => (
+                  <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={styles.drawerCardWrap}>
+                    <LinearGradient colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.drawerArtCard}>
+                      {it.live && <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{it.metric}</Text></View>}
+                      <Text style={styles.artEmoji}>{it.emoji}</Text>
+                      <View style={styles.artFooter}>
+                        <Text style={styles.artTitle}>{it.title}</Text>
+                        {!it.live && it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : null}
+                      </View>
+                    </LinearGradient>
+                  </Pressable>
+                ))}
+              </View>
+            )
+          )}
 
           {kind === 'people' && (
             <View style={styles.drawerList}>
@@ -663,7 +713,7 @@ function DrawerContent({ th, kind, extras, wide = false, topPad = 0, onBack, onS
   );
 }
 
-function DrawerOverlay({ th, wide, kind, extras, topInset, onBack }: { th: ShellTheme; wide: boolean; kind: DrawerKind; extras: HomeExtras; topInset: number; onBack: () => void }) {
+function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack }: { th: ShellTheme; wide: boolean; kind: DrawerKind; extras: HomeExtras; main?: MainDrawer; topInset: number; onBack: () => void }) {
   const { height: winH } = useWindowDimensions();
   const sheetTop = topInset + 74;
   const sheetH = winH - sheetTop;
@@ -691,7 +741,7 @@ function DrawerOverlay({ th, wide, kind, extras, topInset, onBack }: { th: Shell
   if (wide) {
     return (
       <View style={[StyleSheet.absoluteFill, { backgroundColor: th.bg, paddingTop: topInset }]}>
-        <DrawerContent th={th} wide kind={kind} extras={extras} topPad={56} onBack={onBack} />
+        <DrawerContent th={th} wide kind={kind} extras={extras} main={main} topPad={56} onBack={onBack} />
       </View>
     );
   }
@@ -704,7 +754,7 @@ function DrawerOverlay({ th, wide, kind, extras, topInset, onBack }: { th: Shell
       </Pressable>
       <Animated.View {...pan.panHandlers} style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
         <View style={styles.detailDrag}><View style={[styles.detailGrab, { backgroundColor: th.border }]} /></View>
-        <DrawerContent th={th} kind={kind} extras={extras} onBack={close} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} />
+        <DrawerContent th={th} kind={kind} extras={extras} main={main} onBack={close} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} />
       </Animated.View>
     </View>
   );
@@ -1205,6 +1255,9 @@ const styles = StyleSheet.create({
   drawerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 12 },
   drawerAv: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   drawerEventCard: { borderRadius: 18, padding: 16, height: 118, justifyContent: 'space-between', overflow: 'hidden' },
+  drawerCardGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  drawerCardWrap: { width: '48%' },
+  drawerArtCard: { width: '100%', height: 180, borderRadius: 18, padding: 14, justifyContent: 'space-between', overflow: 'hidden' },
 
   /* surface view */
   surfaceHead: { fontSize: 22, fontWeight: '800' },

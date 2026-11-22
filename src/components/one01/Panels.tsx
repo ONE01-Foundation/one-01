@@ -11,8 +11,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, ScrollView, Modal, Animated, PanResponder, Switch,
-  useWindowDimensions,
+  useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
+
+type ScrollHandler = (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -72,26 +74,29 @@ function Mark({ mark, size }: { mark: MarkId; size: number }) {
 
 /* ─────────────────────────────── SheetWindow ─────────────────────────────── */
 
-export function SheetWindow({ visible, wide, th, onClose, children }: { visible: boolean; wide: boolean; th: ShellTheme; onClose: () => void; children: (close: () => void) => React.ReactNode }) {
+export function SheetWindow({ visible, wide, th, onClose, children }: { visible: boolean; wide: boolean; th: ShellTheme; onClose: () => void; children: (close: () => void, onScroll: ScrollHandler) => React.ReactNode }) {
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const prog = useRef(new Animated.Value(0)).current;
   const drag = useRef(new Animated.Value(0)).current;
+  const scrollY = useRef(0);
 
   useEffect(() => {
     if (!visible) return;
-    prog.setValue(0); drag.setValue(0);
+    prog.setValue(0); drag.setValue(0); scrollY.current = 0;
     Animated.spring(prog, { toValue: 1, useNativeDriver: true, bounciness: 4, speed: 12 }).start();
   }, [visible, prog, drag]);
 
   const requestClose = () => Animated.timing(prog, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => onClose());
+  const onScroll: ScrollHandler = (e) => { scrollY.current = e.nativeEvent.contentOffset.y; };
 
   const sheetTop = insets.top + 54;
   const sheetH = winH - sheetTop;
 
+  // drag down to dismiss from anywhere on the sheet — once the content is scrolled to the top
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && g.dy > Math.abs(g.dx),
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5 && scrollY.current <= 2,
       onPanResponderMove: (_, g) => { if (g.dy > 0) drag.setValue(g.dy); },
       onPanResponderRelease: (_, g) => {
         if (g.dy > 120 || g.vy > 0.8) requestClose();
@@ -112,13 +117,13 @@ export function SheetWindow({ visible, wide, th, onClose, children }: { visible:
         {wide ? (
           <View style={styles.winCenter} pointerEvents="box-none">
             <Animated.View style={[styles.window, { backgroundColor: th.bg, borderColor: th.border, opacity: prog, transform: [{ scale: prog.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}>
-              {children(requestClose)}
+              {children(requestClose, onScroll)}
             </Animated.View>
           </View>
         ) : (
-          <Animated.View style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: Animated.add(prog.interpolate({ inputRange: [0, 1], outputRange: [sheetH, 0] }), drag) }] }]}>
-            <View {...pan.panHandlers} style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
-            {children(requestClose)}
+          <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: Animated.add(prog.interpolate({ inputRange: [0, 1], outputRange: [sheetH, 0] }), drag) }] }]}>
+            <View style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
+            {children(requestClose, onScroll)}
           </Animated.View>
         )}
       </View>
@@ -141,7 +146,7 @@ function PanelHead({ th, title, onClose, right }: { th: ShellTheme; title: strin
 
 /* ─────────────────────────────── ProfilePage ─────────────────────────────── */
 
-export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void }) {
+export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler }) {
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<'posts' | 'about'>('posts');
   const stats = [{ v: '128', l: 'Friends' }, { v: '12', l: 'Posts' }, { v: 'LVL 13', l: 'Level' }];
@@ -160,7 +165,7 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings }
   return (
     <View style={styles.flex}>
       <PanelHead th={th} title="Profile" onClose={close} right={<Pressable onPress={onSettings} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable>} />
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={[`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cover} />
         <View style={styles.avatarRow}>
           <View style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}><UserIcon size={40} color="#fff" /></View>
@@ -240,7 +245,7 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings }
 
 /* ─────────────────────────────── SettingsPage ─────────────────────────────── */
 
-export function SettingsPage({ th, close }: { th: ShellTheme; close: () => void }) {
+export function SettingsPage({ th, close, onScroll }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler }) {
   const insets = useSafeAreaInsets();
   const resetDemo = useOne01PlatformStore((s) => s.resetDemo);
   const [notif, setNotif] = useState(true);
@@ -256,7 +261,7 @@ export function SettingsPage({ th, close }: { th: ShellTheme; close: () => void 
   return (
     <View style={styles.flex}>
       <PanelHead th={th} title="Settings" onClose={close} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         <Text style={[styles.secTitle, { color: th.text }]}>Preferences</Text>
         <View style={{ gap: 10 }}>
           {toggles.map((t) => (
@@ -293,7 +298,7 @@ export function SettingsPage({ th, close }: { th: ShellTheme; close: () => void 
 
 /* ─────────────────────────────── WalletPage ─────────────────────────────── */
 
-export function WalletPage({ th, close }: { th: ShellTheme; close: () => void }) {
+export function WalletPage({ th, close, onScroll }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler }) {
   const insets = useSafeAreaInsets();
   const balance = useOne01PlatformStore((s) => s.balance);
   const transactions = useOne01PlatformStore((s) => s.transactions);
@@ -323,7 +328,7 @@ export function WalletPage({ th, close }: { th: ShellTheme; close: () => void })
   return (
     <View style={styles.flex}>
       <PanelHead th={th} title="Wallet" onClose={close} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         {/* balance card */}
         <LinearGradient colors={[th.accent, `${th.accent}C0`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balCard}>
           <View style={styles.balTop}>
