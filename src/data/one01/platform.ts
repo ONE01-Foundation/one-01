@@ -315,6 +315,8 @@ export interface HomeItem {
   /** Corner metric, e.g. "48", "13k". */
   metric?: string;
   live?: boolean;
+  /** Category id for filtering (matches the home's category chips). */
+  cat?: string;
   /** Long description (Market detail "About"). */
   blurb?: string;
   /** Price label for a Market listing, e.g. "◎ 40". */
@@ -363,11 +365,16 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
     sectionCount: 5,
     layout: 'rows',
     items: [
-      { id: 'one', title: 'ONE', subtitle: 'Your representative', mark: 'one', product: 'one', cta: 'Open', bg: ['#123A2E', '#071A14'] },
-      { id: 'winzi', title: 'Winzi', subtitle: 'Play Games, Win Money', mark: 'winzi', product: 'winzi', cta: 'Play', bg: ['#3A3312', '#171205'] },
-      { id: 'mixstar', title: 'MixStar', subtitle: 'AI Reality TV', mark: 'mixstar', product: 'mixstar', cta: 'Watch', bg: ['#2A1A4D', '#140A26'] },
-      { id: 'xit', title: 'Xit', subtitle: 'News & trends coins', mark: 'xit', cta: 'Open', bg: ['#103826', '#07160F'] },
-      { id: 'sodex', title: 'Sodex', subtitle: 'Spiritual intelligence', mark: 'sodex', cta: 'Open', bg: ['#26282B', '#131416'] },
+      { id: 'one', title: 'ONE', subtitle: 'Your representative', mark: 'one', product: 'one', cta: 'Open', bg: ['#123A2E', '#071A14'], cat: 'social' },
+      { id: 'winzi', title: 'Winzi', subtitle: 'Play Games, Win Money', mark: 'winzi', product: 'winzi', cta: 'Play', bg: ['#3A3312', '#171205'], cat: 'games' },
+      { id: 'mixstar', title: 'MixStar', subtitle: 'AI Reality TV', mark: 'mixstar', product: 'mixstar', cta: 'Watch', bg: ['#2A1A4D', '#140A26'], cat: 'media' },
+      { id: 'xit', title: 'Xit', subtitle: 'News & trends coins', mark: 'xit', cta: 'Open', bg: ['#103826', '#07160F'], cat: 'finance' },
+      { id: 'sodex', title: 'Sodex', subtitle: 'Spiritual intelligence', mark: 'sodex', cta: 'Open', bg: ['#26282B', '#131416'], cat: 'tools' },
+      { id: 'dargwin', title: 'DargWin', subtitle: 'Prediction arena', mark: 'dargwin', cta: 'Open', bg: ['#3A2E0B', '#171205'], cat: 'games' },
+      { id: 'onepay', title: 'ONE Pay', subtitle: 'Wallet & transfers', emoji: '💳', cta: 'Open', bg: ['#0E2A4D', '#071424'], cat: 'finance' },
+      { id: 'circle', title: 'Circle', subtitle: 'Your people, one feed', emoji: '💬', cta: 'Open', bg: ['#3A1240', '#1A071D'], cat: 'social' },
+      { id: 'reel', title: 'Reel', subtitle: 'Short live media', emoji: '🎞️', cta: 'Open', bg: ['#3A0E24', '#1A0610'], cat: 'media' },
+      { id: 'vault', title: 'Vault', subtitle: 'Docs & disclosure', emoji: '🔐', cta: 'Open', bg: ['#25282B', '#121416'], cat: 'tools' },
     ],
   },
   one: {
@@ -384,10 +391,15 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
     sectionTitle: 'Processes',
     layout: 'cards',
     items: [
-      { id: 'license', title: 'Renew license', emoji: '🪪', bg: ['#065F46', '#032A20'], metric: '3' },
-      { id: 'car', title: 'Car deal', emoji: '🚗', bg: ['#1E40AF', '#0F1F4D'], metric: '2' },
-      { id: 'handyman', title: 'Handyman', emoji: '🔧', bg: ['#374151', '#1F2937'], metric: '1' },
-      { id: 'moving', title: 'Moving home', emoji: '📦', bg: ['#6D28D9', '#2E1065'], metric: '2' },
+      { id: 'license', title: 'Renew license', emoji: '🪪', bg: ['#065F46', '#032A20'], metric: '3', cat: 'vehicle' },
+      { id: 'car', title: 'Car deal', emoji: '🚗', bg: ['#1E40AF', '#0F1F4D'], metric: '2', cat: 'vehicle' },
+      { id: 'handyman', title: 'Handyman', emoji: '🔧', bg: ['#374151', '#1F2937'], metric: '1', cat: 'home' },
+      { id: 'moving', title: 'Moving home', emoji: '📦', bg: ['#6D28D9', '#2E1065'], metric: '2', cat: 'home' },
+      { id: 'tax', title: 'File taxes', emoji: '📑', bg: ['#0E7490', '#073947'], metric: '1', cat: 'finance' },
+      { id: 'insurance', title: 'Insurance', emoji: '🛡️', bg: ['#1E3A8A', '#0F1F4D'], metric: '2', cat: 'finance' },
+      { id: 'doctor', title: 'Book a doctor', emoji: '🩺', bg: ['#9D174D', '#4A0E27'], metric: '1', cat: 'health' },
+      { id: 'lawyer', title: 'Legal advice', emoji: '⚖️', bg: ['#4A044E', '#240127'], metric: '1', cat: 'legal' },
+      { id: 'startup', title: 'Register company', emoji: '🏢', bg: ['#374151', '#1F2937'], metric: '1', cat: 'business' },
     ],
   },
   winzi: {
@@ -404,10 +416,18 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
     sectionTitle: 'Games',
     layout: 'cards',
     items: [
-      { id: 'pong', title: 'Pong', emoji: '🏓', bg: ['#1E3A8A', '#0F1F4D'], metric: '48' },
-      { id: 'sniper', title: 'Sniper', emoji: '🎯', bg: ['#14532D', '#0A2A17'], metric: '85' },
-      { id: 'jets', title: 'Jets', emoji: '✈️', bg: ['#3730A3', '#1E1B4B'], metric: '62' },
-      { id: 'racer', title: 'Racer', emoji: '🏎️', bg: ['#7C2D12', '#3B1206'], metric: '30' },
+      { id: 'pong', title: 'Pong', emoji: '🏓', bg: ['#1E3A8A', '#0F1F4D'], metric: '48', cat: 'arcade' },
+      { id: 'sniper', title: 'Sniper', emoji: '🎯', bg: ['#14532D', '#0A2A17'], metric: '85', cat: 'action' },
+      { id: 'jets', title: 'Jets', emoji: '✈️', bg: ['#3730A3', '#1E1B4B'], metric: '62', cat: 'action' },
+      { id: 'racer', title: 'Racer', emoji: '🏎️', bg: ['#7C2D12', '#3B1206'], metric: '30', cat: 'racing' },
+      { id: 'hoops', title: 'Hoops', emoji: '🏀', bg: ['#9A3412', '#431407'], metric: '54', cat: 'sports' },
+      { id: 'chess', title: 'Chess', emoji: '♟️', bg: ['#1F2937', '#0B0F19'], metric: '21', cat: 'strategy' },
+      { id: 'blocks', title: 'Blocks', emoji: '🧩', bg: ['#4C1D95', '#2A1065'], metric: '39', cat: 'puzzle' },
+      { id: 'drift', title: 'Drift', emoji: '🏁', bg: ['#1E40AF', '#0F1F4D'], metric: '41', cat: 'racing' },
+      { id: 'striker', title: 'Striker', emoji: '⚽', bg: ['#065F46', '#032A20'], metric: '77', cat: 'sports' },
+      { id: 'dungeon', title: 'Dungeon', emoji: '🗡️', bg: ['#4A044E', '#240127'], metric: '33', cat: 'action' },
+      { id: 'tetro', title: 'Tetro', emoji: '🔲', bg: ['#0E7490', '#073947'], metric: '28', cat: 'puzzle' },
+      { id: 'raid', title: 'Raid', emoji: '👾', bg: ['#3730A3', '#1E1B4B'], metric: '46', cat: 'arcade' },
     ],
   },
   mixstar: {
@@ -424,10 +444,15 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
     sectionCount: 18,
     layout: 'cards',
     items: [
-      { id: 'survive', title: 'Survive', emoji: '💀', bg: ['#166534', '#0A2A17'], metric: '13k', live: true },
-      { id: 'villa', title: 'Villa', emoji: '🏝️', bg: ['#9D174D', '#4A0E27'], metric: '8k', live: true },
-      { id: 'studio', title: 'Studio', emoji: '🎬', bg: ['#5B21B6', '#2E1065'], metric: '21k', live: true },
-      { id: 'cookoff', title: 'Cook Off', emoji: '🍳', bg: ['#B45309', '#5C2A06'], metric: '9k', live: true },
+      { id: 'survive', title: 'Survive', emoji: '💀', bg: ['#166534', '#0A2A17'], metric: '13k', live: true, cat: 'reality' },
+      { id: 'villa', title: 'Villa', emoji: '🏝️', bg: ['#9D174D', '#4A0E27'], metric: '8k', live: true, cat: 'reality' },
+      { id: 'studio', title: 'Studio', emoji: '🎬', bg: ['#5B21B6', '#2E1065'], metric: '21k', live: true, cat: 'music' },
+      { id: 'cookoff', title: 'Cook Off', emoji: '🍳', bg: ['#B45309', '#5C2A06'], metric: '9k', live: true, cat: 'reality' },
+      { id: 'standup', title: 'Standup', emoji: '🎤', bg: ['#B91C1C', '#5A0E0E'], metric: '6k', cat: 'comedy' },
+      { id: 'mansion', title: 'Mansion', emoji: '🏚️', bg: ['#1F2937', '#0B0F19'], metric: '11k', live: true, cat: 'drama' },
+      { id: 'idol', title: 'Idol', emoji: '🎵', bg: ['#6D28D9', '#2E1065'], metric: '18k', live: true, cat: 'music' },
+      { id: 'arena', title: 'Arena', emoji: '🏟️', bg: ['#065F46', '#032A20'], metric: '15k', live: true, cat: 'sports' },
+      { id: 'roast', title: 'Roast', emoji: '🔥', bg: ['#9A3412', '#431407'], metric: '7k', cat: 'comedy' },
     ],
   },
 };

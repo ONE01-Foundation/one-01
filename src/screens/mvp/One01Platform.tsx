@@ -274,7 +274,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       {wide ? (
         <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} onSwitch={() => setSheet('switch')} lang={lang} />
       ) : (
-        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} />
+        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} topInset={insets.top} />
       )}
 
       {toast && (
@@ -362,10 +362,10 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   );
 }
 
-function MobileTopBar({ th, onWallet, onProfile }: { th: ShellTheme; onWallet: () => void; onProfile: () => void }) {
+function MobileTopBar({ th, onWallet, onProfile, topInset }: { th: ShellTheme; onWallet: () => void; onProfile: () => void; topInset: number }) {
   return (
-    // stays solid th.bg through the bar, then fades — so scrolling content is hidden near the clock
-    <LinearGradient colors={[th.bg, th.bg, `${th.bg}00`]} locations={[0, 0.5, 1]} style={styles.topBar} pointerEvents="box-none">
+    // the absolute bar must clear the status bar itself (root padding doesn't offset absolute children)
+    <LinearGradient colors={[th.bg, th.bg, `${th.bg}00`]} locations={[0, 0.58, 1]} style={[styles.topBar, { paddingTop: topInset }]} pointerEvents="box-none">
       <View style={styles.topRow}>
         <WalletChip th={th} onPress={onWallet} />
         <ProfileBtn th={th} onPress={onProfile} />
@@ -376,7 +376,7 @@ function MobileTopBar({ th, onWallet, onProfile }: { th: ShellTheme; onWallet: (
 
 function MobileBottomBar({ th, tab, setTab, onSwitch, bottomInset }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onSwitch: () => void; bottomInset: number }) {
   return (
-    <LinearGradient colors={[`${th.bg}00`, th.bg]} style={[styles.bottomBar, { paddingBottom: Math.max(bottomInset, 12) + 10 }]} pointerEvents="box-none">
+    <LinearGradient colors={[`${th.bg}00`, th.bg]} style={[styles.bottomBar, { paddingBottom: Math.max(bottomInset, 10) }]} pointerEvents="box-none">
       <Pressable style={styles.navBtn} onPress={() => { haptic.select(); setTab('market'); }}>
         <ShopIcon size={26} color={tab === 'market' ? th.accent : th.muted} />
       </Pressable>
@@ -443,6 +443,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
   const { width } = useWindowDimensions();
   const colW = wide ? CW : Math.min(width, 600) - 36;
   const [cat, setCat] = useState('all');
+  const items = cat === 'all' ? home.items : home.items.filter((it) => it.cat === cat);
   const cardKind: DetailKind = th.homeId === 'winzi' ? 'game' : th.homeId === 'mixstar' ? 'show' : th.homeId === 'one' ? 'process' : 'project';
 
   // auto-rotating featured banner
@@ -523,18 +524,18 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
         <Pressable onPress={() => onOpenDrawer('main')} style={({ pressed }) => [styles.sectionHead, pressed && { opacity: 0.6 }]}>
           <View style={styles.sectionIconBox}><MainSectionIcon homeId={th.homeId} color={th.text} size={19} /></View>
           <Text style={[styles.sectionTitle, { color: th.text }]}>{tr(lang, home.sectionTitle)}</Text>
-          {home.sectionCount != null && <Text style={[styles.sectionCount, { color: th.muted }]}>({home.sectionCount})</Text>}
+          <Text style={[styles.sectionCount, { color: th.muted }]}>({items.length})</Text>
           <View style={styles.flex} />
           <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
         </Pressable>
 
-        {/* items */}
+        {/* items (filtered by the selected category) */}
         {home.layout === 'rows' ? (
           <View style={[styles.rowsWrap, wide && styles.rowsWrapWide]}>
-            {home.items.map((it) => (
+            {items.map((it) => (
               <Pressable key={it.id} onPress={() => onOpen('project', it)} style={({ pressed }) => [styles.projRow, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
                 <LinearGradient colors={it.bg ?? [DARK_TILE, '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.projTile}>
-                  <Mark mark={it.mark ?? 'one01'} size={38} accent={markAccent(it.mark ?? 'one01')} eye={DARK_TILE} />
+                  {it.mark ? <Mark mark={it.mark} size={38} accent={markAccent(it.mark)} eye={DARK_TILE} /> : <Text style={{ fontSize: 30 }}>{it.emoji}</Text>}
                 </LinearGradient>
                 <View style={styles.flex}>
                   <Text style={[styles.projName, { color: th.text }]}>{it.title}</Text>
@@ -548,7 +549,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }} style={{ overflow: 'visible' }}>
-            {home.items.map((it) => (
+            {items.map((it) => (
               it.mark ? (
                 /* project "cube" — square brand tile with a label below */
                 <Pressable key={it.id} onPress={() => onOpen(cardKind, it)} style={styles.projCubeWrap}>
@@ -689,7 +690,7 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
                 {main.items.map((it) => (
                   <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={({ pressed }) => [styles.drawerRow, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
                     <LinearGradient colors={it.bg ?? [DARK_TILE, '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.projTile}>
-                      <Mark mark={it.mark ?? 'one01'} size={36} accent={markAccent(it.mark ?? 'one01')} eye={DARK_TILE} />
+                      {it.mark ? <Mark mark={it.mark} size={36} accent={markAccent(it.mark)} eye={DARK_TILE} /> : <Text style={{ fontSize: 28 }}>{it.emoji}</Text>}
                     </LinearGradient>
                     <View style={styles.flex}>
                       <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{it.title}</Text>
@@ -1253,7 +1254,7 @@ const styles = StyleSheet.create({
 
   /* mobile top bar */
   topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 26 },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12 },
   surfaceHeadline: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3, marginTop: 2 },
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },

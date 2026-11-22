@@ -252,8 +252,8 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
         <View style={wide ? styles.colWide : styles.flex}>
         {/* hero */}
         <View style={styles.hero}>
-          <View style={[styles.icon, { backgroundColor: kind === 'project' ? DARK_TILE : grad[0] }]}>
-            {kind === 'project' ? <Mark mark={item.mark ?? 'one01'} size={56} /> : <Text style={{ fontSize: 52 }}>{item.emoji}</Text>}
+          <View style={[styles.icon, { backgroundColor: kind === 'project' && item.mark ? DARK_TILE : grad[0] }]}>
+            {kind === 'project' && item.mark ? <Mark mark={item.mark} size={56} /> : <Text style={{ fontSize: 52 }}>{item.emoji}</Text>}
           </View>
           <View style={styles.heroBody}>
             <Text style={[styles.name, { color: th.text }]} numberOfLines={2}>{item.title}</Text>
@@ -289,8 +289,8 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 12 }}>
           {[0, 1, 2].map((n) => (
             <LinearGradient key={n} colors={grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.shot}>
-              <Text style={styles.shotEmoji}>{kind === 'project' ? '' : item.emoji}</Text>
-              {kind === 'project' ? <View style={styles.shotMark}><Mark mark={item.mark ?? 'one01'} size={46} /></View> : null}
+              <Text style={styles.shotEmoji}>{kind === 'project' && item.mark ? '' : item.emoji}</Text>
+              {kind === 'project' && item.mark ? <View style={styles.shotMark}><Mark mark={item.mark} size={46} /></View> : null}
               <Text style={styles.shotCap}>{kind === 'show' ? `Scene ${n + 1}` : kind === 'game' ? `Match ${n + 1}` : kind === 'market' ? `Detail ${n + 1}` : `Screen ${n + 1}`}</Text>
             </LinearGradient>
           ))}
