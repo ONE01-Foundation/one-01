@@ -33,6 +33,29 @@ export interface Position {
   avgCost: number;
 }
 
+/** Something you published from Creator — it earns credits over time. */
+export interface UserCreation {
+  id: string;
+  title: string;
+  emoji: string;
+  /** Creator pillar id it was built from (e.g. 'agents'). */
+  kind: string;
+  /** Which product's Creator it was built in (display only). */
+  surface: string;
+  ts: number;
+  /** Last time earnings were collected (accrual anchor). */
+  lastCollected: number;
+  /** Total credits collected so far. */
+  collected: number;
+  /** Credits earned per minute (deterministic per creation). */
+  rate: number;
+}
+
+/** Uncollected earnings a creation has accrued since it was last collected. */
+export function pendingEarnings(c: UserCreation, now = Date.now()): number {
+  return Math.floor(((now - c.lastCollected) / 60000) * c.rate);
+}
+
 const START_BALANCE = 3500;
 const rid = () => `tx_${Date.now()}_${Math.floor(Math.random() * 1e4)}`;
 
@@ -96,6 +119,8 @@ interface One01PlatformState {
   transactions: PlatformTx[];
   /** Project id → share position. */
   positions: Record<string, Position>;
+  /** Things you published from Creator. */
+  creations: UserCreation[];
 
   setEntered: (v: boolean) => void;
   markOnboarded: (id: string) => void;
@@ -107,6 +132,10 @@ interface One01PlatformState {
   invest: (id: string, shares: number, price: number, label: string) => boolean;
   /** Sell `shares` of a project at `price` each; false if not enough held. */
   divest: (id: string, shares: number, price: number, label: string) => boolean;
+  /** Publish a creation from Creator (starts earning). */
+  publishCreation: (input: { title: string; emoji: string; kind: string; surface: string }) => void;
+  /** Collect a creation's pending earnings into the balance; returns the amount. */
+  collectEarnings: (id: string) => number;
   resetDemo: () => void;
 }
 
@@ -118,6 +147,7 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       balance: START_BALANCE,
       transactions: [],
       positions: {},
+      creations: [],
 
       setEntered: (v) => set({ entered: v }),
       markOnboarded: (id) =>
@@ -173,7 +203,33 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
         return true;
       },
 
-      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {} }),
+      publishCreation: (input) =>
+        set((s) => {
+          const now = Date.now();
+          const rate = 30 + (hashStr(input.title + now) % 60); // 30–89 credits/min
+          const c: UserCreation = {
+            id: `cr_${now}_${Math.floor(Math.random() * 1e4)}`,
+            title: input.title, emoji: input.emoji, kind: input.kind, surface: input.surface,
+            ts: now, lastCollected: now, collected: 0, rate,
+          };
+          return { creations: [c, ...s.creations].slice(0, 30) };
+        }),
+
+      collectEarnings: (id) => {
+        const c = get().creations.find((x) => x.id === id);
+        if (!c) return 0;
+        const pending = pendingEarnings(c);
+        if (pending <= 0) return 0;
+        const now = Date.now();
+        set((s) => ({
+          balance: s.balance + pending,
+          creations: s.creations.map((x) => (x.id === id ? { ...x, lastCollected: now, collected: x.collected + pending } : x)),
+          transactions: [{ id: rid(), label: `${c.title} earnings`, amount: pending, ts: now }, ...s.transactions].slice(0, 40),
+        }));
+        return pending;
+      },
+
+      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [] }),
     }),
     { name: 'one01_platform_v1', version: 1, storage: createJSONStorage(() => platStorage) },
   ),

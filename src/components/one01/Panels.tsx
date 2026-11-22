@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import { haptic } from '../../utils/haptics';
 import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
@@ -297,7 +298,10 @@ export function WalletPage({ th, close }: { th: ShellTheme; close: () => void })
   const balance = useOne01PlatformStore((s) => s.balance);
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const positions = useOne01PlatformStore((s) => s.positions);
+  const credit = useOne01PlatformStore((s) => s.credit);
+  const [topped, setTopped] = useState(false);
   const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  const topUp = () => { haptic.success(); credit(1000, 'Top up · virtual rails'); setTopped(true); setTimeout(() => setTopped(false), 1600); };
   // Holdings = your cash credits + real share positions in projects (live-priced)
   const holdings: { id: string; mark: MarkId; name: string; amt: string; sub: string; pl: number | null }[] = [
     { id: 'one01', mark: 'one01', name: 'ONE01 Credits', amt: balance.toLocaleString(), sub: 'Cash balance', pl: null },
@@ -334,16 +338,25 @@ export function WalletPage({ th, close }: { th: ShellTheme; close: () => void })
           <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85, marginTop: 4 }]}>≈ ${balance.toLocaleString()} · virtual credits · 30d</Text>
         </LinearGradient>
 
-        {/* actions */}
+        {/* actions — Top up adds virtual credits */}
         <View style={styles.walletActions}>
-          {['Send', 'Receive', 'Top up', 'Swap'].map((a) => (
-            <View key={a} style={styles.walletAction}>
-              <View style={[styles.walletActionIcon, { backgroundColor: th.surface, borderColor: th.border }]}>
-                <Text style={{ color: th.text, fontSize: 16 }}>{a === 'Send' ? '↑' : a === 'Receive' ? '↓' : a === 'Top up' ? '+' : '⇄'}</Text>
-              </View>
-              <Text style={[styles.walletActionTxt, { color: th.muted }]}>{a}</Text>
-            </View>
-          ))}
+          {([
+            { a: 'Send', icon: '↑' },
+            { a: 'Receive', icon: '↓' },
+            { a: 'Top up', icon: '+' },
+            { a: 'Swap', icon: '⇄' },
+          ] as const).map(({ a, icon }) => {
+            const isTop = a === 'Top up';
+            const label = isTop && topped ? '+⟡1,000' : a;
+            return (
+              <Pressable key={a} onPress={isTop ? topUp : undefined} style={({ pressed }) => [styles.walletAction, pressed && isTop && { opacity: 0.7 }]}>
+                <View style={[styles.walletActionIcon, { backgroundColor: isTop && topped ? th.accent : th.surface, borderColor: isTop && topped ? th.accent : th.border }]}>
+                  <Text style={{ color: isTop && topped ? accentFg : th.text, fontSize: 16 }}>{icon}</Text>
+                </View>
+                <Text style={[styles.walletActionTxt, { color: isTop && topped ? th.accent : th.muted }]}>{label}</Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* holdings — cash + live-priced project shares */}

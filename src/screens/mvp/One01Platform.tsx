@@ -48,7 +48,7 @@ import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
 import { SheetWindow, ProfilePage, WalletPage, SettingsPage } from '../../components/one01/Panels';
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
-import { useOne01PlatformStore } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, pendingEarnings, type UserCreation } from '../../stores/one01PlatformStore';
 import { onboardingFor } from '../../data/one01/onboarding';
 import {
   PRODUCTS,
@@ -114,6 +114,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const onboarded = useOne01PlatformStore((s) => s.onboarded);
   const markOnboarded = useOne01PlatformStore((s) => s.markOnboarded);
   const debit = useOne01PlatformStore((s) => s.debit);
+  const publishCreation = useOne01PlatformStore((s) => s.publishCreation);
 
   const [homeId, setHomeId] = useState<HomeId>('one01');
   const [tab, setTab] = useState<Tab>('home');
@@ -149,6 +150,11 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const openMarketDetail = (p: SurfacePillar) => {
     haptic.select();
     setDetail({ kind: 'market', item: { id: `mk_${p.id}`, title: p.title, subtitle: p.tagline, emoji: p.emoji, priceLabel: p.price, blurb: p.detail } });
+  };
+  const buildPillar = (p: SurfacePillar, surface: string) => {
+    publishCreation({ title: p.title, emoji: p.emoji, kind: p.id, surface });
+    haptic.success();
+    showToast(`Published “${p.title}” — now earning`);
   };
   const detailPrimary = () => {
     if (!detail) return;
@@ -191,8 +197,8 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 
       <View style={styles.flex}>
         {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} />}
-        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} />}
-        {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} />}
+        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} />}
+        {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} />}
       </View>
 
       {/* bottom bar sits below the detail overlay */}
@@ -471,7 +477,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; 
 
 /* ─────────────────────────────── market / create ─────────────────────────────── */
 
-function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void }) {
+function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, onBuild, onToast }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void; onBuild: (p: SurfacePillar, surface: string) => void; onToast: (m: string) => void }) {
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
   const s = kind === 'market' ? MARKET[pid] : CREATOR[pid];
   const sectionTitle = kind === 'market' ? 'Market' : CREATOR[pid].title;
@@ -525,7 +531,7 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket }:
         <View style={[styles.rowsWrap, wide && styles.rowsWrapWide]}>
           {s.pillars.map((p) => {
             const isMarket = kind === 'market';
-            const onCta = () => (isMarket ? onOpenMarket(p) : onBuy(p.price, p.title, kind));
+            const onCta = () => (isMarket ? onOpenMarket(p) : onBuild(p, th.name));
             return (
               <Pressable key={p.id} onPress={isMarket ? () => onOpenMarket(p) : undefined} disabled={!isMarket} style={({ pressed }) => [styles.pillar, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }, pressed && isMarket && { opacity: 0.9 }]}>
                 <View style={styles.pillarTop}>
@@ -541,8 +547,59 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket }:
             );
           })}
         </View>
+
+        {kind === 'create' && <CreatorCreations th={th} onToast={onToast} />}
       </View>
     </ScrollView>
+  );
+}
+
+/* ─────────────────────────────── your creations (Creator earns) ─────────────────────────────── */
+
+function CreatorCreations({ th, onToast }: { th: ShellTheme; onToast: (m: string) => void }) {
+  const creations = useOne01PlatformStore((s) => s.creations);
+  const collect = useOne01PlatformStore((s) => s.collectEarnings);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!creations.length) return;
+    const t = setInterval(() => setTick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [creations.length]);
+
+  if (!creations.length) return null;
+  const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+
+  const doCollect = (c: UserCreation) => {
+    const got = collect(c.id);
+    if (got > 0) onToast(`Collected +⟡${got} from “${c.title}”`);
+    else onToast('Nothing to collect yet');
+  };
+
+  return (
+    <>
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionIcon}>🧱</Text>
+        <Text style={[styles.sectionTitle, { color: th.text }]}>Your creations</Text>
+        <Text style={[styles.sectionCount, { color: th.muted }]}>({creations.length})</Text>
+      </View>
+      <View style={styles.rowsWrap}>
+        {creations.map((c) => {
+          const pending = pendingEarnings(c);
+          return (
+            <View key={c.id} style={[styles.projRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+              <View style={[styles.pillarEmoji, { backgroundColor: th.surface2, width: 48, height: 48, borderRadius: 14 }]}><Text style={{ fontSize: 22 }}>{c.emoji}</Text></View>
+              <View style={styles.flex}>
+                <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{c.title}</Text>
+                <Text style={[styles.projSub, { color: th.muted }]}>Live on {c.surface} · ⟡{c.rate}/min · earned ⟡{c.collected.toLocaleString()}</Text>
+              </View>
+              <Pressable onPress={() => doCollect(c)} style={({ pressed }) => [styles.ctaPill, { backgroundColor: pending > 0 ? th.accent : th.surface2 }, pressed && { opacity: 0.8 }]}>
+                <Text style={[styles.ctaPillTxt, { color: pending > 0 ? ctaFg : th.muted }]}>Collect ⟡{pending}</Text>
+              </Pressable>
+            </View>
+          );
+        })}
+      </View>
+    </>
   );
 }
 
