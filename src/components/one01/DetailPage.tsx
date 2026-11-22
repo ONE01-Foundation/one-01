@@ -85,7 +85,7 @@ export function DetailPage({ th, kind, item, onBack, onPrimary }: { th: ShellThe
   const leaderboard = kind === 'game' ? [{ r: '1', n: 'ace_27', s: '12,480' }, { r: '2', n: 'nova', s: '11,905' }, { r: '3', n: 'k1ng', s: '10,772' }] : null;
 
   return (
-    <View style={[styles.root, { backgroundColor: th.bg, paddingTop: insets.top }]}>
+    <View style={styles.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
         {/* header */}
         <View style={styles.header}>

@@ -12,7 +12,7 @@
  * then a section (Projects for ONE01 · Games / Shows for products). Background
  * is the product's canvas with a per-product glow at the top.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   Pressable,
   ScrollView,
   Modal,
+  Animated,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -146,10 +147,6 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const topPad = wide ? 96 : 104;
   const bottomPad = (wide ? 40 : 104) + insets.bottom;
 
-  if (detail) {
-    return <DetailPage th={th} kind={detail.kind} item={detail.item} onBack={() => setDetail(null)} onPrimary={detailPrimary} />;
-  }
-
   return (
     <View style={[styles.flex, { backgroundColor: th.bg, paddingTop: insets.top }]}>
       <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
@@ -160,13 +157,18 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} />}
       </View>
 
+      {/* bottom bar sits below the detail overlay */}
+      {!wide && <MobileBottomBar th={th} tab={tab} setTab={setTab} onSwitch={() => setSheet('switch')} bottomInset={insets.bottom} />}
+
+      {/* detail opens as a card sheet (mobile) / centered card (desktop); the top bar stays above it */}
+      {detail && (
+        <DetailOverlay th={th} wide={wide} kind={detail.kind} item={detail.item} topInset={insets.top} onBack={() => setDetail(null)} onPrimary={detailPrimary} />
+      )}
+
       {wide ? (
         <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} onSwitch={() => setSheet('switch')} />
       ) : (
-        <>
-          <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} />
-          <MobileBottomBar th={th} tab={tab} setTab={setTab} onSwitch={() => setSheet('switch')} bottomInset={insets.bottom} />
-        </>
+        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} />
       )}
 
       <ProfileMenu
@@ -177,7 +179,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         onExit={onExit}
       />
       <WalletSheet visible={sheet === 'wallet'} th={th} onClose={() => setSheet(null)} />
-      <AppSwitcher visible={sheet === 'switch'} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
+      <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
     </View>
   );
@@ -252,11 +254,11 @@ function MobileBottomBar({ th, tab, setTab, onSwitch, bottomInset }: { th: Shell
       </Pressable>
       <Pressable
         style={styles.navCenterWrap}
-        onPress={() => { haptic.select(); setTab('home'); }}
+        onPress={() => { haptic.select(); if (tab === 'home') onSwitch(); else setTab('home'); }}
         onLongPress={() => { haptic.press(); onSwitch(); }}
         delayLongPress={320}
       >
-        <View style={styles.navCenter}>
+        <View style={[styles.navCenter, { opacity: tab === 'home' ? 1 : 0.5 }]}>
           <Mark mark={th.mark} size={46} accent={th.homeId === 'one01' ? th.text : th.accent} eye={th.bg} />
         </View>
       </Pressable>
@@ -279,7 +281,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch }: { th: Sh
     <LinearGradient colors={[th.bg, `${th.bg}00`]} style={styles.desktopNav} pointerEvents="box-none">
       <MicroBanner th={th} />
       <View style={styles.desktopRow}>
-        <Pressable onLongPress={() => { haptic.press(); onSwitch(); }} delayLongPress={320} style={styles.desktopLogo}>
+        <Pressable onPress={() => { haptic.select(); onSwitch(); }} style={styles.desktopLogo}>
           {th.homeId === 'one01' ? (
             <One01Wordmark height={26} color={th.text} />
           ) : (
@@ -494,7 +496,40 @@ function WalletSheet({ visible, th, onClose }: { visible: boolean; th: ShellThem
   );
 }
 
-function AppSwitcher({ visible, current, onClose, onPick }: { visible: boolean; current: HomeId; onClose: () => void; onPick: (id: string) => void }) {
+function AppSwitcher({ visible, wide, th, current, onClose, onPick }: { visible: boolean; wide: boolean; th: ShellTheme; current: HomeId; onClose: () => void; onPick: (id: string) => void }) {
+  if (wide) {
+    const rows: { id: HomeId; label: string; mark: MarkId }[] = [
+      { id: 'one01', label: 'ONE01', mark: 'one01' },
+      { id: 'one', label: 'One', mark: 'one' },
+      { id: 'winzi', label: 'Winzi', mark: 'winzi' },
+      { id: 'mixstar', label: 'MixStar', mark: 'mixstar' },
+    ];
+    return (
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+        <Pressable style={[styles.scrim, styles.scrimWideLeft]} onPress={onClose}>
+          <Pressable style={[styles.appsDropdown, { backgroundColor: th.surface, borderColor: th.border }]} onPress={() => {}}>
+            <View style={styles.appsHead}>
+              <Text style={[styles.menuSmall, { color: th.muted }]}>APPS</Text>
+              <View style={styles.flex} />
+              <Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text>
+            </View>
+            {rows.map((a) => (
+              <Pressable key={a.id} onPress={() => onPick(a.id)} style={styles.appsRow}>
+                <View style={[styles.appsTile, { backgroundColor: a.mark === 'one01' ? (th.mode === 'dark' ? '#fff' : DARK_TILE) : DARK_TILE }]}>
+                  <Mark mark={a.mark} size={22} accent={a.mark === 'one01' ? (th.mode === 'dark' ? '#111318' : '#fff') : markAccent(a.mark)} eye={DARK_TILE} />
+                </View>
+                <Text style={[styles.appsRowTxt, { color: th.text }]}>{a.label}</Text>
+                <View style={styles.flex} />
+                {current === a.id ? <Text style={{ color: '#22c55e', fontWeight: '800' }}>✓</Text> : null}
+              </Pressable>
+            ))}
+            <View style={[styles.menuDivider, { backgroundColor: th.border }]} />
+            <Pressable onPress={onClose} style={styles.appsRow}><Text style={[styles.appsRowTxt, { color: th.muted }]}>+ Add to favorites</Text></Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  }
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.switchRoot}>
@@ -540,6 +575,31 @@ function ExternalModal({ app, onClose }: { app: EcosystemApp | null; onClose: ()
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary }: { th: ShellTheme; wide: boolean; kind: DetailKind; item: HomeItem; topInset: number; onBack: () => void; onPrimary: () => void }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => { Animated.timing(anim, { toValue: 1, duration: 260, useNativeDriver: true }).start(); }, [anim]);
+
+  if (wide) {
+    return (
+      <View style={styles.detailScrim}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onBack} />
+        <Animated.View style={[styles.detailCard, { backgroundColor: th.bg, borderColor: th.border, opacity: anim, transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
+          <DetailPage th={th} kind={kind} item={item} onBack={onBack} onPrimary={onPrimary} />
+        </Animated.View>
+      </View>
+    );
+  }
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} onPress={onBack} />
+      <Animated.View style={[styles.detailSheet, { top: topInset + 74, backgroundColor: th.bg, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [36, 0] }) }] }]}>
+        <View style={[styles.detailGrab, { backgroundColor: th.border }]} />
+        <DetailPage th={th} kind={kind} item={item} onBack={onBack} onPrimary={onPrimary} />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -637,6 +697,20 @@ const styles = StyleSheet.create({
   /* sheets */
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 26 },
   scrimWide: { alignItems: 'flex-end', justifyContent: 'flex-start', paddingHorizontal: 40 },
+  scrimWideLeft: { alignItems: 'flex-start', justifyContent: 'flex-start', paddingLeft: 40, paddingTop: 58, backgroundColor: 'transparent' },
+
+  /* detail overlay */
+  detailScrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  detailCard: { width: '100%', maxWidth: 560, height: '86%', borderRadius: 24, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  detailSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  detailGrab: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: 8, marginBottom: -2 },
+
+  /* desktop apps dropdown */
+  appsDropdown: { width: 248, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 10, gap: 2 },
+  appsHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingTop: 4, paddingBottom: 8 },
+  appsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, paddingHorizontal: 8, borderRadius: 11 },
+  appsTile: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  appsRowTxt: { fontSize: 15, fontWeight: '700' },
   menu: { width: '100%', maxWidth: 360, borderWidth: StyleSheet.hairlineWidth, borderRadius: 22, padding: 18, gap: 8 },
   dropdown: { width: 240, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 12, gap: 2 },
   avatarLg: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 4 },
