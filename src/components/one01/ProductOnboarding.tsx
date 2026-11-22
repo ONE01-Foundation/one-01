@@ -86,14 +86,14 @@ function Glow({ color, mode, w, h, id }: { color: string; mode: OnboardMode; w: 
     <View pointerEvents="none" style={[styles.glowWrap, { height: h }]}>
       <Svg width={w} height={h}>
         <Defs>
-          <RadialGradient id={gid} cx={w / 2} cy={h} rx={w * 0.82} ry={h * 0.92} fx={w / 2} fy={h} gradientUnits="userSpaceOnUse">
-            <Stop offset="0" stopColor={color} stopOpacity={dark ? 0.5 : 0.18} />
-            <Stop offset="0.4" stopColor={color} stopOpacity={dark ? 0.16 : 0.06} />
-            <Stop offset="0.72" stopColor={color} stopOpacity={dark ? 0.04 : 0.015} />
+          <RadialGradient id={gid} cx={w / 2} cy={h} rx={w * 0.98} ry={h * 0.98} fx={w / 2} fy={h} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={color} stopOpacity={dark ? 0.62 : 0.22} />
+            <Stop offset="0.42" stopColor={color} stopOpacity={dark ? 0.24 : 0.08} />
+            <Stop offset="0.72" stopColor={color} stopOpacity={dark ? 0.08 : 0.025} />
             <Stop offset="1" stopColor={color} stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        <Ellipse cx={w / 2} cy={h} rx={w * 0.82} ry={h * 0.92} fill={`url(#${gid})`} />
+        <Ellipse cx={w / 2} cy={h} rx={w * 0.98} ry={h * 0.98} fill={`url(#${gid})`} />
       </Svg>
     </View>
   );
@@ -112,7 +112,7 @@ export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig;
 
   const wide = winW >= WIDE_AT;
   const frameW = wide ? FRAME_MAX : winW;
-  const glowH = Math.round(winH * 0.52);
+  const glowH = Math.round(winH * 0.62);
 
   useEffect(() => {
     if (step !== 'splash') return;
@@ -188,21 +188,33 @@ function Welcome({
   bottomInset: number;
 }) {
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const programmatic = useRef(false);
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
-  const pageH = winH - insets.top; // each slide fills the frame so content centers
+  const pageH = winH - insets.top;
   const count = config.slides.length;
   const isLast = slide >= count - 1;
 
-  const syncIndex = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const i = Math.round(e.nativeEvent.contentOffset.x / frameW);
+  // Scroll position drives a CROSS-FADE (content dissolves in place; never slides).
+  // Swipe tracks live; the Next button animates the fade itself (programmatic
+  // scroll doesn't fire scroll events on web).
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (programmatic.current) return;
+    const x = e.nativeEvent.contentOffset.x;
+    scrollX.setValue(x);
+    const i = Math.round(x / frameW);
     if (i !== slide && i >= 0 && i < count) setSlide(i);
   };
 
   const goTo = (i: number) => {
     const n = Math.max(0, Math.min(count - 1, i));
-    scrollRef.current?.scrollTo({ x: n * frameW, animated: true });
     setSlide(n);
+    programmatic.current = true;
+    scrollRef.current?.scrollTo({ x: n * frameW, animated: false });
+    Animated.timing(scrollX, { toValue: n * frameW, duration: 300, useNativeDriver: false }).start(() => {
+      programmatic.current = false;
+    });
   };
 
   const onCta = () => {
@@ -213,42 +225,55 @@ function Welcome({
 
   return (
     <View style={styles.flex}>
-      {/* swipeable full-page slides (emoji + mark + copy move together) */}
+      {/* transparent gesture layer — provides the scroll/swipe, no visible movement */}
       <ScrollView
         ref={scrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
-        onScroll={syncIndex}
-        onMomentumScrollEnd={syncIndex}
-        style={styles.flex}
+        onScroll={onScroll}
+        style={StyleSheet.absoluteFill}
       >
-        {config.slides.map((item, i) => (
-          <View key={i} style={[styles.page, { width: frameW, height: pageH }]}>
-            <Text style={styles.emojiTop}>{item.emojiTop}</Text>
-            <Text style={styles.emojiBottom}>{item.emojiBottom}</Text>
-            <View style={styles.pageCenter}>
-              <View style={{ marginBottom: 26 }}>
-                <Mark mark={config.mark} size={54} accent={config.accent} />
-              </View>
-              <Text style={[styles.welcomeTitle, { color: p.text }]}>{item.title}</Text>
-              <Text style={[styles.welcomeSub, { color: p.muted }]}>{item.subtitle}</Text>
-              <View style={styles.dots}>
-                {config.slides.map((_, d) => (
-                  <View
-                    key={d}
-                    style={[styles.dot, { backgroundColor: d === i ? p.text : p.muted, opacity: d === i ? 1 : 0.45, width: d === i ? 18 : 6 }]}
-                  />
-                ))}
-              </View>
-            </View>
-          </View>
+        {config.slides.map((_, i) => (
+          <View key={i} style={{ width: frameW, height: pageH }} />
         ))}
       </ScrollView>
 
-      {/* fixed footer */}
-      <View style={[styles.footerOverlay, { paddingBottom: Math.max(bottomInset, 18) + 10 }]}>
+      {/* cross-fading content — stacked, centered, opacity follows scroll */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {config.slides.map((item, i) => {
+          const opacity = scrollX.interpolate({
+            inputRange: [(i - 1) * frameW, i * frameW, (i + 1) * frameW],
+            outputRange: [0, 1, 0],
+            extrapolate: 'clamp',
+          });
+          return (
+            <Animated.View key={i} style={[styles.fadeLayer, { opacity }]}>
+              <Text style={styles.emojiTop}>{item.emojiTop}</Text>
+              <Text style={styles.emojiBottom}>{item.emojiBottom}</Text>
+              <View style={styles.welcomeBlock}>
+                <View style={{ marginBottom: 26 }}>
+                  <Mark mark={config.mark} size={54} accent={config.accent} />
+                </View>
+                <Text style={[styles.welcomeTitle, { color: p.text }]}>{item.title}</Text>
+                <Text style={[styles.welcomeSub, { color: p.muted }]}>{item.subtitle}</Text>
+                <View style={styles.dots}>
+                  {config.slides.map((_, d) => (
+                    <View
+                      key={d}
+                      style={[styles.dot, { backgroundColor: d === i ? p.text : p.muted, opacity: d === i ? 1 : 0.45, width: d === i ? 18 : 6 }]}
+                    />
+                  ))}
+                </View>
+              </View>
+            </Animated.View>
+          );
+        })}
+      </View>
+
+      {/* footer */}
+      <View style={[styles.footerOverlay, { paddingBottom: Math.max(bottomInset, 20) + 40 }]}>
         <Pressable onPress={onCta} style={({ pressed }) => [styles.cta, { backgroundColor: p.ink }, pressed && { opacity: 0.85 }]}>
           <Text style={[styles.ctaTxt, { color: p.inkText }]}>{isLast ? config.ctaLabel : 'Next'}</Text>
         </Pressable>
@@ -400,10 +425,10 @@ const styles = StyleSheet.create({
   splashMark: { marginTop: -20 },
 
   /* welcome */
-  page: { alignItems: 'center', justifyContent: 'center' },
-  pageCenter: { alignItems: 'center', paddingHorizontal: 34 },
-  emojiTop: { position: 'absolute', top: '16%', right: '15%', fontSize: 42 },
-  emojiBottom: { position: 'absolute', top: '60%', left: '13%', fontSize: 42 },
+  fadeLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingBottom: 150 },
+  welcomeBlock: { alignItems: 'center', paddingHorizontal: 34 },
+  emojiTop: { position: 'absolute', top: '15%', right: '15%', fontSize: 42 },
+  emojiBottom: { position: 'absolute', top: '57%', left: '13%', fontSize: 42 },
   welcomeTitle: { fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: -0.4 },
   welcomeSub: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 10, maxWidth: 300 },
   dots: { flexDirection: 'row', gap: 6, marginTop: 20, alignItems: 'center' },

@@ -64,7 +64,7 @@ export const ONBOARDING: Record<OnboardConfig['id'], OnboardConfig> = {
     name: 'ONE',
     mode: 'dark',
     accent: '#2ED8A7',
-    glow: '#10B981',
+    glow: '#6B7280', // ONE is monochrome — a neutral black-gray glow, not a brand color
     mark: 'one',
     logo: 'vertical',
     connectTagline: 'YOUR DIGITAL SELF',
