@@ -11,6 +11,22 @@
 
 export type ProductId = 'one' | 'winzi' | 'mixstar';
 export type MarkId = 'one' | 'winzi' | 'mixstar' | 'xit' | 'sodex' | 'one01' | 'dargwin';
+
+/** Resolved per-home palette (shared by the shell and detail pages). */
+export interface ShellTheme {
+  homeId: 'one01' | ProductId;
+  mode: 'light' | 'dark';
+  mark: MarkId;
+  name: string;
+  accent: string;
+  glow: string;
+  bg: string;
+  surface: string;
+  surface2: string;
+  text: string;
+  muted: string;
+  border: string;
+}
 export type CategoryId = 'all' | 'business' | 'finance' | 'health' | 'knowledge' | 'leisure';
 
 export interface NavItem {

@@ -43,6 +43,7 @@ import {
   FilterIcon,
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
+import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
 import { onboardingFor } from '../../data/one01/onboarding';
 import {
   PRODUCTS,
@@ -56,6 +57,7 @@ import {
   type MarkId,
   type HomeItem,
   type EcosystemApp,
+  type ShellTheme,
 } from '../../data/one01/platform';
 
 type HomeId = 'one01' | ProductId;
@@ -65,12 +67,6 @@ const GLOWS: Record<HomeId, string> = { one01: '#6366F1', one: '#6B7280', winzi:
 const DARK_TILE = '#131317';
 const CW = 700; // desktop content column
 const WIDE_AT = 900;
-
-interface ShellTheme {
-  homeId: HomeId; mode: 'light' | 'dark'; mark: MarkId; name: string;
-  accent: string; glow: string;
-  bg: string; surface: string; surface2: string; text: string; muted: string; border: string;
-}
 
 function shellTheme(homeId: HomeId): ShellTheme {
   if (homeId === 'one01') {
@@ -113,6 +109,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [onboarded, setOnboarded] = useState<Set<string>>(() => new Set());
   const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch'>(null);
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
+  const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
 
   const enterProduct = (id: ProductId) => {
     setOnboarded((prev) => new Set(prev).add(id));
@@ -122,9 +119,17 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     haptic.select();
     if (onboarded.has(id)) { setHomeId(id); setTab('home'); } else setOnboardFor(id);
   };
-  const openItem = (item: HomeItem) => {
-    if (item.product) openProduct(item.product);
-    else { const app = ECOSYSTEM_APPS.find((a) => a.id === item.id); if (app) setExternalApp(app); }
+  const openDetail = (kind: DetailKind, item: HomeItem) => { haptic.select(); setDetail({ kind, item }); };
+  const detailPrimary = () => {
+    if (!detail) return;
+    const it = detail.item;
+    if (detail.kind === 'project') {
+      setDetail(null);
+      if (it.product) openProduct(it.product);
+      else { const app = ECOSYSTEM_APPS.find((a) => a.id === it.id); if (app) setExternalApp(app); }
+    } else {
+      haptic.success(); // demo: Play / Watch / Continue
+    }
   };
   const pickApp = (id: string) => {
     setSheet(null);
@@ -141,12 +146,16 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const topPad = wide ? 96 : 104;
   const bottomPad = (wide ? 40 : 104) + insets.bottom;
 
+  if (detail) {
+    return <DetailPage th={th} kind={detail.kind} item={detail.item} onBack={() => setDetail(null)} onPrimary={detailPrimary} />;
+  }
+
   return (
     <View style={[styles.flex, { backgroundColor: th.bg, paddingTop: insets.top }]}>
       <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
 
       <View style={styles.flex}>
-        {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpenItem={openItem} />}
+        {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} />}
         {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} />}
         {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} />}
       </View>
@@ -298,12 +307,13 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch }: { th: Sh
 
 /* ─────────────────────────────── home content ─────────────────────────────── */
 
-function HomeContent({ th, wide, topPad, bottomPad, onOpenItem }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpenItem: (i: HomeItem) => void }) {
+function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void }) {
   const home = HOME[th.homeId];
   const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
   const { width } = useWindowDimensions();
   const colW = wide ? CW : Math.min(width, 600) - 36;
   const [cat, setCat] = useState('all');
+  const cardKind: DetailKind = th.homeId === 'winzi' ? 'game' : th.homeId === 'mixstar' ? 'show' : th.homeId === 'one' ? 'process' : 'game';
 
   return (
     <ScrollView contentContainerStyle={{ paddingTop: topPad, paddingBottom: bottomPad, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
@@ -359,7 +369,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpenItem }: { th: ShellThe
         {home.layout === 'rows' ? (
           <View style={[styles.rowsWrap, wide && styles.rowsWrapWide]}>
             {home.items.map((it) => (
-              <Pressable key={it.id} onPress={() => onOpenItem(it)} style={({ pressed }) => [styles.projRow, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
+              <Pressable key={it.id} onPress={() => onOpen('project', it)} style={({ pressed }) => [styles.projRow, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
                 <View style={[styles.projTile, { backgroundColor: DARK_TILE }]}>
                   <Mark mark={it.mark ?? 'one01'} size={34} accent={markAccent(it.mark ?? 'one01')} eye={DARK_TILE} />
                 </View>
@@ -376,18 +386,20 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpenItem }: { th: ShellThe
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }} style={{ overflow: 'visible' }}>
             {home.items.map((it) => (
-              <LinearGradient key={it.id} colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.artCard}>
-                {it.live && (
-                  <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{it.metric}</Text></View>
-                )}
-                <Text style={styles.artEmoji}>{it.emoji}</Text>
-                <View style={styles.artFooter}>
-                  <Text style={styles.artTitle}>{it.title}</Text>
-                  {!it.live && it.metric ? (
-                    <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View>
-                  ) : null}
-                </View>
-              </LinearGradient>
+              <Pressable key={it.id} onPress={() => onOpen(cardKind, it)}>
+                <LinearGradient colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.artCard}>
+                  {it.live && (
+                    <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{it.metric}</Text></View>
+                  )}
+                  <Text style={styles.artEmoji}>{it.emoji}</Text>
+                  <View style={styles.artFooter}>
+                    <Text style={styles.artTitle}>{it.title}</Text>
+                    {!it.live && it.metric ? (
+                      <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View>
+                    ) : null}
+                  </View>
+                </LinearGradient>
+              </Pressable>
             ))}
           </ScrollView>
         )}
