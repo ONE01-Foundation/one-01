@@ -274,6 +274,108 @@ export const CREATOR: Record<ProductId, CreatorSurface> = {
   },
 };
 
+/* ───────────────────────────── Home skeleton content (per product) ───────────────────────────── */
+
+export interface HomeCategory {
+  id: string;
+  label: string;
+  emoji?: string;
+}
+
+export interface HomeItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  /** Card artwork stand-in (games/shows). */
+  emoji?: string;
+  /** Project-row brand mark (ONE01). */
+  mark?: MarkId;
+  /** Tap → open this product's shell. */
+  product?: ProductId;
+  /** Card gradient [from, to] (games/shows). */
+  bg?: [string, string];
+  /** Corner metric, e.g. "48", "13k". */
+  metric?: string;
+  live?: boolean;
+}
+
+export interface HomeConfig {
+  categories: HomeCategory[];
+  sectionIcon: string;
+  sectionTitle: string;
+  sectionCount?: number;
+  /** 'rows' = vertical project rows (ONE01); 'cards' = horizontal artwork cards. */
+  layout: 'rows' | 'cards';
+  items: HomeItem[];
+}
+
+export const HOME: Record<'one01' | ProductId, HomeConfig> = {
+  one01: {
+    categories: [
+      { id: 'all', label: 'All' },
+      { id: 'health', label: 'Health', emoji: '❤️' },
+      { id: 'business', label: 'Business', emoji: '💼' },
+    ],
+    sectionIcon: '🚀',
+    sectionTitle: 'Projects',
+    sectionCount: 4,
+    layout: 'rows',
+    items: [
+      { id: 'winzi', title: 'Winzi', subtitle: 'Play Games, Win Money', mark: 'winzi', product: 'winzi' },
+      { id: 'mixstar', title: 'MixStar', subtitle: 'AI Reality TV', mark: 'mixstar', product: 'mixstar' },
+      { id: 'xit', title: 'Xit', subtitle: 'News & trends coins', mark: 'xit' },
+      { id: 'sodex', title: 'Sodex', subtitle: 'Spiritual intelligence', mark: 'sodex' },
+    ],
+  },
+  one: {
+    categories: [
+      { id: 'all', label: 'All' },
+      { id: 'business', label: 'Business', emoji: '💼' },
+      { id: 'finance', label: 'Finance', emoji: '💰' },
+    ],
+    sectionIcon: '◎',
+    sectionTitle: 'Processes',
+    layout: 'cards',
+    items: [
+      { id: 'license', title: 'Renew license', emoji: '🪪', bg: ['#065F46', '#032A20'], metric: '3' },
+      { id: 'car', title: 'Car deal', emoji: '🚗', bg: ['#1E40AF', '#0F1F4D'], metric: '2' },
+      { id: 'handyman', title: 'Handyman', emoji: '🔧', bg: ['#374151', '#1F2937'], metric: '1' },
+    ],
+  },
+  winzi: {
+    categories: [
+      { id: 'all', label: 'All' },
+      { id: 'action', label: 'Action', emoji: '🔫' },
+      { id: 'sports', label: 'Sports', emoji: '🏀' },
+    ],
+    sectionIcon: '🎮',
+    sectionTitle: 'Games',
+    layout: 'cards',
+    items: [
+      { id: 'pong', title: 'Pong', emoji: '🏓', bg: ['#1E3A8A', '#0F1F4D'], metric: '48' },
+      { id: 'sniper', title: 'Sniper', emoji: '🎯', bg: ['#14532D', '#0A2A17'], metric: '85' },
+      { id: 'jets', title: 'Jets', emoji: '✈️', bg: ['#3730A3', '#1E1B4B'], metric: '62' },
+      { id: 'racer', title: 'Racer', emoji: '🏎️', bg: ['#7C2D12', '#3B1206'], metric: '30' },
+    ],
+  },
+  mixstar: {
+    categories: [
+      { id: 'all', label: 'All' },
+      { id: 'comedy', label: 'Comedy', emoji: '😂' },
+      { id: 'sports', label: 'Sports', emoji: '🏀' },
+    ],
+    sectionIcon: '📺',
+    sectionTitle: 'Shows',
+    sectionCount: 18,
+    layout: 'cards',
+    items: [
+      { id: 'survive', title: 'Survive', emoji: '💀', bg: ['#166534', '#0A2A17'], metric: '13k', live: true },
+      { id: 'villa', title: 'Villa', emoji: '🏝️', bg: ['#9D174D', '#4A0E27'], metric: '8k', live: true },
+      { id: 'studio', title: 'Studio', emoji: '🎬', bg: ['#5B21B6', '#2E1065'], metric: '21k', live: true },
+    ],
+  },
+};
+
 /* ───────────────────────────── Hub (ONE01 landing) copy ───────────────────────────── */
 
 export const HUB = {

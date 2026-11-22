@@ -1,18 +1,18 @@
 /**
- * One01Platform — an Expo (mobile + web) port of the ONE Platform
- * (`Main/one/apps/web`). ONE01 is the shared layer; ONE / Winzi / MixStar are
- * apps on it. Two surfaces:
- *   • Hub   — the ONE01 ecosystem: brand header, intro, and a grid of apps
- *             (Winzi, MixStar, Xit, Sodex, Market, Creator). Tap one to open it.
- *   • Shell — a per-product themed app (own canvas + accent): featured slides,
- *             category filters, and tabs Home / Market / Wallet / Creator /
- *             Profile driven by the product's nav, with a product bottom nav.
+ * One01Platform — an Expo port of the ONE Platform. ONE01 and every product
+ * (ONE / Winzi / MixStar) share ONE home skeleton:
+ *   • Top bar  — wallet (one side) + profile avatar with badges (the other).
+ *   • Content  — a Featured / News banner, category pills, then a section
+ *                (Projects for ONE01 · Games for Winzi · Shows for MixStar) of
+ *                artwork cards / project rows.
+ *   • Bottom bar — shop (Market) · centered product mark (Home) · + (Create).
+ * Background is the product's canvas with a per-product glow at the top.
  *
- * Self-contained (internal routing + local state). English/LTR to mirror the
- * web source. Reached from Settings → "ONE01 Platform" (homeMode 'platform');
- * the consumer ONE app and the ONE01 Studio factory are untouched.
+ * ONE01's home lists the Projects (products); tapping one runs that product's
+ * onboarding then opens its home shell. Back to ONE01 / exit live in the profile
+ * menu. Reached from Settings → "ONE01 Platform" (homeMode 'platform').
  */
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -23,599 +23,402 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useThemeStore } from '../../stores/themeStore';
-import type { ThemeColors } from '../../utils/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { haptic } from '../../utils/haptics';
 import {
   One01Mark,
-  One01Wordmark,
   OneMark,
   WinziMark,
   MixStarMark,
   XitMark,
   SodexMark,
-  CategoryIcon,
+  WalletIcon,
+  UserIcon,
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { onboardingFor } from '../../data/one01/onboarding';
 import {
   PRODUCTS,
-  PRODUCT_ORDER,
   ECOSYSTEM_APPS,
   FEATURED_SLIDES,
-  CATEGORY_FILTERS,
   MARKET,
   CREATOR,
-  HUB,
+  HOME,
   type ProductId,
   type MarkId,
-  type CategoryId,
+  type HomeItem,
   type EcosystemApp,
-  type ProductTheme,
-  type NavItem,
 } from '../../data/one01/platform';
 
-/* Dark tile used for brand marks designed on black (Winzi, Xit, Sodex, MixStar). */
-const DARK_TILE = '#131317';
+type HomeId = 'one01' | ProductId;
+type Tab = 'home' | 'market' | 'create';
 
-/* ─────────────────────────────── mark resolver ─────────────────────────────── */
+const GLOWS: Record<HomeId, string> = { one01: '#6366F1', one: '#6B7280', winzi: '#3B5BDB', mixstar: '#8B5CF6' };
 
-function Mark({ mark, size, color, eye }: { mark: MarkId; size: number; color?: string; eye?: string }) {
+interface ShellTheme {
+  homeId: HomeId;
+  mode: 'light' | 'dark';
+  mark: MarkId;
+  name: string;
+  accent: string;
+  glow: string;
+  bg: string;
+  surface: string;
+  surface2: string;
+  text: string;
+  muted: string;
+  border: string;
+}
+
+function shellTheme(homeId: HomeId): ShellTheme {
+  if (homeId === 'one01') {
+    return {
+      homeId, mode: 'light', mark: 'one01', name: 'ONE01', accent: '#10B981', glow: GLOWS.one01,
+      bg: '#F6F7F9', surface: '#FFFFFF', surface2: '#EDEFF3', text: '#0E1116', muted: '#6B7280', border: '#E4E7EC',
+    };
+  }
+  const p = PRODUCTS[homeId];
+  return { homeId, mode: 'dark', mark: p.mark, name: p.name, accent: p.accent, glow: GLOWS[homeId], ...p.canvas };
+}
+
+function Mark({ mark, size, accent, eye }: { mark: MarkId; size: number; accent: string; eye?: string }) {
   switch (mark) {
-    case 'one':
-      return <OneMark size={size} color={color ?? '#10B981'} eye={eye ?? '#0A0C0B'} />;
-    case 'winzi':
-      return <WinziMark size={size} />;
-    case 'mixstar':
-      return <MixStarMark size={size} />;
-    case 'xit':
-      return <XitMark size={size} />;
-    case 'sodex':
-      return <SodexMark size={size} color={color ?? '#FFFFFF'} />;
-    case 'one01':
-    default:
-      return <One01Mark size={size} color={color ?? '#FFFFFF'} />;
+    case 'one': return <OneMark size={size} color={accent} eye={eye ?? '#000'} />;
+    case 'winzi': return <WinziMark size={size} />;
+    case 'mixstar': return <MixStarMark size={size} />;
+    case 'xit': return <XitMark size={size} />;
+    case 'sodex': return <SodexMark size={size} color="#FFFFFF" />;
+    case 'one01': default: return <One01Mark size={size} color={accent} />;
   }
 }
 
+const DARK_TILE = '#131317';
+
 /* ══════════════════════════════════ root ══════════════════════════════════ */
 
-type Tab = NavItem['tab'];
-
 export function One01Platform({ onExit }: { onExit: () => void }) {
-  const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
 
   const [entered, setEntered] = useState(false);
-  const [productId, setProductId] = useState<ProductId | null>(null);
+  const [homeId, setHomeId] = useState<HomeId>('one01');
   const [tab, setTab] = useState<Tab>('home');
   const [onboardFor, setOnboardFor] = useState<ProductId | null>(null);
   const [onboarded, setOnboarded] = useState<Set<string>>(() => new Set());
+  const [sheet, setSheet] = useState<null | 'wallet' | 'profile'>(null);
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
 
   const enterProduct = (id: ProductId) => {
     setOnboarded((prev) => new Set(prev).add(id));
     setOnboardFor(null);
-    setProductId(id);
+    setHomeId(id);
     setTab('home');
   };
 
   const openProduct = (id: ProductId) => {
     haptic.select();
-    if (onboarded.has(id)) {
-      setProductId(id);
-      setTab('home');
-    } else {
-      setOnboardFor(id);
+    if (onboarded.has(id)) { setHomeId(id); setTab('home'); }
+    else setOnboardFor(id);
+  };
+
+  const openItem = (item: HomeItem) => {
+    if (item.product) openProduct(item.product);
+    else {
+      const app = ECOSYSTEM_APPS.find((a) => a.id === item.id);
+      if (app) setExternalApp(app);
     }
   };
 
-  const openApp = (app: EcosystemApp) => {
-    haptic.press();
-    if (app.product) openProduct(app.product);
-    else setExternalApp(app);
-  };
-
-  // 1) ONE01 platform-entry onboarding (once per mount — re-open from Settings to replay).
   if (!entered) {
     return <ProductOnboarding config={onboardingFor('one01')} onFinish={() => setEntered(true)} />;
   }
-
-  // 2) Per-product onboarding (first time a product is opened this session).
   if (onboardFor) {
     return <ProductOnboarding config={onboardingFor(onboardFor)} onFinish={() => enterProduct(onboardFor)} />;
   }
 
-  if (productId) {
-    return (
-      <>
-        <ProductShell
-          product={PRODUCTS[productId]}
-          tab={tab}
-          setTab={setTab}
-          onBack={() => {
-            haptic.select();
-            setProductId(null);
-          }}
-          onSwitchProduct={openProduct}
-          insets={insets}
-        />
-        <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
-      </>
-    );
-  }
+  const th = shellTheme(homeId);
 
   return (
-    <View style={[styles.flex, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-      <Hub colors={colors} onOpenApp={openApp} onOpenProduct={openProduct} onExit={onExit} bottomInset={insets.bottom} />
+    <View style={[styles.flex, { backgroundColor: th.bg, paddingTop: insets.top }]}>
+      <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
+      <TopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} />
+
+      <View style={styles.flex}>
+        {tab === 'home' && <HomeContent th={th} onOpenItem={openItem} bottomInset={insets.bottom} />}
+        {tab === 'market' && <SurfaceView th={th} kind="market" bottomInset={insets.bottom} />}
+        {tab === 'create' && <SurfaceView th={th} kind="create" bottomInset={insets.bottom} />}
+      </View>
+
+      <BottomBar th={th} tab={tab} setTab={setTab} bottomInset={insets.bottom} />
+
+      <AccountSheet
+        visible={sheet === 'profile'}
+        th={th}
+        onClose={() => setSheet(null)}
+        onOne01={() => { haptic.select(); setHomeId('one01'); setTab('home'); setSheet(null); }}
+        onExit={onExit}
+      />
+      <WalletSheet visible={sheet === 'wallet'} th={th} onClose={() => setSheet(null)} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
     </View>
   );
 }
 
-/* ═══════════════════════════════════ hub ═══════════════════════════════════ */
+/* ─────────────────────────────── top glow ─────────────────────────────── */
 
-function Hub({
-  colors,
-  onOpenApp,
-  onOpenProduct,
-  onExit,
-  bottomInset,
-}: {
-  colors: ThemeColors;
-  onOpenApp: (app: EcosystemApp) => void;
-  onOpenProduct: (id: ProductId) => void;
-  onExit: () => void;
-  bottomInset: number;
-}) {
-  const dark = colors.background === '#121212';
-  const tileText = '#F4F5F7';
-
+function TopGlow({ th, w, h }: { th: ShellTheme; w: number; h: number }) {
+  const gid = `tg_${th.homeId}`;
+  const dark = th.mode === 'dark';
   return (
-    <>
-      {/* top bar */}
-      <View style={[styles.hubBar, { borderBottomColor: colors.border }]}>
-        <View style={styles.row}>
-          <One01Wordmark height={26} color={colors.text} />
-        </View>
-        <View style={styles.rowGap}>
-          <View style={[styles.walletPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.walletGlyph, { color: '#10B981' }]}>◎</Text>
-            <Text style={[styles.walletAmt, { color: colors.text }]}>2,480</Text>
-          </View>
-          <Pressable onPress={onExit} hitSlop={10} style={[styles.exitBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-            <Text style={[styles.exitTxt, { color: colors.textSecondary }]}>✕</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={{ padding: 18, paddingBottom: bottomInset + 32 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* hero */}
-        <Text style={[styles.hubKicker, { color: '#10B981' }]}>ONE01 · THE SHARED LAYER</Text>
-        <Text style={[styles.hubTitle, { color: colors.text }]}>{HUB.tagline}</Text>
-        <Text style={[styles.hubIntro, { color: colors.textSecondary }]}>{HUB.intro}</Text>
-
-        <View style={styles.statRow}>
-          {HUB.stats.map((s) => (
-            <View key={s.label} style={[styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.statVal, { color: colors.text }]}>{s.value}</Text>
-              <Text style={[styles.statLbl, { color: colors.textSecondary }]}>{s.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* product switcher strip */}
-        <Text style={[styles.sectionLbl, { color: colors.textSecondary }]}>Products on ONE01</Text>
-        <View style={styles.switchRow}>
-          {PRODUCT_ORDER.map((id) => {
-            const p = PRODUCTS[id];
-            return (
-              <Pressable
-                key={id}
-                onPress={() => onOpenProduct(id)}
-                style={({ pressed }) => [
-                  styles.switchChip,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <View style={[styles.switchMark, { backgroundColor: DARK_TILE }]}>
-                  <Mark mark={p.mark} size={22} color={p.mark === 'one' ? p.accent : undefined} eye={DARK_TILE} />
-                </View>
-                <Text style={[styles.switchName, { color: colors.text }]}>{p.name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* ecosystem grid */}
-        <Text style={[styles.sectionLbl, { color: colors.textSecondary, marginTop: 22 }]}>Featured apps</Text>
-        <View style={styles.grid}>
-          {ECOSYSTEM_APPS.map((app) => (
-            <Pressable
-              key={app.id}
-              onPress={() => onOpenApp(app)}
-              style={({ pressed }) => [
-                styles.appCard,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-                pressed && { opacity: 0.8, transform: [{ scale: 0.99 }] },
-              ]}
-            >
-              <View
-                style={[
-                  styles.appTile,
-                  { backgroundColor: app.tile === 'accent' ? app.accent : DARK_TILE },
-                ]}
-              >
-                <Mark
-                  mark={app.mark}
-                  size={30}
-                  color={app.tile === 'accent' ? '#FFFFFF' : app.mark === 'one01' ? '#FFFFFF' : undefined}
-                  eye={DARK_TILE}
-                />
-              </View>
-              <View style={styles.appBody}>
-                <Text style={[styles.appName, { color: colors.text }]} numberOfLines={1}>{app.name}</Text>
-                <Text style={[styles.appTag, { color: colors.textSecondary }]} numberOfLines={1}>{app.tagline}</Text>
-                <Text style={[styles.appDomain, { color: colors.textSecondary }]} numberOfLines={1}>{app.domain}</Text>
-              </View>
-              <View style={[styles.appCta, { borderColor: app.accent }]}>
-                <Text style={[styles.appCtaTxt, { color: app.accent }]}>{app.cta}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={[styles.footnote, { color: colors.textSecondary }]}>
-          Same wallet, identity, and settlement rails across every app. Virtual balances — no crypto yet.
-        </Text>
-      </ScrollView>
-    </>
-  );
-}
-
-/* ═════════════════════════════════ product shell ═════════════════════════════════ */
-
-function ProductShell({
-  product,
-  tab,
-  setTab,
-  onBack,
-  onSwitchProduct,
-  insets,
-}: {
-  product: ProductTheme;
-  tab: Tab;
-  setTab: (t: Tab) => void;
-  onBack: () => void;
-  onSwitchProduct: (id: ProductId) => void;
-  insets: { top: number; bottom: number };
-}) {
-  const c = product.canvas;
-
-  return (
-    <View style={[styles.flex, { backgroundColor: c.bg, paddingTop: insets.top }]}>
-      {/* header */}
-      <View style={[styles.shellHead, { borderBottomColor: c.border }]}>
-        <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
-          <Text style={[styles.backChevron, { color: c.text }]}>‹</Text>
-        </Pressable>
-        <View style={[styles.headMark, { backgroundColor: DARK_TILE }]}>
-          <Mark mark={product.mark} size={22} color={product.mark === 'one' ? product.accent : undefined} eye={DARK_TILE} />
-        </View>
-        <View style={styles.flex}>
-          <Text style={[styles.headName, { color: c.text }]}>{product.name}</Text>
-          <Text style={[styles.headRail, { color: c.muted }]}>on ONE01</Text>
-        </View>
-        <View style={[styles.walletPill, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <Text style={[styles.walletGlyph, { color: product.accent }]}>◎</Text>
-          <Text style={[styles.walletAmt, { color: c.text }]}>{tab === 'wallet' ? '2,480' : '480'}</Text>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
-        showsVerticalScrollIndicator={false}
-      >
-        {tab === 'home' && <HomeTab product={product} onSwitchProduct={onSwitchProduct} setTab={setTab} />}
-        {tab === 'market' && <SurfaceTab product={product} kind="market" />}
-        {tab === 'creator' && <SurfaceTab product={product} kind="creator" />}
-        {tab === 'wallet' && <WalletTab product={product} />}
-        {tab === 'profile' && <ProfileTab product={product} onBack={onBack} />}
-      </ScrollView>
-
-      {/* bottom nav */}
-      <BottomNav product={product} tab={tab} setTab={setTab} bottomInset={insets.bottom} />
+    <View pointerEvents="none" style={[styles.topGlow, { height: h }]}>
+      <Svg width={w} height={h}>
+        <Defs>
+          <RadialGradient id={gid} cx={w / 2} cy={0} rx={w * 0.95} ry={h} fx={w / 2} fy={0} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={th.glow} stopOpacity={dark ? 0.5 : 0.16} />
+            <Stop offset="0.5" stopColor={th.glow} stopOpacity={dark ? 0.13 : 0.05} />
+            <Stop offset="1" stopColor={th.glow} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width={w} height={h} fill={`url(#${gid})`} />
+      </Svg>
     </View>
   );
 }
 
-/* ───────────────── home tab ───────────────── */
+/* ─────────────────────────────── top bar ─────────────────────────────── */
 
-function HomeTab({
-  product,
-  onSwitchProduct,
-  setTab,
-}: {
-  product: ProductTheme;
-  onSwitchProduct: (id: ProductId) => void;
-  setTab: (t: Tab) => void;
-}) {
-  const c = product.canvas;
-  const { width } = useWindowDimensions();
-  const slideW = Math.min(width, 640) - 36;
-  const [cat, setCat] = useState<CategoryId>('all');
-  const slides = FEATURED_SLIDES[product.id];
-  const market = MARKET[product.id];
-
-  const pillars = useMemo(
-    () => (cat === 'all' ? market.pillars : market.pillars.filter((p) => p.category === cat)),
-    [cat, market],
-  );
-
+function TopBar({ th, onWallet, onProfile }: { th: ShellTheme; onWallet: () => void; onProfile: () => void }) {
   return (
-    <View style={{ paddingTop: 14 }}>
-      {/* featured slides */}
-      <ScrollView
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        decelerationRate="fast"
-        snapToInterval={slideW + 12}
-        contentContainerStyle={{ paddingHorizontal: 18 }}
-      >
-        {slides.map((s, i) => (
-          <View
-            key={i}
-            style={[
-              styles.slide,
-              { width: slideW, backgroundColor: c.surface, borderColor: c.border, marginRight: 12 },
-            ]}
-          >
-            <View style={[styles.badge, { backgroundColor: product.accent }]}>
-              <Text style={[styles.badgeTxt, { color: product.accentFg }]}>{s.badge}</Text>
-            </View>
-            <Text style={[styles.slideTitle, { color: c.text }]}>{s.title}</Text>
-            <Text style={[styles.slideSub, { color: c.muted }]} numberOfLines={3}>{s.subtitle}</Text>
-            <View style={[styles.slideCta, { backgroundColor: product.accent }]}>
-              <Text style={[styles.slideCtaTxt, { color: product.accentFg }]}>{s.ctaLabel}</Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
+    <View style={styles.topBar}>
+      <Pressable onPress={onWallet} style={styles.walletBtn} hitSlop={8}>
+        <WalletIcon size={24} color={th.text} />
+        <Text style={[styles.walletAmt, { color: th.text }]}>$3,500</Text>
+      </Pressable>
 
-      {/* category filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 18, gap: 8, paddingTop: 18 }}
-      >
-        {CATEGORY_FILTERS.map((f) => {
-          const on = f.id === cat;
-          return (
-            <Pressable
-              key={f.id}
-              onPress={() => { haptic.select(); setCat(f.id); }}
-              style={[
-                styles.pill,
-                { borderColor: on ? product.accent : c.border, backgroundColor: on ? product.accent : c.surface },
-              ]}
-            >
-              <CategoryIcon id={f.id} size={15} color={on ? product.accentFg : c.muted} />
-              <Text style={[styles.pillTxt, { color: on ? product.accentFg : c.text }]}>{f.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* market preview */}
-      <View style={styles.sectionHead}>
-        <Text style={[styles.sectionTitle, { color: c.text }]}>{market.headline}</Text>
-        <Pressable onPress={() => setTab('market')}><Text style={[styles.seeAll, { color: product.accent }]}>See all →</Text></Pressable>
-      </View>
-      <View style={{ paddingHorizontal: 18, gap: 10 }}>
-        {pillars.map((p) => (
-          <View key={p.id} style={[styles.listing, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <View style={[styles.listingEmoji, { backgroundColor: c.surface2 }]}>
-              <Text style={{ fontSize: 20 }}>{p.emoji}</Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={[styles.listingTitle, { color: c.text }]}>{p.title}</Text>
-              <Text style={[styles.listingTag, { color: c.muted }]} numberOfLines={1}>{p.tagline}</Text>
-            </View>
-            <View style={[styles.price, { backgroundColor: c.surface2 }]}>
-              <Text style={[styles.priceTxt, { color: c.text }]}>{p.price}</Text>
-            </View>
-          </View>
-        ))}
-        {pillars.length === 0 && (
-          <Text style={[styles.empty, { color: c.muted }]}>Nothing in this category yet.</Text>
-        )}
-      </View>
-
-      {/* cross-sell other products */}
-      <Text style={[styles.sectionTitle, { color: c.text, paddingHorizontal: 18, marginTop: 22 }]}>More on ONE01</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 10, paddingTop: 10 }}>
-        {PRODUCT_ORDER.filter((id) => id !== product.id).map((id) => {
-          const o = PRODUCTS[id];
-          return (
-            <Pressable key={id} onPress={() => onSwitchProduct(id)} style={[styles.crossCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-              <View style={[styles.crossMark, { backgroundColor: DARK_TILE }]}>
-                <Mark mark={o.mark} size={26} color={o.mark === 'one' ? o.accent : undefined} eye={DARK_TILE} />
-              </View>
-              <Text style={[styles.crossName, { color: c.text }]}>{o.name}</Text>
-              <Text style={[styles.crossTag, { color: c.muted }]} numberOfLines={2}>{o.tagline}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
-/* ───────────────── market / creator surface ───────────────── */
-
-function SurfaceTab({ product, kind }: { product: ProductTheme; kind: 'market' | 'creator' }) {
-  const c = product.canvas;
-  const s = kind === 'market' ? MARKET[product.id] : CREATOR[product.id];
-
-  return (
-    <View style={{ padding: 18, gap: 14 }}>
-      <Text style={[styles.surfaceHead, { color: c.text }]}>{s.headline}</Text>
-      <Text style={[styles.surfaceSub, { color: c.muted }]}>{s.subtitle}</Text>
-      <View style={[styles.structure, { borderColor: c.border, backgroundColor: c.surface }]}>
-        <Text style={[styles.structureTxt, { color: c.muted }]}>{s.structureLine}</Text>
-      </View>
-      <View style={{ gap: 10 }}>
-        {s.pillars.map((p) => (
-          <View key={p.id} style={[styles.pillar, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <View style={styles.pillarTop}>
-              <View style={[styles.listingEmoji, { backgroundColor: c.surface2 }]}>
-                <Text style={{ fontSize: 20 }}>{p.emoji}</Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={[styles.listingTitle, { color: c.text }]}>{p.title}</Text>
-                <Text style={[styles.listingTag, { color: c.muted }]}>{p.tagline}</Text>
-              </View>
-              <View style={[styles.price, { backgroundColor: product.accent }]}>
-                <Text style={[styles.priceTxt, { color: product.accentFg }]}>{p.price}</Text>
-              </View>
-            </View>
-            <Text style={[styles.pillarDetail, { color: c.muted }]}>{p.detail}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/* ───────────────── wallet ───────────────── */
-
-function WalletTab({ product }: { product: ProductTheme }) {
-  const c = product.canvas;
-  const f = product.features;
-  const methods = [
-    f.fiat && { k: 'fiat', label: 'Fiat rails', hint: 'Cards & bank corridors' },
-    f.crypto && { k: 'crypto', label: 'Crypto', hint: 'On-chain top-up' },
-    { k: 'credits', label: 'Credits', hint: 'In-ecosystem balance' },
-  ].filter(Boolean) as { k: string; label: string; hint: string }[];
-
-  return (
-    <View style={{ padding: 18, gap: 16 }}>
-      <View style={[styles.walletCard, { backgroundColor: product.accent }]}>
-        <Text style={[styles.walletCardLbl, { color: product.accentFg, opacity: 0.8 }]}>{product.name} balance</Text>
-        <Text style={[styles.walletCardAmt, { color: product.accentFg }]}>◎ 2,480</Text>
-        <Text style={[styles.walletCardLbl, { color: product.accentFg, opacity: 0.8 }]}>Same ONE01 identity · virtual balance</Text>
-      </View>
-      <View style={styles.walletBtnRow}>
-        <View style={[styles.walletBtn, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <Text style={[styles.walletBtnTxt, { color: c.text }]}>Deposit</Text>
+      <Pressable onPress={onProfile} style={styles.profileBtn} hitSlop={8}>
+        <View style={[styles.avatar, { borderColor: th.accent, backgroundColor: th.surface2 }]}>
+          <UserIcon size={22} color={th.muted} />
         </View>
-        <View style={[styles.walletBtn, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <Text style={[styles.walletBtnTxt, { color: c.text }]}>Withdraw</Text>
+        <View style={[styles.avBadge, { backgroundColor: th.accent }]}>
+          <Text style={[styles.avBadgeTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>4</Text>
         </View>
-      </View>
-      <Text style={[styles.sectionTitle, { color: c.text }]}>Payment methods</Text>
-      {methods.map((m) => (
-        <View key={m.k} style={[styles.listing, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <View style={styles.flex}>
-            <Text style={[styles.listingTitle, { color: c.text }]}>{m.label}</Text>
-            <Text style={[styles.listingTag, { color: c.muted }]}>{m.hint}</Text>
-          </View>
-          <Text style={[styles.priceTxt, { color: c.muted }]}>›</Text>
+        <View style={[styles.avCount, { backgroundColor: th.accent }]}>
+          <Text style={[styles.avCountTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>13</Text>
         </View>
-      ))}
-    </View>
-  );
-}
-
-/* ───────────────── profile ───────────────── */
-
-function ProfileTab({ product, onBack }: { product: ProductTheme; onBack: () => void }) {
-  const c = product.canvas;
-  const f = product.features;
-  const flags = Object.entries(f).filter(([, v]) => v).map(([k]) => k);
-
-  return (
-    <View style={{ padding: 18, gap: 16 }}>
-      <View style={[styles.profileHero, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <View style={[styles.profileAv, { backgroundColor: DARK_TILE }]}>
-          <One01Mark size={34} color="#FFFFFF" />
-        </View>
-        <Text style={[styles.profileName, { color: c.text }]}>Your ONE01 account</Text>
-        <Text style={[styles.profileSub, { color: c.muted }]}>One identity across {product.name} and every app on ONE01.</Text>
-      </View>
-      <View style={[styles.structure, { borderColor: c.border, backgroundColor: c.surface }]}>
-        <Text style={[styles.sectionTitle, { color: c.text, marginBottom: 8 }]}>{product.name} features</Text>
-        <View style={styles.flagWrap}>
-          {flags.map((fl) => (
-            <View key={fl} style={[styles.flag, { borderColor: product.accent }]}>
-              <Text style={[styles.flagTxt, { color: product.accent }]}>{fl}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-      <Pressable onPress={onBack} style={[styles.walletBtn, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <Text style={[styles.walletBtnTxt, { color: c.text }]}>← Back to ONE01 hub</Text>
       </Pressable>
     </View>
   );
 }
 
-/* ───────────────── bottom nav ───────────────── */
+/* ─────────────────────────────── home content ─────────────────────────────── */
 
-function BottomNav({ product, tab, setTab, bottomInset }: { product: ProductTheme; tab: Tab; setTab: (t: Tab) => void; bottomInset: number }) {
-  const c = product.canvas;
+function HomeContent({ th, onOpenItem, bottomInset }: { th: ShellTheme; onOpenItem: (i: HomeItem) => void; bottomInset: number }) {
+  const home = HOME[th.homeId];
+  const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
+  const { width } = useWindowDimensions();
+  const bw = Math.min(width, 600) - 36;
+  const [cat, setCat] = useState('all');
+
   return (
-    <View style={[styles.nav, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: Math.max(bottomInset, 10) }]}>
-      {product.nav.map((item, i) => {
-        const active = item.tab === tab;
-        if (item.isCenter) {
+    <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: bottomInset + 120 }} showsVerticalScrollIndicator={false}>
+      {/* featured / news banner */}
+      <ScrollView
+        horizontal
+        pagingEnabled
+        snapToInterval={bw + 12}
+        decelerationRate="fast"
+        showsHorizontalScrollIndicator={false}
+      >
+        {slides.map((s, i) => {
+          const colors: [string, string] = th.mode === 'dark' ? [`${th.glow}CC`, th.surface] : ['#EDEFF3', '#DCE1E8'];
           return (
-            <Pressable key={i} onPress={() => { haptic.select(); setTab(item.tab); }} style={styles.navCenterWrap}>
-              <View style={[styles.navCenter, { backgroundColor: product.accent }]}>
-                <Mark mark={product.mark} size={26} color={product.mark === 'one' ? '#0A0C0B' : undefined} eye={product.accent} />
-              </View>
+            <LinearGradient key={i} colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.banner, { width: bw }]}>
+              <Text style={styles.bannerLabel}>{s.badge}</Text>
+              <Text style={[styles.bannerTitle, { color: th.text }]} numberOfLines={2}>{s.title}</Text>
+              <Text style={[styles.bannerSub, { color: th.muted }]} numberOfLines={1}>{s.subtitle}</Text>
+            </LinearGradient>
+          );
+        })}
+      </ScrollView>
+
+      {/* categories */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 16 }}>
+        {home.categories.map((c) => {
+          const on = c.id === cat;
+          return (
+            <Pressable
+              key={c.id}
+              onPress={() => { haptic.select(); setCat(c.id); }}
+              style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : th.surface, borderColor: on ? 'transparent' : th.border }]}
+            >
+              {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
+              <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{c.label}</Text>
             </Pressable>
           );
-        }
-        return (
-          <Pressable key={i} onPress={() => { haptic.select(); setTab(item.tab); }} style={styles.navItem}>
-            <Text style={[styles.navIcon, { color: active ? product.accent : c.muted, opacity: active ? 1 : 0.9 }]}>{item.icon}</Text>
-            <Text style={[styles.navLabel, { color: active ? product.accent : c.muted }]}>{item.label}</Text>
-          </Pressable>
-        );
-      })}
+        })}
+      </ScrollView>
+
+      {/* section header */}
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionIcon}>{home.sectionIcon}</Text>
+        <Text style={[styles.sectionTitle, { color: th.text }]}>{home.sectionTitle}</Text>
+        {home.sectionCount != null && <Text style={[styles.sectionCount, { color: th.muted }]}>({home.sectionCount})</Text>}
+        <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
+      </View>
+
+      {/* items */}
+      {home.layout === 'rows' ? (
+        <View style={{ gap: 12 }}>
+          {home.items.map((it) => (
+            <Pressable key={it.id} onPress={() => onOpenItem(it)} style={({ pressed }) => [styles.projRow, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
+              <View style={[styles.projTile, { backgroundColor: DARK_TILE }]}>
+                <Mark mark={it.mark ?? 'one01'} size={34} accent="#10B981" eye={DARK_TILE} />
+              </View>
+              <View style={styles.flex}>
+                <Text style={[styles.projName, { color: th.text }]}>{it.title}</Text>
+                <Text style={[styles.projSub, { color: th.muted }]}>{it.subtitle}</Text>
+              </View>
+              <View style={styles.projChip}>
+                <Text style={styles.projChipTxt}>✦</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }}>
+          {home.items.map((it) => (
+            <LinearGradient key={it.id} colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.artCard}>
+              {it.live && (
+                <View style={styles.liveBadge}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveTxt}>{it.metric}</Text>
+                </View>
+              )}
+              <Text style={styles.artEmoji}>{it.emoji}</Text>
+              <View style={styles.artFooter}>
+                <Text style={styles.artTitle}>{it.title}</Text>
+                {!it.live && it.metric ? (
+                  <View style={styles.artMetric}>
+                    <View style={styles.artDot} />
+                    <Text style={styles.artMetricTxt}>{it.metric}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </LinearGradient>
+          ))}
+        </ScrollView>
+      )}
+    </ScrollView>
+  );
+}
+
+/* ─────────────────────────────── market / create ─────────────────────────────── */
+
+function SurfaceView({ th, kind, bottomInset }: { th: ShellTheme; kind: 'market' | 'create'; bottomInset: number }) {
+  const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
+  const s = kind === 'market' ? MARKET[pid] : CREATOR[pid];
+  return (
+    <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: bottomInset + 120, gap: 12 }} showsVerticalScrollIndicator={false}>
+      <Text style={[styles.surfaceHead, { color: th.text }]}>{s.headline}</Text>
+      <Text style={[styles.surfaceSub, { color: th.muted }]}>{s.subtitle}</Text>
+      {s.pillars.map((p) => (
+        <View key={p.id} style={[styles.pillar, { backgroundColor: th.surface, borderColor: th.border }]}>
+          <View style={styles.pillarTop}>
+            <View style={[styles.pillarEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 20 }}>{p.emoji}</Text></View>
+            <View style={styles.flex}>
+              <Text style={[styles.projName, { color: th.text }]}>{p.title}</Text>
+              <Text style={[styles.projSub, { color: th.muted }]}>{p.tagline}</Text>
+            </View>
+            <View style={[styles.price, { backgroundColor: th.accent }]}><Text style={[styles.priceTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{p.price}</Text></View>
+          </View>
+          <Text style={[styles.pillarDetail, { color: th.muted }]}>{p.detail}</Text>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+/* ─────────────────────────────── bottom bar ─────────────────────────────── */
+
+function BottomBar({ th, tab, setTab, bottomInset }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; bottomInset: number }) {
+  return (
+    <View style={[styles.bottomBar, { backgroundColor: th.surface, borderTopColor: th.border, paddingBottom: Math.max(bottomInset, 10) }]}>
+      <Pressable style={styles.navBtn} onPress={() => { haptic.select(); setTab('market'); }}>
+        <Text style={[styles.navGlyph, { opacity: tab === 'market' ? 1 : 0.6 }]}>🛍️</Text>
+      </Pressable>
+      <Pressable style={styles.navCenterWrap} onPress={() => { haptic.select(); setTab('home'); }}>
+        <View style={styles.navCenter}>
+          <Mark mark={th.mark} size={34} accent={th.homeId === 'one01' ? th.text : th.accent} eye={th.bg} />
+        </View>
+      </Pressable>
+      <Pressable style={styles.navBtn} onPress={() => { haptic.select(); setTab('create'); }}>
+        <View style={[styles.plusBox, { borderColor: th.border, backgroundColor: th.surface2 }]}>
+          <Text style={[styles.plusTxt, { color: tab === 'create' ? th.accent : th.muted }]}>+</Text>
+        </View>
+      </Pressable>
     </View>
   );
 }
 
-/* ───────────────── external app modal ───────────────── */
+/* ─────────────────────────────── sheets ─────────────────────────────── */
+
+function AccountSheet({ visible, th, onClose, onOne01, onExit }: { visible: boolean; th: ShellTheme; onClose: () => void; onOne01: () => void; onExit: () => void }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.scrim} onPress={onClose}>
+        <Pressable style={[styles.menu, { backgroundColor: th.surface, borderColor: th.border }]} onPress={() => {}}>
+          <View style={[styles.avatarLg, { backgroundColor: th.surface2, borderColor: th.accent }]}><UserIcon size={28} color={th.muted} /></View>
+          <Text style={[styles.menuName, { color: th.text }]}>Your ONE01 account</Text>
+          <Text style={[styles.menuSub, { color: th.muted }]}>Signed in · $3,500 · one identity</Text>
+          {th.homeId !== 'one01' && (
+            <Pressable onPress={onOne01} style={[styles.menuItem, { borderColor: th.border }]}>
+              <Text style={[styles.menuItemTxt, { color: th.text }]}>← ONE01 home</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={onExit} style={[styles.menuItem, { borderColor: th.border }]}>
+            <Text style={[styles.menuItemTxt, { color: th.text }]}>Exit platform</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function WalletSheet({ visible, th, onClose }: { visible: boolean; th: ShellTheme; onClose: () => void }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.scrim} onPress={onClose}>
+        <Pressable style={[styles.menu, { backgroundColor: th.surface, borderColor: th.border }]} onPress={() => {}}>
+          <View style={[styles.walletCard, { backgroundColor: th.accent }]}>
+            <Text style={[styles.walletCardLbl, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>Balance</Text>
+            <Text style={[styles.walletCardAmt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>$3,500</Text>
+          </View>
+          <View style={styles.walletRow}>
+            <View style={[styles.menuItem, styles.flex, { borderColor: th.border }]}><Text style={[styles.menuItemTxt, { color: th.text, textAlign: 'center' }]}>Deposit</Text></View>
+            <View style={[styles.menuItem, styles.flex, { borderColor: th.border }]}><Text style={[styles.menuItemTxt, { color: th.text, textAlign: 'center' }]}>Withdraw</Text></View>
+          </View>
+          <Text style={[styles.menuSub, { color: th.muted }]}>Virtual balance · same identity across every app</Text>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 function ExternalModal({ app, onClose }: { app: EcosystemApp | null; onClose: () => void }) {
-  const { colors } = useThemeStore();
   return (
     <Modal visible={!!app} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalScrim} onPress={onClose}>
-        <Pressable style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => {}}>
+      <Pressable style={styles.scrim} onPress={onClose}>
+        <Pressable style={[styles.menu, { backgroundColor: '#15161B', borderColor: 'rgba(255,255,255,0.1)' }]} onPress={() => {}}>
           {app && (
             <>
-              <View style={[styles.appTile, { backgroundColor: app.tile === 'accent' ? app.accent : DARK_TILE, alignSelf: 'center' }]}>
-                <Mark mark={app.mark} size={34} color={app.tile === 'accent' ? '#FFFFFF' : undefined} eye={DARK_TILE} />
+              <View style={[styles.projTile, { backgroundColor: DARK_TILE, alignSelf: 'center', width: 60, height: 60, borderRadius: 16 }]}>
+                <Mark mark={app.mark} size={34} accent="#10B981" eye={DARK_TILE} />
               </View>
-              <Text style={[styles.modalName, { color: colors.text }]}>{app.name}</Text>
-              <Text style={[styles.modalTag, { color: colors.textSecondary }]}>{app.tagline}</Text>
-              <Text style={[styles.modalDomain, { color: app.accent }]}>{app.domain}</Text>
-              <Text style={[styles.modalNote, { color: colors.textSecondary }]}>
-                An external ONE01 app — opens at {app.domain} with the same ONE01 account.
-              </Text>
-              <Pressable onPress={onClose} style={[styles.modalBtn, { backgroundColor: colors.text }]}>
-                <Text style={[styles.modalBtnTxt, { color: colors.background }]}>Got it</Text>
+              <Text style={[styles.menuName, { color: '#fff' }]}>{app.name}</Text>
+              <Text style={[styles.menuSub, { color: 'rgba(255,255,255,0.6)' }]}>{app.tagline} · {app.domain}</Text>
+              <Pressable onPress={onClose} style={[styles.menuItem, { borderColor: app.accent }]}>
+                <Text style={[styles.menuItemTxt, { color: app.accent, textAlign: 'center' }]}>Got it</Text>
               </Pressable>
             </>
           )}
@@ -625,127 +428,89 @@ function ExternalModal({ app, onClose }: { app: EcosystemApp | null; onClose: ()
   );
 }
 
-/* ═══════════════════════════════════ styles ═══════════════════════════════════ */
+/* ══════════════════════════════════ styles ══════════════════════════════════ */
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  rowGap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topGlow: { position: 'absolute', top: 0, left: 0, right: 0 },
 
-  /* hub bar */
-  hubBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  walletPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  walletGlyph: { fontSize: 14, fontWeight: '700' },
-  walletAmt: { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  exitBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  exitTxt: { fontSize: 15, fontWeight: '600' },
+  /* top bar */
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14 },
+  walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  profileBtn: { width: 52, alignItems: 'center' },
+  avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  avBadge: { position: 'absolute', top: -2, right: 0, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  avBadgeTxt: { fontSize: 11, fontWeight: '800' },
+  avCount: { marginTop: 2, minWidth: 22, borderRadius: 7, alignItems: 'center', paddingHorizontal: 5, paddingVertical: 1 },
+  avCountTxt: { fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'] },
 
-  /* hub body */
-  hubKicker: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, marginBottom: 8 },
-  hubTitle: { fontSize: 28, fontWeight: '800', lineHeight: 33, letterSpacing: -0.5 },
-  hubIntro: { fontSize: 15, lineHeight: 22, marginTop: 10 },
-  statRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  stat: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 12, alignItems: 'center' },
-  statVal: { fontSize: 22, fontWeight: '800' },
-  statLbl: { fontSize: 11, marginTop: 3, textAlign: 'center' },
+  /* banner */
+  banner: { height: 232, borderRadius: 22, padding: 20, marginRight: 12, justifyContent: 'flex-end' },
+  bannerLabel: { fontSize: 13, fontWeight: '700', color: '#10B981', marginBottom: 8 },
+  bannerTitle: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3, lineHeight: 26 },
+  bannerSub: { fontSize: 14, marginTop: 6 },
 
-  sectionLbl: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 24, marginBottom: 12 },
-  switchRow: { flexDirection: 'row', gap: 10 },
-  switchChip: { flex: 1, alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, paddingVertical: 16 },
-  switchMark: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  switchName: { fontSize: 14, fontWeight: '700' },
+  /* categories */
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 15, paddingVertical: 9 },
+  pillTxt: { fontSize: 14, fontWeight: '600' },
 
-  grid: { gap: 12 },
-  appCard: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, padding: 14 },
-  appTile: { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  appBody: { flex: 1, minWidth: 0 },
-  appName: { fontSize: 16, fontWeight: '700' },
-  appTag: { fontSize: 13, marginTop: 2 },
-  appDomain: { fontSize: 12, marginTop: 4, opacity: 0.8 },
-  appCta: { borderWidth: 1.4, borderRadius: 999, paddingHorizontal: 15, paddingVertical: 7 },
-  appCtaTxt: { fontSize: 13, fontWeight: '700' },
+  /* section */
+  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, marginBottom: 14 },
+  sectionIcon: { fontSize: 18 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
+  sectionCount: { fontSize: 15, fontWeight: '600' },
+  sectionArrow: { fontSize: 20, fontWeight: '600', marginLeft: 2 },
 
-  footnote: { fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 24, paddingHorizontal: 20 },
+  /* project rows */
+  projRow: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, padding: 12 },
+  projTile: { width: 64, height: 64, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  projName: { fontSize: 17, fontWeight: '700' },
+  projSub: { fontSize: 13.5, marginTop: 3 },
+  projChip: { width: 34, height: 28, borderRadius: 9, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center' },
+  projChipTxt: { fontSize: 14, color: '#06281d', fontWeight: '800' },
 
-  /* shell header */
-  shellHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  backBtn: { width: 28, height: 36, alignItems: 'center', justifyContent: 'center' },
-  backChevron: { fontSize: 30, fontWeight: '300', lineHeight: 32 },
-  headMark: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  headName: { fontSize: 17, fontWeight: '800' },
-  headRail: { fontSize: 11, marginTop: 1 },
+  /* artwork cards */
+  artCard: { width: 168, height: 196, borderRadius: 18, padding: 14, justifyContent: 'space-between', overflow: 'hidden' },
+  artEmoji: { fontSize: 54, textAlign: 'center', marginTop: 16 },
+  artFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  artTitle: { fontSize: 16, fontWeight: '800', color: '#fff', textTransform: 'uppercase', letterSpacing: 0.3 },
+  artMetric: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  artDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4ade80' },
+  artMetricTxt: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
+  liveBadge: { position: 'absolute', top: 10, left: 10, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 7, paddingHorizontal: 7, paddingVertical: 3 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22c55e' },
+  liveTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },
 
-  /* slides */
-  slide: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 20, padding: 18, minHeight: 170, justifyContent: 'flex-start' },
-  badge: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 3, marginBottom: 12 },
-  badgeTxt: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
-  slideTitle: { fontSize: 19, fontWeight: '800', lineHeight: 24 },
-  slideSub: { fontSize: 13.5, lineHeight: 19, marginTop: 8 },
-  slideCta: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9, marginTop: 14 },
-  slideCtaTxt: { fontSize: 13, fontWeight: '700' },
-
-  /* pills */
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8 },
-  pillTxt: { fontSize: 13, fontWeight: '600' },
-
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, marginTop: 22, marginBottom: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: '800' },
-  seeAll: { fontSize: 13, fontWeight: '700' },
-
-  listing: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12 },
-  listingEmoji: { width: 42, height: 42, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  listingTitle: { fontSize: 15, fontWeight: '700' },
-  listingTag: { fontSize: 12.5, marginTop: 2 },
-  price: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 5 },
-  priceTxt: { fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  empty: { fontSize: 13, textAlign: 'center', paddingVertical: 16 },
-
-  crossCard: { width: 150, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 14, gap: 8 },
-  crossMark: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  crossName: { fontSize: 15, fontWeight: '800' },
-  crossTag: { fontSize: 12, lineHeight: 16 },
-
-  /* surface tab */
+  /* surface view */
   surfaceHead: { fontSize: 22, fontWeight: '800' },
   surfaceSub: { fontSize: 14, lineHeight: 20 },
-  structure: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 14 },
-  structureTxt: { fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
   pillar: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 14, gap: 10 },
   pillarTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pillarEmoji: { width: 42, height: 42, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   pillarDetail: { fontSize: 13, lineHeight: 19 },
+  price: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 5 },
+  priceTxt: { fontSize: 13, fontWeight: '700' },
 
-  /* wallet */
-  walletCard: { borderRadius: 20, padding: 22, gap: 6 },
-  walletCardLbl: { fontSize: 13, fontWeight: '600' },
-  walletCardAmt: { fontSize: 34, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  walletBtnRow: { flexDirection: 'row', gap: 10 },
-  walletBtn: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  walletBtnTxt: { fontSize: 15, fontWeight: '700' },
-
-  /* profile */
-  profileHero: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 20, padding: 22, alignItems: 'center', gap: 10 },
-  profileAv: { width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  profileName: { fontSize: 18, fontWeight: '800' },
-  profileSub: { fontSize: 13.5, lineHeight: 19, textAlign: 'center' },
-  flagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  flag: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  flagTxt: { fontSize: 12.5, fontWeight: '700' },
-
-  /* bottom nav */
-  nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10, paddingHorizontal: 8 },
-  navItem: { alignItems: 'center', gap: 3, flex: 1 },
-  navIcon: { fontSize: 20 },
-  navLabel: { fontSize: 10, fontWeight: '600' },
+  /* bottom bar */
+  bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10, paddingHorizontal: 20 },
+  navBtn: { flex: 1, alignItems: 'center' },
+  navGlyph: { fontSize: 24 },
+  plusBox: { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  plusTxt: { fontSize: 24, fontWeight: '400', lineHeight: 26 },
   navCenterWrap: { flex: 1, alignItems: 'center' },
-  navCenter: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', marginTop: -18, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  navCenter: { alignItems: 'center', justifyContent: 'center', marginTop: -6 },
 
-  /* external modal */
-  modalScrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 28 },
-  modalCard: { width: '100%', maxWidth: 360, borderWidth: StyleSheet.hairlineWidth, borderRadius: 22, padding: 24, alignItems: 'center', gap: 8 },
-  modalName: { fontSize: 19, fontWeight: '800', marginTop: 6 },
-  modalTag: { fontSize: 13.5 },
-  modalDomain: { fontSize: 13, fontWeight: '700' },
-  modalNote: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 6 },
-  modalBtn: { borderRadius: 999, paddingHorizontal: 24, paddingVertical: 11, marginTop: 10 },
-  modalBtnTxt: { fontSize: 14, fontWeight: '700' },
+  /* sheets */
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 26 },
+  menu: { width: '100%', maxWidth: 360, borderWidth: StyleSheet.hairlineWidth, borderRadius: 22, padding: 22, gap: 10, alignItems: 'stretch' },
+  avatarLg: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
+  menuName: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  menuSub: { fontSize: 13, textAlign: 'center' },
+  menuItem: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 13, paddingVertical: 14, paddingHorizontal: 16, marginTop: 2 },
+  menuItemTxt: { fontSize: 15, fontWeight: '700' },
+  walletCard: { borderRadius: 18, padding: 20, gap: 4 },
+  walletCardLbl: { fontSize: 13, fontWeight: '600' },
+  walletCardAmt: { fontSize: 32, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  walletRow: { flexDirection: 'row', gap: 10 },
 });
