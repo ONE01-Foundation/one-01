@@ -8,19 +8,36 @@
  *   • WalletPage — a crypto-wallet style balance (card, actions, holdings,
  *     activity) — all virtual, no real crypto.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, Modal, Animated, PanResponder,
+  View, Text, StyleSheet, Pressable, ScrollView, Modal, Animated, PanResponder, Switch,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import {
-  One01Mark, OneMark, WinziMark, MixStarMark, XitMark, UserIcon, WalletIcon, CreateIcon,
+  One01Mark, OneMark, WinziMark, MixStarMark, XitMark, UserIcon, CreateIcon,
 } from './brand';
 import { type ShellTheme, type MarkId } from '../../data/one01/platform';
 
 const DARK_TILE = '#131317';
+
+/** Mini area sparkline from a fixed mock series (trending up). */
+function Sparkline({ color, w = 300, h = 46 }: { color: string; w?: number; h?: number }) {
+  const data = [8, 10, 9, 12, 11, 14, 13, 16, 15, 18, 17, 20];
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const pts = data.map((v, i) => [(i / (data.length - 1)) * w, h - ((v - min) / (max - min)) * (h - 8) - 4] as const);
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+  const area = `${line} L${w} ${h} L0 ${h} Z`;
+  return (
+    <Svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <Path d={area} fill={color} opacity={0.18} />
+      <Path d={line} stroke={color} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+    </Svg>
+  );
+}
 
 function Mark({ mark, size }: { mark: MarkId; size: number }) {
   switch (mark) {
@@ -103,22 +120,26 @@ function PanelHead({ th, title, onClose, right }: { th: ShellTheme; title: strin
 
 /* ─────────────────────────────── ProfilePage ─────────────────────────────── */
 
-export function ProfilePage({ th, close, onExit, onCreate, onOne01 }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void }) {
+export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void }) {
   const insets = useSafeAreaInsets();
+  const [tab, setTab] = useState<'posts' | 'about'>('posts');
   const stats = [{ v: '128', l: 'Friends' }, { v: '12', l: 'Posts' }, { v: 'LVL 13', l: 'Level' }];
+  const posts = [
+    { id: 'p1', time: '2h', text: 'Started a process: renew my driving license 🪪', chip: 'Process', accent: th.accent },
+    { id: 'p2', time: '1d', text: 'Reached a provider through ONE — only my city and budget were shared.', chip: 'ONE', accent: '#10B981' },
+    { id: 'p3', time: '3d', text: 'Queued my first Winzi battle ⚔️ wish me luck', chip: 'Winzi', accent: '#F9D800' },
+  ];
   const actions = [
     onOne01 ? { k: 'one01', label: '← ONE01 home', onPress: onOne01 } : null,
-    { k: 'settings', label: 'Settings', onPress: close },
+    { k: 'settings', label: 'Settings', onPress: onSettings },
     { k: 'legal', label: 'Legal', onPress: close },
-    { k: 'updates', label: 'Feature Updates', onPress: close },
     { k: 'support', label: 'Support', onPress: close },
   ].filter(Boolean) as { k: string; label: string; onPress: () => void }[];
 
   return (
     <View style={styles.flex}>
-      <PanelHead th={th} title="Profile" onClose={close} right={<Pressable style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable>} />
+      <PanelHead th={th} title="Profile" onClose={close} right={<Pressable onPress={onSettings} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable>} />
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
-        {/* cover + avatar */}
         <LinearGradient colors={[`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cover} />
         <View style={styles.avatarRow}>
           <View style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}><UserIcon size={40} color="#fff" /></View>
@@ -128,8 +149,6 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01 }: { th: Shel
         <View style={styles.pad}>
           <Text style={[styles.pName, { color: th.text }]}>Nobody</Text>
           <Text style={[styles.pHandle, { color: th.muted }]}>@nobody · on ONE01</Text>
-
-          {/* stats */}
           <View style={[styles.statRow, { borderColor: th.border }]}>
             {stats.map((s, i) => (
               <View key={s.l} style={[styles.stat, i < stats.length - 1 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: th.border }]}>
@@ -139,28 +158,107 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01 }: { th: Shel
             ))}
           </View>
 
-          <Text style={[styles.about, { color: th.muted }]}>One ONE01 identity across every app. Your representative shares only what you allow.</Text>
+          {/* tabs */}
+          <View style={[styles.tabBar, { borderColor: th.border }]}>
+            {(['posts', 'about'] as const).map((t) => (
+              <Pressable key={t} onPress={() => setTab(t)} style={styles.tabBtn}>
+                <Text style={[styles.tabTxt, { color: t === tab ? th.text : th.muted }]}>{t === 'posts' ? 'Posts' : 'About'}</Text>
+                {t === tab ? <View style={[styles.tabUnderline, { backgroundColor: th.text }]} /> : null}
+              </Pressable>
+            ))}
+          </View>
 
-          {/* account actions */}
-          <View style={{ marginTop: 18, gap: 8 }}>
-            <Pressable onPress={onCreate} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-              <CreateIcon size={18} color={th.text} />
-              <Text style={[styles.actionTxt, { color: th.text }]}>Create</Text>
+          {tab === 'posts' ? (
+            <View style={{ gap: 12, marginTop: 14 }}>
+              {posts.map((p) => (
+                <View key={p.id} style={[styles.post, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <View style={styles.postHead}>
+                    <View style={[styles.postAv, { backgroundColor: DARK_TILE }]}><UserIcon size={16} color="#fff" /></View>
+                    <Text style={[styles.postName, { color: th.text }]}>Nobody</Text>
+                    <Text style={[styles.postTime, { color: th.muted }]}> · {p.time}</Text>
+                    <View style={styles.flex} />
+                    <View style={[styles.postChip, { borderColor: p.accent }]}><Text style={[styles.postChipTxt, { color: p.accent }]}>{p.chip}</Text></View>
+                  </View>
+                  <Text style={[styles.postText, { color: th.text }]}>{p.text}</Text>
+                  <View style={styles.postFoot}>
+                    <Text style={[styles.postAction, { color: th.muted }]}>♡  24</Text>
+                    <Text style={[styles.postAction, { color: th.muted }]}>↩  3</Text>
+                    <Text style={[styles.postAction, { color: th.muted }]}>↗</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <>
+              <Text style={[styles.about, { color: th.muted }]}>One ONE01 identity across every app. Your representative shares only what you allow.</Text>
+              <View style={{ marginTop: 18, gap: 8 }}>
+                <Pressable onPress={onCreate} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <CreateIcon size={18} color={th.text} />
+                  <Text style={[styles.actionTxt, { color: th.text }]}>Create</Text>
+                  <View style={styles.flex} />
+                  <Text style={{ color: th.muted }}>›</Text>
+                </Pressable>
+                {actions.map((a) => (
+                  <Pressable key={a.k} onPress={a.onPress} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                    <Text style={[styles.actionTxt, { color: th.text }]}>{a.label}</Text>
+                    <View style={styles.flex} />
+                    <Text style={{ color: th.muted }}>›</Text>
+                  </Pressable>
+                ))}
+                <Pressable onPress={onExit} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <Text style={[styles.actionTxt, { color: '#ef4444' }]}>Log out</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+/* ─────────────────────────────── SettingsPage ─────────────────────────────── */
+
+export function SettingsPage({ th, close }: { th: ShellTheme; close: () => void }) {
+  const insets = useSafeAreaInsets();
+  const [notif, setNotif] = useState(true);
+  const [faceId, setFaceId] = useState(false);
+  const [sounds, setSounds] = useState(true);
+  const toggles = [
+    { k: 'notif', label: 'Notifications', hint: 'Updates from your ONE and apps', v: notif, set: setNotif },
+    { k: 'face', label: 'Face ID', hint: 'Unlock the wallet with Face ID', v: faceId, set: setFaceId },
+    { k: 'sounds', label: 'Sounds & haptics', hint: 'Taps, confirmations, alerts', v: sounds, set: setSounds },
+  ];
+  const links = ['Language', 'Privacy & disclosure', 'Connected accounts', 'Legal', 'Support'];
+
+  return (
+    <View style={styles.flex}>
+      <PanelHead th={th} title="Settings" onClose={close} />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.secTitle, { color: th.text }]}>Preferences</Text>
+        <View style={{ gap: 10 }}>
+          {toggles.map((t) => (
+            <View key={t.k} style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+              <View style={styles.flex}>
+                <Text style={[styles.setLabel, { color: th.text }]}>{t.label}</Text>
+                <Text style={[styles.setHint, { color: th.muted }]}>{t.hint}</Text>
+              </View>
+              <Switch value={t.v} onValueChange={t.set} trackColor={{ true: th.accent, false: th.border }} thumbColor="#fff" />
+            </View>
+          ))}
+        </View>
+
+        <Text style={[styles.secTitle, { color: th.text }]}>Account</Text>
+        <View style={{ gap: 10 }}>
+          {links.map((l) => (
+            <Pressable key={l} onPress={close} style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+              <Text style={[styles.setLabel, { color: th.text }]}>{l}</Text>
               <View style={styles.flex} />
               <Text style={{ color: th.muted }}>›</Text>
             </Pressable>
-            {actions.map((a) => (
-              <Pressable key={a.k} onPress={a.onPress} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-                <Text style={[styles.actionTxt, { color: th.text }]}>{a.label}</Text>
-                <View style={styles.flex} />
-                <Text style={{ color: th.muted }}>›</Text>
-              </Pressable>
-            ))}
-            <Pressable onPress={onExit} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-              <Text style={[styles.actionTxt, { color: '#ef4444' }]}>Log out</Text>
-            </Pressable>
-          </View>
+          ))}
         </View>
+        <Text style={[styles.setVer, { color: th.muted }]}>ONE01 · v1.0 · virtual tokens, no crypto yet</Text>
       </ScrollView>
     </View>
   );
@@ -189,9 +287,16 @@ export function WalletPage({ th, close }: { th: ShellTheme; close: () => void })
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         {/* balance card */}
         <LinearGradient colors={[th.accent, `${th.accent}C0`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balCard}>
-          <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85 }]}>Total balance</Text>
-          <Text style={[styles.balAmt, { color: accentFg }]}>⟡ 3,500</Text>
-          <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85 }]}>≈ $3,500 · virtual credits</Text>
+          <View style={styles.balTop}>
+            <View>
+              <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85 }]}>Total balance</Text>
+              <Text style={[styles.balAmt, { color: accentFg }]}>⟡ 3,500</Text>
+            </View>
+            <View style={styles.flex} />
+            <View style={styles.balChg}><Text style={[styles.balChgTxt, { color: accentFg }]}>▲ 6.2%</Text></View>
+          </View>
+          <View style={{ marginTop: 6 }}><Sparkline color={accentFg} /></View>
+          <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85, marginTop: 4 }]}>≈ $3,500 · virtual credits · 30d</Text>
         </LinearGradient>
 
         {/* actions */}
@@ -273,8 +378,27 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 13, paddingVertical: 14, paddingHorizontal: 15 },
   actionTxt: { fontSize: 15, fontWeight: '700' },
 
+  /* profile tabs + feed */
+  tabBar: { flexDirection: 'row', marginTop: 16, borderBottomWidth: StyleSheet.hairlineWidth },
+  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 12 },
+  tabTxt: { fontSize: 15, fontWeight: '700' },
+  tabUnderline: { position: 'absolute', bottom: -StyleSheet.hairlineWidth, height: 2.5, width: 54, borderRadius: 2 },
+  post: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 14, gap: 10 },
+  postHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  postAv: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  postName: { fontSize: 14, fontWeight: '700' },
+  postTime: { fontSize: 13 },
+  postChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  postChipTxt: { fontSize: 11, fontWeight: '800' },
+  postText: { fontSize: 14.5, lineHeight: 20 },
+  postFoot: { flexDirection: 'row', gap: 20 },
+  postAction: { fontSize: 13, fontWeight: '600' },
+
   /* wallet */
-  balCard: { borderRadius: 20, padding: 22, gap: 6, marginTop: 4 },
+  balCard: { borderRadius: 20, padding: 22, marginTop: 4 },
+  balTop: { flexDirection: 'row', alignItems: 'flex-start' },
+  balChg: { backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  balChgTxt: { fontSize: 12, fontWeight: '800' },
   balLbl: { fontSize: 13, fontWeight: '600' },
   balAmt: { fontSize: 38, fontWeight: '800', fontVariant: ['tabular-nums'] },
   walletActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 18 },
@@ -287,4 +411,10 @@ const styles = StyleSheet.create({
   holdName: { fontSize: 15, fontWeight: '700' },
   holdChg: { fontSize: 12.5, marginTop: 2, fontWeight: '600' },
   holdAmt: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
+
+  /* settings */
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 15 },
+  setLabel: { fontSize: 15, fontWeight: '700' },
+  setHint: { fontSize: 12.5, marginTop: 2 },
+  setVer: { fontSize: 12, textAlign: 'center', marginTop: 24 },
 });

@@ -46,7 +46,7 @@ import {
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
-import { SheetWindow, ProfilePage, WalletPage } from '../../components/one01/Panels';
+import { SheetWindow, ProfilePage, WalletPage, SettingsPage } from '../../components/one01/Panels';
 import { onboardingFor } from '../../data/one01/onboarding';
 import {
   PRODUCTS,
@@ -110,7 +110,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [tab, setTab] = useState<Tab>('home');
   const [onboardFor, setOnboardFor] = useState<ProductId | null>(null);
   const [onboarded, setOnboarded] = useState<Set<string>>(() => new Set());
-  const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch'>(null);
+  const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings'>(null);
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
 
@@ -180,12 +180,16 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
             close={close}
             onExit={onExit}
             onCreate={() => { setTab('create'); close(); }}
+            onSettings={() => setSheet('settings')}
             onOne01={th.homeId !== 'one01' ? () => { haptic.select(); setHomeId('one01'); setTab('home'); close(); } : undefined}
           />
         )}
       </SheetWindow>
       <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close) => <WalletPage th={th} close={close} />}
+      </SheetWindow>
+      <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
+        {(close) => <SettingsPage th={th} close={close} />}
       </SheetWindow>
       <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
