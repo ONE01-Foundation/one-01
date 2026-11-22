@@ -358,7 +358,7 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
     sectionIcon: '🚀',
     sectionTitle: 'Projects',
     sectionCount: 5,
-    layout: 'cards',
+    layout: 'rows',
     items: [
       { id: 'one', title: 'ONE', subtitle: 'Your representative', mark: 'one', product: 'one', cta: 'Open', bg: ['#123A2E', '#071A14'] },
       { id: 'winzi', title: 'Winzi', subtitle: 'Play Games, Win Money', mark: 'winzi', product: 'winzi', cta: 'Play', bg: ['#3A3312', '#171205'] },

@@ -487,15 +487,15 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, lang }
           <View style={[styles.rowsWrap, wide && styles.rowsWrapWide]}>
             {home.items.map((it) => (
               <Pressable key={it.id} onPress={() => onOpen('project', it)} style={({ pressed }) => [styles.projRow, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
-                <View style={[styles.projTile, { backgroundColor: DARK_TILE }]}>
-                  <Mark mark={it.mark ?? 'one01'} size={34} accent={markAccent(it.mark ?? 'one01')} eye={DARK_TILE} />
-                </View>
+                <LinearGradient colors={it.bg ?? [DARK_TILE, '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.projTile}>
+                  <Mark mark={it.mark ?? 'one01'} size={38} accent={markAccent(it.mark ?? 'one01')} eye={DARK_TILE} />
+                </LinearGradient>
                 <View style={styles.flex}>
                   <Text style={[styles.projName, { color: th.text }]}>{it.title}</Text>
                   <Text style={[styles.projSub, { color: th.muted }]}>{it.subtitle}</Text>
                 </View>
-                <View style={[styles.ctaPill, { backgroundColor: th.mode === 'dark' ? th.surface2 : '#0E1116' }]}>
-                  <Text style={[styles.ctaPillTxt, { color: th.mode === 'dark' ? th.text : '#fff' }]}>{it.cta ?? 'Open'}</Text>
+                <View style={[styles.getPill, { backgroundColor: th.surface2 }]}>
+                  <Text style={[styles.getPillTxt, { color: th.accent }]}>{tr(lang, it.cta ?? 'Open')}</Text>
                 </View>
               </Pressable>
             ))}
@@ -619,42 +619,38 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
   const rawTitle = kind === 'main' ? (main?.label ?? '') : kind === 'people' ? extras.people.label : kind === 'events' ? extras.events.label : kind === 'stats' ? extras.stats.label : extras.feed.label;
   const title = tr(lang, rawTitle);
 
+  const headIcon = kind === 'main' ? <Text style={{ fontSize: 20 }}>{main?.icon}</Text> : drawerIcon(kind, th.text, 22);
+
   return (
     <View style={styles.flex}>
-      {wide ? (
-        <Pressable onPress={onBack} hitSlop={10} style={[styles.corner, { top: topPad, left: 24, backgroundColor: th.surface, borderColor: th.border }]}>
-          <Text style={[styles.chev, { color: th.text }]}>‹</Text>
-        </Pressable>
-      ) : (
-        <View style={[styles.header, { paddingTop: 10 }]}>
+      {/* pinned header — title stays while the body scrolls; ✕ on the right */}
+      <View style={[styles.drawerHeader, { paddingTop: wide ? topPad + 44 : 8, borderBottomColor: th.border }]}>
+        <View style={[styles.drawerHeaderRow, wide && styles.drawerBodyWide]}>
+          <View style={styles.drawerHeadIcon}>{headIcon}</View>
+          <Text style={[styles.drawerBigTitle, { color: th.text }]} numberOfLines={1}>{title}</Text>
+          <View style={styles.flex} />
           <Pressable onPress={onBack} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
             <Text style={[styles.xmark, { color: th.text }]}>✕</Text>
           </Pressable>
-          <View style={styles.flex} />
         </View>
-      )}
+      </View>
 
-      <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: wide ? topPad + 52 : 4, paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }}>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 10, paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }}>
         <View style={[styles.drawerBody, wide && styles.drawerBodyWide]}>
-          <View style={styles.drawerTitleRow}>
-            <View style={styles.drawerHeadIcon}>{kind === 'main' ? <Text style={{ fontSize: 20 }}>{main?.icon}</Text> : drawerIcon(kind, th.text, 22)}</View>
-            <Text style={[styles.drawerBigTitle, { color: th.text }]}>{title}</Text>
-          </View>
-
           {kind === 'main' && main && (
             main.layout === 'rows' ? (
               <View style={styles.drawerList}>
                 {main.items.map((it) => (
                   <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={({ pressed }) => [styles.drawerRow, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
-                    <View style={[styles.projTile, { backgroundColor: DARK_TILE }]}>
-                      <Mark mark={it.mark ?? 'one01'} size={32} accent={markAccent(it.mark ?? 'one01')} eye={DARK_TILE} />
-                    </View>
+                    <LinearGradient colors={it.bg ?? [DARK_TILE, '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.projTile}>
+                      <Mark mark={it.mark ?? 'one01'} size={36} accent={markAccent(it.mark ?? 'one01')} eye={DARK_TILE} />
+                    </LinearGradient>
                     <View style={styles.flex}>
                       <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{it.title}</Text>
                       <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{it.subtitle}</Text>
                     </View>
-                    <View style={[styles.ctaPill, { backgroundColor: th.mode === 'dark' ? th.surface2 : '#0E1116' }]}>
-                      <Text style={[styles.ctaPillTxt, { color: th.mode === 'dark' ? th.text : '#fff' }]}>{tr(lang, it.cta ?? 'Open')}</Text>
+                    <View style={[styles.getPill, { backgroundColor: th.surface2 }]}>
+                      <Text style={[styles.getPillTxt, { color: th.accent }]}>{tr(lang, it.cta ?? 'Open')}</Text>
                     </View>
                   </Pressable>
                 ))}
@@ -1254,6 +1250,8 @@ const styles = StyleSheet.create({
   projSub: { fontSize: 13.5, marginTop: 3 },
   ctaPill: { borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
   ctaPillTxt: { fontSize: 13.5, fontWeight: '700' },
+  getPill: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 7 },
+  getPillTxt: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
 
   /* artwork cards */
   artCard: { width: 168, height: 196, borderRadius: 18, padding: 14, justifyContent: 'space-between', overflow: 'hidden' },
@@ -1313,6 +1311,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingTop: 10, paddingBottom: 6 },
   round: { width: 38, height: 38, borderRadius: 19, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
   xmark: { fontSize: 17, fontWeight: '600' },
+  drawerHeader: { paddingHorizontal: 18, paddingBottom: 14, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  drawerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' },
   drawerBody: { width: '100%', paddingHorizontal: 18 },
   drawerBodyWide: { width: 640, maxWidth: '100%' },
   drawerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: 18 },
