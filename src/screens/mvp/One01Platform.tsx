@@ -12,7 +12,7 @@
  * then a section (Projects for ONE01 · Games / Shows for products). Background
  * is the product's canvas with a per-product glow at the top.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import {
   Animated,
   PanResponder,
   StatusBar,
+  TextInput,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -85,6 +86,8 @@ type Tab = 'home' | 'market' | 'create';
 type DrawerKind = 'main' | 'people' | 'events' | 'stats' | 'feed';
 /** Descriptor for the main-section ("Projects"/"Games"/…) focused drawer page. */
 type MainDrawer = { label: string; homeId: HomeId; items: HomeItem[]; layout: 'rows' | 'cards'; onOpenItem: (item: HomeItem) => void };
+/** A platform search result (a home item or a Market listing). */
+type SearchResult = { type: 'item'; item: HomeItem } | { type: 'market'; pillar: SurfacePillar };
 
 const GLOWS: Record<HomeId, string> = { one01: '#E8B923', one: '#6B7280', winzi: '#3B5BDB', mixstar: '#8B5CF6' };
 const DARK_TILE = '#131317';
@@ -160,6 +163,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [play, setPlay] = useState<{ kind: PlayKind; item: HomeItem } | null>(null);
   const [drawer, setDrawer] = useState<{ kind: DrawerKind } | null>(null);
   const [bannerSlide, setBannerSlide] = useState<ShellHero | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (msg: string) => {
@@ -195,6 +199,15 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     publishCreation({ title: p.title, emoji: p.emoji, kind: p.id, surface });
     haptic.success();
     showToast(`Published “${p.title}” — now earning`);
+  };
+  const onSearchResult = (res: SearchResult) => {
+    setSearchOpen(false);
+    if (res.type === 'item') {
+      const kind: DetailKind = homeId === 'winzi' ? 'game' : homeId === 'mixstar' ? 'show' : homeId === 'one' ? 'process' : 'project';
+      openDetail(kind, res.item);
+    } else {
+      openMarketDetail(res.pillar);
+    }
   };
   const detailPrimary = () => {
     if (!detail) return;
@@ -253,7 +266,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
 
       <View style={styles.flex}>
-        {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} onOpenBanner={(s) => setBannerSlide(s)} lang={lang} />}
+        {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} onOpenBanner={(s) => setBannerSlide(s)} onOpenSearch={() => setSearchOpen(true)} lang={lang} />}
         {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
         {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
       </View>
@@ -305,6 +318,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       </SheetWindow>
       <SheetWindow visible={!!bannerSlide} wide={wide} th={th} onClose={() => setBannerSlide(null)}>
         {(close, onScroll) => (bannerSlide ? <BannerPage th={th} slide={bannerSlide} close={close} onScroll={onScroll} onCta={() => { setBannerSlide(null); setTab('market'); }} /> : null)}
+      </SheetWindow>
+      <SheetWindow visible={searchOpen} wide={wide} th={th} onClose={() => setSearchOpen(false)}>
+        {(close) => <SearchSheet th={th} homeId={homeId} lang={lang} close={close} onResult={onSearchResult} />}
       </SheetWindow>
       <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
@@ -436,7 +452,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { 
 
 /* ─────────────────────────────── home content ─────────────────────────────── */
 
-function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpenBanner, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void; onOpenBanner: (s: ShellHero) => void; lang: Lang }) {
+function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpenBanner, onOpenSearch, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void; onOpenBanner: (s: ShellHero) => void; onOpenSearch: () => void; lang: Lang }) {
   const home = HOME[th.homeId];
   const extras = HOME_EXTRAS[th.homeId];
   const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
@@ -505,7 +521,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
 
         {/* categories */}
         <View style={styles.catRow}>
-          {wide && <View style={[styles.catIcon, { backgroundColor: th.surface }]}><SearchIcon size={16} color={th.muted} /></View>}
+          <Pressable onPress={onOpenSearch} style={[styles.catIcon, { backgroundColor: th.surface, borderColor: th.border, borderWidth: StyleSheet.hairlineWidth }]}><SearchIcon size={16} color={th.muted} /></Pressable>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={styles.flex}>
             {home.categories.map((c) => {
               const on = c.id === cat;
@@ -1260,6 +1276,70 @@ function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; sli
   );
 }
 
+/* ─────────────────────────────── search sheet ─────────────────────────────── */
+
+function SearchSheet({ th, homeId, lang, close, onResult }: { th: ShellTheme; homeId: HomeId; lang: Lang; close: () => void; onResult: (r: SearchResult) => void }) {
+  const insets = useSafeAreaInsets();
+  const [q, setQ] = useState('');
+  const pid: ProductId = homeId === 'one01' ? 'one' : homeId;
+  const home = HOME[homeId];
+  const results = useMemo<SearchResult[]>(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return [];
+    const out: SearchResult[] = [];
+    home.items.forEach((it) => {
+      if (it.title.toLowerCase().includes(term) || (it.subtitle ?? '').toLowerCase().includes(term)) out.push({ type: 'item', item: it });
+    });
+    MARKET[pid].pillars.forEach((p) => {
+      if (p.title.toLowerCase().includes(term) || p.tagline.toLowerCase().includes(term)) out.push({ type: 'market', pillar: p });
+    });
+    return out.slice(0, 30);
+  }, [q, home, pid]);
+
+  return (
+    <View style={styles.flex}>
+      <View style={styles.searchHead}>
+        <View style={[styles.searchBox, { backgroundColor: th.surface2, borderColor: th.border }]}>
+          <SearchIcon size={17} color={th.muted} />
+          <TextInput value={q} onChangeText={setQ} placeholder={`${tr(lang, 'Search')}…`} placeholderTextColor={th.muted} style={[styles.searchInput, { color: th.text }]} autoFocus returnKeyType="search" />
+          {q ? <Pressable onPress={() => setQ('')} hitSlop={8}><Text style={{ color: th.muted, fontSize: 15 }}>✕</Text></Pressable> : null}
+        </View>
+        <Pressable onPress={close} hitSlop={10}><Text style={[styles.searchCancel, { color: th.accent }]}>{tr(lang, 'Cancel')}</Text></Pressable>
+      </View>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }}>
+        {!q.trim() ? (
+          <Text style={[styles.searchHint, { color: th.muted }]}>{tr(lang, 'Search games, projects, listings…')}</Text>
+        ) : results.length === 0 ? (
+          <Text style={[styles.searchHint, { color: th.muted }]}>{tr(lang, 'No results')}</Text>
+        ) : (
+          <View style={{ gap: 10, marginTop: 4 }}>
+            {results.map((r, i) => {
+              const title = r.type === 'item' ? r.item.title : r.pillar.title;
+              const sub = r.type === 'item' ? r.item.subtitle : r.pillar.tagline;
+              const emoji = r.type === 'item' ? r.item.emoji : r.pillar.emoji;
+              const mark = r.type === 'item' ? r.item.mark : undefined;
+              const bg = r.type === 'item' ? r.item.bg : undefined;
+              const tag = r.type === 'market' ? tr(lang, 'Market') : tr(lang, home.sectionTitle);
+              return (
+                <Pressable key={`${r.type}_${i}`} onPress={() => onResult(r)} style={({ pressed }) => [styles.searchRow, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
+                  <LinearGradient colors={bg ?? [DARK_TILE, '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.searchTile}>
+                    {mark ? <Mark mark={mark} size={24} accent={markAccent(mark)} eye={DARK_TILE} /> : <Text style={{ fontSize: 22 }}>{emoji}</Text>}
+                  </LinearGradient>
+                  <View style={styles.flex}>
+                    <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{title}</Text>
+                    <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{sub}</Text>
+                  </View>
+                  <Text style={[styles.searchTag, { color: th.muted }]}>{tag}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
 /* ══════════════════════════════════ styles ══════════════════════════════════ */
 
 const styles = StyleSheet.create({
@@ -1309,6 +1389,16 @@ const styles = StyleSheet.create({
   bannerCtaTxt: { fontSize: 14, fontWeight: '700', color: '#111' },
   bannerDots: { flexDirection: 'row', gap: 5, justifyContent: 'center', marginTop: 12 },
   bannerDot: { height: 6, borderRadius: 3 },
+
+  /* search sheet */
+  searchHead: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 13, height: 44 },
+  searchInput: { flex: 1, fontSize: 15.5, fontWeight: '600', paddingVertical: 0 },
+  searchCancel: { fontSize: 15, fontWeight: '700' },
+  searchHint: { fontSize: 14, lineHeight: 20, marginTop: 24, textAlign: 'center' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, padding: 11 },
+  searchTile: { width: 46, height: 46, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  searchTag: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3, textTransform: 'uppercase' },
 
   /* banner sheet */
   bannerHero: { height: 200, borderRadius: 22, padding: 22, justifyContent: 'space-between', overflow: 'hidden', marginTop: 4 },

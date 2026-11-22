@@ -43,6 +43,9 @@ const HE: Record<string, string> = {
   'Interface language': 'שפת הממשק',
   'In‑app · virtual': 'באפליקציה · וירטואלי',
   'virtual credits · 30d': 'קרדיטים וירטואליים · 30 ימים',
+  // search
+  Search: 'חיפוש', Cancel: 'ביטול', 'No results': 'אין תוצאות',
+  'Search games, projects, listings…': 'חיפוש משחקים, פרויקטים, פריטים…',
 };
 
 export function tr(lang: Lang, en: string): string {
