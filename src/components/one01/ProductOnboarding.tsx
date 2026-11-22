@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
 import { haptic } from '../../utils/haptics';
 import {
   One01Mark,
@@ -55,6 +56,9 @@ function palette(mode: OnboardMode) {
     text: dark ? '#FFFFFF' : '#0A0A0A',
     muted: dark ? 'rgba(255,255,255,0.55)' : 'rgba(10,10,10,0.5)',
     sheet: dark ? '#111113' : '#FFFFFF',
+    // translucent tint laid over the blur so the glow bleeds through the sheet
+    sheetGlass: dark ? 'rgba(12,12,16,0.42)' : 'rgba(255,255,255,0.5)',
+    blurTint: (dark ? 'dark' : 'light') as 'dark' | 'light',
     sheetBorder: dark ? 'rgba(255,255,255,0.09)' : 'rgba(10,10,10,0.08)',
     ink: dark ? '#FFFFFF' : '#0A0A0A',
     inkText: dark ? '#0A0A0A' : '#FFFFFF',
@@ -188,33 +192,21 @@ function Welcome({
   bottomInset: number;
 }) {
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const programmatic = useRef(false);
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
   const pageH = winH - insets.top;
   const count = config.slides.length;
   const isLast = slide >= count - 1;
 
-  // Scroll position drives a CROSS-FADE (content dissolves in place; never slides).
-  // Swipe tracks live; the Next button animates the fade itself (programmatic
-  // scroll doesn't fire scroll events on web).
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (programmatic.current) return;
-    const x = e.nativeEvent.contentOffset.x;
-    scrollX.setValue(x);
-    const i = Math.round(x / frameW);
+  const syncIndex = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const i = Math.round(e.nativeEvent.contentOffset.x / frameW);
     if (i !== slide && i >= 0 && i < count) setSlide(i);
   };
 
   const goTo = (i: number) => {
     const n = Math.max(0, Math.min(count - 1, i));
+    scrollRef.current?.scrollTo({ x: n * frameW, animated: true });
     setSlide(n);
-    programmatic.current = true;
-    scrollRef.current?.scrollTo({ x: n * frameW, animated: false });
-    Animated.timing(scrollX, { toValue: n * frameW, duration: 300, useNativeDriver: false }).start(() => {
-      programmatic.current = false;
-    });
   };
 
   const onCta = () => {
@@ -225,51 +217,40 @@ function Welcome({
 
   return (
     <View style={styles.flex}>
-      {/* transparent gesture layer — provides the scroll/swipe, no visible movement */}
+      {/* only the text + emoji pages slide; the mark stays fixed */}
       <ScrollView
         ref={scrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
-        onScroll={onScroll}
-        style={StyleSheet.absoluteFill}
+        onScroll={syncIndex}
+        onMomentumScrollEnd={syncIndex}
+        style={styles.flex}
       >
-        {config.slides.map((_, i) => (
-          <View key={i} style={{ width: frameW, height: pageH }} />
+        {config.slides.map((item, i) => (
+          <View key={i} style={{ width: frameW, height: pageH }}>
+            <Text style={styles.emojiTop}>{item.emojiTop}</Text>
+            <Text style={styles.emojiBottom}>{item.emojiBottom}</Text>
+            <View style={styles.welcomeText}>
+              <Text style={[styles.welcomeTitle, { color: p.text }]}>{item.title}</Text>
+              <Text style={[styles.welcomeSub, { color: p.muted }]}>{item.subtitle}</Text>
+              <View style={styles.dots}>
+                {config.slides.map((_, d) => (
+                  <View
+                    key={d}
+                    style={[styles.dot, { backgroundColor: d === i ? p.text : p.muted, opacity: d === i ? 1 : 0.45, width: d === i ? 18 : 6 }]}
+                  />
+                ))}
+              </View>
+            </View>
+          </View>
         ))}
       </ScrollView>
 
-      {/* cross-fading content — stacked, centered, opacity follows scroll */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {config.slides.map((item, i) => {
-          const opacity = scrollX.interpolate({
-            inputRange: [(i - 1) * frameW, i * frameW, (i + 1) * frameW],
-            outputRange: [0, 1, 0],
-            extrapolate: 'clamp',
-          });
-          return (
-            <Animated.View key={i} style={[styles.fadeLayer, { opacity }]}>
-              <Text style={styles.emojiTop}>{item.emojiTop}</Text>
-              <Text style={styles.emojiBottom}>{item.emojiBottom}</Text>
-              <View style={styles.welcomeBlock}>
-                <View style={{ marginBottom: 26 }}>
-                  <Mark mark={config.mark} size={54} accent={config.accent} />
-                </View>
-                <Text style={[styles.welcomeTitle, { color: p.text }]}>{item.title}</Text>
-                <Text style={[styles.welcomeSub, { color: p.muted }]}>{item.subtitle}</Text>
-                <View style={styles.dots}>
-                  {config.slides.map((_, d) => (
-                    <View
-                      key={d}
-                      style={[styles.dot, { backgroundColor: d === i ? p.text : p.muted, opacity: d === i ? 1 : 0.45, width: d === i ? 18 : 6 }]}
-                    />
-                  ))}
-                </View>
-              </View>
-            </Animated.View>
-          );
-        })}
+      {/* fixed mark (does not move while pages slide underneath it) */}
+      <View pointerEvents="none" style={styles.fixedMark}>
+        <Mark mark={config.mark} size={54} accent={config.accent} />
       </View>
 
       {/* footer */}
@@ -363,9 +344,12 @@ function Connect({
           <Animated.View
             style={[
               styles.sheet,
-              { backgroundColor: p.sheet, borderColor: p.sheetBorder, paddingBottom: Math.max(bottomInset, 18) + 14, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }] },
+              { borderColor: p.sheetBorder, paddingBottom: Math.max(bottomInset, 18) + 14, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }] },
             ]}
           >
+            {/* frosted glass so the glow shows through the sheet */}
+            <BlurView intensity={48} tint={p.blurTint} style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: p.sheetGlass }]} />
             <View style={[styles.grabber, { backgroundColor: p.grabber }]} />
             {authButtons}
           </Animated.View>
@@ -425,8 +409,8 @@ const styles = StyleSheet.create({
   splashMark: { marginTop: -20 },
 
   /* welcome */
-  fadeLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingBottom: 150 },
-  welcomeBlock: { alignItems: 'center', paddingHorizontal: 34 },
+  fixedMark: { position: 'absolute', top: '34%', left: 0, right: 0, alignItems: 'center' },
+  welcomeText: { position: 'absolute', top: '43%', left: 0, right: 0, alignItems: 'center', paddingHorizontal: 34 },
   emojiTop: { position: 'absolute', top: '15%', right: '15%', fontSize: 42 },
   emojiBottom: { position: 'absolute', top: '57%', left: '13%', fontSize: 42 },
   welcomeTitle: { fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: -0.4 },
@@ -448,7 +432,7 @@ const styles = StyleSheet.create({
   connectTagline: { fontSize: 13, fontWeight: '700', letterSpacing: 2.5, marginTop: 2 },
 
   /* connect — mobile bottom sheet */
-  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: 12, gap: 12 },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: 12, gap: 12, overflow: 'hidden' },
   grabber: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center', marginBottom: 8 },
 
   /* connect — desktop popup */
