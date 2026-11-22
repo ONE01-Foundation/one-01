@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { haptic } from '../../utils/haptics';
 import { type ShellTheme, type HomeItem } from '../../data/one01/platform';
+import { useOne01PlatformStore } from '../../stores/one01PlatformStore';
 
 export type PlayKind = 'game' | 'show';
 
@@ -36,6 +37,7 @@ function MiniGame({ th, item, onClose }: { th: ShellTheme; item: HomeItem; onClo
   const accent = th.accent;
   const accentFg = accent === '#F9D800' ? '#000' : '#fff';
 
+  const credit = useOne01PlatformStore((s) => s.credit);
   const [phase, setPhase] = useState<'ready' | 'play' | 'done'>('ready');
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(15);
@@ -65,7 +67,12 @@ function MiniGame({ th, item, onClose }: { th: ShellTheme; item: HomeItem; onClo
   }, [phase]);
 
   useEffect(() => {
-    if (phase === 'play' && time <= 0) { setPhase('done'); haptic.success(); }
+    if (phase === 'play' && time <= 0) {
+      setPhase('done');
+      if (score > 0) credit(score * 2, `${item.title} win`);
+      haptic.success();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [time, phase]);
 
   const hit = () => { haptic.tap(); setScore((s) => s + 1); move(); };
@@ -131,6 +138,7 @@ function MiniShow({ th, item, onClose }: { th: ShellTheme; item: HomeItem; onClo
     { id: 'c', emoji: '🧑‍🎨', name: 'Kофi', pct: 21 },
     { id: 'd', emoji: '👨‍🚀', name: 'Vex', pct: 17 },
   ]);
+  const credit = useOne01PlatformStore((s) => s.credit);
   const [voted, setVoted] = useState<string | null>(null);
   const [time, setTime] = useState(20);
   const [done, setDone] = useState(false);
@@ -162,6 +170,7 @@ function MiniShow({ th, item, onClose }: { th: ShellTheme; item: HomeItem; onClo
     if (voted || done) return;
     haptic.press();
     setVoted(id);
+    credit(5, `${item.title} vote`);
     setCast((prev) => {
       const bumped = prev.map((c) => ({ ...c, pct: c.id === id ? c.pct + 12 : c.pct }));
       const sum = bumped.reduce((a, c) => a + c.pct, 0);

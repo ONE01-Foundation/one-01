@@ -48,6 +48,7 @@ import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
 import { SheetWindow, ProfilePage, WalletPage, SettingsPage } from '../../components/one01/Panels';
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
+import { useOne01PlatformStore } from '../../stores/one01PlatformStore';
 import { onboardingFor } from '../../data/one01/onboarding';
 import {
   PRODUCTS,
@@ -106,23 +107,42 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const { width, height } = useWindowDimensions();
   const wide = width >= WIDE_AT;
 
-  const [entered, setEntered] = useState(false);
+  // persisted platform state — onboard once, one live credit balance
+  const entered = useOne01PlatformStore((s) => s.entered);
+  const setEntered = useOne01PlatformStore((s) => s.setEntered);
+  const onboarded = useOne01PlatformStore((s) => s.onboarded);
+  const markOnboarded = useOne01PlatformStore((s) => s.markOnboarded);
+  const debit = useOne01PlatformStore((s) => s.debit);
+
   const [homeId, setHomeId] = useState<HomeId>('one01');
   const [tab, setTab] = useState<Tab>('home');
   const [onboardFor, setOnboardFor] = useState<ProductId | null>(null);
-  const [onboarded, setOnboarded] = useState<Set<string>>(() => new Set());
   const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings'>(null);
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
   const [play, setPlay] = useState<{ kind: PlayKind; item: HomeItem } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
+  };
 
   const enterProduct = (id: ProductId) => {
-    setOnboarded((prev) => new Set(prev).add(id));
+    markOnboarded(id);
     setOnboardFor(null); setHomeId(id); setTab('home');
   };
   const openProduct = (id: ProductId) => {
     haptic.select();
-    if (onboarded.has(id)) { setHomeId(id); setTab('home'); } else setOnboardFor(id);
+    if (onboarded.includes(id)) { setHomeId(id); setTab('home'); } else setOnboardFor(id);
+  };
+  const buyPillar = (price: string, title: string, kind: 'market' | 'create') => {
+    if (kind === 'create') { haptic.success(); showToast(`Opened “${title}” in Creator`); return; }
+    const n = parseInt(price.replace(/[^0-9]/g, ''), 10) || 0;
+    if (n === 0) { haptic.success(); showToast(`Added “${title}”`); return; }
+    if (debit(n, `Market · ${title}`)) { haptic.success(); showToast(`Got “${title}”  ·  −⟡${n}`); }
+    else { haptic.warning(); showToast('Not enough credits'); }
   };
   const openDetail = (kind: DetailKind, item: HomeItem) => { haptic.select(); setDetail({ kind, item }); };
   const detailPrimary = () => {
@@ -164,8 +184,8 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 
       <View style={styles.flex}>
         {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} />}
-        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} />}
-        {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} />}
+        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} />}
+        {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} />}
       </View>
 
       {/* bottom bar sits below the detail overlay */}
@@ -180,6 +200,12 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} onSwitch={() => setSheet('switch')} />
       ) : (
         <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} />
+      )}
+
+      {toast && (
+        <View pointerEvents="none" style={[styles.toastWrap, { top: insets.top + 64 }]}>
+          <View style={[styles.toast, { backgroundColor: th.text }]}><Text style={[styles.toastTxt, { color: th.bg }]}>{toast}</Text></View>
+        </View>
       )}
 
       <SheetWindow visible={sheet === 'profile'} wide={wide} th={th} onClose={() => setSheet(null)}>
@@ -234,10 +260,11 @@ function MicroBanner({ th }: { th: ShellTheme }) {
 }
 
 function WalletChip({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
+  const balance = useOne01PlatformStore((s) => s.balance);
   return (
     <Pressable onPress={onPress} style={styles.walletBtn} hitSlop={8}>
       <WalletIcon size={24} color={th.text} />
-      <Text style={[styles.walletAmt, { color: th.text }]}>$3,500</Text>
+      <Text style={[styles.walletAmt, { color: th.text }]}>${balance.toLocaleString()}</Text>
     </Pressable>
   );
 }
@@ -437,7 +464,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; 
 
 /* ─────────────────────────────── market / create ─────────────────────────────── */
 
-function SurfaceView({ th, wide, kind, topPad, bottomPad }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number }) {
+function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => void }) {
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
   const s = kind === 'market' ? MARKET[pid] : CREATOR[pid];
   const sectionTitle = kind === 'market' ? 'Market' : CREATOR[pid].title;
@@ -497,7 +524,7 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad }: { th: ShellTheme; wi
                   <Text style={[styles.projName, { color: th.text }]}>{p.title}</Text>
                   <Text style={[styles.projSub, { color: th.muted }]}>{p.tagline}</Text>
                 </View>
-                <View style={[styles.ctaPill, { backgroundColor: th.accent }]}><Text style={[styles.ctaPillTxt, { color: ctaFg }]}>{kind === 'market' ? 'Get' : 'Build'}</Text></View>
+                <Pressable onPress={() => onBuy(p.price, p.title, kind)} style={({ pressed }) => [styles.ctaPill, { backgroundColor: th.accent }, pressed && { opacity: 0.8 }]}><Text style={[styles.ctaPillTxt, { color: ctaFg }]}>{kind === 'market' ? 'Get' : 'Build'}</Text></Pressable>
               </View>
               <Text style={[styles.pillarDetail, { color: th.muted }]}>{p.detail}</Text>
             </View>
@@ -721,6 +748,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topGlow: { position: 'absolute', top: 0, left: 0, right: 0 },
+  toastWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 60 },
+  toast: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  toastTxt: { fontSize: 13.5, fontWeight: '700' },
 
   micro: { fontSize: 11, textAlign: 'center', paddingTop: 10 },
 

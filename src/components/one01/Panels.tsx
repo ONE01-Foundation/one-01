@@ -20,8 +20,19 @@ import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, UserIcon, CreateIcon,
 } from './brand';
 import { type ShellTheme, type MarkId } from '../../data/one01/platform';
+import { useOne01PlatformStore } from '../../stores/one01PlatformStore';
 
 const DARK_TILE = '#131317';
+
+function ago(ts: number): string {
+  const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 /** Mini area sparkline from a fixed mock series (trending up). */
 function Sparkline({ color, w = 300, h = 46 }: { color: string; w?: number; h?: number }) {
@@ -221,6 +232,7 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings }
 
 export function SettingsPage({ th, close }: { th: ShellTheme; close: () => void }) {
   const insets = useSafeAreaInsets();
+  const resetDemo = useOne01PlatformStore((s) => s.resetDemo);
   const [notif, setNotif] = useState(true);
   const [faceId, setFaceId] = useState(false);
   const [sounds, setSounds] = useState(true);
@@ -258,6 +270,11 @@ export function SettingsPage({ th, close }: { th: ShellTheme; close: () => void 
             </Pressable>
           ))}
         </View>
+        <Pressable onPress={() => { resetDemo(); close(); }} style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border, marginTop: 10 }]}>
+          <Text style={[styles.setLabel, { color: '#ef4444' }]}>Reset demo</Text>
+          <View style={styles.flex} />
+          <Text style={{ color: th.muted }}>›</Text>
+        </Pressable>
         <Text style={[styles.setVer, { color: th.muted }]}>ONE01 · v1.0 · virtual tokens, no crypto yet</Text>
       </ScrollView>
     </View>
@@ -268,18 +285,22 @@ export function SettingsPage({ th, close }: { th: ShellTheme; close: () => void 
 
 export function WalletPage({ th, close }: { th: ShellTheme; close: () => void }) {
   const insets = useSafeAreaInsets();
+  const balance = useOne01PlatformStore((s) => s.balance);
+  const transactions = useOne01PlatformStore((s) => s.transactions);
   const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
   const holdings: { id: string; mark: MarkId; name: string; amt: string; chg: string; up: boolean }[] = [
-    { id: 'one01', mark: 'one01', name: 'ONE01 Credits', amt: '3,500', chg: '+2.4%', up: true },
+    { id: 'one01', mark: 'one01', name: 'ONE01 Credits', amt: balance.toLocaleString(), chg: '+2.4%', up: true },
     { id: 'winzi', mark: 'winzi', name: 'Winzi Tokens', amt: '300', chg: '+8.1%', up: true },
     { id: 'mixstar', mark: 'mixstar', name: 'MixStar', amt: '150', chg: '-1.2%', up: false },
     { id: 'xit', mark: 'xit', name: 'Xit', amt: '42', chg: '+0.3%', up: true },
   ];
-  const tx = [
+  const liveTx = transactions.map((t) => ({ k: t.id, label: t.label, sub: ago(t.ts), amt: `${t.amount > 0 ? '+' : ''}${t.amount}`, up: t.amount > 0 }));
+  const mockTx = [
     { k: 't1', label: 'Top up', sub: 'Today · fiat rails', amt: '+500', up: true },
     { k: 't2', label: 'Winzi — Tournament ticket', sub: 'Yesterday', amt: '-50', up: false },
     { k: 't3', label: 'Received · MixStar vote refund', sub: '2 days ago', amt: '+12', up: true },
   ];
+  const tx = liveTx.length ? liveTx : mockTx;
 
   return (
     <View style={styles.flex}>
@@ -290,13 +311,13 @@ export function WalletPage({ th, close }: { th: ShellTheme; close: () => void })
           <View style={styles.balTop}>
             <View>
               <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85 }]}>Total balance</Text>
-              <Text style={[styles.balAmt, { color: accentFg }]}>⟡ 3,500</Text>
+              <Text style={[styles.balAmt, { color: accentFg }]}>⟡ {balance.toLocaleString()}</Text>
             </View>
             <View style={styles.flex} />
             <View style={styles.balChg}><Text style={[styles.balChgTxt, { color: accentFg }]}>▲ 6.2%</Text></View>
           </View>
           <View style={{ marginTop: 6 }}><Sparkline color={accentFg} /></View>
-          <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85, marginTop: 4 }]}>≈ $3,500 · virtual credits · 30d</Text>
+          <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85, marginTop: 4 }]}>≈ ${balance.toLocaleString()} · virtual credits · 30d</Text>
         </LinearGradient>
 
         {/* actions */}
