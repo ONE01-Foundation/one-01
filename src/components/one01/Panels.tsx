@@ -23,7 +23,7 @@ import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
 import { type ShellTheme, type MarkId } from '../../data/one01/platform';
-import { useOne01PlatformStore, livePrice, buildNotifs, type PlatformTx, type UserCreation } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
 
 const PROJ_META: Record<string, { name: string; mark: MarkId }> = {
@@ -46,7 +46,7 @@ function ago(ts: number): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-type Post = { id: string; time: string; text: string; chip: string; accent: string };
+type Post = { id: string; time: string; text: string; chip: string; accent: string; nav?: NotifNav };
 
 /** Turn the wallet's real transactions + published creations into a social feed. */
 function buildPosts(transactions: PlatformTx[], creations: UserCreation[], accent: string): Post[] {
@@ -67,9 +67,9 @@ function buildPosts(transactions: PlatformTx[], creations: UserCreation[], accen
     else if (L.includes('free vote')) { text = `Voted on ${L.replace(' free vote', '')}`; chip = 'MixStar'; col = PURPLE; }
     else if (L.includes('practice')) { text = `Practised ${L.replace(' practice', '')} 🏓`; chip = 'Winzi'; col = GOLD; }
     else if (L.includes('earnings')) { text = `Collected earnings from ${L.replace(' earnings', '')} 🧱`; chip = 'Creator'; col = accent; }
-    raw.push({ id: t.id, ts: t.ts, time: ago(t.ts), text, chip, accent: col });
+    raw.push({ id: t.id, ts: t.ts, time: ago(t.ts), text, chip, accent: col, nav: labelNav(t.label) });
   });
-  creations.forEach((c) => raw.push({ id: c.id, ts: c.ts, time: ago(c.ts), text: `Published ${c.title} on ${c.surface} 🧱`, chip: 'Creator', accent: ONE }));
+  creations.forEach((c) => raw.push({ id: c.id, ts: c.ts, time: ago(c.ts), text: `Published ${c.title} on ${c.surface} 🧱`, chip: 'Creator', accent: ONE, nav: { kind: 'create' } }));
   return raw.sort((a, b) => b.ts - a.ts).slice(0, 30);
 }
 
@@ -174,7 +174,7 @@ function PanelHead({ th, title, onClose, right }: { th: ShellTheme; title: strin
 
 /* ─────────────────────────────── ProfilePage ─────────────────────────────── */
 
-export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang, initialTab = 'posts' }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'posts' | 'notifs' | 'about' }) {
+export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang, initialTab = 'posts', onNavigate }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'posts' | 'notifs' | 'about'; onNavigate?: (nav: NotifNav) => void }) {
   const insets = useSafeAreaInsets();
   const t = (en: string) => tr(lang, en);
   const [tab, setTab] = useState<'posts' | 'notifs' | 'about'>(initialTab);
@@ -183,10 +183,11 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
   const activity = useMemo(() => buildPosts(transactions, creations, th.accent), [transactions, creations, th.accent]);
   const notifs = useMemo(() => buildNotifs(transactions), [transactions]);
   const seedPosts: Post[] = [
-    { id: 'p1', time: '2h', text: 'Started a process: renew my driving license 🪪', chip: 'Process', accent: th.accent },
-    { id: 'p2', time: '1d', text: 'Reached a provider through ONE — only my city and budget were shared.', chip: 'ONE', accent: '#10B981' },
-    { id: 'p3', time: '3d', text: 'Queued my first Winzi battle ⚔️ wish me luck', chip: 'Winzi', accent: '#F9D800' },
+    { id: 'p1', time: '2h', text: 'Started a process: renew my driving license 🪪', chip: 'Process', accent: th.accent, nav: { kind: 'home', homeId: 'one' } },
+    { id: 'p2', time: '1d', text: 'Reached a provider through ONE — only my city and budget were shared.', chip: 'ONE', accent: '#10B981', nav: { kind: 'home', homeId: 'one' } },
+    { id: 'p3', time: '3d', text: 'Queued my first Winzi battle ⚔️ wish me luck', chip: 'Winzi', accent: '#F9D800', nav: { kind: 'home', homeId: 'winzi' } },
   ];
+  const go = (nav?: NotifNav) => { if (nav && onNavigate) onNavigate(nav); };
   const posts = activity.length ? activity : seedPosts;
   const stats = [{ v: '128', l: 'Friends' }, { v: `${posts.length}`, l: 'Posts' }, { v: 'LVL 13', l: 'Level' }];
   const actions = [
@@ -231,14 +232,15 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
           {tab === 'notifs' && (
             <View style={{ gap: 10, marginTop: 14 }}>
               {notifs.map((n) => (
-                <View key={n.id} style={[styles.notifRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                <Pressable key={n.id} disabled={!n.nav} onPress={() => go(n.nav)} style={({ pressed }) => [styles.notifRow, { backgroundColor: th.surface, borderColor: th.border, opacity: pressed ? 0.6 : 1 }]}>
                   <View style={[styles.notifTile, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 19 }}>{n.emoji}</Text></View>
                   <View style={styles.flex}>
                     <Text style={[styles.notifRowTitle, { color: th.text }]} numberOfLines={1}>{n.title}</Text>
                     <Text style={[styles.notifRowBody, { color: th.muted }]} numberOfLines={1}>{n.body}</Text>
                   </View>
                   <Text style={[styles.notifRowTime, { color: th.muted }]}>{ago(n.ts)}</Text>
-                </View>
+                  {n.nav ? <Text style={{ color: th.muted, fontSize: 18, marginLeft: 4 }}>›</Text> : null}
+                </Pressable>
               ))}
             </View>
           )}
@@ -246,7 +248,7 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
           {tab === 'posts' && (
             <View style={{ gap: 12, marginTop: 14 }}>
               {posts.map((p) => (
-                <View key={p.id} style={[styles.post, { backgroundColor: th.surface, borderColor: th.border }]}>
+                <Pressable key={p.id} disabled={!p.nav} onPress={() => go(p.nav)} style={({ pressed }) => [styles.post, { backgroundColor: th.surface, borderColor: th.border, opacity: pressed ? 0.7 : 1 }]}>
                   <View style={styles.postHead}>
                     <View style={[styles.postAv, { backgroundColor: DARK_TILE }]}><UserIcon size={16} color="#fff" /></View>
                     <Text style={[styles.postName, { color: th.text }]}>Nobody</Text>
@@ -260,7 +262,7 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
                     <Text style={[styles.postAction, { color: th.muted }]}>↩  3</Text>
                     <Text style={[styles.postAction, { color: th.muted }]}>↗</Text>
                   </View>
-                </View>
+                </Pressable>
               ))}
             </View>
           )}

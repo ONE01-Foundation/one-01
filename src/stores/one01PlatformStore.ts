@@ -58,16 +58,32 @@ export function pendingEarnings(c: UserCreation, now = Date.now()): number {
 
 /* ───────────────────────── notifications ───────────────────────── */
 
-export interface Notif { id: string; emoji: string; title: string; body: string; ts: number; }
+/** Where tapping a notification or feed post takes you. */
+export type NotifNav =
+  | { kind: 'home'; homeId: string }
+  | { kind: 'wallet' }
+  | { kind: 'market' }
+  | { kind: 'create' };
+
+export interface Notif { id: string; emoji: string; title: string; body: string; ts: number; nav?: NotifNav; }
+
+/** Infer a navigation target from a transaction/activity label. */
+export function labelNav(label: string): NotifNav {
+  if (label.startsWith('Market · ')) return { kind: 'market' };
+  if (/match|practice/i.test(label)) return { kind: 'home', homeId: 'winzi' };
+  if (/bet|vote/i.test(label)) return { kind: 'home', homeId: 'mixstar' };
+  if (/earnings|published/i.test(label)) return { kind: 'create' };
+  return { kind: 'wallet' };
+}
 
 const NOTIF_T0 = Date.now();
 const NOTIF_SEED: Notif[] = [
   { id: 's1', emoji: '🏆', title: 'You reached Level 13', body: 'Keep the streak going', ts: NOTIF_T0 - 2 * 60000 },
   { id: 's2', emoji: '💬', title: 'nova started following you', body: 'Now following your ONE', ts: NOTIF_T0 - 9 * 60000 },
-  { id: 's3', emoji: '🎯', title: 'Winzi rank updated', body: 'You climbed to Gold II', ts: NOTIF_T0 - 24 * 60000 },
-  { id: 's4', emoji: '📺', title: 'Episode 4 voting is open', body: 'MixStar · Survive', ts: NOTIF_T0 - 52 * 60000 },
-  { id: 's5', emoji: '🤝', title: 'A provider replied', body: 'Renew license · step 2', ts: NOTIF_T0 - 95 * 60000 },
-  { id: 's6', emoji: '⚡', title: 'New on ONE01 Market', body: 'Fresh signals & feeds dropped', ts: NOTIF_T0 - 3 * 3600000 },
+  { id: 's3', emoji: '🎯', title: 'Winzi rank updated', body: 'You climbed to Gold II', ts: NOTIF_T0 - 24 * 60000, nav: { kind: 'home', homeId: 'winzi' } },
+  { id: 's4', emoji: '📺', title: 'Episode 4 voting is open', body: 'MixStar · Survive', ts: NOTIF_T0 - 52 * 60000, nav: { kind: 'home', homeId: 'mixstar' } },
+  { id: 's5', emoji: '🤝', title: 'A provider replied', body: 'Renew license · step 2', ts: NOTIF_T0 - 95 * 60000, nav: { kind: 'home', homeId: 'one' } },
+  { id: 's6', emoji: '⚡', title: 'New on ONE01 Market', body: 'Fresh signals & feeds dropped', ts: NOTIF_T0 - 3 * 3600000, nav: { kind: 'market' } },
 ];
 
 /** Merge seeded platform updates with the wallet's real transactions, newest first. */
@@ -78,6 +94,7 @@ export function buildNotifs(transactions: PlatformTx[]): Notif[] {
     title: t.label,
     body: `${t.amount >= 0 ? '+' : ''}⟡${t.amount.toLocaleString()}`,
     ts: t.ts,
+    nav: labelNav(t.label),
   }));
   return [...txn, ...NOTIF_SEED].sort((a, b) => b.ts - a.ts).slice(0, 40);
 }

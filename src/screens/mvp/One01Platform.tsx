@@ -60,7 +60,7 @@ import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
 import { SheetWindow, ProfilePage, WalletPage, SettingsPage } from '../../components/one01/Panels';
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
-import { useOne01PlatformStore, pendingEarnings, buildNotifs, type UserCreation } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, pendingEarnings, buildNotifs, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { onboardingFor } from '../../data/one01/onboarding';
 import { tr, type Lang } from '../../data/one01/i18n';
 import {
@@ -176,6 +176,15 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
+  };
+
+  // tapping a notification / feed post jumps to whatever it's about
+  const onNotifNav = (nav: NotifNav) => {
+    if (nav.kind === 'wallet') { setSheet('wallet'); return; }
+    setSheet(null);
+    if (nav.kind === 'home') { haptic.select(); setHomeId(nav.homeId as HomeId); setTab('home'); }
+    else if (nav.kind === 'market') { setTab('market'); }
+    else if (nav.kind === 'create') { setTab('create'); }
   };
 
   // a focused drawer view belongs to the current home/tab — drop it on any switch
@@ -310,6 +319,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
             onScroll={onScroll}
             lang={lang}
             initialTab={profileTab}
+            onNavigate={onNotifNav}
             onExit={onExit}
             onCreate={() => { setTab('create'); close(); }}
             onSettings={() => setSheet('settings')}
