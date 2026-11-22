@@ -39,6 +39,54 @@ export function AppleIcon({ size = 20, color = '#000000' }: BrandProps) {
   );
 }
 
+/** Shop / Market — for the bottom bar. */
+export function ShopIcon({ size = 24, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 34 34" fill="none">
+      <Path d="M12.5 10.5C13.1679 10.5 13.7143 9.95357 13.7143 9.28572V8.07143C13.7143 6.05571 15.3414 4.42857 17.3571 4.42857C19.3729 4.42857 21 6.05571 21 8.07143V9.28572C21 9.95357 21.5464 10.5 22.2143 10.5C22.8821 10.5 23.4286 9.95357 23.4286 9.28572V8.07143C23.4286 4.72 20.7086 2 17.3571 2C14.0057 2 11.2857 4.72 11.2857 8.07143V9.28572C11.2857 9.95357 11.8321 10.5 12.5 10.5ZM17.3571 20.2143C14.0057 20.2143 11.2857 17.4943 11.2857 14.1429C11.2857 13.475 11.8321 12.9286 12.5 12.9286C13.1679 12.9286 13.7143 13.475 13.7143 14.1429C13.7143 16.1586 15.3414 17.7857 17.3571 17.7857C19.3729 17.7857 21 16.1586 21 14.1429C21 13.475 21.5464 12.9286 22.2143 12.9286C22.8821 12.9286 23.4286 13.475 23.4286 14.1429C23.4286 17.4943 20.7086 20.2143 17.3571 20.2143ZM30.7143 23.7358L29.5 11.7144C29.5 9.69864 27.8729 8.0715 25.8571 8.0715H8.85714C6.89 8.05936 5.275 9.62578 5.21429 11.5929L4 23.8572C4 27.8765 7.26643 31.1429 11.2857 31.1429H23.4286C27.4721 31.1308 30.7264 27.8401 30.7143 23.7965C30.7143 23.7844 30.7143 23.7601 30.7143 23.7358Z" fill={color} />
+    </Svg>
+  );
+}
+
+/** Create — for the bottom bar (+). */
+export function CreateIcon({ size = 24, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 34 34" fill="none">
+      <Path d="M22.0898 4H10.9102C6.54164 4 3 7.54164 3 11.9102V23.0898C3 27.4584 6.54164 31 10.9102 31H22.0898C26.4584 31 30 27.4584 30 23.0898V11.9102C30 7.54164 26.4584 4 22.0898 4ZM24.1465 17.5C24.1465 18.2283 23.5564 18.8184 22.8281 18.8184H17.8184V23.8281C17.8184 24.5564 17.2283 25.1465 16.5 25.1465C15.7717 25.1465 15.1816 24.5564 15.1816 23.8281V18.8184H10.1719C9.44361 18.8184 8.85352 18.2283 8.85352 17.5C8.85352 16.7717 9.44361 16.1816 10.1719 16.1816H15.1816V11.1719C15.1816 10.4436 15.7717 9.85352 16.5 9.85352C17.2283 9.85352 17.8184 10.4436 17.8184 11.1719V16.1816H22.8281C23.5564 16.1816 24.1465 16.7717 24.1465 17.5Z" fill={color} />
+    </Svg>
+  );
+}
+
+/** Magnifier — category search. */
+export function SearchIcon({ size = 18, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={11} cy={11} r={7} stroke={color} strokeWidth={2} />
+      <Path d="M20 20 L16.2 16.2" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Funnel — category filter. */
+export function FilterIcon({ size = 18, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M4 5.5 H20 L14 12.5 V19 L10 21 V12.5 Z" fill={color} />
+    </Svg>
+  );
+}
+
+/** DargWin — placeholder mark (gold figure). */
+export function DargWinMark({ size = 28 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 62 62" fill="none">
+      <Circle cx={31} cy={22} r={8} fill="#E8A33D" />
+      <Path d="M16 33 L31 56 L46 33 Z" fill="#E8A33D" />
+      <Circle cx={31} cy={40} r={3.4} fill="#131317" />
+    </Svg>
+  );
+}
+
 /** Wallet — for the home top bar. */
 export function WalletIcon({ size = 22, color = '#000000' }: BrandProps) {
   return (

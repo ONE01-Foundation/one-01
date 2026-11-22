@@ -10,7 +10,7 @@
  */
 
 export type ProductId = 'one' | 'winzi' | 'mixstar';
-export type MarkId = 'one' | 'winzi' | 'mixstar' | 'xit' | 'sodex' | 'one01';
+export type MarkId = 'one' | 'winzi' | 'mixstar' | 'xit' | 'sodex' | 'one01' | 'dargwin';
 export type CategoryId = 'all' | 'business' | 'finance' | 'health' | 'knowledge' | 'leisure';
 
 export interface NavItem {
@@ -292,12 +292,31 @@ export interface HomeItem {
   mark?: MarkId;
   /** Tap → open this product's shell. */
   product?: ProductId;
+  /** Row CTA label (ONE01 projects), e.g. "Play". */
+  cta?: string;
   /** Card gradient [from, to] (games/shows). */
   bg?: [string, string];
   /** Corner metric, e.g. "48", "13k". */
   metric?: string;
   live?: boolean;
 }
+
+/** App switcher grid (long-press the logo). ONE01 is shown separately on top. */
+export interface SwitcherApp {
+  id: string;
+  label: string;
+  mark: MarkId;
+  product?: ProductId;
+}
+
+export const SWITCHER_APPS: SwitcherApp[] = [
+  { id: 'one', label: 'One', mark: 'one', product: 'one' },
+  { id: 'winzi', label: 'Winzi', mark: 'winzi', product: 'winzi' },
+  { id: 'mixstar', label: 'MixStar', mark: 'mixstar', product: 'mixstar' },
+  { id: 'xit', label: 'Xit', mark: 'xit' },
+  { id: 'dargwin', label: 'DargWin', mark: 'dargwin' },
+  { id: 'sodex', label: 'Sodex', mark: 'sodex' },
+];
 
 export interface HomeConfig {
   categories: HomeCategory[];
@@ -321,10 +340,10 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
     sectionCount: 4,
     layout: 'rows',
     items: [
-      { id: 'winzi', title: 'Winzi', subtitle: 'Play Games, Win Money', mark: 'winzi', product: 'winzi' },
-      { id: 'mixstar', title: 'MixStar', subtitle: 'AI Reality TV', mark: 'mixstar', product: 'mixstar' },
-      { id: 'xit', title: 'Xit', subtitle: 'News & trends coins', mark: 'xit' },
-      { id: 'sodex', title: 'Sodex', subtitle: 'Spiritual intelligence', mark: 'sodex' },
+      { id: 'winzi', title: 'Winzi', subtitle: 'Play Games, Win Money', mark: 'winzi', product: 'winzi', cta: 'Play' },
+      { id: 'mixstar', title: 'MixStar', subtitle: 'AI Reality TV', mark: 'mixstar', product: 'mixstar', cta: 'Watch' },
+      { id: 'xit', title: 'Xit', subtitle: 'News & trends coins', mark: 'xit', cta: 'Open' },
+      { id: 'sodex', title: 'Sodex', subtitle: 'Spiritual intelligence', mark: 'sodex', cta: 'Open' },
     ],
   },
   one: {
