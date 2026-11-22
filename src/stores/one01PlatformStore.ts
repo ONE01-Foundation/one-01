@@ -56,6 +56,32 @@ export function pendingEarnings(c: UserCreation, now = Date.now()): number {
   return Math.floor(((now - c.lastCollected) / 60000) * c.rate);
 }
 
+/* ───────────────────────── notifications ───────────────────────── */
+
+export interface Notif { id: string; emoji: string; title: string; body: string; ts: number; }
+
+const NOTIF_T0 = Date.now();
+const NOTIF_SEED: Notif[] = [
+  { id: 's1', emoji: '🏆', title: 'You reached Level 13', body: 'Keep the streak going', ts: NOTIF_T0 - 2 * 60000 },
+  { id: 's2', emoji: '💬', title: 'nova started following you', body: 'Now following your ONE', ts: NOTIF_T0 - 9 * 60000 },
+  { id: 's3', emoji: '🎯', title: 'Winzi rank updated', body: 'You climbed to Gold II', ts: NOTIF_T0 - 24 * 60000 },
+  { id: 's4', emoji: '📺', title: 'Episode 4 voting is open', body: 'MixStar · Survive', ts: NOTIF_T0 - 52 * 60000 },
+  { id: 's5', emoji: '🤝', title: 'A provider replied', body: 'Renew license · step 2', ts: NOTIF_T0 - 95 * 60000 },
+  { id: 's6', emoji: '⚡', title: 'New on ONE01 Market', body: 'Fresh signals & feeds dropped', ts: NOTIF_T0 - 3 * 3600000 },
+];
+
+/** Merge seeded platform updates with the wallet's real transactions, newest first. */
+export function buildNotifs(transactions: PlatformTx[]): Notif[] {
+  const txn: Notif[] = transactions.map((t) => ({
+    id: t.id,
+    emoji: t.amount >= 0 ? '💰' : '🧾',
+    title: t.label,
+    body: `${t.amount >= 0 ? '+' : ''}⟡${t.amount.toLocaleString()}`,
+    ts: t.ts,
+  }));
+  return [...txn, ...NOTIF_SEED].sort((a, b) => b.ts - a.ts).slice(0, 40);
+}
+
 const START_BALANCE = 3500;
 const rid = () => `tx_${Date.now()}_${Math.floor(Math.random() * 1e4)}`;
 

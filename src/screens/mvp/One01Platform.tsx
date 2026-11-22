@@ -60,7 +60,7 @@ import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
 import { SheetWindow, ProfilePage, WalletPage, SettingsPage } from '../../components/one01/Panels';
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
-import { useOne01PlatformStore, pendingEarnings, type UserCreation, type PlatformTx } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, pendingEarnings, buildNotifs, type UserCreation } from '../../stores/one01PlatformStore';
 import { onboardingFor } from '../../data/one01/onboarding';
 import { tr, type Lang } from '../../data/one01/i18n';
 import {
@@ -89,29 +89,7 @@ type DrawerKind = 'main' | 'people' | 'events' | 'stats' | 'feed';
 type MainDrawer = { label: string; homeId: HomeId; items: HomeItem[]; layout: 'rows' | 'cards'; onOpenItem: (item: HomeItem) => void };
 /** A platform search result (a home item or a Market listing). */
 type SearchResult = { type: 'item'; item: HomeItem } | { type: 'market'; pillar: SurfacePillar };
-
-/** A notification (from your real activity + seeded platform updates). */
-interface Notif { id: string; emoji: string; title: string; body: string; ts: number; }
-const NOTIF_T0 = Date.now();
-const NOTIF_SEED: Notif[] = [
-  { id: 's1', emoji: '🏆', title: 'You reached Level 13', body: 'Keep the streak going', ts: NOTIF_T0 - 2 * 60000 },
-  { id: 's2', emoji: '💬', title: 'nova started following you', body: 'Now following your ONE', ts: NOTIF_T0 - 9 * 60000 },
-  { id: 's3', emoji: '🎯', title: 'Winzi rank updated', body: 'You climbed to Gold II', ts: NOTIF_T0 - 24 * 60000 },
-  { id: 's4', emoji: '📺', title: 'Episode 4 voting is open', body: 'MixStar · Survive', ts: NOTIF_T0 - 52 * 60000 },
-  { id: 's5', emoji: '🤝', title: 'A provider replied', body: 'Renew license · step 2', ts: NOTIF_T0 - 95 * 60000 },
-  { id: 's6', emoji: '⚡', title: 'New on ONE01 Market', body: 'Fresh signals & feeds dropped', ts: NOTIF_T0 - 3 * 3600000 },
-];
-/** Merge seeded platform updates with the wallet's real transactions, newest first. */
-function buildNotifs(transactions: PlatformTx[]): Notif[] {
-  const txn: Notif[] = transactions.map((t) => ({
-    id: t.id,
-    emoji: t.amount >= 0 ? '💰' : '🧾',
-    title: t.label,
-    body: `${t.amount >= 0 ? '+' : ''}⟡${t.amount.toLocaleString()}`,
-    ts: t.ts,
-  }));
-  return [...txn, ...NOTIF_SEED].sort((a, b) => b.ts - a.ts).slice(0, 40);
-}
+type ProfileTab = 'posts' | 'notifs' | 'about';
 
 const GLOWS: Record<HomeId, string> = { one01: '#E8B923', one: '#6B7280', winzi: '#3B5BDB', mixstar: '#8B5CF6' };
 const DARK_TILE = '#131317';
@@ -178,12 +156,14 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const debit = useOne01PlatformStore((s) => s.debit);
   const publishCreation = useOne01PlatformStore((s) => s.publishCreation);
   const markNotifsSeen = useOne01PlatformStore((s) => s.markNotifsSeen);
-  const openNotifs = () => { markNotifsSeen(); setSheet('notifs'); };
+  const openProfile = () => { setProfileTab('posts'); setSheet('profile'); };
+  const openNotifs = () => { markNotifsSeen(); setProfileTab('notifs'); setSheet('profile'); };
 
   const [homeId, setHomeId] = useState<HomeId>('one01');
   const [tab, setTab] = useState<Tab>('home');
   const [onboardFor, setOnboardFor] = useState<ProductId | null>(null);
-  const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings' | 'notifs'>(null);
+  const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings'>(null);
+  const [profileTab, setProfileTab] = useState<ProfileTab>('posts');
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
   const [play, setPlay] = useState<{ kind: PlayKind; item: HomeItem } | null>(null);
@@ -311,9 +291,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       )}
 
       {wide ? (
-        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} onSwitch={() => setSheet('switch')} onNotifs={openNotifs} lang={lang} />
+        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={openProfile} onSwitch={() => setSheet('switch')} onNotifs={openNotifs} lang={lang} />
       ) : (
-        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} onNotifs={openNotifs} topInset={insets.top} />
+        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={openProfile} onNotifs={openNotifs} topInset={insets.top} />
       )}
 
       {toast && (
@@ -329,6 +309,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
             close={close}
             onScroll={onScroll}
             lang={lang}
+            initialTab={profileTab}
             onExit={onExit}
             onCreate={() => { setTab('create'); close(); }}
             onSettings={() => setSheet('settings')}
@@ -341,9 +322,6 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       </SheetWindow>
       <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} lang={lang} />}
-      </SheetWindow>
-      <SheetWindow visible={sheet === 'notifs'} wide={wide} th={th} onClose={() => setSheet(null)}>
-        {(close, onScroll) => <NotificationsPage th={th} lang={lang} close={close} onScroll={onScroll} />}
       </SheetWindow>
       <SheetWindow visible={!!bannerSlide} wide={wide} th={th} onClose={() => setBannerSlide(null)}>
         {(close, onScroll) => (bannerSlide ? <BannerPage th={th} slide={bannerSlide} close={close} onScroll={onScroll} onCta={() => { setBannerSlide(null); setTab('market'); }} /> : null)}
@@ -1319,47 +1297,6 @@ function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; sli
         <Pressable onPress={onCta} style={[styles.bannerPageCta, { backgroundColor: th.accent }]}>
           <Text style={[styles.bannerPageCtaTxt, { color: ctaFg }]}>{slide.ctaLabel}</Text>
         </Pressable>
-      </ScrollView>
-    </View>
-  );
-}
-
-/* ─────────────────────────────── notifications ─────────────────────────────── */
-
-function agoShort(ts: number): string {
-  const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
-  if (s < 60) return 'now';
-  const m = Math.floor(s / 60); if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60); if (h < 24) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-}
-
-function NotificationsPage({ th, lang, close, onScroll }: { th: ShellTheme; lang: Lang; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
-  const insets = useSafeAreaInsets();
-  const transactions = useOne01PlatformStore((s) => s.transactions);
-  const notifs = useMemo(() => buildNotifs(transactions), [transactions]);
-  return (
-    <View style={styles.flex}>
-      <View style={[styles.header, { paddingTop: 12 }]}>
-        <Text style={[styles.notifTitle, { color: th.text }]}>{tr(lang, 'Notifications')}</Text>
-        <View style={styles.flex} />
-        <Pressable onPress={close} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
-          <Text style={[styles.xmark, { color: th.text }]}>✕</Text>
-        </Pressable>
-      </View>
-      <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30, gap: 10 }}>
-        {notifs.length === 0 ? (
-          <Text style={[styles.searchHint, { color: th.muted }]}>{tr(lang, 'Nothing new')}</Text>
-        ) : notifs.map((n) => (
-          <View key={n.id} style={[styles.notifRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-            <View style={[styles.notifTile, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 20 }}>{n.emoji}</Text></View>
-            <View style={styles.flex}>
-              <Text style={[styles.notifRowTitle, { color: th.text }]} numberOfLines={1}>{n.title}</Text>
-              <Text style={[styles.notifRowBody, { color: th.muted }]} numberOfLines={1}>{n.body}</Text>
-            </View>
-            <Text style={[styles.notifTime, { color: th.muted }]}>{agoShort(n.ts)}</Text>
-          </View>
-        ))}
       </ScrollView>
     </View>
   );

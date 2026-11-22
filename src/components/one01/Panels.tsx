@@ -23,7 +23,7 @@ import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
 import { type ShellTheme, type MarkId } from '../../data/one01/platform';
-import { useOne01PlatformStore, livePrice, type PlatformTx, type UserCreation } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, livePrice, buildNotifs, type PlatformTx, type UserCreation } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
 
 const PROJ_META: Record<string, { name: string; mark: MarkId }> = {
@@ -174,13 +174,14 @@ function PanelHead({ th, title, onClose, right }: { th: ShellTheme; title: strin
 
 /* ─────────────────────────────── ProfilePage ─────────────────────────────── */
 
-export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang }) {
+export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang, initialTab = 'posts' }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'posts' | 'notifs' | 'about' }) {
   const insets = useSafeAreaInsets();
   const t = (en: string) => tr(lang, en);
-  const [tab, setTab] = useState<'posts' | 'about'>('posts');
+  const [tab, setTab] = useState<'posts' | 'notifs' | 'about'>(initialTab);
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const creations = useOne01PlatformStore((s) => s.creations);
   const activity = useMemo(() => buildPosts(transactions, creations, th.accent), [transactions, creations, th.accent]);
+  const notifs = useMemo(() => buildNotifs(transactions), [transactions]);
   const seedPosts: Post[] = [
     { id: 'p1', time: '2h', text: 'Started a process: renew my driving license 🪪', chip: 'Process', accent: th.accent },
     { id: 'p2', time: '1d', text: 'Reached a provider through ONE — only my city and budget were shared.', chip: 'ONE', accent: '#10B981' },
@@ -219,15 +220,30 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
 
           {/* tabs */}
           <View style={[styles.tabBar, { borderColor: th.border }]}>
-            {(['posts', 'about'] as const).map((tk) => (
+            {(['posts', 'notifs', 'about'] as const).map((tk) => (
               <Pressable key={tk} onPress={() => setTab(tk)} style={styles.tabBtn}>
-                <Text style={[styles.tabTxt, { color: tk === tab ? th.text : th.muted }]}>{tk === 'posts' ? t('Posts') : t('About')}</Text>
+                <Text style={[styles.tabTxt, { color: tk === tab ? th.text : th.muted }]}>{tk === 'posts' ? t('Posts') : tk === 'notifs' ? t('Notifications') : t('About')}</Text>
                 {tk === tab ? <View style={[styles.tabUnderline, { backgroundColor: th.text }]} /> : null}
               </Pressable>
             ))}
           </View>
 
-          {tab === 'posts' ? (
+          {tab === 'notifs' && (
+            <View style={{ gap: 10, marginTop: 14 }}>
+              {notifs.map((n) => (
+                <View key={n.id} style={[styles.notifRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <View style={[styles.notifTile, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 19 }}>{n.emoji}</Text></View>
+                  <View style={styles.flex}>
+                    <Text style={[styles.notifRowTitle, { color: th.text }]} numberOfLines={1}>{n.title}</Text>
+                    <Text style={[styles.notifRowBody, { color: th.muted }]} numberOfLines={1}>{n.body}</Text>
+                  </View>
+                  <Text style={[styles.notifRowTime, { color: th.muted }]}>{ago(n.ts)}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {tab === 'posts' && (
             <View style={{ gap: 12, marginTop: 14 }}>
               {posts.map((p) => (
                 <View key={p.id} style={[styles.post, { backgroundColor: th.surface, borderColor: th.border }]}>
@@ -247,7 +263,9 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
                 </View>
               ))}
             </View>
-          ) : (
+          )}
+
+          {tab === 'about' && (
             <>
               <Text style={[styles.about, { color: th.muted }]}>One ONE01 identity across every app. Your representative shares only what you allow.</Text>
               <View style={{ marginTop: 18, gap: 8 }}>
@@ -524,6 +542,13 @@ const styles = StyleSheet.create({
   postText: { fontSize: 14.5, lineHeight: 20 },
   postFoot: { flexDirection: 'row', gap: 20 },
   postAction: { fontSize: 13, fontWeight: '600' },
+
+  /* profile notifications tab */
+  notifRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, padding: 11 },
+  notifTile: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  notifRowTitle: { fontSize: 14.5, fontWeight: '700' },
+  notifRowBody: { fontSize: 12.5, marginTop: 2 },
+  notifRowTime: { fontSize: 11.5, fontWeight: '600' },
 
   /* wallet */
   balCard: { borderRadius: 20, padding: 22, marginTop: 4 },
