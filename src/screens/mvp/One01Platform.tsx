@@ -76,6 +76,7 @@ import {
   type HomeItem,
   type EcosystemApp,
   type ShellTheme,
+  type ShellHero,
   type SurfacePillar,
 } from '../../data/one01/platform';
 
@@ -158,6 +159,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
   const [play, setPlay] = useState<{ kind: PlayKind; item: HomeItem } | null>(null);
   const [drawer, setDrawer] = useState<{ kind: DrawerKind } | null>(null);
+  const [bannerSlide, setBannerSlide] = useState<ShellHero | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (msg: string) => {
@@ -222,8 +224,8 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   if (onboardFor) return <ProductOnboarding config={onboardingFor(onboardFor)} onFinish={() => enterProduct(onboardFor)} />;
 
   const th = shellTheme(homeId, appearance);
-  const topPad = wide ? 96 : 112;
-  const bottomPad = (wide ? 40 : 104) + insets.bottom;
+  const topPad = wide ? 88 : 100;
+  const bottomPad = (wide ? 40 : 120) + insets.bottom;
 
   // the main section ("Projects"/"Games"/…) as a focused drawer page
   const homeCfg = HOME[homeId];
@@ -251,7 +253,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
 
       <View style={styles.flex}>
-        {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} lang={lang} />}
+        {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} onOpenBanner={(s) => setBannerSlide(s)} lang={lang} />}
         {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
         {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
       </View>
@@ -301,6 +303,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
+      <SheetWindow visible={!!bannerSlide} wide={wide} th={th} onClose={() => setBannerSlide(null)}>
+        {(close, onScroll) => (bannerSlide ? <BannerPage th={th} slide={bannerSlide} close={close} onScroll={onScroll} onCta={() => { setBannerSlide(null); setTab('market'); }} /> : null)}
+      </SheetWindow>
       <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
     </View>
@@ -329,10 +334,6 @@ function TopGlow({ th, w, h }: { th: ShellTheme; w: number; h: number }) {
 }
 
 /* ─────────────────────────────── mobile bars ─────────────────────────────── */
-
-function MicroBanner({ th }: { th: ShellTheme }) {
-  return <Text style={[styles.micro, { color: th.muted }]}>20% up users in {th.name}</Text>;
-}
 
 function WalletChip({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   const balance = useOne01PlatformStore((s) => s.balance);
@@ -365,7 +366,6 @@ function MobileTopBar({ th, onWallet, onProfile }: { th: ShellTheme; onWallet: (
   return (
     // stays solid th.bg through the bar, then fades — so scrolling content is hidden near the clock
     <LinearGradient colors={[th.bg, th.bg, `${th.bg}00`]} locations={[0, 0.5, 1]} style={styles.topBar} pointerEvents="box-none">
-      <MicroBanner th={th} />
       <View style={styles.topRow}>
         <WalletChip th={th} onPress={onWallet} />
         <ProfileBtn th={th} onPress={onProfile} />
@@ -376,7 +376,7 @@ function MobileTopBar({ th, onWallet, onProfile }: { th: ShellTheme; onWallet: (
 
 function MobileBottomBar({ th, tab, setTab, onSwitch, bottomInset }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onSwitch: () => void; bottomInset: number }) {
   return (
-    <LinearGradient colors={[`${th.bg}00`, th.bg]} style={[styles.bottomBar, { paddingBottom: Math.max(bottomInset, 12) }]} pointerEvents="box-none">
+    <LinearGradient colors={[`${th.bg}00`, th.bg]} style={[styles.bottomBar, { paddingBottom: Math.max(bottomInset, 12) + 10 }]} pointerEvents="box-none">
       <Pressable style={styles.navBtn} onPress={() => { haptic.select(); setTab('market'); }}>
         <ShopIcon size={26} color={tab === 'market' ? th.accent : th.muted} />
       </Pressable>
@@ -407,7 +407,6 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { 
   ];
   return (
     <LinearGradient colors={[th.bg, `${th.bg}00`]} style={styles.desktopNav} pointerEvents="box-none">
-      <MicroBanner th={th} />
       <View style={styles.desktopRow}>
         <Pressable onPress={() => { haptic.select(); onSwitch(); }} style={styles.desktopLogo}>
           {th.homeId === 'one01' ? (
@@ -437,7 +436,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { 
 
 /* ─────────────────────────────── home content ─────────────────────────────── */
 
-function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void; lang: Lang }) {
+function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpenBanner, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void; onOpenBanner: (s: ShellHero) => void; lang: Lang }) {
   const home = HOME[th.homeId];
   const extras = HOME_EXTRAS[th.homeId];
   const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
@@ -446,29 +445,62 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, lang }
   const [cat, setCat] = useState('all');
   const cardKind: DetailKind = th.homeId === 'winzi' ? 'game' : th.homeId === 'mixstar' ? 'show' : th.homeId === 'one' ? 'process' : 'project';
 
+  // auto-rotating featured banner
+  const bannerRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const bannerIdx = useRef(0);
+  const [bannerI, setBannerI] = useState(0);
+  const step = colW + 12;
+  useEffect(() => {
+    if (slides.length < 2) return;
+    const t = setInterval(() => {
+      bannerIdx.current = (bannerIdx.current + 1) % slides.length;
+      setBannerI(bannerIdx.current);
+      bannerRef.current?.scrollTo({ x: bannerIdx.current * step, animated: true });
+    }, 4500);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slides.length, step]);
+
   return (
     <ScrollView contentContainerStyle={{ paddingTop: topPad, paddingBottom: bottomPad, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
       <View style={{ width: colW }}>
-        {/* featured / news banner */}
-        <ScrollView horizontal pagingEnabled snapToInterval={colW + 12} decelerationRate="fast" showsHorizontalScrollIndicator={false} style={{ overflow: 'visible' }}>
+        {/* featured / news banner — tap to open, auto-rotates, clipped on desktop so the next slide can't peek */}
+        <ScrollView
+          ref={bannerRef}
+          horizontal
+          pagingEnabled
+          snapToInterval={step}
+          decelerationRate="fast"
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={(e) => { const i = Math.round(e.nativeEvent.contentOffset.x / step); bannerIdx.current = i; setBannerI(i); }}
+          style={{ overflow: wide ? 'hidden' : 'visible', width: colW, borderRadius: 22 }}
+        >
           {slides.map((s, i) => {
             const colors: [string, string] = th.mode === 'dark' ? [`${th.glow}CC`, th.surface] : ['#EDEFF3', '#DCE1E8'];
             return (
-              <LinearGradient key={i} colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.banner, { width: colW }]}>
-                <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{s.badge}</Text></View>
-                <View style={styles.bannerFooter}>
-                  <View style={styles.flex}>
-                    <Text style={[styles.bannerTitle, { color: th.text }]} numberOfLines={2}>{s.title}</Text>
-                    <Text style={[styles.bannerSub, { color: th.muted }]} numberOfLines={1}>{s.subtitle}</Text>
+              <Pressable key={i} onPress={() => onOpenBanner(s)}>
+                <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.banner, { width: colW }]}>
+                  <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{s.badge}</Text></View>
+                  <View style={styles.bannerFooter}>
+                    <View style={styles.flex}>
+                      <Text style={[styles.bannerTitle, { color: th.text }]} numberOfLines={2}>{s.title}</Text>
+                      <Text style={[styles.bannerSub, { color: th.muted }]} numberOfLines={1}>{s.subtitle}</Text>
+                    </View>
+                    {wide && (
+                      <View style={styles.bannerCta}><Text style={styles.bannerCtaTxt}>{s.ctaLabel}</Text></View>
+                    )}
                   </View>
-                  {wide && (
-                    <View style={styles.bannerCta}><Text style={styles.bannerCtaTxt}>{s.ctaLabel}</Text></View>
-                  )}
-                </View>
-              </LinearGradient>
+                </LinearGradient>
+              </Pressable>
             );
           })}
         </ScrollView>
+        {slides.length > 1 && (
+          <View style={styles.bannerDots}>
+            {slides.map((_, i) => <View key={i} style={[styles.bannerDot, { backgroundColor: i === bannerI ? th.text : th.border, width: i === bannerI ? 18 : 6 }]} />)}
+          </View>
+        )}
 
         {/* categories */}
         <View style={styles.catRow}>
@@ -477,9 +509,9 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, lang }
             {home.categories.map((c) => {
               const on = c.id === cat;
               return (
-                <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : th.surface, borderColor: on ? 'transparent' : th.border }]}>
+                <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: on ? 'transparent' : th.border }]}>
                   {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
-                  <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{c.label}</Text>
+                  <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{tr(lang, c.label)}</Text>
                 </Pressable>
               );
             })}
@@ -851,24 +883,13 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
   const { width } = useWindowDimensions();
   const colW = wide ? CW : Math.min(width, 600) - 36;
   const [cat, setCat] = useState('all');
-  const bannerColors: [string, string] = th.mode === 'dark' ? [`${th.glow}CC`, th.surface] : ['#EDEFF3', '#DCE1E8'];
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
 
   return (
     <ScrollView contentContainerStyle={{ paddingTop: topPad, paddingBottom: bottomPad, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
       <View style={{ width: colW }}>
-        {/* banner */}
-        <LinearGradient colors={bannerColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.banner, { width: colW }]}>
-          <View style={[styles.bannerBadge, { backgroundColor: th.accent }]}><Text style={[styles.bannerBadgeTxt, { color: ctaFg }]}>{tr(lang, kind === 'market' ? 'Market' : 'Creator')}</Text></View>
-          <View style={styles.bannerFooter}>
-            <View style={styles.flex}>
-              <Text style={[styles.bannerTitle, { color: th.text }]} numberOfLines={2}>{s.headline}</Text>
-              <Text style={[styles.bannerSub, { color: th.muted }]} numberOfLines={2}>{s.subtitle}</Text>
-            </View>
-          </View>
-        </LinearGradient>
-
-        {/* structure line */}
+        {/* headline + structure line (banner removed) */}
+        <Text style={[styles.surfaceHeadline, { color: th.text }]}>{s.headline}</Text>
         <View style={[styles.structure, { borderColor: th.border, backgroundColor: th.surface }]}>
           <Text style={[styles.structureTxt, { color: th.muted }]}>{s.structureLine}</Text>
         </View>
@@ -878,9 +899,9 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
           {cats.map((c) => {
             const on = c.id === cat;
             return (
-              <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : th.surface, borderColor: on ? 'transparent' : th.border }]}>
+              <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: on ? 'transparent' : th.border }]}>
                 {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
-                <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{c.label}</Text>
+                <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{tr(lang, c.label)}</Text>
               </Pressable>
             );
           })}
@@ -1192,6 +1213,34 @@ function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary, onTo
   );
 }
 
+/* ─────────────────────────────── banner sheet ─────────────────────────────── */
+
+function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; slide: ShellHero; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void; onCta: () => void }) {
+  const insets = useSafeAreaInsets();
+  const colors: [string, string] = th.mode === 'dark' ? [`${th.glow}CC`, th.surface] : ['#EDEFF3', '#DCE1E8'];
+  const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  return (
+    <View style={styles.flex}>
+      <View style={[styles.header, { paddingTop: 12 }]}>
+        <View style={styles.flex} />
+        <Pressable onPress={close} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
+          <Text style={[styles.xmark, { color: th.text }]}>✕</Text>
+        </Pressable>
+      </View>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }}>
+        <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bannerHero}>
+          <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{slide.badge}</Text></View>
+          <Text style={[styles.bannerHeroTitle, { color: th.text }]}>{slide.title}</Text>
+        </LinearGradient>
+        <Text style={[styles.bannerPageBody, { color: th.muted }]}>{slide.subtitle}</Text>
+        <Pressable onPress={onCta} style={[styles.bannerPageCta, { backgroundColor: th.accent }]}>
+          <Text style={[styles.bannerPageCtaTxt, { color: ctaFg }]}>{slide.ctaLabel}</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+}
+
 /* ══════════════════════════════════ styles ══════════════════════════════════ */
 
 const styles = StyleSheet.create({
@@ -1202,11 +1251,10 @@ const styles = StyleSheet.create({
   toast: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
   toastTxt: { fontSize: 13.5, fontWeight: '700' },
 
-  micro: { fontSize: 11, textAlign: 'center', paddingTop: 8 },
-
   /* mobile top bar */
   topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 26 },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20 },
+  surfaceHeadline: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3, marginTop: 2 },
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1218,7 +1266,7 @@ const styles = StyleSheet.create({
   avBadgeTxt: { fontSize: 11, fontWeight: '800' },
 
   /* mobile bottom bar */
-  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 34, paddingTop: 20, paddingHorizontal: 24 },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 34, paddingTop: 46, paddingHorizontal: 24 },
   navBtn: { width: 52, alignItems: 'center' },
   navCenterWrap: { alignItems: 'center' },
   navCenter: { alignItems: 'center', justifyContent: 'center', marginTop: -20 },
@@ -1240,6 +1288,15 @@ const styles = StyleSheet.create({
   bannerSub: { fontSize: 14, marginTop: 6 },
   bannerCta: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 11 },
   bannerCtaTxt: { fontSize: 14, fontWeight: '700', color: '#111' },
+  bannerDots: { flexDirection: 'row', gap: 5, justifyContent: 'center', marginTop: 12 },
+  bannerDot: { height: 6, borderRadius: 3 },
+
+  /* banner sheet */
+  bannerHero: { height: 200, borderRadius: 22, padding: 22, justifyContent: 'space-between', overflow: 'hidden', marginTop: 4 },
+  bannerHeroTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.4, lineHeight: 30 },
+  bannerPageBody: { fontSize: 15, lineHeight: 22, marginTop: 18 },
+  bannerPageCta: { borderRadius: 999, paddingVertical: 15, alignItems: 'center', marginTop: 24 },
+  bannerPageCtaTxt: { fontSize: 16, fontWeight: '800' },
 
   /* categories */
   catRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
