@@ -113,6 +113,16 @@ export function ChartIcon({ size = 18, color = '#000000' }: BrandProps) {
   );
 }
 
+/** Bell — notifications. */
+export function BellIcon({ size = 22, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M18 8.5a6 6 0 1 0-12 0c0 4.2-1.2 5.6-2.2 6.6-.5.5-.1 1.4.6 1.4h15.2c.7 0 1.1-.9.6-1.4-1-1-2.2-2.4-2.2-6.6Z" stroke={color} strokeWidth={1.9} strokeLinejoin="round" />
+      <Path d="M9.7 20a2.4 2.4 0 0 0 4.6 0" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 /** Live feed / bolt drawer. */
 export function BoltIcon({ size = 18, color = '#000000' }: BrandProps) {
   return (

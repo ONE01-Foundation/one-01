@@ -46,6 +46,8 @@ const HE: Record<string, string> = {
   // search
   Search: 'חיפוש', Cancel: 'ביטול', 'No results': 'אין תוצאות',
   'Search games, projects, listings…': 'חיפוש משחקים, פרויקטים, פריטים…',
+  // notifications ('Notifications' already defined above)
+  'Nothing new': 'אין חדש',
 };
 
 export function tr(lang: Lang, en: string): string {

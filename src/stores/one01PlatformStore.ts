@@ -125,10 +125,13 @@ interface One01PlatformState {
   appearance: 'light' | 'dark';
   /** UI language. */
   lang: 'en' | 'he';
+  /** Timestamp notifications were last opened (for the unread badge). */
+  notifsSeenAt: number;
 
   setEntered: (v: boolean) => void;
   setAppearance: (v: 'light' | 'dark') => void;
   setLang: (v: 'en' | 'he') => void;
+  markNotifsSeen: () => void;
   markOnboarded: (id: string) => void;
   /** Add credits (e.g. a match won, a bet paid out). */
   credit: (amount: number, label: string) => void;
@@ -156,10 +159,12 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       creations: [],
       appearance: 'light',
       lang: 'en',
+      notifsSeenAt: 0,
 
       setEntered: (v) => set({ entered: v }),
       setAppearance: (v) => set({ appearance: v }),
       setLang: (v) => set({ lang: v }),
+      markNotifsSeen: () => set({ notifsSeenAt: Date.now() }),
       markOnboarded: (id) =>
         set((s) => (s.onboarded.includes(id) ? s : { onboarded: [...s.onboarded, id] })),
 
@@ -239,7 +244,7 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
         return pending;
       },
 
-      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [] }),
+      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], notifsSeenAt: 0 }),
     }),
     { name: 'one01_platform_v1', version: 1, storage: createJSONStorage(() => platStorage) },
   ),
