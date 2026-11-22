@@ -8,7 +8,7 @@
  *   • WalletPage — a crypto-wallet style balance (card, actions, holdings,
  *     activity) — all virtual, no real crypto.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, ScrollView, Modal, Animated, PanResponder, Switch,
   useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
@@ -23,7 +23,7 @@ import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
 import { type ShellTheme, type MarkId } from '../../data/one01/platform';
-import { useOne01PlatformStore, livePrice } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, livePrice, type PlatformTx, type UserCreation } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
 
 const PROJ_META: Record<string, { name: string; mark: MarkId }> = {
@@ -44,6 +44,33 @@ function ago(ts: number): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+type Post = { id: string; time: string; text: string; chip: string; accent: string };
+
+/** Turn the wallet's real transactions + published creations into a social feed. */
+function buildPosts(transactions: PlatformTx[], creations: UserCreation[], accent: string): Post[] {
+  const GOLD = '#F9D800', PURPLE = '#8B5CF6', GREEN = '#22c55e', ONE = '#10B981';
+  const raw: (Post & { ts: number })[] = [];
+  transactions.forEach((t) => {
+    const L = t.label, amt = Math.abs(t.amount);
+    let text = L, chip = 'ONE', col = ONE;
+    if (L.startsWith('Market · ')) { text = `Picked up ${L.slice(9)} on the Market`; chip = 'Market'; col = accent; }
+    else if (L.startsWith('Invested · ')) { text = `Invested in ${L.slice(11)} 📈`; chip = 'Invest'; col = GREEN; }
+    else if (L.startsWith('Sold · ')) { text = `Sold my ${L.slice(7)} shares`; chip = 'Invest'; col = GREEN; }
+    else if (L.startsWith('Top up')) { text = `Topped up ⟡${amt.toLocaleString()} of credits`; chip = 'Wallet'; col = ONE; }
+    else if (L.includes('match won')) { text = `Won a ${L.replace(' match won', '')} match ⚔️ +⟡${amt}`; chip = 'Winzi'; col = GOLD; }
+    else if (L.includes('stake back')) { text = `Drew a ${L.split(' ')[0]} match — stake back`; chip = 'Winzi'; col = GOLD; }
+    else if (L.includes('match stake')) { text = `Queued a ${L.replace(' match stake', '')} match`; chip = 'Winzi'; col = GOLD; }
+    else if (L.includes('bet won')) { text = `Called the winner on ${L.split('·').pop()?.trim() ?? 'a show'} 🎯 +⟡${amt}`; chip = 'MixStar'; col = PURPLE; }
+    else if (L.includes('bet · ')) { text = `Placed a bet on ${L.split('· ').pop()?.trim()}`; chip = 'MixStar'; col = PURPLE; }
+    else if (L.includes('free vote')) { text = `Voted on ${L.replace(' free vote', '')}`; chip = 'MixStar'; col = PURPLE; }
+    else if (L.includes('practice')) { text = `Practised ${L.replace(' practice', '')} 🏓`; chip = 'Winzi'; col = GOLD; }
+    else if (L.includes('earnings')) { text = `Collected earnings from ${L.replace(' earnings', '')} 🧱`; chip = 'Creator'; col = accent; }
+    raw.push({ id: t.id, ts: t.ts, time: ago(t.ts), text, chip, accent: col });
+  });
+  creations.forEach((c) => raw.push({ id: c.id, ts: c.ts, time: ago(c.ts), text: `Published ${c.title} on ${c.surface} 🧱`, chip: 'Creator', accent: ONE }));
+  return raw.sort((a, b) => b.ts - a.ts).slice(0, 30);
 }
 
 /** Mini area sparkline from a fixed mock series (trending up). */
@@ -151,12 +178,16 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
   const insets = useSafeAreaInsets();
   const t = (en: string) => tr(lang, en);
   const [tab, setTab] = useState<'posts' | 'about'>('posts');
-  const stats = [{ v: '128', l: 'Friends' }, { v: '12', l: 'Posts' }, { v: 'LVL 13', l: 'Level' }];
-  const posts = [
+  const transactions = useOne01PlatformStore((s) => s.transactions);
+  const creations = useOne01PlatformStore((s) => s.creations);
+  const activity = useMemo(() => buildPosts(transactions, creations, th.accent), [transactions, creations, th.accent]);
+  const seedPosts: Post[] = [
     { id: 'p1', time: '2h', text: 'Started a process: renew my driving license 🪪', chip: 'Process', accent: th.accent },
     { id: 'p2', time: '1d', text: 'Reached a provider through ONE — only my city and budget were shared.', chip: 'ONE', accent: '#10B981' },
     { id: 'p3', time: '3d', text: 'Queued my first Winzi battle ⚔️ wish me luck', chip: 'Winzi', accent: '#F9D800' },
   ];
+  const posts = activity.length ? activity : seedPosts;
+  const stats = [{ v: '128', l: 'Friends' }, { v: `${posts.length}`, l: 'Posts' }, { v: 'LVL 13', l: 'Level' }];
   const actions = [
     onOne01 ? { k: 'one01', label: '← ONE01 home', onPress: onOne01 } : null,
     { k: 'settings', label: 'Settings', onPress: onSettings },
