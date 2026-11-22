@@ -315,6 +315,10 @@ export interface HomeItem {
   /** Corner metric, e.g. "48", "13k". */
   metric?: string;
   live?: boolean;
+  /** Long description (Market detail "About"). */
+  blurb?: string;
+  /** Price label for a Market listing, e.g. "◎ 40". */
+  priceLabel?: string;
 }
 
 /** App switcher grid (long-press the logo). ONE01 is shown separately on top. */

@@ -17,10 +17,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import {
-  One01Mark, OneMark, WinziMark, MixStarMark, XitMark, UserIcon, CreateIcon,
+  One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
 import { type ShellTheme, type MarkId } from '../../data/one01/platform';
-import { useOne01PlatformStore } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, livePrice } from '../../stores/one01PlatformStore';
+
+const PROJ_META: Record<string, { name: string; mark: MarkId }> = {
+  winzi: { name: 'Winzi', mark: 'winzi' },
+  mixstar: { name: 'MixStar', mark: 'mixstar' },
+  xit: { name: 'Xit', mark: 'xit' },
+  sodex: { name: 'Sodex', mark: 'sodex' },
+  one: { name: 'ONE', mark: 'one' },
+};
 
 const DARK_TILE = '#131317';
 
@@ -56,6 +64,7 @@ function Mark({ mark, size }: { mark: MarkId; size: number }) {
     case 'winzi': return <WinziMark size={size} />;
     case 'mixstar': return <MixStarMark size={size} />;
     case 'xit': return <XitMark size={size} />;
+    case 'sodex': return <SodexMark size={size} color="#FFFFFF" />;
     case 'one01': default: return <One01Mark size={size} color="#FFFFFF" />;
   }
 }
@@ -287,12 +296,17 @@ export function WalletPage({ th, close }: { th: ShellTheme; close: () => void })
   const insets = useSafeAreaInsets();
   const balance = useOne01PlatformStore((s) => s.balance);
   const transactions = useOne01PlatformStore((s) => s.transactions);
+  const positions = useOne01PlatformStore((s) => s.positions);
   const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
-  const holdings: { id: string; mark: MarkId; name: string; amt: string; chg: string; up: boolean }[] = [
-    { id: 'one01', mark: 'one01', name: 'ONE01 Credits', amt: balance.toLocaleString(), chg: '+2.4%', up: true },
-    { id: 'winzi', mark: 'winzi', name: 'Winzi Tokens', amt: '300', chg: '+8.1%', up: true },
-    { id: 'mixstar', mark: 'mixstar', name: 'MixStar', amt: '150', chg: '-1.2%', up: false },
-    { id: 'xit', mark: 'xit', name: 'Xit', amt: '42', chg: '+0.3%', up: true },
+  // Holdings = your cash credits + real share positions in projects (live-priced)
+  const holdings: { id: string; mark: MarkId; name: string; amt: string; sub: string; pl: number | null }[] = [
+    { id: 'one01', mark: 'one01', name: 'ONE01 Credits', amt: balance.toLocaleString(), sub: 'Cash balance', pl: null },
+    ...Object.entries(positions).map(([id, p]) => {
+      const price = livePrice(id);
+      const meta = PROJ_META[id] ?? { name: id, mark: 'one01' as MarkId };
+      const pl = p.avgCost > 0 ? ((price - p.avgCost) / p.avgCost) * 100 : 0;
+      return { id, mark: meta.mark, name: meta.name, amt: Math.round(p.shares * price).toLocaleString(), sub: `${p.shares} ${p.shares === 1 ? 'share' : 'shares'} · ⟡${price}`, pl };
+    }),
   ];
   const liveTx = transactions.map((t) => ({ k: t.id, label: t.label, sub: ago(t.ts), amt: `${t.amount > 0 ? '+' : ''}${t.amount}`, up: t.amount > 0 }));
   const mockTx = [
@@ -332,7 +346,7 @@ export function WalletPage({ th, close }: { th: ShellTheme; close: () => void })
           ))}
         </View>
 
-        {/* holdings */}
+        {/* holdings — cash + live-priced project shares */}
         <Text style={[styles.secTitle, { color: th.text }]}>Holdings</Text>
         <View style={{ gap: 10 }}>
           {holdings.map((h) => (
@@ -340,12 +354,18 @@ export function WalletPage({ th, close }: { th: ShellTheme; close: () => void })
               <View style={[styles.holdTile, { backgroundColor: DARK_TILE }]}><Mark mark={h.mark} size={24} /></View>
               <View style={styles.flex}>
                 <Text style={[styles.holdName, { color: th.text }]}>{h.name}</Text>
-                <Text style={[styles.holdChg, { color: h.up ? '#22c55e' : '#ef4444' }]}>{h.chg}</Text>
+                <Text style={[styles.holdChg, { color: th.muted }]}>{h.sub}</Text>
               </View>
-              <Text style={[styles.holdAmt, { color: th.text }]}>⟡ {h.amt}</Text>
+              <View style={styles.holdEnd}>
+                <Text style={[styles.holdAmt, { color: th.text }]}>⟡ {h.amt}</Text>
+                {h.pl !== null ? <Text style={[styles.holdPl, { color: h.pl >= 0 ? '#22c55e' : '#ef4444' }]}>{h.pl >= 0 ? '+' : ''}{h.pl.toFixed(1)}%</Text> : null}
+              </View>
             </View>
           ))}
         </View>
+        {holdings.length === 1 && (
+          <Text style={[styles.holdHint, { color: th.muted }]}>Invest in a project from its page to build positions.</Text>
+        )}
 
         {/* activity */}
         <Text style={[styles.secTitle, { color: th.text }]}>Activity</Text>
@@ -432,6 +452,9 @@ const styles = StyleSheet.create({
   holdName: { fontSize: 15, fontWeight: '700' },
   holdChg: { fontSize: 12.5, marginTop: 2, fontWeight: '600' },
   holdAmt: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  holdEnd: { alignItems: 'flex-end' },
+  holdPl: { fontSize: 12, fontWeight: '700', marginTop: 2, fontVariant: ['tabular-nums'] },
+  holdHint: { fontSize: 12.5, marginTop: 10, lineHeight: 18 },
 
   /* settings */
   setRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 15 },

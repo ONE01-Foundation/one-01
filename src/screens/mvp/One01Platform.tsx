@@ -63,6 +63,7 @@ import {
   type HomeItem,
   type EcosystemApp,
   type ShellTheme,
+  type SurfacePillar,
 } from '../../data/one01/platform';
 
 type HomeId = 'one01' | ProductId;
@@ -137,14 +138,18 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     haptic.select();
     if (onboarded.includes(id)) { setHomeId(id); setTab('home'); } else setOnboardFor(id);
   };
-  const buyPillar = (price: string, title: string, kind: 'market' | 'create') => {
-    if (kind === 'create') { haptic.success(); showToast(`Opened “${title}” in Creator`); return; }
+  const buyPillar = (price: string, title: string, kind: 'market' | 'create'): boolean => {
+    if (kind === 'create') { haptic.success(); showToast(`Opened “${title}” in Creator`); return true; }
     const n = parseInt(price.replace(/[^0-9]/g, ''), 10) || 0;
-    if (n === 0) { haptic.success(); showToast(`Added “${title}”`); return; }
-    if (debit(n, `Market · ${title}`)) { haptic.success(); showToast(`Got “${title}”  ·  −⟡${n}`); }
-    else { haptic.warning(); showToast('Not enough credits'); }
+    if (n === 0) { haptic.success(); showToast(`Added “${title}”`); return true; }
+    if (debit(n, `Market · ${title}`)) { haptic.success(); showToast(`Got “${title}”  ·  −⟡${n}`); return true; }
+    haptic.warning(); showToast('Not enough credits'); return false;
   };
   const openDetail = (kind: DetailKind, item: HomeItem) => { haptic.select(); setDetail({ kind, item }); };
+  const openMarketDetail = (p: SurfacePillar) => {
+    haptic.select();
+    setDetail({ kind: 'market', item: { id: `mk_${p.id}`, title: p.title, subtitle: p.tagline, emoji: p.emoji, priceLabel: p.price, blurb: p.detail } });
+  };
   const detailPrimary = () => {
     if (!detail) return;
     const it = detail.item;
@@ -155,6 +160,8 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     } else if (detail.kind === 'game' || detail.kind === 'show') {
       setDetail(null);
       setPlay({ kind: detail.kind, item: it });
+    } else if (detail.kind === 'market') {
+      if (buyPillar(it.priceLabel ?? '', it.title, 'market')) setDetail(null);
     } else {
       haptic.success(); // process: Continue
     }
@@ -184,8 +191,8 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 
       <View style={styles.flex}>
         {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} />}
-        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} />}
-        {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} />}
+        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} />}
+        {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} />}
       </View>
 
       {/* bottom bar sits below the detail overlay */}
@@ -193,7 +200,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 
       {/* detail opens as a card sheet (mobile) / centered card (desktop); the top bar stays above it */}
       {detail && (
-        <DetailOverlay th={th} wide={wide} kind={detail.kind} item={detail.item} topInset={insets.top} onBack={() => setDetail(null)} onPrimary={detailPrimary} />
+        <DetailOverlay th={th} wide={wide} kind={detail.kind} item={detail.item} topInset={insets.top} onBack={() => setDetail(null)} onPrimary={detailPrimary} onToast={showToast} />
       )}
 
       {wide ? (
@@ -464,7 +471,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; 
 
 /* ─────────────────────────────── market / create ─────────────────────────────── */
 
-function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => void }) {
+function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void }) {
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
   const s = kind === 'market' ? MARKET[pid] : CREATOR[pid];
   const sectionTitle = kind === 'market' ? 'Market' : CREATOR[pid].title;
@@ -514,21 +521,25 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy }: { th: ShellTh
           <Text style={[styles.sectionCount, { color: th.muted }]}>({s.pillars.length})</Text>
         </View>
 
-        {/* pillars as cards */}
+        {/* pillars as cards — a Market listing opens its detail page; Creator builds */}
         <View style={[styles.rowsWrap, wide && styles.rowsWrapWide]}>
-          {s.pillars.map((p) => (
-            <View key={p.id} style={[styles.pillar, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }]}>
-              <View style={styles.pillarTop}>
-                <View style={[styles.pillarEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 20 }}>{p.emoji}</Text></View>
-                <View style={styles.flex}>
-                  <Text style={[styles.projName, { color: th.text }]}>{p.title}</Text>
-                  <Text style={[styles.projSub, { color: th.muted }]}>{p.tagline}</Text>
+          {s.pillars.map((p) => {
+            const isMarket = kind === 'market';
+            const onCta = () => (isMarket ? onOpenMarket(p) : onBuy(p.price, p.title, kind));
+            return (
+              <Pressable key={p.id} onPress={isMarket ? () => onOpenMarket(p) : undefined} disabled={!isMarket} style={({ pressed }) => [styles.pillar, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }, pressed && isMarket && { opacity: 0.9 }]}>
+                <View style={styles.pillarTop}>
+                  <View style={[styles.pillarEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 20 }}>{p.emoji}</Text></View>
+                  <View style={styles.flex}>
+                    <Text style={[styles.projName, { color: th.text }]}>{p.title}</Text>
+                    <Text style={[styles.projSub, { color: th.muted }]}>{p.tagline}</Text>
+                  </View>
+                  <Pressable onPress={onCta} style={({ pressed }) => [styles.ctaPill, { backgroundColor: th.accent }, pressed && { opacity: 0.8 }]}><Text style={[styles.ctaPillTxt, { color: ctaFg }]}>{isMarket ? (p.price.replace(/[^0-9]/g, '') ? `Get ⟡${parseInt(p.price.replace(/[^0-9]/g, ''), 10)}` : 'Get') : 'Build'}</Text></Pressable>
                 </View>
-                <Pressable onPress={() => onBuy(p.price, p.title, kind)} style={({ pressed }) => [styles.ctaPill, { backgroundColor: th.accent }, pressed && { opacity: 0.8 }]}><Text style={[styles.ctaPillTxt, { color: ctaFg }]}>{kind === 'market' ? 'Get' : 'Build'}</Text></Pressable>
-              </View>
-              <Text style={[styles.pillarDetail, { color: th.muted }]}>{p.detail}</Text>
-            </View>
-          ))}
+                <Text style={[styles.pillarDetail, { color: th.muted }]}>{p.detail}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
     </ScrollView>
@@ -688,7 +699,7 @@ function ExternalModal({ app, onClose }: { app: EcosystemApp | null; onClose: ()
   );
 }
 
-function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary }: { th: ShellTheme; wide: boolean; kind: DetailKind; item: HomeItem; topInset: number; onBack: () => void; onPrimary: () => void }) {
+function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary, onToast }: { th: ShellTheme; wide: boolean; kind: DetailKind; item: HomeItem; topInset: number; onBack: () => void; onPrimary: () => void; onToast?: (m: string) => void }) {
   const { height: winH } = useWindowDimensions();
   const sheetTop = topInset + 74;
   const sheetH = winH - sheetTop;
@@ -719,7 +730,7 @@ function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary }: { 
   if (wide) {
     return (
       <View style={[StyleSheet.absoluteFill, { backgroundColor: th.bg, paddingTop: topInset }]}>
-        <DetailPage th={th} wide kind={kind} item={item} topPad={56} onBack={onBack} onPrimary={onPrimary} />
+        <DetailPage th={th} wide kind={kind} item={item} topPad={56} onBack={onBack} onPrimary={onPrimary} onToast={onToast} />
       </View>
     );
   }
@@ -736,7 +747,7 @@ function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary }: { 
         <View style={styles.detailDrag}>
           <View style={[styles.detailGrab, { backgroundColor: th.border }]} />
         </View>
-        <DetailPage th={th} kind={kind} item={item} onBack={close} onPrimary={onPrimary} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} />
+        <DetailPage th={th} kind={kind} item={item} onBack={close} onPrimary={onPrimary} onToast={onToast} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} />
       </Animated.View>
     </View>
   );
