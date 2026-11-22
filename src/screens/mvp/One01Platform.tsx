@@ -49,6 +49,10 @@ import {
   CalendarIcon,
   ChartIcon,
   BoltIcon,
+  ProjectsIcon,
+  GamesIcon,
+  ShowsIcon,
+  ProcessesIcon,
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
@@ -79,7 +83,7 @@ type HomeId = 'one01' | ProductId;
 type Tab = 'home' | 'market' | 'create';
 type DrawerKind = 'main' | 'people' | 'events' | 'stats' | 'feed';
 /** Descriptor for the main-section ("Projects"/"Games"/…) focused drawer page. */
-type MainDrawer = { label: string; icon: string; items: HomeItem[]; layout: 'rows' | 'cards'; onOpenItem: (item: HomeItem) => void };
+type MainDrawer = { label: string; homeId: HomeId; items: HomeItem[]; layout: 'rows' | 'cards'; onOpenItem: (item: HomeItem) => void };
 
 const GLOWS: Record<HomeId, string> = { one01: '#E8B923', one: '#6B7280', winzi: '#3B5BDB', mixstar: '#8B5CF6' };
 const DARK_TILE = '#131317';
@@ -116,6 +120,16 @@ function Mark({ mark, size, accent, eye }: { mark: MarkId; size: number; accent:
     case 'sodex': return <SodexMark size={size} color="#FFFFFF" />;
     case 'dargwin': return <DargWinMark size={size} />;
     case 'one01': default: return <One01Mark size={size} color={accent} />;
+  }
+}
+
+/** The per-home main-section icon (Projects / Games / Shows / Processes). */
+function MainSectionIcon({ homeId, color, size = 20 }: { homeId: HomeId; color: string; size?: number }) {
+  switch (homeId) {
+    case 'winzi': return <GamesIcon size={size} color={color} />;
+    case 'mixstar': return <ShowsIcon size={size} color={color} />;
+    case 'one': return <ProcessesIcon size={size} color={color} />;
+    case 'one01': default: return <ProjectsIcon size={size} color={color} />;
   }
 }
 
@@ -216,7 +230,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const mainCardKind: DetailKind = homeId === 'winzi' ? 'game' : homeId === 'mixstar' ? 'show' : homeId === 'one' ? 'process' : 'project';
   const drawerMain: MainDrawer = {
     label: homeCfg.sectionTitle,
-    icon: homeCfg.sectionIcon,
+    homeId,
     items: homeCfg.items,
     layout: homeCfg.layout,
     onOpenItem: (item) => { setDrawer(null); openDetail(homeCfg.layout === 'rows' ? 'project' : mainCardKind, item); },
@@ -237,7 +251,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
 
       <View style={styles.flex}>
-        {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} lang={lang} />}
+        {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} lang={lang} />}
         {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
         {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
       </View>
@@ -475,7 +489,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, lang }
 
         {/* section header — opens the main section as a focused drawer page */}
         <Pressable onPress={() => onOpenDrawer('main')} style={({ pressed }) => [styles.sectionHead, pressed && { opacity: 0.6 }]}>
-          <Text style={styles.sectionIcon}>{home.sectionIcon}</Text>
+          <View style={styles.sectionIconBox}><MainSectionIcon homeId={th.homeId} color={th.text} size={19} /></View>
           <Text style={[styles.sectionTitle, { color: th.text }]}>{tr(lang, home.sectionTitle)}</Text>
           {home.sectionCount != null && <Text style={[styles.sectionCount, { color: th.muted }]}>({home.sectionCount})</Text>}
           <View style={styles.flex} />
@@ -619,7 +633,7 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
   const rawTitle = kind === 'main' ? (main?.label ?? '') : kind === 'people' ? extras.people.label : kind === 'events' ? extras.events.label : kind === 'stats' ? extras.stats.label : extras.feed.label;
   const title = tr(lang, rawTitle);
 
-  const headIcon = kind === 'main' ? <Text style={{ fontSize: 20 }}>{main?.icon}</Text> : drawerIcon(kind, th.text, 22);
+  const headIcon = kind === 'main' ? <MainSectionIcon homeId={main?.homeId ?? 'one01'} color={th.text} size={22} /> : drawerIcon(kind, th.text, 22);
 
   return (
     <View style={styles.flex}>
@@ -1236,6 +1250,7 @@ const styles = StyleSheet.create({
   /* section */
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, marginBottom: 14 },
   sectionIcon: { fontSize: 18 },
+  sectionIconBox: { alignItems: 'center', justifyContent: 'center', minWidth: 20 },
   sectionTitle: { fontSize: 18, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
   sectionCount: { fontSize: 15, fontWeight: '600' },
   sectionArrow: { fontSize: 20, fontWeight: '600' },
