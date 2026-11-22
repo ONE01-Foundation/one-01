@@ -640,7 +640,7 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer, lang }: { th: ShellTheme;
         ))}
       </ScrollView>
 
-      {/* stats */}
+      {/* stats + live feed combined (the separate Live drawer was folded in here) */}
       <DrawerHead th={th} kind="stats" title={tr(lang, extras.stats.label)} onOpen={() => onOpenDrawer('stats')} />
       <View style={styles.statGrid}>
         {extras.stats.tiles.map((t) => (
@@ -651,9 +651,10 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer, lang }: { th: ShellTheme;
           </View>
         ))}
       </View>
-
-      {/* live feed */}
-      <DrawerHead th={th} kind="feed" title={tr(lang, extras.feed.label)} onOpen={() => onOpenDrawer('feed')} />
+      <View style={styles.statFeedHead}>
+        <View style={styles.feedDot} />
+        <Text style={[styles.statFeedTitle, { color: th.muted }]}>{tr(lang, extras.feed.label)}</Text>
+      </View>
       <FeedDrawer th={th} lines={extras.feed.lines} />
     </>
   );
@@ -751,15 +752,32 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
           )}
 
           {kind === 'stats' && (
-            <View style={styles.statGrid}>
-              {extras.stats.tiles.map((t) => (
-                <View key={t.k} style={[styles.statTile, { backgroundColor: th.surface, borderColor: th.border }]}>
-                  <Text style={[styles.statBig, { color: th.text }]} numberOfLines={1}>{t.value}</Text>
-                  <Text style={[styles.statLabel, { color: th.muted }]} numberOfLines={1}>{t.label}</Text>
-                  {t.delta ? <Text style={[styles.statDelta, { color: t.delta.startsWith('-') ? '#ef4444' : '#22c55e' }]}>{t.delta}</Text> : null}
-                </View>
-              ))}
-            </View>
+            <>
+              <View style={styles.statGrid}>
+                {extras.stats.tiles.map((t) => (
+                  <View key={t.k} style={[styles.statTile, { backgroundColor: th.surface, borderColor: th.border }]}>
+                    <Text style={[styles.statBig, { color: th.text }]} numberOfLines={1}>{t.value}</Text>
+                    <Text style={[styles.statLabel, { color: th.muted }]} numberOfLines={1}>{t.label}</Text>
+                    {t.delta ? <Text style={[styles.statDelta, { color: t.delta.startsWith('-') ? '#ef4444' : '#22c55e' }]}>{t.delta}</Text> : null}
+                  </View>
+                ))}
+              </View>
+              <View style={[styles.statFeedHead, { marginTop: 22 }]}>
+                <View style={styles.feedDot} />
+                <Text style={[styles.statFeedTitle, { color: th.muted }]}>{extras.feed.label}</Text>
+              </View>
+              <View style={styles.drawerList}>
+                {extras.feed.lines.map((l, i) => (
+                  <View key={l.id} style={[styles.feedPill, { backgroundColor: th.surface, borderColor: th.border }]}>
+                    <View style={[styles.feedDot, i > 0 && { backgroundColor: th.muted, opacity: 0.4 }]} />
+                    <Text style={{ fontSize: 15 }}>{l.emoji}</Text>
+                    <Text style={[styles.feedTxt, { color: th.text }]} numberOfLines={1}>{l.text}</Text>
+                    <View style={styles.flex} />
+                    <Text style={[styles.feedTime, { color: th.muted }]}>{i === 0 ? 'now' : `${i * 4}s`}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
           )}
 
           {kind === 'feed' && (
@@ -1368,7 +1386,9 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12, fontWeight: '600' },
   statDelta: { fontSize: 12, fontWeight: '800', marginTop: 2 },
 
-  /* drawers: live feed */
+  /* drawers: live feed (now folded under Stats) */
+  statFeedHead: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 18, marginBottom: 10 },
+  statFeedTitle: { fontSize: 12.5, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
   feedPill: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 13, paddingHorizontal: 14, paddingVertical: 11 },
   feedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' },
   feedTxt: { fontSize: 13.5, fontWeight: '600' },
