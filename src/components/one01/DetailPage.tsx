@@ -86,18 +86,29 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
 
   return (
     <View style={styles.root}>
-      {/* pinned header — stays put while the content scrolls */}
-      <View style={[styles.header, { paddingTop: topPad + 10 }]}>
-        <Pressable onPress={onBack} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
-          <Text style={[styles.chev, { color: th.text }]}>‹</Text>
-        </Pressable>
-        <View style={styles.flex} />
-        <Pressable style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
-          <Text style={[styles.share, { color: th.muted }]}>↗</Text>
-        </Pressable>
-      </View>
+      {/* controls — pinned to the screen corners on desktop, a header row on mobile */}
+      {wide ? (
+        <>
+          <Pressable onPress={onBack} hitSlop={10} style={[styles.corner, { top: topPad, left: 24, backgroundColor: th.surface, borderColor: th.border }]}>
+            <Text style={[styles.chev, { color: th.text }]}>‹</Text>
+          </Pressable>
+          <Pressable style={[styles.corner, { top: topPad, right: 24, backgroundColor: th.surface, borderColor: th.border }]}>
+            <Text style={[styles.share, { color: th.muted }]}>↗</Text>
+          </Pressable>
+        </>
+      ) : (
+        <View style={[styles.header, { paddingTop: topPad + 10 }]}>
+          <Pressable onPress={onBack} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <Text style={[styles.xmark, { color: th.text }]}>✕</Text>
+          </Pressable>
+          <View style={styles.flex} />
+          <Pressable style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <Text style={[styles.share, { color: th.muted }]}>↗</Text>
+          </Pressable>
+        </View>
+      )}
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
+      <ScrollView contentContainerStyle={{ paddingTop: wide ? topPad + 52 : 0, paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
         <View style={wide ? styles.colWide : styles.flex}>
         {/* hero */}
         <View style={styles.hero}>
@@ -201,7 +212,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingTop: 10, paddingBottom: 6 },
   round: { width: 38, height: 38, borderRadius: 19, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  corner: { position: 'absolute', zIndex: 5, width: 42, height: 42, borderRadius: 21, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
   chev: { fontSize: 28, fontWeight: '400', lineHeight: 30 },
+  xmark: { fontSize: 17, fontWeight: '600' },
   share: { fontSize: 18, fontWeight: '700' },
 
   hero: { flexDirection: 'row', gap: 16, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 18 },

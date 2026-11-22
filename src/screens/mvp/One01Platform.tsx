@@ -46,6 +46,7 @@ import {
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
+import { SheetWindow, ProfilePage, WalletPage } from '../../components/one01/Panels';
 import { onboardingFor } from '../../data/one01/onboarding';
 import {
   PRODUCTS,
@@ -172,14 +173,20 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} />
       )}
 
-      <ProfileMenu
-        visible={sheet === 'profile'} th={th} wide={wide} topInset={insets.top}
-        onClose={() => setSheet(null)}
-        onOne01={() => { haptic.select(); setHomeId('one01'); setTab('home'); setSheet(null); }}
-        onCreate={() => { setTab('create'); setSheet(null); }}
-        onExit={onExit}
-      />
-      <WalletSheet visible={sheet === 'wallet'} th={th} onClose={() => setSheet(null)} />
+      <SheetWindow visible={sheet === 'profile'} wide={wide} th={th} onClose={() => setSheet(null)}>
+        {(close) => (
+          <ProfilePage
+            th={th}
+            close={close}
+            onExit={onExit}
+            onCreate={() => { setTab('create'); close(); }}
+            onOne01={th.homeId !== 'one01' ? () => { haptic.select(); setHomeId('one01'); setTab('home'); close(); } : undefined}
+          />
+        )}
+      </SheetWindow>
+      <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} onClose={() => setSheet(null)}>
+        {(close) => <WalletPage th={th} close={close} />}
+      </SheetWindow>
       <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
     </View>
@@ -420,25 +427,69 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; 
 function SurfaceView({ th, wide, kind, topPad, bottomPad }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number }) {
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
   const s = kind === 'market' ? MARKET[pid] : CREATOR[pid];
-  const colW = wide ? CW : undefined;
+  const sectionTitle = kind === 'market' ? 'Market' : CREATOR[pid].title;
+  const cats = HOME[th.homeId].categories;
+  const { width } = useWindowDimensions();
+  const colW = wide ? CW : Math.min(width, 600) - 36;
+  const [cat, setCat] = useState('all');
+  const bannerColors: [string, string] = th.mode === 'dark' ? [`${th.glow}CC`, th.surface] : ['#EDEFF3', '#DCE1E8'];
+  const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+
   return (
-    <ScrollView contentContainerStyle={{ paddingTop: topPad, paddingBottom: bottomPad, paddingHorizontal: wide ? 0 : 18, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
-      <View style={{ width: colW, gap: 12 }}>
-        <Text style={[styles.surfaceHead, { color: th.text }]}>{s.headline}</Text>
-        <Text style={[styles.surfaceSub, { color: th.muted }]}>{s.subtitle}</Text>
-        {s.pillars.map((p) => (
-          <View key={p.id} style={[styles.pillar, { backgroundColor: th.surface, borderColor: th.border }]}>
-            <View style={styles.pillarTop}>
-              <View style={[styles.pillarEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 20 }}>{p.emoji}</Text></View>
-              <View style={styles.flex}>
-                <Text style={[styles.projName, { color: th.text }]}>{p.title}</Text>
-                <Text style={[styles.projSub, { color: th.muted }]}>{p.tagline}</Text>
-              </View>
-              <View style={[styles.price, { backgroundColor: th.accent }]}><Text style={[styles.priceTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{p.price}</Text></View>
+    <ScrollView contentContainerStyle={{ paddingTop: topPad, paddingBottom: bottomPad, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
+      <View style={{ width: colW }}>
+        {/* banner */}
+        <LinearGradient colors={bannerColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.banner, { width: colW }]}>
+          <View style={[styles.bannerBadge, { backgroundColor: th.accent }]}><Text style={[styles.bannerBadgeTxt, { color: ctaFg }]}>{kind === 'market' ? 'MARKET' : 'CREATOR'}</Text></View>
+          <View style={styles.bannerFooter}>
+            <View style={styles.flex}>
+              <Text style={[styles.bannerTitle, { color: th.text }]} numberOfLines={2}>{s.headline}</Text>
+              <Text style={[styles.bannerSub, { color: th.muted }]} numberOfLines={2}>{s.subtitle}</Text>
             </View>
-            <Text style={[styles.pillarDetail, { color: th.muted }]}>{p.detail}</Text>
           </View>
-        ))}
+        </LinearGradient>
+
+        {/* structure line */}
+        <View style={[styles.structure, { borderColor: th.border, backgroundColor: th.surface }]}>
+          <Text style={[styles.structureTxt, { color: th.muted }]}>{s.structureLine}</Text>
+        </View>
+
+        {/* categories */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 16 }}>
+          {cats.map((c) => {
+            const on = c.id === cat;
+            return (
+              <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : th.surface, borderColor: on ? 'transparent' : th.border }]}>
+                {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
+                <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{c.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* section header */}
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionIcon}>{kind === 'market' ? '🛍️' : '✦'}</Text>
+          <Text style={[styles.sectionTitle, { color: th.text }]}>{sectionTitle}</Text>
+          <Text style={[styles.sectionCount, { color: th.muted }]}>({s.pillars.length})</Text>
+        </View>
+
+        {/* pillars as cards */}
+        <View style={[styles.rowsWrap, wide && styles.rowsWrapWide]}>
+          {s.pillars.map((p) => (
+            <View key={p.id} style={[styles.pillar, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }]}>
+              <View style={styles.pillarTop}>
+                <View style={[styles.pillarEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 20 }}>{p.emoji}</Text></View>
+                <View style={styles.flex}>
+                  <Text style={[styles.projName, { color: th.text }]}>{p.title}</Text>
+                  <Text style={[styles.projSub, { color: th.muted }]}>{p.tagline}</Text>
+                </View>
+                <View style={[styles.ctaPill, { backgroundColor: th.accent }]}><Text style={[styles.ctaPillTxt, { color: ctaFg }]}>{kind === 'market' ? 'Get' : 'Build'}</Text></View>
+              </View>
+              <Text style={[styles.pillarDetail, { color: th.muted }]}>{p.detail}</Text>
+            </View>
+          ))}
+        </View>
       </View>
     </ScrollView>
   );
@@ -736,6 +787,8 @@ const styles = StyleSheet.create({
   /* surface view */
   surfaceHead: { fontSize: 22, fontWeight: '800' },
   surfaceSub: { fontSize: 14, lineHeight: 20 },
+  structure: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 14, marginTop: 12 },
+  structureTxt: { fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
   pillar: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 14, gap: 10 },
   pillarTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   pillarEmoji: { width: 42, height: 42, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
