@@ -121,8 +121,14 @@ interface One01PlatformState {
   positions: Record<string, Position>;
   /** Things you published from Creator. */
   creations: UserCreation[];
+  /** ONE01 shell appearance (products keep their own dark theme). */
+  appearance: 'light' | 'dark';
+  /** UI language. */
+  lang: 'en' | 'he';
 
   setEntered: (v: boolean) => void;
+  setAppearance: (v: 'light' | 'dark') => void;
+  setLang: (v: 'en' | 'he') => void;
   markOnboarded: (id: string) => void;
   /** Add credits (e.g. a match won, a bet paid out). */
   credit: (amount: number, label: string) => void;
@@ -148,8 +154,12 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       transactions: [],
       positions: {},
       creations: [],
+      appearance: 'light',
+      lang: 'en',
 
       setEntered: (v) => set({ entered: v }),
+      setAppearance: (v) => set({ appearance: v }),
+      setLang: (v) => set({ lang: v }),
       markOnboarded: (id) =>
         set((s) => (s.onboarded.includes(id) ? s : { onboarded: [...s.onboarded, id] })),
 

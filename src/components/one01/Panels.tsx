@@ -24,6 +24,7 @@ import {
 } from './brand';
 import { type ShellTheme, type MarkId } from '../../data/one01/platform';
 import { useOne01PlatformStore, livePrice } from '../../stores/one01PlatformStore';
+import { tr, type Lang } from '../../data/one01/i18n';
 
 const PROJ_META: Record<string, { name: string; mark: MarkId }> = {
   winzi: { name: 'Winzi', mark: 'winzi' },
@@ -146,8 +147,9 @@ function PanelHead({ th, title, onClose, right }: { th: ShellTheme; title: strin
 
 /* ─────────────────────────────── ProfilePage ─────────────────────────────── */
 
-export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler }) {
+export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang }) {
   const insets = useSafeAreaInsets();
+  const t = (en: string) => tr(lang, en);
   const [tab, setTab] = useState<'posts' | 'about'>('posts');
   const stats = [{ v: '128', l: 'Friends' }, { v: '12', l: 'Posts' }, { v: 'LVL 13', l: 'Level' }];
   const posts = [
@@ -164,13 +166,13 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
 
   return (
     <View style={styles.flex}>
-      <PanelHead th={th} title="Profile" onClose={close} right={<Pressable onPress={onSettings} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable>} />
+      <PanelHead th={th} title={t('Profile')} onClose={close} right={<Pressable onPress={onSettings} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable>} />
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={[`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cover} />
         <View style={styles.avatarRow}>
           <View style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}><UserIcon size={40} color="#fff" /></View>
           <View style={styles.flex} />
-          <Pressable style={[styles.editBtn, { backgroundColor: th.accent }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>Edit profile</Text></Pressable>
+          <Pressable style={[styles.editBtn, { backgroundColor: th.accent }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{t('Edit profile')}</Text></Pressable>
         </View>
         <View style={styles.pad}>
           <Text style={[styles.pName, { color: th.text }]}>Nobody</Text>
@@ -179,17 +181,17 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
             {stats.map((s, i) => (
               <View key={s.l} style={[styles.stat, i < stats.length - 1 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: th.border }]}>
                 <Text style={[styles.statV, { color: th.text }]}>{s.v}</Text>
-                <Text style={[styles.statL, { color: th.muted }]}>{s.l}</Text>
+                <Text style={[styles.statL, { color: th.muted }]}>{t(s.l)}</Text>
               </View>
             ))}
           </View>
 
           {/* tabs */}
           <View style={[styles.tabBar, { borderColor: th.border }]}>
-            {(['posts', 'about'] as const).map((t) => (
-              <Pressable key={t} onPress={() => setTab(t)} style={styles.tabBtn}>
-                <Text style={[styles.tabTxt, { color: t === tab ? th.text : th.muted }]}>{t === 'posts' ? 'Posts' : 'About'}</Text>
-                {t === tab ? <View style={[styles.tabUnderline, { backgroundColor: th.text }]} /> : null}
+            {(['posts', 'about'] as const).map((tk) => (
+              <Pressable key={tk} onPress={() => setTab(tk)} style={styles.tabBtn}>
+                <Text style={[styles.tabTxt, { color: tk === tab ? th.text : th.muted }]}>{tk === 'posts' ? t('Posts') : t('About')}</Text>
+                {tk === tab ? <View style={[styles.tabUnderline, { backgroundColor: th.text }]} /> : null}
               </Pressable>
             ))}
           </View>
@@ -220,19 +222,19 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
               <View style={{ marginTop: 18, gap: 8 }}>
                 <Pressable onPress={onCreate} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
                   <CreateIcon size={18} color={th.text} />
-                  <Text style={[styles.actionTxt, { color: th.text }]}>Create</Text>
+                  <Text style={[styles.actionTxt, { color: th.text }]}>{t('Create')}</Text>
                   <View style={styles.flex} />
                   <Text style={{ color: th.muted }}>›</Text>
                 </Pressable>
                 {actions.map((a) => (
                   <Pressable key={a.k} onPress={a.onPress} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-                    <Text style={[styles.actionTxt, { color: th.text }]}>{a.label}</Text>
+                    <Text style={[styles.actionTxt, { color: th.text }]}>{t(a.label)}</Text>
                     <View style={styles.flex} />
                     <Text style={{ color: th.muted }}>›</Text>
                   </Pressable>
                 ))}
                 <Pressable onPress={onExit} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-                  <Text style={[styles.actionTxt, { color: '#ef4444' }]}>Log out</Text>
+                  <Text style={[styles.actionTxt, { color: '#ef4444' }]}>{t('Log out')}</Text>
                 </Pressable>
               </View>
             </>
@@ -245,9 +247,29 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
 
 /* ─────────────────────────────── SettingsPage ─────────────────────────────── */
 
-export function SettingsPage({ th, close, onScroll }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler }) {
+function Segmented<T extends string>({ th, options, value, onChange }: { th: ShellTheme; options: { v: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  const fg = th.accent === '#F9D800' ? '#000' : '#fff';
+  return (
+    <View style={[styles.segment, { backgroundColor: th.surface2, borderColor: th.border }]}>
+      {options.map((o) => {
+        const on = o.v === value;
+        return (
+          <Pressable key={o.v} onPress={() => onChange(o.v)} style={[styles.segmentBtn, on && { backgroundColor: th.accent }]}>
+            <Text style={[styles.segmentTxt, { color: on ? fg : th.muted }]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function SettingsPage({ th, close, onScroll, lang }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang }) {
   const insets = useSafeAreaInsets();
   const resetDemo = useOne01PlatformStore((s) => s.resetDemo);
+  const appearance = useOne01PlatformStore((s) => s.appearance);
+  const setAppearance = useOne01PlatformStore((s) => s.setAppearance);
+  const setLang = useOne01PlatformStore((s) => s.setLang);
+  const t = (en: string) => tr(lang, en);
   const [notif, setNotif] = useState(true);
   const [faceId, setFaceId] = useState(false);
   const [sounds, setSounds] = useState(true);
@@ -256,37 +278,55 @@ export function SettingsPage({ th, close, onScroll }: { th: ShellTheme; close: (
     { k: 'face', label: 'Face ID', hint: 'Unlock the wallet with Face ID', v: faceId, set: setFaceId },
     { k: 'sounds', label: 'Sounds & haptics', hint: 'Taps, confirmations, alerts', v: sounds, set: setSounds },
   ];
-  const links = ['Language', 'Privacy & disclosure', 'Connected accounts', 'Legal', 'Support'];
+  const links = ['Privacy & disclosure', 'Connected accounts', 'Legal', 'Support'];
 
   return (
     <View style={styles.flex}>
-      <PanelHead th={th} title="Settings" onClose={close} />
+      <PanelHead th={th} title={t('Settings')} onClose={close} />
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.secTitle, { color: th.text }]}>Preferences</Text>
+        <Text style={[styles.secTitle, { color: th.text }]}>{t('Appearance')}</Text>
         <View style={{ gap: 10 }}>
-          {toggles.map((t) => (
-            <View key={t.k} style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+          <View style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <View style={styles.flex}>
+              <Text style={[styles.setLabel, { color: th.text }]}>{t('Appearance')}</Text>
+              <Text style={[styles.setHint, { color: th.muted }]}>{t('Light or dark ONE01')}</Text>
+            </View>
+            <Segmented th={th} value={appearance} onChange={setAppearance} options={[{ v: 'light', label: t('Light') }, { v: 'dark', label: t('Dark') }]} />
+          </View>
+          <View style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <View style={styles.flex}>
+              <Text style={[styles.setLabel, { color: th.text }]}>{t('Language')}</Text>
+              <Text style={[styles.setHint, { color: th.muted }]}>{t('Interface language')}</Text>
+            </View>
+            <Segmented th={th} value={lang} onChange={setLang} options={[{ v: 'en', label: 'EN' }, { v: 'he', label: 'עב' }]} />
+          </View>
+        </View>
+
+        <Text style={[styles.secTitle, { color: th.text }]}>{t('Preferences')}</Text>
+        <View style={{ gap: 10 }}>
+          {toggles.map((tg) => (
+            <View key={tg.k} style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border }]}>
               <View style={styles.flex}>
-                <Text style={[styles.setLabel, { color: th.text }]}>{t.label}</Text>
-                <Text style={[styles.setHint, { color: th.muted }]}>{t.hint}</Text>
+                <Text style={[styles.setLabel, { color: th.text }]}>{t(tg.label)}</Text>
+                <Text style={[styles.setHint, { color: th.muted }]}>{t(tg.hint)}</Text>
               </View>
-              <Switch value={t.v} onValueChange={t.set} trackColor={{ true: th.accent, false: th.border }} thumbColor="#fff" />
+              <Switch value={tg.v} onValueChange={tg.set} trackColor={{ true: th.accent, false: th.border }} thumbColor="#fff" />
             </View>
           ))}
         </View>
 
-        <Text style={[styles.secTitle, { color: th.text }]}>Account</Text>
+        <Text style={[styles.secTitle, { color: th.text }]}>{t('Account')}</Text>
         <View style={{ gap: 10 }}>
           {links.map((l) => (
             <Pressable key={l} onPress={close} style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-              <Text style={[styles.setLabel, { color: th.text }]}>{l}</Text>
+              <Text style={[styles.setLabel, { color: th.text }]}>{t(l)}</Text>
               <View style={styles.flex} />
               <Text style={{ color: th.muted }}>›</Text>
             </Pressable>
           ))}
         </View>
         <Pressable onPress={() => { resetDemo(); close(); }} style={[styles.setRow, { backgroundColor: th.surface, borderColor: th.border, marginTop: 10 }]}>
-          <Text style={[styles.setLabel, { color: '#ef4444' }]}>Reset demo</Text>
+          <Text style={[styles.setLabel, { color: '#ef4444' }]}>{t('Reset demo')}</Text>
           <View style={styles.flex} />
           <Text style={{ color: th.muted }}>›</Text>
         </Pressable>
@@ -298,8 +338,9 @@ export function SettingsPage({ th, close, onScroll }: { th: ShellTheme; close: (
 
 /* ─────────────────────────────── WalletPage ─────────────────────────────── */
 
-export function WalletPage({ th, close, onScroll }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler }) {
+export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang }) {
   const insets = useSafeAreaInsets();
+  const t = (en: string) => tr(lang, en);
   const balance = useOne01PlatformStore((s) => s.balance);
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const positions = useOne01PlatformStore((s) => s.positions);
@@ -327,20 +368,20 @@ export function WalletPage({ th, close, onScroll }: { th: ShellTheme; close: () 
 
   return (
     <View style={styles.flex}>
-      <PanelHead th={th} title="Wallet" onClose={close} />
+      <PanelHead th={th} title={t('Wallet')} onClose={close} />
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         {/* balance card */}
         <LinearGradient colors={[th.accent, `${th.accent}C0`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balCard}>
           <View style={styles.balTop}>
             <View>
-              <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85 }]}>Total balance</Text>
+              <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85 }]}>{t('Total balance')}</Text>
               <Text style={[styles.balAmt, { color: accentFg }]}>⟡ {balance.toLocaleString()}</Text>
             </View>
             <View style={styles.flex} />
             <View style={styles.balChg}><Text style={[styles.balChgTxt, { color: accentFg }]}>▲ 6.2%</Text></View>
           </View>
           <View style={{ marginTop: 6 }}><Sparkline color={accentFg} /></View>
-          <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85, marginTop: 4 }]}>≈ ${balance.toLocaleString()} · virtual credits · 30d</Text>
+          <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85, marginTop: 4 }]}>≈ ${balance.toLocaleString()} · {t('virtual credits · 30d')}</Text>
         </LinearGradient>
 
         {/* actions — Top up adds virtual credits */}
@@ -358,21 +399,21 @@ export function WalletPage({ th, close, onScroll }: { th: ShellTheme; close: () 
                 <View style={[styles.walletActionIcon, { backgroundColor: isTop && topped ? th.accent : th.surface, borderColor: isTop && topped ? th.accent : th.border }]}>
                   <Text style={{ color: isTop && topped ? accentFg : th.text, fontSize: 16 }}>{icon}</Text>
                 </View>
-                <Text style={[styles.walletActionTxt, { color: isTop && topped ? th.accent : th.muted }]}>{label}</Text>
+                <Text style={[styles.walletActionTxt, { color: isTop && topped ? th.accent : th.muted }]}>{isTop && topped ? label : t(label)}</Text>
               </Pressable>
             );
           })}
         </View>
 
         {/* holdings — cash + live-priced project shares */}
-        <Text style={[styles.secTitle, { color: th.text }]}>Holdings</Text>
+        <Text style={[styles.secTitle, { color: th.text }]}>{t('Holdings')}</Text>
         <View style={{ gap: 10 }}>
           {holdings.map((h) => (
             <View key={h.id} style={[styles.holdRow, { backgroundColor: th.surface, borderColor: th.border }]}>
               <View style={[styles.holdTile, { backgroundColor: DARK_TILE }]}><Mark mark={h.mark} size={24} /></View>
               <View style={styles.flex}>
                 <Text style={[styles.holdName, { color: th.text }]}>{h.name}</Text>
-                <Text style={[styles.holdChg, { color: th.muted }]}>{h.sub}</Text>
+                <Text style={[styles.holdChg, { color: th.muted }]}>{t(h.sub)}</Text>
               </View>
               <View style={styles.holdEnd}>
                 <Text style={[styles.holdAmt, { color: th.text }]}>⟡ {h.amt}</Text>
@@ -386,7 +427,7 @@ export function WalletPage({ th, close, onScroll }: { th: ShellTheme; close: () 
         )}
 
         {/* activity */}
-        <Text style={[styles.secTitle, { color: th.text }]}>Activity</Text>
+        <Text style={[styles.secTitle, { color: th.text }]}>{t('Activity')}</Text>
         <View style={{ gap: 10 }}>
           {tx.map((t) => (
             <View key={t.k} style={[styles.holdRow, { backgroundColor: th.surface, borderColor: th.border }]}>
@@ -479,4 +520,7 @@ const styles = StyleSheet.create({
   setLabel: { fontSize: 15, fontWeight: '700' },
   setHint: { fontSize: 12.5, marginTop: 2 },
   setVer: { fontSize: 12, textAlign: 'center', marginTop: 24 },
+  segment: { flexDirection: 'row', borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, padding: 3, gap: 2 },
+  segmentBtn: { paddingHorizontal: 13, paddingVertical: 6, borderRadius: 999 },
+  segmentTxt: { fontSize: 13, fontWeight: '800' },
 });

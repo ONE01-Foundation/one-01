@@ -56,6 +56,7 @@ import { SheetWindow, ProfilePage, WalletPage, SettingsPage } from '../../compon
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
 import { useOne01PlatformStore, pendingEarnings, type UserCreation } from '../../stores/one01PlatformStore';
 import { onboardingFor } from '../../data/one01/onboarding';
+import { tr, type Lang } from '../../data/one01/i18n';
 import {
   PRODUCTS,
   ECOSYSTEM_APPS,
@@ -85,8 +86,14 @@ const DARK_TILE = '#131317';
 const CW = 700; // desktop content column
 const WIDE_AT = 900;
 
-function shellTheme(homeId: HomeId): ShellTheme {
+function shellTheme(homeId: HomeId, appearance: 'light' | 'dark' = 'light'): ShellTheme {
   if (homeId === 'one01') {
+    if (appearance === 'dark') {
+      return {
+        homeId, mode: 'dark', mark: 'one01', name: 'ONE01', accent: '#10B981', glow: GLOWS.one01,
+        bg: '#0B0D10', surface: '#15181C', surface2: '#1D2126', text: '#F3F6F4', muted: '#8A938E', border: '#262B30',
+      };
+    }
     return {
       homeId, mode: 'light', mark: 'one01', name: 'ONE01', accent: '#10B981', glow: GLOWS.one01,
       bg: '#F6F7F9', surface: '#FFFFFF', surface2: '#EDEFF3', text: '#0E1116', muted: '#6B7280', border: '#E4E7EC',
@@ -120,6 +127,8 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const wide = width >= WIDE_AT;
 
   // persisted platform state — onboard once, one live credit balance
+  const appearance = useOne01PlatformStore((s) => s.appearance);
+  const lang = useOne01PlatformStore((s) => s.lang);
   const entered = useOne01PlatformStore((s) => s.entered);
   const setEntered = useOne01PlatformStore((s) => s.setEntered);
   const onboarded = useOne01PlatformStore((s) => s.onboarded);
@@ -198,8 +207,8 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   if (!entered) return <ProductOnboarding config={onboardingFor('one01')} onFinish={() => setEntered(true)} />;
   if (onboardFor) return <ProductOnboarding config={onboardingFor(onboardFor)} onFinish={() => enterProduct(onboardFor)} />;
 
-  const th = shellTheme(homeId);
-  const topPad = wide ? 96 : 104;
+  const th = shellTheme(homeId, appearance);
+  const topPad = wide ? 96 : 112;
   const bottomPad = (wide ? 40 : 104) + insets.bottom;
 
   // the main section ("Projects"/"Games"/…) as a focused drawer page
@@ -228,9 +237,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
 
       <View style={styles.flex}>
-        {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} />}
-        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} />}
-        {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} />}
+        {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} lang={lang} />}
+        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
+        {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
       </View>
 
       {/* bottom bar sits below the detail overlay */}
@@ -243,11 +252,11 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 
       {/* a focused drawer: desktop = full page, mobile = bottom sheet */}
       {drawer && tab === 'home' && (
-        <DrawerOverlay th={th} wide={wide} kind={drawer.kind} extras={HOME_EXTRAS[homeId]} main={drawerMain} topInset={insets.top} onBack={() => setDrawer(null)} />
+        <DrawerOverlay th={th} wide={wide} kind={drawer.kind} extras={HOME_EXTRAS[homeId]} main={drawerMain} topInset={insets.top} onBack={() => setDrawer(null)} lang={lang} />
       )}
 
       {wide ? (
-        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} onSwitch={() => setSheet('switch')} />
+        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} onSwitch={() => setSheet('switch')} lang={lang} />
       ) : (
         <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={() => setSheet('profile')} />
       )}
@@ -264,6 +273,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
             th={th}
             close={close}
             onScroll={onScroll}
+            lang={lang}
             onExit={onExit}
             onCreate={() => { setTab('create'); close(); }}
             onSettings={() => setSheet('settings')}
@@ -272,10 +282,10 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         )}
       </SheetWindow>
       <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} onClose={() => setSheet(null)}>
-        {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} />}
+        {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
       <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
-        {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} />}
+        {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
       <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
@@ -375,11 +385,11 @@ function MobileBottomBar({ th, tab, setTab, onSwitch, bottomInset }: { th: Shell
 
 /* ─────────────────────────────── desktop nav ─────────────────────────────── */
 
-function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onWallet: () => void; onProfile: () => void; onSwitch: () => void }) {
+function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onWallet: () => void; onProfile: () => void; onSwitch: () => void; lang: Lang }) {
   const links: { k: Tab; label: string }[] = [
-    { k: 'home', label: 'Home' },
-    { k: 'market', label: 'Market' },
-    { k: 'create', label: 'Creator' },
+    { k: 'home', label: tr(lang, 'Home') },
+    { k: 'market', label: tr(lang, 'Market') },
+    { k: 'create', label: tr(lang, 'Creator') },
   ];
   return (
     <LinearGradient colors={[th.bg, `${th.bg}00`]} style={styles.desktopNav} pointerEvents="box-none">
@@ -413,7 +423,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch }: { th: Sh
 
 /* ─────────────────────────────── home content ─────────────────────────────── */
 
-function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void }) {
+function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void; lang: Lang }) {
   const home = HOME[th.homeId];
   const extras = HOME_EXTRAS[th.homeId];
   const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
@@ -466,7 +476,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer }: { th
         {/* section header — opens the main section as a focused drawer page */}
         <Pressable onPress={() => onOpenDrawer('main')} style={({ pressed }) => [styles.sectionHead, pressed && { opacity: 0.6 }]}>
           <Text style={styles.sectionIcon}>{home.sectionIcon}</Text>
-          <Text style={[styles.sectionTitle, { color: th.text }]}>{home.sectionTitle}</Text>
+          <Text style={[styles.sectionTitle, { color: th.text }]}>{tr(lang, home.sectionTitle)}</Text>
           {home.sectionCount != null && <Text style={[styles.sectionCount, { color: th.muted }]}>({home.sectionCount})</Text>}
           <View style={styles.flex} />
           <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
@@ -493,28 +503,38 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer }: { th
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }} style={{ overflow: 'visible' }}>
             {home.items.map((it) => (
-              <Pressable key={it.id} onPress={() => onOpen(cardKind, it)}>
-                <LinearGradient colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.artCard}>
-                  {it.live && (
-                    <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{it.metric}</Text></View>
-                  )}
-                  {it.mark ? <View style={styles.artMark}><Mark mark={it.mark} size={46} accent={markAccent(it.mark)} eye={DARK_TILE} /></View> : <Text style={styles.artEmoji}>{it.emoji}</Text>}
-                  <View style={styles.artFooter}>
-                    <Text style={styles.artTitle}>{it.title}</Text>
-                    {!it.live && it.metric ? (
-                      <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View>
-                    ) : it.cta ? (
-                      <View style={styles.artCta}><Text style={styles.artCtaTxt}>{it.cta}</Text></View>
-                    ) : null}
-                  </View>
-                </LinearGradient>
-              </Pressable>
+              it.mark ? (
+                /* project "cube" — square brand tile with a label below */
+                <Pressable key={it.id} onPress={() => onOpen(cardKind, it)} style={styles.projCubeWrap}>
+                  <LinearGradient colors={it.bg ?? [DARK_TILE, '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.projCube}>
+                    <Mark mark={it.mark} size={56} accent={markAccent(it.mark)} eye={DARK_TILE} />
+                    {it.cta ? <View style={styles.projCubeCta}><Text style={styles.artCtaTxt}>{tr(lang, it.cta)}</Text></View> : null}
+                  </LinearGradient>
+                  <Text style={[styles.projCubeName, { color: th.text }]} numberOfLines={1}>{it.title}</Text>
+                  <Text style={[styles.projCubeSub, { color: th.muted }]} numberOfLines={1}>{it.subtitle}</Text>
+                </Pressable>
+              ) : (
+                <Pressable key={it.id} onPress={() => onOpen(cardKind, it)}>
+                  <LinearGradient colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.artCard}>
+                    {it.live && (
+                      <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{it.metric}</Text></View>
+                    )}
+                    <Text style={styles.artEmoji}>{it.emoji}</Text>
+                    <View style={styles.artFooter}>
+                      <Text style={styles.artTitle}>{it.title}</Text>
+                      {!it.live && it.metric ? (
+                        <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View>
+                      ) : null}
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+              )
             ))}
           </ScrollView>
         )}
 
         {/* per-product drawers: people · events · stats · live feed */}
-        {extras && <HomeDrawers th={th} extras={extras} wide={wide} onOpenDrawer={onOpenDrawer} />}
+        {extras && <HomeDrawers th={th} extras={extras} wide={wide} onOpenDrawer={onOpenDrawer} lang={lang} />}
       </View>
     </ScrollView>
   );
@@ -543,11 +563,11 @@ function DrawerHead({ th, kind, title, count, onOpen }: { th: ShellTheme; kind: 
   );
 }
 
-function HomeDrawers({ th, extras, wide, onOpenDrawer }: { th: ShellTheme; extras: HomeExtras; wide: boolean; onOpenDrawer: (k: DrawerKind) => void }) {
+function HomeDrawers({ th, extras, wide, onOpenDrawer, lang }: { th: ShellTheme; extras: HomeExtras; wide: boolean; onOpenDrawer: (k: DrawerKind) => void; lang: Lang }) {
   return (
     <>
       {/* people */}
-      <DrawerHead th={th} kind="people" title={extras.people.label} count={extras.people.items.length} onOpen={() => onOpenDrawer('people')} />
+      <DrawerHead th={th} kind="people" title={tr(lang, extras.people.label)} count={extras.people.items.length} onOpen={() => onOpenDrawer('people')} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 8 }} style={{ overflow: 'visible' }}>
         {extras.people.items.map((p) => (
           <View key={p.id} style={[styles.personCard, { backgroundColor: th.surface, borderColor: th.border }]}>
@@ -559,7 +579,7 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer }: { th: ShellTheme; extra
       </ScrollView>
 
       {/* events */}
-      <DrawerHead th={th} kind="events" title={extras.events.label} count={extras.events.items.length} onOpen={() => onOpenDrawer('events')} />
+      <DrawerHead th={th} kind="events" title={tr(lang, extras.events.label)} count={extras.events.items.length} onOpen={() => onOpenDrawer('events')} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }} style={{ overflow: 'visible' }}>
         {extras.events.items.map((e) => (
           <LinearGradient key={e.id} colors={e.bg ?? [`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.eventCard}>
@@ -574,7 +594,7 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer }: { th: ShellTheme; extra
       </ScrollView>
 
       {/* stats */}
-      <DrawerHead th={th} kind="stats" title={extras.stats.label} onOpen={() => onOpenDrawer('stats')} />
+      <DrawerHead th={th} kind="stats" title={tr(lang, extras.stats.label)} onOpen={() => onOpenDrawer('stats')} />
       <View style={styles.statGrid}>
         {extras.stats.tiles.map((t) => (
           <View key={t.k} style={[styles.statTile, wide && styles.statTileWide, { backgroundColor: th.surface, borderColor: th.border }]}>
@@ -586,7 +606,7 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer }: { th: ShellTheme; extra
       </View>
 
       {/* live feed */}
-      <DrawerHead th={th} kind="feed" title={extras.feed.label} onOpen={() => onOpenDrawer('feed')} />
+      <DrawerHead th={th} kind="feed" title={tr(lang, extras.feed.label)} onOpen={() => onOpenDrawer('feed')} />
       <FeedDrawer th={th} lines={extras.feed.lines} />
     </>
   );
@@ -594,9 +614,10 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer }: { th: ShellTheme; extra
 
 /* ─────────────────────────────── drawer detail (focused view) ─────────────────────────────── */
 
-function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBack, onScroll }: { th: ShellTheme; kind: DrawerKind; extras: HomeExtras; main?: MainDrawer; wide?: boolean; topPad?: number; onBack: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
+function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBack, onScroll, lang }: { th: ShellTheme; kind: DrawerKind; extras: HomeExtras; main?: MainDrawer; wide?: boolean; topPad?: number; onBack: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void; lang: Lang }) {
   const insets = useSafeAreaInsets();
-  const title = kind === 'main' ? (main?.label ?? '') : kind === 'people' ? extras.people.label : kind === 'events' ? extras.events.label : kind === 'stats' ? extras.stats.label : extras.feed.label;
+  const rawTitle = kind === 'main' ? (main?.label ?? '') : kind === 'people' ? extras.people.label : kind === 'events' ? extras.events.label : kind === 'stats' ? extras.stats.label : extras.feed.label;
+  const title = tr(lang, rawTitle);
 
   return (
     <View style={styles.flex}>
@@ -633,7 +654,7 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
                       <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{it.subtitle}</Text>
                     </View>
                     <View style={[styles.ctaPill, { backgroundColor: th.mode === 'dark' ? th.surface2 : '#0E1116' }]}>
-                      <Text style={[styles.ctaPillTxt, { color: th.mode === 'dark' ? th.text : '#fff' }]}>{it.cta ?? 'Open'}</Text>
+                      <Text style={[styles.ctaPillTxt, { color: th.mode === 'dark' ? th.text : '#fff' }]}>{tr(lang, it.cta ?? 'Open')}</Text>
                     </View>
                   </Pressable>
                 ))}
@@ -647,7 +668,7 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
                       {it.mark ? <View style={styles.artMark}><Mark mark={it.mark} size={46} accent={markAccent(it.mark)} eye={DARK_TILE} /></View> : <Text style={styles.artEmoji}>{it.emoji}</Text>}
                       <View style={styles.artFooter}>
                         <Text style={styles.artTitle}>{it.title}</Text>
-                        {!it.live && it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : it.cta ? <View style={styles.artCta}><Text style={styles.artCtaTxt}>{it.cta}</Text></View> : null}
+                        {!it.live && it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : it.cta ? <View style={styles.artCta}><Text style={styles.artCtaTxt}>{tr(lang, it.cta)}</Text></View> : null}
                       </View>
                     </LinearGradient>
                   </Pressable>
@@ -717,7 +738,7 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
   );
 }
 
-function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack }: { th: ShellTheme; wide: boolean; kind: DrawerKind; extras: HomeExtras; main?: MainDrawer; topInset: number; onBack: () => void }) {
+function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack, lang }: { th: ShellTheme; wide: boolean; kind: DrawerKind; extras: HomeExtras; main?: MainDrawer; topInset: number; onBack: () => void; lang: Lang }) {
   const { height: winH } = useWindowDimensions();
   const sheetTop = topInset + 74;
   const sheetH = winH - sheetTop;
@@ -745,7 +766,7 @@ function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack }: { th:
   if (wide) {
     return (
       <View style={[StyleSheet.absoluteFill, { backgroundColor: th.bg, paddingTop: topInset }]}>
-        <DrawerContent th={th} wide kind={kind} extras={extras} main={main} topPad={56} onBack={onBack} />
+        <DrawerContent th={th} wide kind={kind} extras={extras} main={main} topPad={56} onBack={onBack} lang={lang} />
       </View>
     );
   }
@@ -758,7 +779,7 @@ function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack }: { th:
       </Pressable>
       <Animated.View {...pan.panHandlers} style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
         <View style={styles.detailDrag}><View style={[styles.detailGrab, { backgroundColor: th.border }]} /></View>
-        <DrawerContent th={th} kind={kind} extras={extras} main={main} onBack={close} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} />
+        <DrawerContent th={th} kind={kind} extras={extras} main={main} onBack={close} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} lang={lang} />
       </Animated.View>
     </View>
   );
@@ -812,10 +833,10 @@ function FeedDrawer({ th, lines }: { th: ShellTheme; lines: FeedLineLite[] }) {
 
 /* ─────────────────────────────── market / create ─────────────────────────────── */
 
-function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, onBuild, onToast }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void; onBuild: (p: SurfacePillar, surface: string) => void; onToast: (m: string) => void }) {
+function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, onBuild, onToast, lang }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void; onBuild: (p: SurfacePillar, surface: string) => void; onToast: (m: string) => void; lang: Lang }) {
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
   const s = kind === 'market' ? MARKET[pid] : CREATOR[pid];
-  const sectionTitle = kind === 'market' ? 'Market' : CREATOR[pid].title;
+  const sectionTitle = kind === 'market' ? tr(lang, 'Market') : tr(lang, CREATOR[pid].title);
   const cats = HOME[th.homeId].categories;
   const { width } = useWindowDimensions();
   const colW = wide ? CW : Math.min(width, 600) - 36;
@@ -828,7 +849,7 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
       <View style={{ width: colW }}>
         {/* banner */}
         <LinearGradient colors={bannerColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.banner, { width: colW }]}>
-          <View style={[styles.bannerBadge, { backgroundColor: th.accent }]}><Text style={[styles.bannerBadgeTxt, { color: ctaFg }]}>{kind === 'market' ? 'MARKET' : 'CREATOR'}</Text></View>
+          <View style={[styles.bannerBadge, { backgroundColor: th.accent }]}><Text style={[styles.bannerBadgeTxt, { color: ctaFg }]}>{tr(lang, kind === 'market' ? 'Market' : 'Creator')}</Text></View>
           <View style={styles.bannerFooter}>
             <View style={styles.flex}>
               <Text style={[styles.bannerTitle, { color: th.text }]} numberOfLines={2}>{s.headline}</Text>
@@ -875,7 +896,7 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
                     <Text style={[styles.projName, { color: th.text }]}>{p.title}</Text>
                     <Text style={[styles.projSub, { color: th.muted }]}>{p.tagline}</Text>
                   </View>
-                  <Pressable onPress={onCta} style={({ pressed }) => [styles.ctaPill, { backgroundColor: th.accent }, pressed && { opacity: 0.8 }]}><Text style={[styles.ctaPillTxt, { color: ctaFg }]}>{isMarket ? (p.price.replace(/[^0-9]/g, '') ? `Get ⟡${parseInt(p.price.replace(/[^0-9]/g, ''), 10)}` : 'Get') : 'Build'}</Text></Pressable>
+                  <Pressable onPress={onCta} style={({ pressed }) => [styles.ctaPill, { backgroundColor: th.accent }, pressed && { opacity: 0.8 }]}><Text style={[styles.ctaPillTxt, { color: ctaFg }]}>{isMarket ? (p.price.replace(/[^0-9]/g, '') ? `${tr(lang, 'Get')} ⟡${parseInt(p.price.replace(/[^0-9]/g, ''), 10)}` : tr(lang, 'Get')) : tr(lang, 'Build')}</Text></Pressable>
                 </View>
                 <Text style={[styles.pillarDetail, { color: th.muted }]}>{p.detail}</Text>
               </Pressable>
@@ -883,7 +904,7 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
           })}
         </View>
 
-        {kind === 'create' && <CreatorCreations th={th} onToast={onToast} />}
+        {kind === 'create' && <CreatorCreations th={th} onToast={onToast} lang={lang} />}
       </View>
     </ScrollView>
   );
@@ -891,7 +912,7 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
 
 /* ─────────────────────────────── your creations (Creator earns) ─────────────────────────────── */
 
-function CreatorCreations({ th, onToast }: { th: ShellTheme; onToast: (m: string) => void }) {
+function CreatorCreations({ th, onToast, lang }: { th: ShellTheme; onToast: (m: string) => void; lang: Lang }) {
   const creations = useOne01PlatformStore((s) => s.creations);
   const collect = useOne01PlatformStore((s) => s.collectEarnings);
   const [, setTick] = useState(0);
@@ -914,7 +935,7 @@ function CreatorCreations({ th, onToast }: { th: ShellTheme; onToast: (m: string
     <>
       <View style={styles.sectionHead}>
         <Text style={styles.sectionIcon}>🧱</Text>
-        <Text style={[styles.sectionTitle, { color: th.text }]}>Your creations</Text>
+        <Text style={[styles.sectionTitle, { color: th.text }]}>{tr(lang, 'Your creations')}</Text>
         <Text style={[styles.sectionCount, { color: th.muted }]}>({creations.length})</Text>
       </View>
       <View style={styles.rowsWrap}>
@@ -928,7 +949,7 @@ function CreatorCreations({ th, onToast }: { th: ShellTheme; onToast: (m: string
                 <Text style={[styles.projSub, { color: th.muted }]}>Live on {c.surface} · ⟡{c.rate}/min · earned ⟡{c.collected.toLocaleString()}</Text>
               </View>
               <Pressable onPress={() => doCollect(c)} style={({ pressed }) => [styles.ctaPill, { backgroundColor: pending > 0 ? th.accent : th.surface2 }, pressed && { opacity: 0.8 }]}>
-                <Text style={[styles.ctaPillTxt, { color: pending > 0 ? ctaFg : th.muted }]}>Collect ⟡{pending}</Text>
+                <Text style={[styles.ctaPillTxt, { color: pending > 0 ? ctaFg : th.muted }]}>{tr(lang, 'Collect')} ⟡{pending}</Text>
               </Pressable>
             </View>
           );
@@ -1171,11 +1192,11 @@ const styles = StyleSheet.create({
   toast: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
   toastTxt: { fontSize: 13.5, fontWeight: '700' },
 
-  micro: { fontSize: 11, textAlign: 'center', paddingTop: 6 },
+  micro: { fontSize: 11, textAlign: 'center', paddingTop: 8 },
 
   /* mobile top bar */
-  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 30 },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8 },
+  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 26 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16 },
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1240,6 +1261,13 @@ const styles = StyleSheet.create({
   artMark: { alignItems: 'center', justifyContent: 'center', marginTop: 24 },
   artCta: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
   artCtaTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },
+
+  /* project cubes (square brand tiles) */
+  projCubeWrap: { width: 140 },
+  projCube: { width: 140, height: 140, borderRadius: 28, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  projCubeCta: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.34)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  projCubeName: { fontSize: 15, fontWeight: '800', marginTop: 9 },
+  projCubeSub: { fontSize: 12, marginTop: 1 },
   artFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   artTitle: { fontSize: 16, fontWeight: '800', color: '#fff', textTransform: 'uppercase', letterSpacing: 0.3 },
   artMetric: { flexDirection: 'row', alignItems: 'center', gap: 5 },
