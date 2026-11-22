@@ -21,6 +21,7 @@ import {
   ScrollView,
   Modal,
   Animated,
+  PanResponder,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -86,7 +87,7 @@ function markAccent(mark: MarkId): string {
 
 function Mark({ mark, size, accent, eye }: { mark: MarkId; size: number; accent: string; eye?: string }) {
   switch (mark) {
-    case 'one': return <OneMark size={size} color={accent} eye={eye ?? '#000'} />;
+    case 'one': return <OneMark size={size} color="#FFFFFF" eye="#0A0A0A" />;
     case 'winzi': return <WinziMark size={size} />;
     case 'mixstar': return <MixStarMark size={size} />;
     case 'xit': return <XitMark size={size} />;
@@ -579,24 +580,44 @@ function ExternalModal({ app, onClose }: { app: EcosystemApp | null; onClose: ()
 }
 
 function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary }: { th: ShellTheme; wide: boolean; kind: DetailKind; item: HomeItem; topInset: number; onBack: () => void; onPrimary: () => void }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => { Animated.timing(anim, { toValue: 1, duration: 260, useNativeDriver: true }).start(); }, [anim]);
+  const { height: winH } = useWindowDimensions();
+  const sheetTop = topInset + 74;
+  const sheetH = winH - sheetTop;
+  const ty = useRef(new Animated.Value(sheetH)).current;
 
+  useEffect(() => {
+    if (wide) return;
+    Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 3, speed: 13 }).start();
+  }, [wide, ty]);
+
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && g.dy > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => { if (g.dy > 0) ty.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 130 || g.vy > 0.8) Animated.timing(ty, { toValue: sheetH, duration: 200, useNativeDriver: true }).start(() => onBack());
+        else Animated.spring(ty, { toValue: 0, useNativeDriver: true }).start();
+      },
+    }),
+  ).current;
+
+  // desktop: a regular full page (nav bar stays above it), not a popup card
   if (wide) {
     return (
-      <View style={styles.detailScrim}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onBack} />
-        <Animated.View style={[styles.detailCard, { backgroundColor: th.bg, borderColor: th.border, opacity: anim, transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
-          <DetailPage th={th} kind={kind} item={item} onBack={onBack} onPrimary={onPrimary} />
-        </Animated.View>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: th.bg, paddingTop: topInset }]}>
+        <DetailPage th={th} wide kind={kind} item={item} topPad={56} onBack={onBack} onPrimary={onPrimary} />
       </View>
     );
   }
+
+  // mobile: a sheet that rises from the bottom and can be dragged down to close
   return (
     <View style={StyleSheet.absoluteFill}>
       <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} onPress={onBack} />
-      <Animated.View style={[styles.detailSheet, { top: topInset + 74, backgroundColor: th.bg, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [36, 0] }) }] }]}>
-        <View style={[styles.detailGrab, { backgroundColor: th.border }]} />
+      <Animated.View style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
+        <View {...pan.panHandlers} style={styles.detailDrag}>
+          <View style={[styles.detailGrab, { backgroundColor: th.border }]} />
+        </View>
         <DetailPage th={th} kind={kind} item={item} onBack={onBack} onPrimary={onPrimary} />
       </Animated.View>
     </View>
@@ -610,11 +631,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topGlow: { position: 'absolute', top: 0, left: 0, right: 0 },
 
-  micro: { fontSize: 11, textAlign: 'center', paddingTop: 6 },
+  micro: { fontSize: 11, textAlign: 'center', paddingTop: 10 },
 
   /* mobile top bar */
   topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 18 },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14 },
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   profileBtn: { width: 52, alignItems: 'center' },
@@ -702,8 +723,9 @@ const styles = StyleSheet.create({
   /* detail overlay */
   detailScrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   detailCard: { width: '100%', maxWidth: 560, height: '86%', borderRadius: 24, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
-  detailSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
-  detailGrab: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: 8, marginBottom: -2 },
+  detailSheet: { position: 'absolute', left: 0, right: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  detailDrag: { paddingTop: 10, paddingBottom: 4, alignItems: 'center' },
+  detailGrab: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center' },
 
   /* desktop apps dropdown */
   appsDropdown: { width: 248, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 10, gap: 2 },

@@ -127,12 +127,13 @@ export function One01Mark({ size = 28, color = '#FFFFFF' }: BrandProps) {
   );
 }
 
-/** ONE product mark — ◉ disc with a concentric eye. */
-export function OneMark({ size = 28, color = '#10B981', eye = '#0A0A0A' }: BrandProps & { eye?: string }) {
+/** ONE product mark — the ONE face: a disc with two eyes. */
+export function OneMark({ size = 28, color = '#FFFFFF', eye = '#050400' }: BrandProps & { eye?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 62 62" fill="none">
-      <Circle cx={31} cy={31} r={20} fill={color} />
-      <Circle cx={31} cy={31} r={6.5} fill={eye} opacity={0.4} />
+    <Svg width={size} height={size} viewBox="0 0 74 74" fill="none">
+      <Circle cx={36.7} cy={36.7} r={36.7} fill={color} />
+      <Ellipse cx={47.0139} cy={34.5409} rx={8.1555} ry={11.5136} fill={eye} />
+      <Ellipse cx={24.9465} cy={34.5409} rx={8.1555} ry={11.5136} fill={eye} />
     </Svg>
   );
 }

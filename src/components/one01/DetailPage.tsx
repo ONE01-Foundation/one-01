@@ -23,7 +23,7 @@ const DARK_TILE = '#131317';
 
 function Mark({ mark, size }: { mark: MarkId; size: number }) {
   switch (mark) {
-    case 'one': return <OneMark size={size} color="#2ED8A7" eye={DARK_TILE} />;
+    case 'one': return <OneMark size={size} color="#FFFFFF" eye="#0A0A0A" />;
     case 'winzi': return <WinziMark size={size} />;
     case 'mixstar': return <MixStarMark size={size} />;
     case 'xit': return <XitMark size={size} />;
@@ -45,7 +45,7 @@ function Stars({ value, color }: { value: number; color: string }) {
   return <Text style={{ color, fontSize: 13, letterSpacing: 1 }}>{'★★★★★'.slice(0, full)}{'☆☆☆☆☆'.slice(0, 5 - full)}</Text>;
 }
 
-export function DetailPage({ th, kind, item, onBack, onPrimary }: { th: ShellTheme; kind: DetailKind; item: HomeItem; onBack: () => void; onPrimary: () => void }) {
+export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, topPad = 0 }: { th: ShellTheme; kind: DetailKind; item: HomeItem; onBack: () => void; onPrimary: () => void; wide?: boolean; topPad?: number }) {
   const insets = useSafeAreaInsets();
   const accent = item.product ? PRODUCTS[item.product].accent : th.accent;
   const accentFg = accent === '#F9D800' ? '#000' : '#fff';
@@ -86,18 +86,19 @@ export function DetailPage({ th, kind, item, onBack, onPrimary }: { th: ShellThe
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
-        {/* header */}
-        <View style={styles.header}>
-          <Pressable onPress={onBack} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
-            <Text style={[styles.chev, { color: th.text }]}>‹</Text>
-          </Pressable>
-          <View style={styles.flex} />
-          <View style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
-            <Text style={[styles.share, { color: th.muted }]}>↗</Text>
-          </View>
-        </View>
+      {/* pinned header — stays put while the content scrolls */}
+      <View style={[styles.header, { paddingTop: topPad + 10 }]}>
+        <Pressable onPress={onBack} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
+          <Text style={[styles.chev, { color: th.text }]}>‹</Text>
+        </Pressable>
+        <View style={styles.flex} />
+        <Pressable style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
+          <Text style={[styles.share, { color: th.muted }]}>↗</Text>
+        </Pressable>
+      </View>
 
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }} showsVerticalScrollIndicator={false}>
+        <View style={wide ? styles.colWide : styles.flex}>
         {/* hero */}
         <View style={styles.hero}>
           <View style={[styles.icon, { backgroundColor: kind === 'project' ? DARK_TILE : grad[0] }]}>
@@ -188,6 +189,7 @@ export function DetailPage({ th, kind, item, onBack, onPrimary }: { th: ShellThe
             </View>
           </>
         )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -195,6 +197,7 @@ export function DetailPage({ th, kind, item, onBack, onPrimary }: { th: ShellThe
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  colWide: { width: 700, maxWidth: '100%' },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingTop: 10, paddingBottom: 6 },
   round: { width: 38, height: 38, borderRadius: 19, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
