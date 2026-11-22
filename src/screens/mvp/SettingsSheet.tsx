@@ -259,6 +259,20 @@ export function SettingsSheet({
               }
               he={he}
             />
+            <ActionRow
+              label={he ? 'ONE01 Platform (אקוסיסטם)' : 'ONE01 Platform (ecosystem)'}
+              onPress={() => {
+                setHomeMode('platform');
+                onClose();
+              }}
+              colors={colors}
+              hint={
+                he
+                  ? 'השכבה המשותפת — ONE / Winzi / MixStar כאפליקציות על אותן מסילות. פורט של אתר ה-ONE Platform.'
+                  : 'The shared layer — ONE / Winzi / MixStar as apps on one set of rails. A port of the ONE Platform site.'
+              }
+              he={he}
+            />
           </Group>
 
           {/* Language */}

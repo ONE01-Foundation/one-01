@@ -26,6 +26,7 @@ import { HomeScreen } from '../screens/mvp/HomeScreen';
 import { HomeFocus } from '../screens/mvp/HomeFocus';
 import { MeetOne } from '../screens/mvp/MeetOne';
 import { One01Studio } from '../screens/mvp/One01Studio';
+import { One01Platform } from '../screens/mvp/One01Platform';
 import { ProfileFocus } from '../screens/mvp/ProfileFocus';
 import { UnitProfileSheet } from '../screens/mvp/UnitProfileSheet';
 import { IdentitySwitchSheet } from '../screens/mvp/IdentitySwitchSheet';
@@ -295,6 +296,13 @@ function HomeWithOverlays() {
   // to the classic home.
   if (homeMode === 'one01') {
     return <One01Studio onExit={() => useMvpStore.getState().setHomeMode('classic')} />;
+  }
+
+  // ONE01 Platform — an Expo port of the ONE Platform (the shared layer: ONE /
+  // Winzi / MixStar apps on one set of rails). Separate full-surface mode;
+  // exit returns to the classic home.
+  if (homeMode === 'platform') {
+    return <One01Platform onExit={() => useMvpStore.getState().setHomeMode('classic')} />;
   }
 
   return (
