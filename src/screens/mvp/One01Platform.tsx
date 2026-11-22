@@ -47,6 +47,7 @@ import {
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
 import { SheetWindow, ProfilePage, WalletPage, SettingsPage } from '../../components/one01/Panels';
+import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
 import { onboardingFor } from '../../data/one01/onboarding';
 import {
   PRODUCTS,
@@ -113,6 +114,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings'>(null);
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
+  const [play, setPlay] = useState<{ kind: PlayKind; item: HomeItem } | null>(null);
 
   const enterProduct = (id: ProductId) => {
     setOnboarded((prev) => new Set(prev).add(id));
@@ -130,8 +132,11 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       setDetail(null);
       if (it.product) openProduct(it.product);
       else { const app = ECOSYSTEM_APPS.find((a) => a.id === it.id); if (app) setExternalApp(app); }
+    } else if (detail.kind === 'game' || detail.kind === 'show') {
+      setDetail(null);
+      setPlay({ kind: detail.kind, item: it });
     } else {
-      haptic.success(); // demo: Play / Watch / Continue
+      haptic.success(); // process: Continue
     }
   };
   const pickApp = (id: string) => {
@@ -148,6 +153,10 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const th = shellTheme(homeId);
   const topPad = wide ? 96 : 104;
   const bottomPad = (wide ? 40 : 104) + insets.bottom;
+
+  if (play) {
+    return <MiniPlayer kind={play.kind} th={th} item={play.item} onClose={() => setPlay(null)} />;
+  }
 
   return (
     <View style={[styles.flex, { backgroundColor: th.bg, paddingTop: insets.top }]}>
