@@ -76,6 +76,52 @@ export function FilterIcon({ size = 18, color = '#000000' }: BrandProps) {
   );
 }
 
+/* ── drawer header icons (line style) ── */
+
+/** People / players drawer. */
+export function PeopleIcon({ size = 18, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={8.5} cy={8} r={3} stroke={color} strokeWidth={2} />
+      <Path d="M3.5 19c0-2.8 2.2-4.6 5-4.6s5 1.8 5 4.6" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M16 6.3a2.8 2.8 0 0 1 0 5.4" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M15.6 14.6c2.2.4 3.9 2 3.9 4.4" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Events / calendar drawer. */
+export function CalendarIcon({ size = 18, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={3.5} y={5} width={17} height={15} rx={3} stroke={color} strokeWidth={2} />
+      <Path d="M3.5 9.5 H20.5" stroke={color} strokeWidth={2} />
+      <Path d="M8 3.5 V6.5 M16 3.5 V6.5" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Circle cx={8.5} cy={13.8} r={1.3} fill={color} />
+      <Circle cx={13} cy={13.8} r={1.3} fill={color} />
+    </Svg>
+  );
+}
+
+/** Stats / bar-chart drawer. */
+export function ChartIcon({ size = 18, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M4 20 H20" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M6.5 20 V13 M12 20 V5.5 M17.5 20 V10" stroke={color} strokeWidth={2.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Live feed / bolt drawer. */
+export function BoltIcon({ size = 18, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M13 2 L5 13 H10.5 L9.5 22 L19 10 H12.5 Z" fill={color} />
+    </Svg>
+  );
+}
+
 /** DargWin — placeholder mark (gold figure). */
 export function DargWinMark({ size = 28 }: { size?: number }) {
   return (

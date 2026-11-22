@@ -22,6 +22,7 @@ import {
   Modal,
   Animated,
   PanResponder,
+  StatusBar,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,6 +44,10 @@ import {
   CreateIcon,
   SearchIcon,
   FilterIcon,
+  PeopleIcon,
+  CalendarIcon,
+  ChartIcon,
+  BoltIcon,
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
@@ -70,6 +75,7 @@ import {
 
 type HomeId = 'one01' | ProductId;
 type Tab = 'home' | 'market' | 'create';
+type DrawerKind = 'people' | 'events' | 'stats' | 'feed';
 
 const GLOWS: Record<HomeId, string> = { one01: '#E8B923', one: '#6B7280', winzi: '#3B5BDB', mixstar: '#8B5CF6' };
 const DARK_TILE = '#131317';
@@ -125,6 +131,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
   const [play, setPlay] = useState<{ kind: PlayKind; item: HomeItem } | null>(null);
+  const [drawer, setDrawer] = useState<{ kind: DrawerKind } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (msg: string) => {
@@ -132,6 +139,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   };
+
+  // a focused drawer view belongs to the current home/tab — drop it on any switch
+  useEffect(() => { setDrawer(null); }, [tab, homeId]);
 
   const enterProduct = (id: ProductId) => {
     markOnboarded(id);
@@ -190,15 +200,21 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const bottomPad = (wide ? 40 : 104) + insets.bottom;
 
   if (play) {
-    return <MiniPlayer kind={play.kind} th={th} item={play.item} onClose={() => setPlay(null)} />;
+    return (
+      <>
+        <StatusBar barStyle="light-content" />
+        <MiniPlayer kind={play.kind} th={th} item={play.item} onClose={() => setPlay(null)} />
+      </>
+    );
   }
 
   return (
     <View style={[styles.flex, { backgroundColor: th.bg, paddingTop: insets.top }]}>
+      <StatusBar barStyle={th.mode === 'dark' ? 'light-content' : 'dark-content'} />
       <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
 
       <View style={styles.flex}>
-        {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} />}
+        {tab === 'home' && <HomeContent th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} />}
         {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} />}
         {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} />}
       </View>
@@ -209,6 +225,11 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       {/* detail opens as a card sheet (mobile) / centered card (desktop); the top bar stays above it */}
       {detail && (
         <DetailOverlay th={th} wide={wide} kind={detail.kind} item={detail.item} topInset={insets.top} onBack={() => setDetail(null)} onPrimary={detailPrimary} onToast={showToast} />
+      )}
+
+      {/* a focused drawer: desktop = full page, mobile = bottom sheet */}
+      {drawer && tab === 'home' && (
+        <DrawerOverlay th={th} wide={wide} kind={drawer.kind} extras={HOME_EXTRAS[homeId]} topInset={insets.top} onBack={() => setDrawer(null)} />
       )}
 
       {wide ? (
@@ -326,7 +347,7 @@ function MobileBottomBar({ th, tab, setTab, onSwitch, bottomInset }: { th: Shell
         delayLongPress={320}
       >
         <View style={[styles.navCenter, { opacity: tab === 'home' ? 1 : 0.5 }]}>
-          <Mark mark={th.mark} size={46} accent={th.homeId === 'one01' ? th.text : th.accent} eye={th.bg} />
+          <Mark mark={th.mark} size={60} accent={th.homeId === 'one01' ? th.text : th.accent} eye={th.bg} />
         </View>
       </Pressable>
       <Pressable style={styles.navBtn} onPress={() => { haptic.select(); setTab('create'); }}>
@@ -376,7 +397,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch }: { th: Sh
 
 /* ─────────────────────────────── home content ─────────────────────────────── */
 
-function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void }) {
+function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void }) {
   const home = HOME[th.homeId];
   const extras = HOME_EXTRAS[th.homeId];
   const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
@@ -475,7 +496,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; 
         )}
 
         {/* per-product drawers: people · events · stats · live feed */}
-        {extras && <HomeDrawers th={th} extras={extras} wide={wide} />}
+        {extras && <HomeDrawers th={th} extras={extras} wide={wide} onOpenDrawer={onOpenDrawer} />}
       </View>
     </ScrollView>
   );
@@ -483,23 +504,32 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen }: { th: ShellTheme; 
 
 /* ─────────────────────────────── home drawers (shelves) ─────────────────────────────── */
 
-function DrawerHead({ th, icon, title, count }: { th: ShellTheme; icon: string; title: string; count?: number }) {
+function drawerIcon(kind: DrawerKind, color: string, size = 17) {
+  switch (kind) {
+    case 'people': return <PeopleIcon size={size} color={color} />;
+    case 'events': return <CalendarIcon size={size} color={color} />;
+    case 'stats': return <ChartIcon size={size} color={color} />;
+    case 'feed': default: return <BoltIcon size={size} color={color} />;
+  }
+}
+
+function DrawerHead({ th, kind, title, count, onOpen }: { th: ShellTheme; kind: DrawerKind; title: string; count?: number; onOpen?: () => void }) {
   return (
-    <View style={styles.sectionHead}>
-      <Text style={styles.sectionIcon}>{icon}</Text>
+    <Pressable onPress={onOpen} style={({ pressed }) => [styles.drawerHead, pressed && onOpen && { opacity: 0.6 }]}>
+      <View style={styles.drawerHeadIcon}>{drawerIcon(kind, th.text)}</View>
       <Text style={[styles.sectionTitle, { color: th.text }]}>{title}</Text>
       {count != null && <Text style={[styles.sectionCount, { color: th.muted }]}>({count})</Text>}
       <View style={styles.flex} />
       <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
-    </View>
+    </Pressable>
   );
 }
 
-function HomeDrawers({ th, extras, wide }: { th: ShellTheme; extras: HomeExtras; wide: boolean }) {
+function HomeDrawers({ th, extras, wide, onOpenDrawer }: { th: ShellTheme; extras: HomeExtras; wide: boolean; onOpenDrawer: (k: DrawerKind) => void }) {
   return (
     <>
       {/* people */}
-      <DrawerHead th={th} icon="👥" title={extras.people.label} count={extras.people.items.length} />
+      <DrawerHead th={th} kind="people" title={extras.people.label} count={extras.people.items.length} onOpen={() => onOpenDrawer('people')} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 8 }} style={{ overflow: 'visible' }}>
         {extras.people.items.map((p) => (
           <View key={p.id} style={[styles.personCard, { backgroundColor: th.surface, borderColor: th.border }]}>
@@ -511,7 +541,7 @@ function HomeDrawers({ th, extras, wide }: { th: ShellTheme; extras: HomeExtras;
       </ScrollView>
 
       {/* events */}
-      <DrawerHead th={th} icon="📅" title={extras.events.label} count={extras.events.items.length} />
+      <DrawerHead th={th} kind="events" title={extras.events.label} count={extras.events.items.length} onOpen={() => onOpenDrawer('events')} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }} style={{ overflow: 'visible' }}>
         {extras.events.items.map((e) => (
           <LinearGradient key={e.id} colors={e.bg ?? [`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.eventCard}>
@@ -526,7 +556,7 @@ function HomeDrawers({ th, extras, wide }: { th: ShellTheme; extras: HomeExtras;
       </ScrollView>
 
       {/* stats */}
-      <DrawerHead th={th} icon="📊" title={extras.stats.label} />
+      <DrawerHead th={th} kind="stats" title={extras.stats.label} onOpen={() => onOpenDrawer('stats')} />
       <View style={styles.statGrid}>
         {extras.stats.tiles.map((t) => (
           <View key={t.k} style={[styles.statTile, wide && styles.statTileWide, { backgroundColor: th.surface, borderColor: th.border }]}>
@@ -538,9 +568,145 @@ function HomeDrawers({ th, extras, wide }: { th: ShellTheme; extras: HomeExtras;
       </View>
 
       {/* live feed */}
-      <DrawerHead th={th} icon="⚡" title={extras.feed.label} />
+      <DrawerHead th={th} kind="feed" title={extras.feed.label} onOpen={() => onOpenDrawer('feed')} />
       <FeedDrawer th={th} lines={extras.feed.lines} />
     </>
+  );
+}
+
+/* ─────────────────────────────── drawer detail (focused view) ─────────────────────────────── */
+
+function DrawerContent({ th, kind, extras, wide = false, topPad = 0, onBack, onScroll }: { th: ShellTheme; kind: DrawerKind; extras: HomeExtras; wide?: boolean; topPad?: number; onBack: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
+  const insets = useSafeAreaInsets();
+  const title = kind === 'people' ? extras.people.label : kind === 'events' ? extras.events.label : kind === 'stats' ? extras.stats.label : extras.feed.label;
+
+  return (
+    <View style={styles.flex}>
+      {wide ? (
+        <Pressable onPress={onBack} hitSlop={10} style={[styles.corner, { top: topPad, left: 24, backgroundColor: th.surface, borderColor: th.border }]}>
+          <Text style={[styles.chev, { color: th.text }]}>‹</Text>
+        </Pressable>
+      ) : (
+        <View style={[styles.header, { paddingTop: 10 }]}>
+          <Pressable onPress={onBack} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <Text style={[styles.xmark, { color: th.text }]}>✕</Text>
+          </Pressable>
+          <View style={styles.flex} />
+        </View>
+      )}
+
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: wide ? topPad + 52 : 4, paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }}>
+        <View style={[styles.drawerBody, wide && styles.drawerBodyWide]}>
+          <View style={styles.drawerTitleRow}>
+            <View style={styles.drawerHeadIcon}>{drawerIcon(kind, th.text, 22)}</View>
+            <Text style={[styles.drawerBigTitle, { color: th.text }]}>{title}</Text>
+          </View>
+
+          {kind === 'people' && (
+            <View style={styles.drawerList}>
+              {extras.people.items.map((p) => (
+                <View key={p.id} style={[styles.drawerRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <View style={[styles.drawerAv, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 24 }}>{p.emoji}</Text></View>
+                  <View style={styles.flex}>
+                    <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{p.name}</Text>
+                    <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{p.meta}</Text>
+                  </View>
+                  <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {kind === 'events' && (
+            <View style={styles.drawerList}>
+              {extras.events.items.map((e) => (
+                <LinearGradient key={e.id} colors={e.bg ?? [`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.drawerEventCard}>
+                  {e.live && <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>LIVE</Text></View>}
+                  <Text style={{ fontSize: 34 }}>{e.emoji}</Text>
+                  <View>
+                    <Text style={styles.eventTitle} numberOfLines={1}>{e.title}</Text>
+                    <Text style={styles.eventMeta} numberOfLines={1}>{e.meta}</Text>
+                  </View>
+                </LinearGradient>
+              ))}
+            </View>
+          )}
+
+          {kind === 'stats' && (
+            <View style={styles.statGrid}>
+              {extras.stats.tiles.map((t) => (
+                <View key={t.k} style={[styles.statTile, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <Text style={[styles.statBig, { color: th.text }]} numberOfLines={1}>{t.value}</Text>
+                  <Text style={[styles.statLabel, { color: th.muted }]} numberOfLines={1}>{t.label}</Text>
+                  {t.delta ? <Text style={[styles.statDelta, { color: t.delta.startsWith('-') ? '#ef4444' : '#22c55e' }]}>{t.delta}</Text> : null}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {kind === 'feed' && (
+            <View style={styles.drawerList}>
+              {extras.feed.lines.map((l, i) => (
+                <View key={l.id} style={[styles.feedPill, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <View style={[styles.feedDot, i > 0 && { backgroundColor: th.muted, opacity: 0.4 }]} />
+                  <Text style={{ fontSize: 15 }}>{l.emoji}</Text>
+                  <Text style={[styles.feedTxt, { color: th.text }]} numberOfLines={1}>{l.text}</Text>
+                  <View style={styles.flex} />
+                  <Text style={[styles.feedTime, { color: th.muted }]}>{i === 0 ? 'now' : `${i * 4}s`}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function DrawerOverlay({ th, wide, kind, extras, topInset, onBack }: { th: ShellTheme; wide: boolean; kind: DrawerKind; extras: HomeExtras; topInset: number; onBack: () => void }) {
+  const { height: winH } = useWindowDimensions();
+  const sheetTop = topInset + 74;
+  const sheetH = winH - sheetTop;
+  const ty = useRef(new Animated.Value(sheetH)).current;
+  const scrollY = useRef(0);
+
+  useEffect(() => {
+    if (wide) return;
+    Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 3, speed: 13 }).start();
+  }, [wide, ty]);
+
+  const close = () => Animated.timing(ty, { toValue: sheetH, duration: 220, useNativeDriver: true }).start(() => onBack());
+
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5 && scrollY.current <= 2,
+      onPanResponderMove: (_, g) => { if (g.dy > 0) ty.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 130 || g.vy > 0.8) close();
+        else Animated.spring(ty, { toValue: 0, useNativeDriver: true }).start();
+      },
+    }),
+  ).current;
+
+  if (wide) {
+    return (
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: th.bg, paddingTop: topInset }]}>
+        <DrawerContent th={th} wide kind={kind} extras={extras} topPad={56} onBack={onBack} />
+      </View>
+    );
+  }
+
+  const scrimOpacity = ty.interpolate({ inputRange: [0, sheetH], outputRange: [0.42, 0], extrapolate: 'clamp' });
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={close}>
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: scrimOpacity }]} pointerEvents="none" />
+      </Pressable>
+      <Animated.View {...pan.panHandlers} style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
+        <View style={styles.detailDrag}><View style={[styles.detailGrab, { backgroundColor: th.border }]} /></View>
+        <DrawerContent th={th} kind={kind} extras={extras} onBack={close} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -936,10 +1102,10 @@ const styles = StyleSheet.create({
   avBadgeTxt: { fontSize: 11, fontWeight: '800' },
 
   /* mobile bottom bar */
-  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingTop: 22, paddingHorizontal: 24 },
-  navBtn: { flex: 1, alignItems: 'center' },
-  navCenterWrap: { flex: 1, alignItems: 'center' },
-  navCenter: { alignItems: 'center', justifyContent: 'center', marginTop: -14 },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 34, paddingTop: 20, paddingHorizontal: 24 },
+  navBtn: { width: 52, alignItems: 'center' },
+  navCenterWrap: { alignItems: 'center' },
+  navCenter: { alignItems: 'center', justifyContent: 'center', marginTop: -20 },
 
   /* desktop nav */
   desktopNav: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 24 },
@@ -1020,6 +1186,25 @@ const styles = StyleSheet.create({
   feedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' },
   feedTxt: { fontSize: 13.5, fontWeight: '600' },
   feedTime: { fontSize: 11.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
+
+  /* drawer header (shelf) — more space above each */
+  drawerHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 34, marginBottom: 14 },
+  drawerHeadIcon: { width: 22, alignItems: 'center', justifyContent: 'center' },
+
+  /* drawer detail (focused page / sheet) */
+  corner: { position: 'absolute', zIndex: 5, width: 42, height: 42, borderRadius: 21, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  chev: { fontSize: 28, fontWeight: '400', lineHeight: 30 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingTop: 10, paddingBottom: 6 },
+  round: { width: 38, height: 38, borderRadius: 19, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  xmark: { fontSize: 17, fontWeight: '600' },
+  drawerBody: { width: '100%', paddingHorizontal: 18 },
+  drawerBodyWide: { width: 640, maxWidth: '100%' },
+  drawerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: 18 },
+  drawerBigTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3 },
+  drawerList: { gap: 10 },
+  drawerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 12 },
+  drawerAv: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  drawerEventCard: { borderRadius: 18, padding: 16, height: 118, justifyContent: 'space-between', overflow: 'hidden' },
 
   /* surface view */
   surfaceHead: { fontSize: 22, fontWeight: '800' },
