@@ -22,7 +22,7 @@ import { haptic } from '../../utils/haptics';
 import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
-import { type ShellTheme, type MarkId } from '../../data/one01/platform';
+import { type ShellTheme, type MarkId, NETWORK, type Person } from '../../data/one01/platform';
 import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
 
@@ -174,7 +174,7 @@ function PanelHead({ th, title, onClose, right }: { th: ShellTheme; title: strin
 
 /* ─────────────────────────────── ProfilePage ─────────────────────────────── */
 
-export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang, initialTab = 'posts', onNavigate }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'posts' | 'notifs' | 'about'; onNavigate?: (nav: NotifNav) => void }) {
+export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang, initialTab = 'posts', onNavigate, onOpenNetwork }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'posts' | 'notifs' | 'about'; onNavigate?: (nav: NotifNav) => void; onOpenNetwork?: () => void }) {
   const insets = useSafeAreaInsets();
   const t = (en: string) => tr(lang, en);
   const [tab, setTab] = useState<'posts' | 'notifs' | 'about'>(initialTab);
@@ -212,10 +212,10 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
           <Text style={[styles.pHandle, { color: th.muted }]}>@nobody · on ONE01</Text>
           <View style={[styles.statRow, { borderColor: th.border }]}>
             {stats.map((s, i) => (
-              <View key={s.l} style={[styles.stat, i < stats.length - 1 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: th.border }]}>
+              <Pressable key={s.l} disabled={s.l !== 'Friends' || !onOpenNetwork} onPress={onOpenNetwork} style={({ pressed }) => [styles.stat, i < stats.length - 1 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: th.border }, { opacity: pressed ? 0.6 : 1 }]}>
                 <Text style={[styles.statV, { color: th.text }]}>{s.v}</Text>
                 <Text style={[styles.statL, { color: th.muted }]}>{t(s.l)}</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
 
@@ -291,6 +291,65 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
             </>
           )}
         </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+/* ─────────────────────────────── NetworkPage ─────────────────────────────── */
+
+/** Followers / Following lists around your ONE — real follow/unfollow toggles. */
+export function NetworkPage({ th, close, onScroll, lang, initialTab = 'followers' }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'followers' | 'following' }) {
+  const insets = useSafeAreaInsets();
+  const t = (en: string) => tr(lang, en);
+  const [tab, setTab] = useState<'followers' | 'following'>(initialTab);
+  const follows = useOne01PlatformStore((s) => s.follows);
+  const setFollow = useOne01PlatformStore((s) => s.setFollow);
+  const isFollowing = (p: Person) => follows[p.id] ?? p.followsBack;
+
+  const followers = useMemo(() => NETWORK.filter((p) => p.followsYou), []);
+  const following = useMemo(() => NETWORK.filter(isFollowing), [follows]);
+  const list = tab === 'followers' ? followers : following;
+  const fg = th.accent === '#F9D800' ? '#000' : '#fff';
+
+  return (
+    <View style={styles.flex}>
+      <PanelHead th={th} title={t('Network')} onClose={close} />
+      <View style={[styles.tabBar, { borderColor: th.border, marginHorizontal: 18 }]}>
+        {(['followers', 'following'] as const).map((tk) => (
+          <Pressable key={tk} onPress={() => setTab(tk)} style={styles.tabBtn}>
+            <Text style={[styles.tabTxt, { color: tk === tab ? th.text : th.muted }]}>
+              {tk === 'followers' ? `${followers.length} ${t('Followers')}` : `${following.length} ${t('Following')}`}
+            </Text>
+            {tk === tab ? <View style={[styles.tabUnderline, { backgroundColor: th.text }]} /> : null}
+          </Pressable>
+        ))}
+      </View>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ padding: 18, paddingBottom: insets.bottom + 30, gap: 10 }} showsVerticalScrollIndicator={false}>
+        {list.map((p) => {
+          const followed = isFollowing(p);
+          return (
+            <View key={p.id} style={[styles.personRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+              <View style={[styles.personAv, { backgroundColor: `${p.accent}22` }]}><Text style={{ fontSize: 20 }}>{p.emoji}</Text></View>
+              <View style={styles.flex}>
+                <View style={styles.row}>
+                  <Text style={[styles.personName, { color: th.text }]} numberOfLines={1}>{p.name}</Text>
+                  <Text style={[styles.personHandle, { color: th.muted }]} numberOfLines={1}>  {p.handle}</Text>
+                </View>
+                <Text style={[styles.personMeta, { color: th.muted }]} numberOfLines={1}>{p.meta}</Text>
+              </View>
+              <Pressable
+                onPress={() => { haptic.select(); setFollow(p.id, !followed); }}
+                style={[styles.followBtn, followed ? { backgroundColor: th.surface2, borderColor: th.border } : { backgroundColor: th.accent, borderColor: th.accent }]}
+              >
+                <Text style={[styles.followTxt, { color: followed ? th.muted : fg }]}>
+                  {followed ? t('Following') : p.followsYou ? t('Follow back') : t('Follow')}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })}
+        {list.length === 0 && <Text style={[styles.about, { color: th.muted }]}>{t('No one here yet')}</Text>}
       </ScrollView>
     </View>
   );
@@ -551,6 +610,16 @@ const styles = StyleSheet.create({
   notifRowTitle: { fontSize: 14.5, fontWeight: '700' },
   notifRowBody: { fontSize: 12.5, marginTop: 2 },
   notifRowTime: { fontSize: 11.5, fontWeight: '600' },
+
+  /* network */
+  row: { flexDirection: 'row', alignItems: 'center' },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, padding: 11 },
+  personAv: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  personName: { fontSize: 15, fontWeight: '700' },
+  personHandle: { fontSize: 12.5 },
+  personMeta: { fontSize: 12.5, marginTop: 2 },
+  followBtn: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
+  followTxt: { fontSize: 12.5, fontWeight: '800' },
 
   /* wallet */
   balCard: { borderRadius: 20, padding: 22, marginTop: 4 },

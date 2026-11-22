@@ -63,7 +63,8 @@ export type NotifNav =
   | { kind: 'home'; homeId: string }
   | { kind: 'wallet' }
   | { kind: 'market' }
-  | { kind: 'create' };
+  | { kind: 'create' }
+  | { kind: 'network' };
 
 export interface Notif { id: string; emoji: string; title: string; body: string; ts: number; nav?: NotifNav; }
 
@@ -73,13 +74,14 @@ export function labelNav(label: string): NotifNav {
   if (/match|practice/i.test(label)) return { kind: 'home', homeId: 'winzi' };
   if (/bet|vote/i.test(label)) return { kind: 'home', homeId: 'mixstar' };
   if (/earnings|published/i.test(label)) return { kind: 'create' };
+  if (/follow/i.test(label)) return { kind: 'network' };
   return { kind: 'wallet' };
 }
 
 const NOTIF_T0 = Date.now();
 const NOTIF_SEED: Notif[] = [
   { id: 's1', emoji: '🏆', title: 'You reached Level 13', body: 'Keep the streak going', ts: NOTIF_T0 - 2 * 60000 },
-  { id: 's2', emoji: '💬', title: 'nova started following you', body: 'Now following your ONE', ts: NOTIF_T0 - 9 * 60000 },
+  { id: 's2', emoji: '💬', title: 'nova started following you', body: 'Now following your ONE', ts: NOTIF_T0 - 9 * 60000, nav: { kind: 'network' } },
   { id: 's3', emoji: '🎯', title: 'Winzi rank updated', body: 'You climbed to Gold II', ts: NOTIF_T0 - 24 * 60000, nav: { kind: 'home', homeId: 'winzi' } },
   { id: 's4', emoji: '📺', title: 'Episode 4 voting is open', body: 'MixStar · Survive', ts: NOTIF_T0 - 52 * 60000, nav: { kind: 'home', homeId: 'mixstar' } },
   { id: 's5', emoji: '🤝', title: 'A provider replied', body: 'Renew license · step 2', ts: NOTIF_T0 - 95 * 60000, nav: { kind: 'home', homeId: 'one' } },
@@ -170,11 +172,15 @@ interface One01PlatformState {
   lang: 'en' | 'he';
   /** Timestamp notifications were last opened (for the unread badge). */
   notifsSeenAt: number;
+  /** Per-person follow overrides (id → following?). Absent = use the seed default. */
+  follows: Record<string, boolean>;
 
   setEntered: (v: boolean) => void;
   setAppearance: (v: 'light' | 'dark') => void;
   setLang: (v: 'en' | 'he') => void;
   markNotifsSeen: () => void;
+  /** Follow or unfollow a person by id. */
+  setFollow: (id: string, following: boolean) => void;
   markOnboarded: (id: string) => void;
   /** Add credits (e.g. a match won, a bet paid out). */
   credit: (amount: number, label: string) => void;
@@ -203,11 +209,13 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       appearance: 'light',
       lang: 'en',
       notifsSeenAt: 0,
+      follows: {},
 
       setEntered: (v) => set({ entered: v }),
       setAppearance: (v) => set({ appearance: v }),
       setLang: (v) => set({ lang: v }),
       markNotifsSeen: () => set({ notifsSeenAt: Date.now() }),
+      setFollow: (id, following) => set((s) => ({ follows: { ...s.follows, [id]: following } })),
       markOnboarded: (id) =>
         set((s) => (s.onboarded.includes(id) ? s : { onboarded: [...s.onboarded, id] })),
 
@@ -287,7 +295,7 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
         return pending;
       },
 
-      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], notifsSeenAt: 0 }),
+      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], notifsSeenAt: 0, follows: {} }),
     }),
     { name: 'one01_platform_v1', version: 1, storage: createJSONStorage(() => platStorage) },
   ),

@@ -624,6 +624,38 @@ export const HOME_EXTRAS: Record<'one01' | ProductId, HomeExtras> = {
   },
 };
 
+/* ───────────────────────────── Network (followers / following) ───────────────────────────── */
+
+export interface Person {
+  id: string;
+  name: string;
+  handle: string;
+  emoji: string;
+  accent: string;
+  /** Short line under the name (what they do on ONE01). */
+  meta: string;
+  /** This person follows your ONE. */
+  followsYou: boolean;
+  /** Seed: you follow them by default (store overrides can change it). */
+  followsBack: boolean;
+}
+
+/** A curated slice of the people around your ONE (the "128" is the full community). */
+export const NETWORK: Person[] = [
+  { id: 'nova', name: 'nova', handle: '@nova', emoji: '🛰️', accent: '#6366F1', meta: 'Just followed your ONE', followsYou: true, followsBack: false },
+  { id: 'lune', name: 'lune', handle: '@lune', emoji: '👩‍🎨', accent: '#8B5CF6', meta: 'Creator · ⟡21k earned', followsYou: true, followsBack: true },
+  { id: 'bolt', name: 'bolt', handle: '@bolt', emoji: '🧑‍🔧', accent: '#F59E0B', meta: 'Builds protocols', followsYou: true, followsBack: false },
+  { id: 'remy', name: 'Remy', handle: '@remy', emoji: '🎭', accent: '#8B5CF6', meta: 'MixStar · Comedy', followsYou: true, followsBack: true },
+  { id: 'kofi', name: 'Kofi', handle: '@kofi', emoji: '🏓', accent: '#F9D800', meta: 'Winzi · Gold I', followsYou: true, followsBack: false },
+  { id: 'mira', name: 'mira', handle: '@mira', emoji: '👩‍💼', accent: '#10B981', meta: 'Verified org', followsYou: true, followsBack: true },
+  { id: 'orbit', name: 'orbit', handle: '@orbit', emoji: '🧑‍🚀', accent: '#6366F1', meta: 'Agents & automations', followsYou: true, followsBack: false },
+  { id: 'vex', name: 'Vex', handle: '@vex', emoji: '🔥', accent: '#EF4444', meta: 'MixStar · Survive', followsYou: true, followsBack: false },
+  { id: 'devk', name: 'devk', handle: '@devk', emoji: '🧑‍💻', accent: '#10B981', meta: 'Ships 3 products', followsYou: false, followsBack: true },
+  { id: 'zara', name: 'Zara', handle: '@zara', emoji: '🎤', accent: '#8B5CF6', meta: 'MixStar · Music', followsYou: false, followsBack: true },
+  { id: 'pulse', name: 'pulse', handle: '@pulse', emoji: '⚡', accent: '#F59E0B', meta: 'Winzi streamer', followsYou: false, followsBack: true },
+  { id: 'sol', name: 'sol', handle: '@sol', emoji: '🌞', accent: '#10B981', meta: 'ONE power user', followsYou: false, followsBack: true },
+];
+
 /* ───────────────────────────── Hub (ONE01 landing) copy ───────────────────────────── */
 
 export const HUB = {

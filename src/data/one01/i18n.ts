@@ -29,6 +29,9 @@ const HE: Record<string, string> = {
   // profile
   Profile: 'פרופיל', 'Edit profile': 'ערוך פרופיל', Friends: 'חברים', Posts: 'פוסטים', Level: 'דרגה',
   About: 'אודות', 'Log out': 'התנתק', '← ONE01 home': '← בית ONE01',
+  // network
+  Network: 'רשת', Followers: 'עוקבים', Following: 'נעקבים', Follow: 'עקוב', 'Follow back': 'עקוב בחזרה',
+  'No one here yet': 'אין כאן אף אחד עדיין',
   // settings
   Settings: 'הגדרות', Preferences: 'העדפות', Account: 'חשבון',
   Notifications: 'התראות', 'Face ID': 'זיהוי פנים', 'Sounds & haptics': 'צלילים ורטט',

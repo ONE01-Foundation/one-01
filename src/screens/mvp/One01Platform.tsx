@@ -57,7 +57,7 @@ import {
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
-import { SheetWindow, ProfilePage, WalletPage, SettingsPage } from '../../components/one01/Panels';
+import { SheetWindow, ProfilePage, WalletPage, SettingsPage, NetworkPage } from '../../components/one01/Panels';
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
 import { useOne01PlatformStore, pendingEarnings, buildNotifs, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { onboardingFor } from '../../data/one01/onboarding';
@@ -167,7 +167,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [homeId, setHomeId] = useState<HomeId>('one01');
   const [tab, setTab] = useState<Tab>('home');
   const [onboardFor, setOnboardFor] = useState<ProductId | null>(null);
-  const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings'>(null);
+  const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings' | 'network'>(null);
   const [profileTab, setProfileTab] = useState<ProfileTab>('posts');
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
@@ -186,6 +186,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   // tapping a notification / feed post jumps to whatever it's about
   const onNotifNav = (nav: NotifNav) => {
     if (nav.kind === 'wallet') { setSheet('wallet'); return; }
+    if (nav.kind === 'network') { setSheet('network'); return; }
     setSheet(null);
     if (nav.kind === 'home') { haptic.select(); setHomeId(nav.homeId as HomeId); setTab('home'); }
     else if (nav.kind === 'market') { setTab('market'); }
@@ -325,6 +326,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
             lang={lang}
             initialTab={profileTab}
             onNavigate={onNotifNav}
+            onOpenNetwork={() => setSheet('network')}
             onExit={onExit}
             onCreate={() => { setTab('create'); close(); }}
             onSettings={() => setSheet('settings')}
@@ -334,6 +336,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       </SheetWindow>
       <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} lang={lang} />}
+      </SheetWindow>
+      <SheetWindow visible={sheet === 'network'} wide={wide} th={th} onClose={() => setSheet(null)}>
+        {(close, onScroll) => <NetworkPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
       <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} lang={lang} />}
