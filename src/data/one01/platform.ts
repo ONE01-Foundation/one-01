@@ -337,6 +337,11 @@ export const RARITIES: Rarity[] = [
   { id: 'legendary', label: 'Legendary', emoji: '🟡', mult: 8, editions: 10 },
 ];
 
+/** Frame colour per rarity tier (for creation preview tiles). */
+export const RARITY_COLOR: Record<string, string> = {
+  common: '#9CA3AF', rare: '#3B82F6', epic: '#8B5CF6', legendary: '#F9D800',
+};
+
 /** Something you can make in a product's studio, with a one-question style step. */
 export interface Creatable {
   id: string;

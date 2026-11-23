@@ -24,6 +24,8 @@ import {
   PanResponder,
   StatusBar,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -71,6 +73,7 @@ import {
   FRESH_LISTINGS,
   CREATABLES,
   RARITIES,
+  RARITY_COLOR,
   type Creatable,
   type Rarity,
   HOME,
@@ -1109,6 +1112,28 @@ type CCMsg = { id: string; role: 'ai' | 'you'; text: string };
 const ccMid = () => `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 const ccArt = (w: string) => (/^[aeiou]/i.test(w.trim()) ? 'an' : 'a');
 
+/** A deterministic hue (0–359) from a string, for creation preview tiles. */
+function ccHue(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+/** A generated preview tile for a creation: a hashed gradient + the emoji, framed by rarity. */
+function CreationArt({ emoji, seed, rarity, size = 46 }: { emoji: string; seed: string; rarity?: string; size?: number }) {
+  const h = ccHue(seed);
+  const frame = rarity ? RARITY_COLOR[rarity] : undefined;
+  return (
+    <LinearGradient
+      colors={[`hsl(${h}, 68%, 46%)`, `hsl(${(h + 42) % 360}, 66%, 26%)`]}
+      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+      style={{ width: size, height: size, borderRadius: size * 0.28, alignItems: 'center', justifyContent: 'center', borderWidth: frame ? 2 : 0, borderColor: frame }}
+    >
+      <Text style={{ fontSize: size * 0.46 }}>{emoji}</Text>
+    </LinearGradient>
+  );
+}
+
 /** The guided build chat, shown inside a sheet: choice pills render inline in the
  *  thread (below each message), with a persistent input box at the bottom. Minting costs credits. */
 function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWallet, lang, close, onScroll }: { th: ShellTheme; pid: ProductId; surface: string; initial: Creatable | null; seed: string; onToast: (m: string) => void; onOpenWallet: () => void; lang: Lang; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
@@ -1182,7 +1207,7 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
   const placeholder = phase === 'name' ? tr(lang, 'Name it…') : phase === 'confirm' || phase === 'done' ? tr(lang, 'Tap a button above') : tr(lang, 'Pick above, or type…');
 
   return (
-    <View style={styles.flex}>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 54}>
       <View style={styles.ccTopRow}>
         <Text style={[styles.ccTopTitle, { color: th.text }]}>✦ {sel ? sel.title : tr(lang, 'Create')}{rarity ? ` · ${rarity.label}` : ''}</Text>
         <View style={styles.flex} />
@@ -1230,7 +1255,7 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
         {phase === 'done' && made && (
           <View style={{ gap: 10, marginTop: 2 }}>
             <View style={[styles.ccResult, { backgroundColor: th.surface, borderColor: th.accent }]}>
-              <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 24 }}>{made.emoji}</Text></View>
+              <CreationArt emoji={made.emoji} seed={made.title} rarity={made.rarity} size={48} />
               <View style={styles.flex}>
                 <Text style={[styles.ccCardTitle, { color: th.text }]} numberOfLines={1}>{made.title}</Text>
                 <Text style={[styles.ccCardSub, { color: th.muted }]}>{made.rarity ? `${made.rarity} · ${(made.editions ?? 0).toLocaleString()} ed · ` : ''}⟡{made.rate}/min</Text>
@@ -1242,13 +1267,13 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
       </ScrollView>
 
       {/* persistent input box at the bottom */}
-      <View style={[styles.ccDock, { borderTopColor: th.border, paddingBottom: insets.bottom + 10 }]}>
-        <View style={[styles.ccInputRow, { backgroundColor: th.surface, borderColor: th.border, marginTop: 0, marginHorizontal: 16 }]}>
+      <View style={[styles.ccDock, { borderTopColor: th.border, paddingHorizontal: 16, paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.ccInputRow, { backgroundColor: th.surface, borderColor: th.border, marginTop: 0 }]}>
           <TextInput value={compose} onChangeText={setCompose} onSubmitEditing={onSend} placeholder={placeholder} placeholderTextColor={th.muted} returnKeyType="send" style={[styles.ccInput, { color: th.text }]} />
           <Pressable onPress={onSend} disabled={!compose.trim()} style={[styles.ccSend, { backgroundColor: compose.trim() ? th.accent : th.surface2 }]}><Text style={[styles.ccSendTxt, { color: compose.trim() ? ctaFg : th.muted }]}>↑</Text></Pressable>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1284,7 +1309,7 @@ function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang 
     <>
       <ScrollView contentContainerStyle={{ paddingTop: topPad + 10, paddingBottom: bottomPad, alignItems: 'center', paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={{ width: colW ?? '100%', maxWidth: 560, alignItems: 'center' }}>
-          <Text style={[styles.ccGreet, { color: th.text }]}>{tr(lang, CC_GREETINGS[gi])}</Text>
+          <View style={styles.ccGreetWrap}><Text style={[styles.ccGreet, { color: th.text }]}>{tr(lang, CC_GREETINGS[gi])}</Text></View>
           <View style={[styles.ccInputRow, { backgroundColor: th.surface, borderColor: th.border }]}>
             <TextInput value={draft} onChangeText={setDraft} onSubmitEditing={startFromText} placeholder={tr(lang, 'Describe it, or pick below…')} placeholderTextColor={th.muted} returnKeyType="go" style={[styles.ccInput, { color: th.text }]} />
             <Pressable onPress={startFromText} disabled={!draft.trim()} style={[styles.ccSend, { backgroundColor: draft.trim() ? th.accent : th.surface2 }]}><Text style={[styles.ccSendTxt, { color: draft.trim() ? ctaFg : th.muted }]}>↑</Text></Pressable>
@@ -1321,7 +1346,7 @@ function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang 
                 const pending = pendingEarnings(c);
                 return (
                   <View key={c.id} style={[styles.ccCard, { backgroundColor: th.surface, borderColor: th.border }]}>
-                    <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 22 }}>{c.emoji}</Text></View>
+                    <CreationArt emoji={c.emoji} seed={c.title} rarity={c.rarity} size={46} />
                     <View style={styles.flex}>
                       <Text style={[styles.ccCardTitle, { color: th.text }]} numberOfLines={1}>{c.title}</Text>
                       <Text style={[styles.ccCardSub, { color: th.muted }]} numberOfLines={1}>{c.rarity ? `${c.rarity} · ${(c.editions ?? 0).toLocaleString()} ed · ` : ''}⟡{c.collected.toLocaleString()} {tr(lang, 'earned')}</Text>
@@ -1374,7 +1399,7 @@ function FreshMarket({ th, pid, onBuy, onToast, lang, onGoCreate }: { th: ShellT
           const pending = pendingEarnings(c);
           return (
             <View key={c.id} style={[styles.projRow, { backgroundColor: th.surface, borderColor: th.accent }]}>
-              <View style={[styles.pillarEmoji, { backgroundColor: th.surface2, width: 48, height: 48, borderRadius: 14 }]}><Text style={{ fontSize: 22 }}>{c.emoji}</Text></View>
+              <CreationArt emoji={c.emoji} seed={c.title} rarity={c.rarity} size={48} />
               <View style={styles.flex}>
                 <View style={styles.row}>
                   <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{c.title}</Text>
@@ -1394,7 +1419,7 @@ function FreshMarket({ th, pid, onBuy, onToast, lang, onGoCreate }: { th: ShellT
           const have = owned(f.title);
           return (
             <View key={f.id} style={[styles.projRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-              <View style={[styles.pillarEmoji, { backgroundColor: th.surface2, width: 48, height: 48, borderRadius: 14 }]}><Text style={{ fontSize: 22 }}>{f.emoji}</Text></View>
+              <CreationArt emoji={f.emoji} seed={f.title} size={48} />
               <View style={styles.flex}>
                 <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{f.title}</Text>
                 <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{f.byEmoji} {f.by} · {f.tagline}</Text>
@@ -1936,7 +1961,8 @@ const styles = StyleSheet.create({
 
   /* creator chat (studio) */
   ccMark: { width: 58, height: 58, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  ccGreet: { fontSize: 26, fontWeight: '800', textAlign: 'center', marginBottom: 20 },
+  ccGreetWrap: { height: 92, justifyContent: 'center', alignItems: 'center', marginTop: 8, marginBottom: 22 },
+  ccGreet: { fontSize: 26, lineHeight: 33, fontWeight: '800', textAlign: 'center' },
   ccInputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, paddingLeft: 16, paddingRight: 6, paddingVertical: 6, width: '100%', marginTop: 4 },
   ccInput: { flex: 1, fontSize: 15.5, paddingVertical: 8 },
   ccSend: { width: 38, height: 38, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

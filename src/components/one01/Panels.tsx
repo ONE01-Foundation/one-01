@@ -22,7 +22,7 @@ import { haptic } from '../../utils/haptics';
 import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
-import { type ShellTheme, type MarkId, NETWORK, type Person } from '../../data/one01/platform';
+import { type ShellTheme, type MarkId, NETWORK, type Person, RARITY_COLOR } from '../../data/one01/platform';
 import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
 
@@ -640,16 +640,19 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
           <>
             <Text style={[styles.secTitle, { color: th.text }]}>{t('Creations')}</Text>
             <View style={{ gap: 10 }}>
-              {creations.slice(0, 6).map((c) => (
+              {creations.slice(0, 6).map((c) => {
+                const hue = phash(c.title) % 360;
+                return (
                 <View key={c.id} style={[styles.holdRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-                  <View style={[styles.holdTile, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 18 }}>{c.emoji}</Text></View>
+                  <LinearGradient colors={[`hsl(${hue}, 68%, 46%)`, `hsl(${(hue + 42) % 360}, 66%, 26%)`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.holdTile, c.rarity ? { borderWidth: 2, borderColor: RARITY_COLOR[c.rarity] } : null]}><Text style={{ fontSize: 18 }}>{c.emoji}</Text></LinearGradient>
                   <View style={styles.flex}>
                     <Text style={[styles.holdName, { color: th.text }]} numberOfLines={1}>{c.title}</Text>
                     <Text style={[styles.holdChg, { color: th.muted }]} numberOfLines={1}>{c.rarity ? `${c.rarity} · ` : `${c.surface} · `}⟡{c.rate}/min</Text>
                   </View>
                   <Text style={[styles.holdAmt, { color: '#22c55e' }]}>⟡ {c.collected.toLocaleString()}</Text>
                 </View>
-              ))}
+                );
+              })}
             </View>
           </>
         )}
