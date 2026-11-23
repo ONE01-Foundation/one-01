@@ -741,14 +741,14 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
           style={{ overflow: wide ? 'hidden' : 'visible', width: colW, borderRadius: 22 }}
         >
           {slides.map((s, i) => {
-            // background fades from a brand-tinted colour (bottom-left, under the text)
-            // to transparent (top-right, under the art) — reveals the page behind it
+            // a solid brand-tinted "news" card that eases off toward the art corner
+            // (top-right) so the cut-out still reads, without going fully see-through
             const colors: [string, string, string] = th.mode === 'dark'
-              ? [`${th.glow}E6`, `${th.glow}2E`, `${th.glow}00`]
-              : ['#E6EAF1', '#E6EAF144', '#E6EAF100'];
+              ? [th.glow, `${th.glow}CC`, `${th.glow}3A`]
+              : ['#DDE3EC', '#DDE3ECCC', '#DDE3EC4D'];
             return (
               <Pressable key={i} onPress={() => onOpenBanner(s)}>
-                <LinearGradient colors={colors} locations={[0, 0.44, 0.9]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={[styles.banner, { width: colW }]}>
+                <LinearGradient colors={colors} locations={[0, 0.52, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={[styles.banner, { width: colW }]}>
                   {s.art ? <Text style={styles.bannerArt} allowFontScaling={false}>{s.art}</Text> : null}
                   <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{s.badge}</Text></View>
                   <View style={styles.bannerFooter}>
@@ -793,8 +793,8 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
           <View style={styles.sectionIconBox}><MainSectionIcon homeId={th.homeId} color={th.text} size={19} /></View>
           <Text style={[styles.sectionTitle, { color: th.text }]}>{tr(lang, home.sectionTitle)}</Text>
           <Text style={[styles.sectionCount, { color: th.muted }]}>({items.length})</Text>
-          <View style={styles.flex} />
           <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
+          <View style={styles.flex} />
         </Pressable>
 
         {/* items (filtered by the selected category) */}
@@ -902,8 +902,8 @@ function DrawerHead({ th, kind, title, count, onOpen }: { th: ShellTheme; kind: 
       <View style={styles.drawerHeadIcon}>{drawerIcon(kind, th.text)}</View>
       <Text style={[styles.sectionTitle, { color: th.text }]}>{title}</Text>
       {count != null && <Text style={[styles.sectionCount, { color: th.muted }]}>({count})</Text>}
-      <View style={styles.flex} />
       <Text style={[styles.sectionArrow, { color: th.muted }]}>›</Text>
+      <View style={styles.flex} />
     </Pressable>
   );
 }
@@ -2104,8 +2104,8 @@ function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary, onTo
 function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; slide: ShellHero; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void; onCta: () => void }) {
   const insets = useSafeAreaInsets();
   const colors: [string, string, string] = th.mode === 'dark'
-    ? [`${th.glow}E6`, `${th.glow}2E`, `${th.glow}00`]
-    : ['#E6EAF1', '#E6EAF144', '#E6EAF100'];
+    ? [th.glow, `${th.glow}CC`, `${th.glow}3A`]
+    : ['#DDE3EC', '#DDE3ECCC', '#DDE3EC4D'];
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
   return (
     <View style={styles.flex}>
@@ -2116,7 +2116,7 @@ function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; sli
         </Pressable>
       </View>
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }}>
-        <LinearGradient colors={colors} locations={[0, 0.44, 0.9]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.bannerHero}>
+        <LinearGradient colors={colors} locations={[0, 0.52, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.bannerHero}>
           {slide.art ? <Text style={styles.bannerArt} allowFontScaling={false}>{slide.art}</Text> : null}
           <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{slide.badge}</Text></View>
           <Text style={[styles.bannerHeroTitle, { color: th.text }]}>{slide.title}</Text>
@@ -2273,8 +2273,8 @@ const styles = StyleSheet.create({
   curveEdge: { position: 'absolute', top: 0, bottom: 0, width: '15%', maxWidth: 220 },
 
   /* banner */
-  banner: { height: 240, borderRadius: 22, padding: 22, marginRight: 12, justifyContent: 'space-between', overflow: 'hidden' },
-  bannerArt: { position: 'absolute', right: 14, top: 10, fontSize: 96, lineHeight: 112, opacity: 0.97, transform: [{ rotate: '-7deg' }], textShadowColor: 'rgba(0,0,0,0.33)', textShadowOffset: { width: 0, height: 7 }, textShadowRadius: 16 },
+  banner: { height: 186, borderRadius: 22, padding: 20, marginRight: 12, justifyContent: 'space-between', overflow: 'hidden' },
+  bannerArt: { position: 'absolute', right: 14, top: 6, fontSize: 82, lineHeight: 96, opacity: 0.97, transform: [{ rotate: '-7deg' }], textShadowColor: 'rgba(0,0,0,0.33)', textShadowOffset: { width: 0, height: 7 }, textShadowRadius: 16 },
   bannerBadge: { alignSelf: 'flex-start', backgroundColor: '#33E17A', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 3 },
   bannerBadgeTxt: { fontSize: 12, fontWeight: '800', color: '#05331c' },
   bannerFooter: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
@@ -2344,7 +2344,7 @@ const styles = StyleSheet.create({
   showArt: { position: 'absolute', right: 8, top: 2, fontSize: 118, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 16 },
   showFooter: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   showName: { fontSize: 18, fontWeight: '800', color: '#fff' },
-  viewersBadge: { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.42)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  viewersBadge: { position: 'absolute', top: 10, left: 10, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.42)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   viewersTxt: { fontSize: 12, fontWeight: '800', color: '#fff' },
   artMark: { alignItems: 'center', justifyContent: 'center', marginTop: 24 },
   artCta: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },

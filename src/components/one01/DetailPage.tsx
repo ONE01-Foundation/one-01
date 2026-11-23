@@ -10,8 +10,8 @@
  * Hero (icon + name + CTA), a stat strip, a screenshots gallery, an About
  * paragraph, and a kind-specific section + ratings. Themed by the current shell.
  */
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Platform, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -168,6 +168,33 @@ function InvestPanel({ th, item, accent, onToast }: { th: ShellTheme; item: Home
   );
 }
 
+/* ── preview shot — an App-Store-style screenshot that feathers into the page.
+ *    On web we mask the tile edges to transparent (top/bottom + sides) so it melts
+ *    into the sheet like the hero banner on the App Store, instead of a hard rect. */
+function PreviewShot({ grad, emoji, mark }: { grad: [string, string]; emoji?: string; mark?: MarkId }) {
+  const ref = useRef<React.ComponentRef<typeof View>>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      const node = ref.current as unknown as { style?: Record<string, string> } | null;
+      if (node?.style) {
+        const vy = 'linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%)';
+        const vx = 'linear-gradient(to right, transparent 0%, #000 9%, #000 91%, transparent 100%)';
+        node.style.maskImage = `${vy}, ${vx}`;
+        node.style.WebkitMaskImage = `${vy}, ${vx}`;
+        node.style.maskComposite = 'intersect';
+        node.style.WebkitMaskComposite = 'source-in';
+      }
+    } catch { /* non-web or no DOM node */ }
+  }, []);
+  return (
+    <View ref={ref} style={styles.shot}>
+      <LinearGradient colors={grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      {mark ? <View style={styles.shotMark}><Mark mark={mark} size={50} /></View> : <Text style={styles.shotEmoji}>{emoji}</Text>}
+    </View>
+  );
+}
+
 export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, topPad = 0, onScroll, onToast }: { th: ShellTheme; kind: DetailKind; item: HomeItem; onBack: () => void; onPrimary: () => void; wide?: boolean; topPad?: number; onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void; onToast?: (m: string) => void }) {
   const insets = useSafeAreaInsets();
   const accent = item.product ? PRODUCTS[item.product].accent : th.accent;
@@ -284,15 +311,14 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
           </View>
         )}
 
-        {/* gallery */}
+        {/* gallery — App-Store-style previews that feather into the page */}
         <Text style={[styles.secTitle, { color: th.text }]}>Preview</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 12 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 14 }}>
           {[0, 1, 2].map((n) => (
-            <LinearGradient key={n} colors={grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.shot}>
-              <Text style={styles.shotEmoji}>{kind === 'project' && item.mark ? '' : item.emoji}</Text>
-              {kind === 'project' && item.mark ? <View style={styles.shotMark}><Mark mark={item.mark} size={46} /></View> : null}
-              <Text style={styles.shotCap}>{kind === 'show' ? `Scene ${n + 1}` : kind === 'game' ? `Match ${n + 1}` : kind === 'market' ? `Detail ${n + 1}` : `Screen ${n + 1}`}</Text>
-            </LinearGradient>
+            <View key={n} style={styles.shotCol}>
+              <PreviewShot grad={grad} emoji={kind === 'project' && item.mark ? undefined : item.emoji} mark={kind === 'project' && item.mark ? item.mark : undefined} />
+              <Text style={[styles.shotCap, { color: th.muted }]}>{kind === 'show' ? `Scene ${n + 1}` : kind === 'game' ? `Match ${n + 1}` : kind === 'market' ? `Detail ${n + 1}` : `Screen ${n + 1}`}</Text>
+            </View>
           ))}
         </ScrollView>
 
@@ -410,10 +436,11 @@ const styles = StyleSheet.create({
   sellBtn: { flex: 0.6, borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'transparent' },
   tradeTxt: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
 
-  shot: { width: 260, height: 190, borderRadius: 18, overflow: 'hidden', padding: 16, justifyContent: 'flex-end' },
-  shotEmoji: { position: 'absolute', top: 30, alignSelf: 'center', fontSize: 72, left: 0, right: 0, textAlign: 'center' },
-  shotMark: { position: 'absolute', top: 44, left: 0, right: 0, alignItems: 'center' },
-  shotCap: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  shotCol: { width: 260 },
+  shot: { width: 260, height: 190, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  shotEmoji: { fontSize: 78 },
+  shotMark: { alignItems: 'center', justifyContent: 'center' },
+  shotCap: { fontSize: 12.5, fontWeight: '700', marginTop: 9, paddingLeft: 2 },
 
   about: { fontSize: 14.5, lineHeight: 21, paddingHorizontal: 18 },
 
