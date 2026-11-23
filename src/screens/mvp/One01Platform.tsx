@@ -1394,7 +1394,7 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
     if (balance < price) { push('ai', 'You are a little short on credits — top up in your Wallet and we will finish here.'); haptic.warning(); scrollDown(); return; }
     if (isVenture) {
       debit(price, `Launched · ${name}`);
-      createVenture({ name, emoji: sel!.emoji, kind: sel!.id, sector: style });
+      createVenture({ name, emoji: sel!.emoji, kind: sel!.id, sector: style, cost: price });
       const v = useOne01PlatformStore.getState().ventures[0];
       setMadeV(v ?? null);
       push('ai', `🚀 “${name}” is incubating in your Store at ${v?.status ?? genStage()}. Advance its stages to raise and graduate it into the home — or grab a pitch deck.`);
@@ -1633,18 +1633,20 @@ function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMar
   const owned = ventureKits[v.id] ?? [];
   const advanceCost = Math.max(20, Math.round(70 * (stageIdx + 1) * (1 - 0.12 * owned.length)));
   const nextIsFinal = stageIdx + 1 >= ladder.length - 1;
-  const exitReward = v.goal > 0 ? Math.round(v.goal * 1.8) : 400;
+  // graduating returns ~1.6× everything you put in (launch + rounds + kit) — a real return
+  const spent = v.spent ?? 0;
+  const exitReward = Math.round((spent + advanceCost) * 1.6);
   const doAdvance = () => {
     if (atEnd) return;
     if (!debit(advanceCost, `${v.name} · ${ladder[stageIdx + 1]} round`)) { haptic.warning(); onToast(tr(lang, 'Not enough credits')); return; }
-    advance(v.id); haptic.success();
+    advance(v.id, advanceCost); haptic.success();
     if (nextIsFinal) { credit(exitReward, `Exit · ${v.name}`); onToast(`🎉 ${v.name} · +⟡${exitReward.toLocaleString()}`); }
     else onToast(`${v.name} → ${ladder[stageIdx + 1]}`);
   };
   const doBuyKit = (k: (typeof VENTURE_KIT)[number]) => {
     if (owned.includes(k.id)) return;
     if (!debit(k.price, `Kit · ${k.title}`)) { haptic.warning(); onToast(tr(lang, 'Not enough credits')); return; }
-    buyKit(v.id, k.id, k.boost); haptic.success(); onToast(v.goal > 0 ? `+⟡${k.boost.toLocaleString()} raised` : `${k.title} ✓`);
+    buyKit(v.id, k.id, k.boost, k.price); haptic.success(); onToast(v.goal > 0 ? `+⟡${k.boost.toLocaleString()} raised` : `${k.title} ✓`);
   };
 
   return (
@@ -1686,8 +1688,8 @@ function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMar
             <Text style={[styles.ccCreateTxt, { color: atEnd ? th.muted : ctaFg }]}>{atEnd ? `🦄 ${tr(lang, 'Graduated')}` : nextIsFinal ? `${tr(lang, 'Graduate')} · ⟡${advanceCost}` : `${tr(lang, 'Advance to')} ${ladder[stageIdx + 1]} · ⟡${advanceCost}`}</Text>
           </Pressable>
           {atEnd
-            ? <Text style={[styles.ccCardSub, { color: th.muted, textAlign: 'center', marginTop: 6 }]}>{tr(lang, 'Live in the home')}</Text>
-            : <Text style={[styles.ccCardSub, { color: th.muted, textAlign: 'center', marginTop: 6 }]}>{nextIsFinal ? `${tr(lang, 'Exit pays')} +⟡${exitReward.toLocaleString()}` : owned.length > 0 ? `${owned.length} ${tr(lang, 'kit · cheaper rounds')}` : `${tr(lang, 'Exit pays')} +⟡${exitReward.toLocaleString()}`}</Text>}
+            ? <Text style={[styles.ccCardSub, { color: th.muted, textAlign: 'center', marginTop: 6 }]}>{tr(lang, 'Live in the home')} · {tr(lang, 'Invested')} ⟡{spent.toLocaleString()}</Text>
+            : <Text style={[styles.ccCardSub, { color: th.muted, textAlign: 'center', marginTop: 6 }]}>{nextIsFinal ? `${tr(lang, 'Exit pays')} +⟡${exitReward.toLocaleString()}` : `${tr(lang, 'Invested')} ⟡${spent.toLocaleString()}${owned.length > 0 ? ` · ${owned.length} ${tr(lang, 'Kit')}` : ''}`}</Text>}
         </View>
 
         {/* kit — buy for this venture: adds funding + cheaper rounds */}

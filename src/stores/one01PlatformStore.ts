@@ -74,6 +74,8 @@ export interface Venture {
   /** Credits raised so far / funding goal (ventures only; 0 otherwise). */
   raised: number;
   goal: number;
+  /** Total credits you have put into this venture (launch + rounds + kit). */
+  spent: number;
   ts: number;
 }
 
@@ -228,11 +230,11 @@ interface One01PlatformState {
   /** Collect a creation's pending earnings into the balance; returns the amount. */
   collectEarnings: (id: string) => number;
   /** Spin up a venture on ONE01 — it lands in Projects with a starting stage. */
-  createVenture: (input: { name: string; emoji: string; kind: string; sector: string }) => void;
-  /** Advance a venture to the next stage (and raise funds, for ventures). */
-  advanceVenture: (id: string) => void;
-  /** Attach a bought kit item to a venture and add its funding boost. */
-  buyVentureKit: (ventureId: string, kitId: string, boost: number) => void;
+  createVenture: (input: { name: string; emoji: string; kind: string; sector: string; cost: number }) => void;
+  /** Advance a venture to the next stage (raise funds + record the round cost). */
+  advanceVenture: (id: string, cost: number) => void;
+  /** Attach a bought kit item to a venture (funding boost + recorded spend). */
+  buyVentureKit: (ventureId: string, kitId: string, boost: number, price: number) => void;
   resetDemo: () => void;
 }
 
@@ -346,12 +348,12 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
           const v: Venture = {
             id: `vt_${now}_${Math.floor(Math.random() * 1e4)}`,
             name: input.name, emoji: input.emoji, kind: input.kind, sector: input.sector,
-            status: ladder[0], raised: 0, goal, ts: now,
+            status: ladder[0], raised: 0, goal, spent: input.cost, ts: now,
           };
           return { ventures: [v, ...s.ventures].slice(0, 30) };
         }),
 
-      advanceVenture: (id) =>
+      advanceVenture: (id, cost) =>
         set((s) => ({
           ventures: s.ventures.map((v) => {
             if (v.id !== id) return v;
@@ -360,17 +362,17 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
             const next = i >= 0 && i < ladder.length - 1 ? ladder[i + 1] : v.status;
             const step = ladder.length > 1 ? Math.round(v.goal / (ladder.length - 1)) : v.goal;
             const raised = v.goal > 0 ? Math.min(v.goal, v.raised + step) : v.raised;
-            return { ...v, status: next, raised };
+            return { ...v, status: next, raised, spent: (v.spent ?? 0) + cost };
           }),
         })),
 
-      buyVentureKit: (ventureId, kitId, boost) =>
+      buyVentureKit: (ventureId, kitId, boost, price) =>
         set((s) => {
           const owned = s.ventureKits[ventureId] ?? [];
           if (owned.includes(kitId)) return {};
           return {
             ventureKits: { ...s.ventureKits, [ventureId]: [...owned, kitId] },
-            ventures: s.ventures.map((v) => (v.id === ventureId && v.goal > 0 ? { ...v, raised: Math.min(v.goal, v.raised + boost) } : v)),
+            ventures: s.ventures.map((v) => (v.id === ventureId ? { ...v, spent: (v.spent ?? 0) + price, raised: v.goal > 0 ? Math.min(v.goal, v.raised + boost) : v.raised } : v)),
           };
         }),
 
