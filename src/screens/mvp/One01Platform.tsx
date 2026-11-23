@@ -304,11 +304,11 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   return (
     <View style={[styles.flex, { backgroundColor: th.bg, paddingTop: insets.top }]}>
       <StatusBar barStyle={th.mode === 'dark' ? 'light-content' : 'dark-content'} />
-      <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
+      <TopGlow th={th} w={width} h={Math.round(height * 0.62)} />
 
       <View style={styles.flex}>
         {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} onOpenBanner={(s) => setBannerSlide(s)} onOpenSearch={() => setSearchOpen(true)} onOpenVenture={(id) => setVentureId(id)} lang={lang} />}
-        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} onGoCreate={() => setTab('create')} />}
+        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} onGoCreate={() => setTab('create')} onOpenVenture={(id) => setVentureId(id)} />}
         {tab === 'create' && <CreatorChat th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onToast={showToast} onOpenWallet={() => setSheet('wallet')} onOpenVenture={(id) => setVentureId(id)} lang={lang} />}
       </View>
 
@@ -386,7 +386,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 /** A soft left/right edge vignette so the flat page reads like the centre of a
  *  gently concave, curved screen — the edges fall away from the viewer. Desktop only. */
 function ScreenCurve({ th }: { th: ShellTheme }) {
-  const edge = th.mode === 'dark' ? 'rgba(0,0,0,0.30)' : 'rgba(10,12,20,0.07)';
+  const edge = th.mode === 'dark' ? 'rgba(0,0,0,0.20)' : 'rgba(10,12,20,0.06)';
   const clear = 'rgba(0,0,0,0)';
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -405,9 +405,10 @@ function TopGlow({ th, w, h }: { th: ShellTheme; w: number; h: number }) {
     <View pointerEvents="none" style={[styles.topGlow, { height: h }]}>
       <Svg width={w} height={h}>
         <Defs>
-          <RadialGradient id={gid} cx={w / 2} cy={0} rx={w * 0.95} ry={h} fx={w / 2} fy={0} gradientUnits="userSpaceOnUse">
-            <Stop offset="0" stopColor={th.glow} stopOpacity={dark ? 0.5 : 0.16} />
-            <Stop offset="0.5" stopColor={th.glow} stopOpacity={dark ? 0.13 : 0.05} />
+          <RadialGradient id={gid} cx={w / 2} cy={0} rx={w * 1.2} ry={h} fx={w / 2} fy={0} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={th.glow} stopOpacity={dark ? 0.42 : 0.15} />
+            <Stop offset="0.4" stopColor={th.glow} stopOpacity={dark ? 0.16 : 0.06} />
+            <Stop offset="0.72" stopColor={th.glow} stopOpacity={dark ? 0.04 : 0.015} />
             <Stop offset="1" stopColor={th.glow} stopOpacity={0} />
           </RadialGradient>
         </Defs>
@@ -531,12 +532,28 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { 
 /** A horizontal shelf with a fade mask on its right edge, where cards run off the
  *  side of the screen (same idea as the bottom-bar gradient, turned sideways). */
 function Shelf({ th, gap = 12, children }: { th: ShellTheme; gap?: number; children: React.ReactNode }) {
+  const ref = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  // web: mask the content itself to transparent at the right edge (reveals whatever is
+  // behind — glow included), instead of painting a solid-colour fade over it
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      const node = (ref.current as unknown as { getScrollableNode?: () => { style?: Record<string, string> } } | null)?.getScrollableNode?.();
+      if (node?.style) {
+        const m = 'linear-gradient(to right, #000 calc(100% - 56px), transparent 100%)';
+        node.style.maskImage = m;
+        (node.style as Record<string, string>).WebkitMaskImage = m;
+      }
+    } catch { /* non-web or no DOM node */ }
+  }, []);
   return (
     <View style={styles.shelf}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap, paddingRight: 8 }} style={styles.shelfScroll}>
+      <ScrollView ref={ref} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap, paddingRight: 8 }} style={styles.shelfScroll}>
         {children}
       </ScrollView>
-      <LinearGradient pointerEvents="none" colors={[`${th.bg}00`, th.bg]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.shelfFade} />
+      {Platform.OS !== 'web' && (
+        <LinearGradient pointerEvents="none" colors={[`${th.bg}00`, th.bg]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.shelfFade} />
+      )}
     </View>
   );
 }
@@ -550,9 +567,12 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
   const [cat, setCat] = useState('all');
   const ventures = useOne01PlatformStore((s) => s.ventures);
   const baseItems = cat === 'all' ? home.items : home.items.filter((it) => it.cat === cat);
-  // your ONE01 ventures lead the Projects list, with a stage badge
+  // only graduated ventures ("unicorns" — reached the final stage) join the home Projects;
+  // fresh ones live in the Store until they get there
   const ventureItems: HomeItem[] = th.homeId === 'one01'
-    ? ventures.map((v) => ({ id: v.id, title: v.name, subtitle: `${v.kind[0].toUpperCase()}${v.kind.slice(1)} · ${v.sector}`, emoji: v.emoji, cta: 'Open', status: v.status, ventureId: v.id }))
+    ? ventures
+        .filter((v) => { const l = VENTURE_LADDER[v.kind] ?? ['Live']; return v.status === l[l.length - 1]; })
+        .map((v) => ({ id: v.id, title: v.name, subtitle: `🦄 ${v.sector} ${v.kind}`, emoji: v.emoji, cta: 'Open', status: v.status, ventureId: v.id }))
     : [];
   const items = [...ventureItems, ...baseItems];
   const cardKind: DetailKind = th.homeId === 'winzi' ? 'game' : th.homeId === 'mixstar' ? 'show' : th.homeId === 'one' ? 'process' : 'project';
@@ -1011,7 +1031,8 @@ function FeedDrawer({ th, lines }: { th: ShellTheme; lines: FeedLineLite[] }) {
 
 /* ─────────────────────────────── market / create ─────────────────────────────── */
 
-function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, onBuild, onToast, lang, onGoCreate }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void; onBuild: (p: SurfacePillar, surface: string) => void; onToast: (m: string) => void; lang: Lang; onGoCreate?: () => void }) {
+function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, onBuild, onToast, lang, onGoCreate, onOpenVenture }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void; onBuild: (p: SurfacePillar, surface: string) => void; onToast: (m: string) => void; lang: Lang; onGoCreate?: () => void; onOpenVenture?: (id: string) => void }) {
+  const ventures = useOne01PlatformStore((s) => s.ventures);
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
   const s = kind === 'market' ? (th.homeId === 'one01' ? MARKET_ONE01 : MARKET[pid]) : CREATOR[pid];
   const sectionTitle = kind === 'market' ? tr(lang, 'Market') : tr(lang, CREATOR[pid].title);
@@ -1042,6 +1063,33 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
             );
           })}
         </ScrollView>
+
+        {/* your ventures in the factory — fresh ones live here until they graduate to the home */}
+        {kind === 'market' && th.homeId === 'one01' && ventures.length > 0 && (
+          <>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionIcon}>🚀</Text>
+              <Text style={[styles.sectionTitle, { color: th.text }]}>{tr(lang, 'Your ventures')}</Text>
+              <Text style={[styles.sectionCount, { color: th.muted }]}>({ventures.length})</Text>
+            </View>
+            <View style={styles.rowsWrap}>
+              {ventures.map((v) => {
+                const l = VENTURE_LADDER[v.kind] ?? ['Live'];
+                const grad = v.status === l[l.length - 1];
+                return (
+                  <Pressable key={v.id} onPress={() => onOpenVenture?.(v.id)} style={({ pressed }) => [styles.projRow, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
+                    <CreationArt emoji={v.emoji} seed={v.name} size={50} />
+                    <View style={styles.flex}>
+                      <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{grad ? `🦄 ${v.name}` : v.name}</Text>
+                      <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{v.sector} {v.kind}{v.goal > 0 ? ` · ⟡${v.raised.toLocaleString()}/${v.goal.toLocaleString()}` : ''}</Text>
+                    </View>
+                    <View style={[styles.statusChip, { backgroundColor: th.surface2, borderColor: th.border }]}><Text style={[styles.statusChipTxt, { color: th.text }]}>{v.status}</Text></View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         {/* fresh creator listings — the Creator → Market loop (Market tab only) */}
         {kind === 'market' && <FreshMarket th={th} pid={pid} onBuy={onBuy} onToast={onToast} lang={lang} onGoCreate={onGoCreate} />}
@@ -1163,7 +1211,7 @@ function CreationArt({ emoji, seed, rarity, size = 46 }: { emoji: string; seed: 
 
 /** The guided build chat, shown inside a sheet: choice pills render inline in the
  *  thread (below each message), with a persistent input box at the bottom. Minting costs credits. */
-function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWallet, lang, close, onScroll }: { th: ShellTheme; pid: ProductId; surface: string; initial: Creatable | null; seed: string; onToast: (m: string) => void; onOpenWallet: () => void; lang: Lang; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
+function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWallet, onOpenVenture, lang, close, onScroll }: { th: ShellTheme; pid: ProductId; surface: string; initial: Creatable | null; seed: string; onToast: (m: string) => void; onOpenWallet: () => void; onOpenVenture?: (id: string) => void; lang: Lang; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
   const insets = useSafeAreaInsets();
   const isVenture = th.homeId === 'one01';
   const creatables = isVenture ? CREATABLES_ONE01 : CREATABLES[pid];
@@ -1214,7 +1262,7 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
     const nm = raw.trim() || genName();
     setName(nm); setCompose(''); push('you', nm);
     if (isVenture) {
-      push('ai', `Ready to launch “${nm}” — ${ccArt(style)} ${style} ${sel?.noun}. Costs ⟡${price} and it lands in Projects at ${genStage()}.`);
+      push('ai', `Ready to launch “${nm}” — ${ccArt(style)} ${style} ${sel?.noun}. Costs ⟡${price}; it starts in your Store at ${genStage()}.`);
     } else {
       const ed = rarity ? ` · ${rarity.editions.toLocaleString()} editions` : '';
       push('ai', `Ready to mint “${nm}”${ed}. Publishing costs ⟡${price} and it lists on the ${surface} Market right away.`);
@@ -1228,7 +1276,7 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
       createVenture({ name, emoji: sel!.emoji, kind: sel!.id, sector: style });
       const v = useOne01PlatformStore.getState().ventures[0];
       setMadeV(v ?? null);
-      push('ai', `🚀 “${name}” is live in Projects at ${v?.status ?? genStage()}. Open it to advance stages and raise — or grab a pitch deck in the Market.`);
+      push('ai', `🚀 “${name}” is incubating in your Store at ${v?.status ?? genStage()}. Advance its stages to raise and graduate it into the home — or grab a pitch deck.`);
       setPhase('done'); onToast(`Launched “${name}” · −⟡${price}`); haptic.success(); scrollDown();
       return;
     }
@@ -1317,7 +1365,7 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
                 <Text style={[styles.ccCardSub, { color: th.muted }]}>{madeV.sector} {madeV.kind} · {madeV.status}</Text>
               </View>
             </View>
-            <Pressable onPress={close} style={({ pressed }) => [styles.ccCreate, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.ccCreateTxt, { color: ctaFg }]}>{tr(lang, 'View in Projects')}</Text></Pressable>
+            <Pressable onPress={() => { const id = madeV.id; close(); onOpenVenture?.(id); }} style={({ pressed }) => [styles.ccCreate, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.ccCreateTxt, { color: ctaFg }]}>{tr(lang, 'View venture')}</Text></Pressable>
           </View>
         )}
       </ScrollView>
@@ -1435,7 +1483,7 @@ function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, onOpe
       </ScrollView>
 
       <SheetWindow visible={!!flow} wide={wide} th={th} onClose={() => setFlow(null)}>
-        {(close, onScroll) => (flow ? <CreateFlowSheet key={flowKey} th={th} pid={pid} surface={th.name} initial={flow.initial} seed={flow.seed} onToast={onToast} onOpenWallet={() => { close(); onOpenWallet(); }} lang={lang} close={close} onScroll={onScroll} /> : null)}
+        {(close, onScroll) => (flow ? <CreateFlowSheet key={flowKey} th={th} pid={pid} surface={th.name} initial={flow.initial} seed={flow.seed} onToast={onToast} onOpenWallet={() => { close(); onOpenWallet(); }} onOpenVenture={onOpenVenture} lang={lang} close={close} onScroll={onScroll} /> : null)}
       </SheetWindow>
     </>
   );
