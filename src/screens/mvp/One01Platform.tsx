@@ -1105,138 +1105,130 @@ type CCPhase = 'home' | 'type' | 'style' | 'rarity' | 'name' | 'confirm' | 'done
 const CC_GREETINGS = ['What do you want to make?', 'Let us create something.', 'Dream it up.', 'Build something new.'];
 const CC_ADJ = ['Astral', 'Phantom', 'Neon', 'Golden', 'Shadow', 'Crystal', 'Rogue', 'Vortex', 'Lunar', 'Hyper'];
 
-/** A ChatGPT-style studio: a greeting + input, a menu of what this product can make,
- *  then a guided chat (choice pills + text) that builds and mints it with you — for credits. */
-function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onToast: (m: string) => void; onOpenWallet: () => void; lang: Lang }) {
-  const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
+type CCMsg = { id: string; role: 'ai' | 'you'; text: string };
+const ccMid = () => `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const ccArt = (w: string) => (/^[aeiou]/i.test(w.trim()) ? 'an' : 'a');
+
+/** The guided build chat, shown inside a sheet: choice pills render inline in the
+ *  thread (below each message), with a persistent input box at the bottom. Minting costs credits. */
+function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWallet, lang, close, onScroll }: { th: ShellTheme; pid: ProductId; surface: string; initial: Creatable | null; seed: string; onToast: (m: string) => void; onOpenWallet: () => void; lang: Lang; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
+  const insets = useSafeAreaInsets();
   const creatables = CREATABLES[pid];
   const balance = useOne01PlatformStore((s) => s.balance);
   const debit = useOne01PlatformStore((s) => s.debit);
   const publishCreation = useOne01PlatformStore((s) => s.publishCreation);
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
 
-  const [phase, setPhase] = useState<CCPhase>('home');
-  const [sel, setSel] = useState<Creatable | null>(null);
+  const [phase, setPhase] = useState<Exclude<CCPhase, 'home'>>(initial ? 'style' : 'type');
+  const [sel, setSel] = useState<Creatable | null>(initial);
   const [style, setStyle] = useState('');
   const [rarity, setRarity] = useState<Rarity | null>(null);
   const [name, setName] = useState('');
-  const [draft, setDraft] = useState('');
-  const [nameDraft, setNameDraft] = useState('');
-  const [msgs, setMsgs] = useState<{ id: string; role: 'ai' | 'you'; text: string }[]>([]);
+  const [compose, setCompose] = useState('');
+  const [msgs, setMsgs] = useState<CCMsg[]>(
+    initial
+      ? [{ id: 'u0', role: 'you', text: `Create ${ccArt(initial.noun)} ${initial.noun}` }, { id: 'a0', role: 'ai', text: `Nice — ${ccArt(initial.title)} ${initial.title.toLowerCase()} on ${surface}. ${initial.styleQ}` }]
+      : [{ id: 'u0', role: 'you', text: seed || 'Make something' }, { id: 'a0', role: 'ai', text: `Love it. What are we making on ${surface}?` }],
+  );
   const [made, setMade] = useState<UserCreation | null>(null);
   const scRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
-  const [gi, setGi] = useState(0);
-  useEffect(() => { const t = setInterval(() => setGi((x) => (x + 1) % CC_GREETINGS.length), 3200); return () => clearInterval(t); }, []);
-
   const price = sel ? Math.round(sel.basePrice * (rarity?.mult ?? 1)) : 0;
   const scrollDown = () => setTimeout(() => scRef.current?.scrollToEnd({ animated: true }), 60);
-  const push = (role: 'ai' | 'you', text: string) => setMsgs((m) => [...m, { id: `${Date.now()}_${Math.random().toString(36).slice(2)}`, role, text }]);
+  const push = (role: 'ai' | 'you', text: string) => setMsgs((m) => [...m, { id: ccMid(), role, text }]);
 
   const begin = (c: Creatable) => {
-    setSel(c); setStyle(''); setRarity(null); setName(''); setNameDraft('');
-    setMsgs([{ id: 'u0', role: 'you', text: `Create a ${c.noun}` }, { id: 'a0', role: 'ai', text: `Nice — a ${c.title.toLowerCase()} on ${th.name}. ${c.styleQ}` }]);
+    setSel(c); setStyle(''); setRarity(null); setName('');
+    push('you', `Create ${ccArt(c.noun)} ${c.noun}`); push('ai', `Nice — ${ccArt(c.title)} ${c.title.toLowerCase()} on ${surface}. ${c.styleQ}`);
     setPhase('style'); haptic.select(); scrollDown();
-  };
-  const startFromText = () => {
-    const text = draft.trim(); if (!text) return;
-    setDraft('');
-    const hit = creatables.find((c) => text.toLowerCase().includes(c.id) || text.toLowerCase().includes(c.noun.toLowerCase()));
-    if (hit) { begin(hit); return; }
-    setMsgs([{ id: 'u0', role: 'you', text }, { id: 'a0', role: 'ai', text: `Love it. What are we making on ${th.name}?` }]);
-    setPhase('type'); haptic.select(); scrollDown();
   };
   const pickStyle = (sName: string) => {
     setStyle(sName); push('you', sName);
     if (sel?.hasRarity) { push('ai', 'Love it. Which rarity? Rarer means fewer editions and higher earnings.'); setPhase('rarity'); }
-    else { push('ai', `Great. Give your ${sel?.noun} a name — or tap Surprise me.`); setPhase('name'); }
+    else { push('ai', `Great. Name your ${sel?.noun} below — or tap Surprise me.`); setPhase('name'); }
     haptic.select(); scrollDown();
   };
   const pickRarity = (r: Rarity) => {
     setRarity(r); push('you', `${r.emoji} ${r.label}`);
-    push('ai', `${r.label} — ${r.editions.toLocaleString()} editions. Name it, or tap Surprise me.`);
+    push('ai', `${r.label} — ${r.editions.toLocaleString()} editions. Name it below, or tap Surprise me.`);
     setPhase('name'); haptic.select(); scrollDown();
   };
   const genName = () => `${CC_ADJ[Math.floor(Math.random() * CC_ADJ.length)]} ${style || sel?.title || 'One'}`;
-  const confirmName = () => {
-    const nm = nameDraft.trim() || genName();
-    setName(nm); setNameDraft(''); push('you', nm);
+  const confirmName = (raw: string) => {
+    const nm = raw.trim() || genName();
+    setName(nm); setCompose(''); push('you', nm);
     const ed = rarity ? ` · ${rarity.editions.toLocaleString()} editions` : '';
-    push('ai', `Ready to mint “${nm}”${ed}. Publishing costs ⟡${price} and it lists on the ${th.name} Market right away.`);
+    push('ai', `Ready to mint “${nm}”${ed}. Publishing costs ⟡${price} and it lists on the ${surface} Market right away.`);
     setPhase('confirm'); scrollDown();
   };
   const doCreate = () => {
     if (balance < price) { push('ai', 'You are a little short on credits — top up in your Wallet and we will finish here.'); haptic.warning(); scrollDown(); return; }
     debit(price, `Created · ${name}`);
-    publishCreation({ title: name, emoji: sel!.emoji, kind: sel!.id, surface: th.name, rarity: rarity?.id, editions: rarity?.editions, rateMult: rarity?.mult });
+    publishCreation({ title: name, emoji: sel!.emoji, kind: sel!.id, surface, rarity: rarity?.id, editions: rarity?.editions, rateMult: rarity?.mult });
     const c = useOne01PlatformStore.getState().creations[0];
     setMade(c ?? null);
-    push('ai', `✨ “${name}” is live on the ${th.name} Market! Earning ⟡${c?.rate ?? ''}/min${rarity ? ` · ${rarity.label}` : ''}. Collect it anytime from your Profile.`);
+    push('ai', `✨ “${name}” is live on the ${surface} Market! Earning ⟡${c?.rate ?? ''}/min${rarity ? ` · ${rarity.label}` : ''}. Find it under Mine, your Wallet, or the Market.`);
     setPhase('done'); onToast(`Minted “${name}” · −⟡${price}`); haptic.success(); scrollDown();
   };
-  const reset = () => { setPhase('home'); setSel(null); setStyle(''); setRarity(null); setName(''); setMsgs([]); setDraft(''); setNameDraft(''); setMade(null); };
+  const onSend = () => {
+    const text = compose.trim(); if (!text) return; setCompose('');
+    if (phase === 'name') { confirmName(text); return; }
+    if (phase === 'type') { const h = creatables.find((c) => text.toLowerCase().includes(c.id) || text.toLowerCase().includes(c.noun.toLowerCase())); if (h) { begin(h); return; } }
+    else if (phase === 'style' && sel) { const h = sel.styles.find((s) => text.toLowerCase().includes(s.label.toLowerCase())); if (h) { pickStyle(h.label); return; } }
+    else if (phase === 'rarity') { const h = RARITIES.find((r) => text.toLowerCase().includes(r.id) || text.toLowerCase().includes(r.label.toLowerCase())); if (h) { pickRarity(h); return; } }
+    push('you', text); push('ai', 'Tap one of the options above to keep going.'); scrollDown();
+  };
 
-  const colW = wide ? CW : undefined;
+  const placeholder = phase === 'name' ? tr(lang, 'Name it…') : phase === 'confirm' || phase === 'done' ? tr(lang, 'Tap a button above') : tr(lang, 'Pick above, or type…');
 
-  // ── home: greeting + input + what you can make ──
-  if (phase === 'home') {
-    return (
-      <ScrollView contentContainerStyle={{ paddingTop: topPad + 10, paddingBottom: bottomPad, alignItems: 'center', paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={{ width: colW ?? '100%', maxWidth: 560, alignItems: 'center' }}>
-          <View style={[styles.ccMark, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ fontSize: 26 }}>✦</Text></View>
-          <Text style={[styles.ccGreet, { color: th.text }]}>{tr(lang, CC_GREETINGS[gi])}</Text>
-          <View style={[styles.ccInputRow, { backgroundColor: th.surface, borderColor: th.border }]}>
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              onSubmitEditing={startFromText}
-              placeholder={`Describe it, or pick below…`}
-              placeholderTextColor={th.muted}
-              returnKeyType="go"
-              style={[styles.ccInput, { color: th.text }]}
-            />
-            <Pressable onPress={startFromText} disabled={!draft.trim()} style={[styles.ccSend, { backgroundColor: draft.trim() ? th.accent : th.surface2 }]}>
-              <Text style={[styles.ccSendTxt, { color: draft.trim() ? ctaFg : th.muted }]}>↑</Text>
-            </Pressable>
-          </View>
-
-          <Text style={[styles.ccSugLabel, { color: th.muted }]}>{tr(lang, 'Make on')} {th.name}</Text>
-          <View style={styles.ccSugWrap}>
-            {creatables.map((c) => (
-              <Pressable key={c.id} onPress={() => begin(c)} style={({ pressed }) => [styles.ccCard, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
-                <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 22 }}>{c.emoji}</Text></View>
-                <View style={styles.flex}>
-                  <Text style={[styles.ccCardTitle, { color: th.text }]}>{c.title}</Text>
-                  <Text style={[styles.ccCardSub, { color: th.muted }]}>{c.hasRarity ? tr(lang, 'Rarity · editions') : tr(lang, 'From')} ⟡{c.basePrice}{c.hasRarity ? '+' : ''}</Text>
-                </View>
-                <Text style={[styles.ccCardPlus, { color: th.accent }]}>＋</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      </ScrollView>
-    );
-  }
-
-  // ── guided chat ──
   return (
-    <View style={[styles.flex, { paddingTop: topPad }]}>
-      <View style={[styles.ccTopRow, { width: colW, maxWidth: 680, alignSelf: 'center' }]}>
-        <Text style={[styles.ccTopTitle, { color: th.text }]}>✦ {sel ? sel.title : tr(lang, 'Create')}</Text>
+    <View style={styles.flex}>
+      <View style={styles.ccTopRow}>
+        <Text style={[styles.ccTopTitle, { color: th.text }]}>✦ {sel ? sel.title : tr(lang, 'Create')}{rarity ? ` · ${rarity.label}` : ''}</Text>
         <View style={styles.flex} />
-        <Pressable onPress={reset} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.xmark, { color: th.text }]}>✕</Text></Pressable>
+        <Pressable onPress={close} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.xmark, { color: th.text }]}>✕</Text></Pressable>
       </View>
 
-      <ScrollView ref={scRef} style={styles.flex} contentContainerStyle={{ alignItems: 'center', paddingVertical: 12 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={{ width: colW ?? '100%', maxWidth: 680, paddingHorizontal: 18, gap: 10 }}>
-          {msgs.map((m) => (
-            <View key={m.id} style={{ alignSelf: m.role === 'you' ? 'flex-end' : 'flex-start', maxWidth: '88%' }}>
-              <View style={[styles.ccBubble, m.role === 'you' ? { backgroundColor: th.accent } : { backgroundColor: th.surface, borderColor: th.border, borderWidth: StyleSheet.hairlineWidth }]}>
-                <Text style={[styles.ccBubbleTxt, { color: m.role === 'you' ? ctaFg : th.text }]}>{m.text}</Text>
-              </View>
+      <ScrollView ref={scRef} onScroll={onScroll} scrollEventThrottle={16} style={styles.flex} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 18, gap: 10 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {msgs.map((m) => (
+          <View key={m.id} style={{ alignSelf: m.role === 'you' ? 'flex-end' : 'flex-start', maxWidth: '88%' }}>
+            <View style={[styles.ccBubble, m.role === 'you' ? { backgroundColor: th.accent } : { backgroundColor: th.surface, borderColor: th.border, borderWidth: StyleSheet.hairlineWidth }]}>
+              <Text style={[styles.ccBubbleTxt, { color: m.role === 'you' ? ctaFg : th.text }]}>{m.text}</Text>
             </View>
-          ))}
-          {phase === 'done' && made && (
+          </View>
+        ))}
+
+        {/* choice pills — inline, below the message, inside the scroll */}
+        {phase === 'type' && (
+          <View style={styles.ccPillWrap}>
+            {creatables.map((c) => (<Pressable key={c.id} onPress={() => begin(c)} style={[styles.ccPill, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.ccPillTxt, { color: th.text }]}>{c.emoji} {c.title}</Text></Pressable>))}
+          </View>
+        )}
+        {phase === 'style' && sel && (
+          <View style={styles.ccPillWrap}>
+            {sel.styles.map((s) => (<Pressable key={s.label} onPress={() => pickStyle(s.label)} style={[styles.ccPill, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.ccPillTxt, { color: th.text }]}>{s.emoji} {s.label}</Text></Pressable>))}
+          </View>
+        )}
+        {phase === 'rarity' && (
+          <View style={styles.ccPillWrap}>
+            {RARITIES.map((r) => (<Pressable key={r.id} onPress={() => pickRarity(r)} style={[styles.ccPill, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.ccPillTxt, { color: th.text }]}>{r.emoji} {r.label} · ⟡{Math.round((sel?.basePrice ?? 0) * r.mult)}</Text></Pressable>))}
+          </View>
+        )}
+        {phase === 'name' && (
+          <View style={styles.ccPillWrap}>
+            <Pressable onPress={() => confirmName('')} style={[styles.ccPill, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.ccPillTxt, { color: th.muted }]}>🎲 {tr(lang, 'Surprise me')}</Text></Pressable>
+          </View>
+        )}
+        {phase === 'confirm' && (
+          <View style={{ gap: 10, marginTop: 2 }}>
+            <Pressable onPress={doCreate} style={({ pressed }) => [styles.ccCreate, { backgroundColor: balance < price ? th.surface2 : th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.ccCreateTxt, { color: balance < price ? th.muted : ctaFg }]}>{balance < price ? tr(lang, 'Not enough credits') : `${tr(lang, 'Create')} · ⟡${price}`}</Text></Pressable>
+            {balance < price
+              ? <Pressable onPress={onOpenWallet} style={styles.ccGhost}><Text style={[styles.ccGhostTxt, { color: th.accent }]}>{tr(lang, 'Top up')} →</Text></Pressable>
+              : <Pressable onPress={() => { setPhase(sel?.hasRarity ? 'rarity' : 'style'); push('ai', tr(lang, 'Sure — change it.')); scrollDown(); }} style={styles.ccGhost}><Text style={[styles.ccGhostTxt, { color: th.muted }]}>{tr(lang, 'Change')}</Text></Pressable>}
+          </View>
+        )}
+        {phase === 'done' && made && (
+          <View style={{ gap: 10, marginTop: 2 }}>
             <View style={[styles.ccResult, { backgroundColor: th.surface, borderColor: th.accent }]}>
               <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 24 }}>{made.emoji}</Text></View>
               <View style={styles.flex}>
@@ -1244,59 +1236,109 @@ function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang 
                 <Text style={[styles.ccCardSub, { color: th.muted }]}>{made.rarity ? `${made.rarity} · ${(made.editions ?? 0).toLocaleString()} ed · ` : ''}⟡{made.rate}/min</Text>
               </View>
             </View>
+            <Pressable onPress={close} style={({ pressed }) => [styles.ccCreate, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.ccCreateTxt, { color: ctaFg }]}>{tr(lang, 'Done')}</Text></Pressable>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* persistent input box at the bottom */}
+      <View style={[styles.ccDock, { borderTopColor: th.border, paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.ccInputRow, { backgroundColor: th.surface, borderColor: th.border, marginTop: 0, marginHorizontal: 16 }]}>
+          <TextInput value={compose} onChangeText={setCompose} onSubmitEditing={onSend} placeholder={placeholder} placeholderTextColor={th.muted} returnKeyType="send" style={[styles.ccInput, { color: th.text }]} />
+          <Pressable onPress={onSend} disabled={!compose.trim()} style={[styles.ccSend, { backgroundColor: compose.trim() ? th.accent : th.surface2 }]}><Text style={[styles.ccSendTxt, { color: compose.trim() ? ctaFg : th.muted }]}>↑</Text></Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** The Create tab: greeting + input and two sections — New (what you can make) and
+ *  Mine (your creations). Picking something opens the guided chat in a sheet. */
+function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onToast: (m: string) => void; onOpenWallet: () => void; lang: Lang }) {
+  const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
+  const creatables = CREATABLES[pid];
+  const creations = useOne01PlatformStore((s) => s.creations);
+  const collect = useOne01PlatformStore((s) => s.collectEarnings);
+  const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+
+  const [seg, setSeg] = useState<'new' | 'mine'>('new');
+  const [draft, setDraft] = useState('');
+  const [gi, setGi] = useState(0);
+  const [, setTick] = useState(0);
+  const [flow, setFlow] = useState<{ initial: Creatable | null; seed: string } | null>(null);
+  const [flowKey, setFlowKey] = useState(0);
+
+  useEffect(() => { const t = setInterval(() => setGi((x) => (x + 1) % CC_GREETINGS.length), 3200); return () => clearInterval(t); }, []);
+  useEffect(() => { if (seg !== 'mine' || !creations.length) return; const t = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(t); }, [seg, creations.length]);
+
+  const openFlow = (initial: Creatable | null, seed = '') => { haptic.select(); setFlow({ initial, seed }); setFlowKey((k) => k + 1); };
+  const startFromText = () => {
+    const text = draft.trim(); if (!text) return; setDraft('');
+    const hit = creatables.find((c) => text.toLowerCase().includes(c.id) || text.toLowerCase().includes(c.noun.toLowerCase()));
+    openFlow(hit ?? null, hit ? '' : text);
+  };
+
+  const colW = wide ? CW : undefined;
+
+  return (
+    <>
+      <ScrollView contentContainerStyle={{ paddingTop: topPad + 10, paddingBottom: bottomPad, alignItems: 'center', paddingHorizontal: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={{ width: colW ?? '100%', maxWidth: 560, alignItems: 'center' }}>
+          <Text style={[styles.ccGreet, { color: th.text }]}>{tr(lang, CC_GREETINGS[gi])}</Text>
+          <View style={[styles.ccInputRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <TextInput value={draft} onChangeText={setDraft} onSubmitEditing={startFromText} placeholder={tr(lang, 'Describe it, or pick below…')} placeholderTextColor={th.muted} returnKeyType="go" style={[styles.ccInput, { color: th.text }]} />
+            <Pressable onPress={startFromText} disabled={!draft.trim()} style={[styles.ccSend, { backgroundColor: draft.trim() ? th.accent : th.surface2 }]}><Text style={[styles.ccSendTxt, { color: draft.trim() ? ctaFg : th.muted }]}>↑</Text></Pressable>
+          </View>
+
+          {/* two sections: New | Mine */}
+          <View style={[styles.ccSeg, { backgroundColor: th.surface2, borderColor: th.border }]}>
+            {(['new', 'mine'] as const).map((k) => (
+              <Pressable key={k} onPress={() => setSeg(k)} style={[styles.ccSegBtn, seg === k && { backgroundColor: th.accent }]}>
+                <Text style={[styles.ccSegTxt, { color: seg === k ? ctaFg : th.muted }]}>{k === 'new' ? tr(lang, 'New') : `${tr(lang, 'Mine')}${creations.length ? ` · ${creations.length}` : ''}`}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {seg === 'new' && (
+            <View style={styles.ccSugWrap}>
+              {creatables.map((c) => (
+                <Pressable key={c.id} onPress={() => openFlow(c)} style={({ pressed }) => [styles.ccCard, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
+                  <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 22 }}>{c.emoji}</Text></View>
+                  <View style={styles.flex}>
+                    <Text style={[styles.ccCardTitle, { color: th.text }]}>{c.title}</Text>
+                    <Text style={[styles.ccCardSub, { color: th.muted }]}>{c.hasRarity ? tr(lang, 'Rarity · editions') : tr(lang, 'From')} ⟡{c.basePrice}{c.hasRarity ? '+' : ''}</Text>
+                  </View>
+                  <Text style={[styles.ccCardPlus, { color: th.accent }]}>＋</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {seg === 'mine' && (
+            <View style={styles.ccSugWrap}>
+              {creations.length === 0 && <Text style={[styles.ccMineEmpty, { color: th.muted }]}>{tr(lang, 'Nothing yet — make your first creation above.')}</Text>}
+              {creations.map((c) => {
+                const pending = pendingEarnings(c);
+                return (
+                  <View key={c.id} style={[styles.ccCard, { backgroundColor: th.surface, borderColor: th.border }]}>
+                    <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 22 }}>{c.emoji}</Text></View>
+                    <View style={styles.flex}>
+                      <Text style={[styles.ccCardTitle, { color: th.text }]} numberOfLines={1}>{c.title}</Text>
+                      <Text style={[styles.ccCardSub, { color: th.muted }]} numberOfLines={1}>{c.rarity ? `${c.rarity} · ${(c.editions ?? 0).toLocaleString()} ed · ` : ''}⟡{c.collected.toLocaleString()} {tr(lang, 'earned')}</Text>
+                    </View>
+                    <Pressable onPress={() => { const got = collect(c.id); if (got > 0) { haptic.success(); onToast(`+⟡${got}`); } }} style={[styles.ccCollect, { backgroundColor: pending > 0 ? th.accent : th.surface2 }]}><Text style={[styles.ccCollectTxt, { color: pending > 0 ? ctaFg : th.muted }]}>{tr(lang, 'Collect')} ⟡{pending}</Text></Pressable>
+                  </View>
+                );
+              })}
+            </View>
           )}
         </View>
       </ScrollView>
 
-      {/* dock — controls for the current step */}
-      <View style={[styles.ccDock, { borderTopColor: th.border, paddingBottom: bottomPad - 28 > 0 ? bottomPad - 28 : 14 }]}>
-        <View style={{ width: colW ?? '100%', maxWidth: 680, paddingHorizontal: 18, alignSelf: 'center' }}>
-          {phase === 'type' && (
-            <View style={styles.ccPillWrap}>
-              {creatables.map((c) => (
-                <Pressable key={c.id} onPress={() => begin(c)} style={[styles.ccPill, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.ccPillTxt, { color: th.text }]}>{c.emoji} {c.title}</Text></Pressable>
-              ))}
-            </View>
-          )}
-          {phase === 'style' && sel && (
-            <View style={styles.ccPillWrap}>
-              {sel.styles.map((s) => (
-                <Pressable key={s.label} onPress={() => pickStyle(s.label)} style={[styles.ccPill, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.ccPillTxt, { color: th.text }]}>{s.emoji} {s.label}</Text></Pressable>
-              ))}
-            </View>
-          )}
-          {phase === 'rarity' && (
-            <View style={styles.ccPillWrap}>
-              {RARITIES.map((r) => (
-                <Pressable key={r.id} onPress={() => pickRarity(r)} style={[styles.ccPill, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.ccPillTxt, { color: th.text }]}>{r.emoji} {r.label} · ⟡{Math.round((sel?.basePrice ?? 0) * r.mult)}</Text></Pressable>
-              ))}
-            </View>
-          )}
-          {phase === 'name' && (
-            <View style={styles.ccNameRow}>
-              <View style={[styles.ccInputRow, styles.flex, { backgroundColor: th.surface, borderColor: th.border, marginTop: 0 }]}>
-                <TextInput value={nameDraft} onChangeText={setNameDraft} onSubmitEditing={confirmName} placeholder={tr(lang, 'Name it…')} placeholderTextColor={th.muted} returnKeyType="done" style={[styles.ccInput, { color: th.text }]} />
-                <Pressable onPress={confirmName} style={[styles.ccSend, { backgroundColor: th.accent }]}><Text style={[styles.ccSendTxt, { color: ctaFg }]}>↑</Text></Pressable>
-              </View>
-              <Pressable onPress={() => { setNameDraft(''); confirmName(); }} style={[styles.ccPill, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.ccPillTxt, { color: th.muted }]}>🎲 {tr(lang, 'Surprise me')}</Text></Pressable>
-            </View>
-          )}
-          {phase === 'confirm' && (
-            <View style={{ gap: 10 }}>
-              <Pressable onPress={doCreate} style={({ pressed }) => [styles.ccCreate, { backgroundColor: balance < price ? th.surface2 : th.accent }, pressed && { opacity: 0.85 }]}>
-                <Text style={[styles.ccCreateTxt, { color: balance < price ? th.muted : ctaFg }]}>{balance < price ? tr(lang, 'Not enough credits') : `${tr(lang, 'Create')} · ⟡${price}`}</Text>
-              </Pressable>
-              {balance < price
-                ? <Pressable onPress={onOpenWallet} style={styles.ccGhost}><Text style={[styles.ccGhostTxt, { color: th.accent }]}>{tr(lang, 'Top up')} →</Text></Pressable>
-                : <Pressable onPress={() => { setPhase('style'); push('ai', sel?.styleQ ?? ''); }} style={styles.ccGhost}><Text style={[styles.ccGhostTxt, { color: th.muted }]}>{tr(lang, 'Change')}</Text></Pressable>}
-            </View>
-          )}
-          {phase === 'done' && (
-            <Pressable onPress={reset} style={({ pressed }) => [styles.ccCreate, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.ccCreateTxt, { color: ctaFg }]}>＋ {tr(lang, 'Make another')}</Text></Pressable>
-          )}
-        </View>
-      </View>
-    </View>
+      <SheetWindow visible={!!flow} wide={wide} th={th} onClose={() => setFlow(null)}>
+        {(close, onScroll) => (flow ? <CreateFlowSheet key={flowKey} th={th} pid={pid} surface={th.name} initial={flow.initial} seed={flow.seed} onToast={onToast} onOpenWallet={() => { close(); onOpenWallet(); }} lang={lang} close={close} onScroll={onScroll} /> : null)}
+      </SheetWindow>
+    </>
   );
 }
 
@@ -1920,6 +1962,12 @@ const styles = StyleSheet.create({
   ccCreateTxt: { fontSize: 15.5, fontWeight: '800' },
   ccGhost: { alignItems: 'center', paddingVertical: 4 },
   ccGhostTxt: { fontSize: 13.5, fontWeight: '700' },
+  ccSeg: { flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, padding: 3, marginTop: 24, marginBottom: 14, alignSelf: 'stretch' },
+  ccSegBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 999 },
+  ccSegTxt: { fontSize: 13.5, fontWeight: '700' },
+  ccMineEmpty: { fontSize: 14, textAlign: 'center', paddingVertical: 24 },
+  ccCollect: { borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8 },
+  ccCollectTxt: { fontSize: 12.5, fontWeight: '800' },
 
   /* sheets */
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 26 },

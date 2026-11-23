@@ -55,6 +55,10 @@ const HE: Record<string, string> = {
   'Make on': 'צור ב-', From: 'מ-', 'Rarity · editions': 'נדירות · מהדורות',
   'Name it…': 'תן שם…', 'Surprise me': 'הפתע אותי', 'Not enough credits': 'אין מספיק קרדיטים',
   Change: 'שנה', 'Make another': 'צור עוד', 'Make your first creation': 'צור את היצירה הראשונה שלך',
+  'Describe it, or pick below…': 'תאר, או בחר למטה…', New: 'חדש', Mine: 'שלי', Done: 'סיום',
+  'Nothing yet — make your first creation above.': 'עדיין כלום — צור את היצירה הראשונה שלך למעלה.',
+  'Pick above, or type…': 'בחר למעלה, או הקלד…', 'Tap a button above': 'הקש על כפתור למעלה',
+  'Sure — change it.': 'בטח — בוא נשנה.',
   // search
   Search: 'חיפוש', Cancel: 'ביטול', 'No results': 'אין תוצאות',
   'Search games, projects, listings…': 'חיפוש משחקים, פרויקטים, פריטים…',
