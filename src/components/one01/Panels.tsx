@@ -20,9 +20,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { haptic } from '../../utils/haptics';
 import {
-  One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
+  One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon, LevelRing,
 } from './brand';
-import { type ShellTheme, type MarkId, NETWORK, type Person, RARITY_COLOR } from '../../data/one01/platform';
+import { type ShellTheme, type MarkId, NETWORK, type Person, RARITY_COLOR, levelFor } from '../../data/one01/platform';
 import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
 
@@ -237,6 +237,7 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
   const avatarUri = useOne01PlatformStore((s) => s.avatarUri);
   const setAvatar = useOne01PlatformStore((s) => s.setAvatar);
   const changeAvatar = async () => { const uri = await pickAvatar(); if (uri) { haptic.success(); setAvatar(uri); } };
+  const { level, progress } = levelFor(transactions.length);
   const activity = useMemo(() => buildPosts(transactions, creations, th.accent), [transactions, creations, th.accent]);
   const notifs = useMemo(() => buildNotifs(transactions), [transactions]);
   const seedPosts: Post[] = [
@@ -246,7 +247,7 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
   ];
   const go = (nav?: NotifNav) => { if (nav && onNavigate) onNavigate(nav); };
   const posts = activity.length ? activity : seedPosts;
-  const stats = [{ v: '128', l: 'Friends' }, { v: `${posts.length}`, l: 'Posts' }, { v: 'LVL 13', l: 'Level' }];
+  const stats = [{ v: '128', l: 'Friends' }, { v: `${posts.length}`, l: 'Posts' }, { v: `LVL ${level}`, l: 'Level' }];
   const actions = [
     onOne01 ? { k: 'one01', label: '← ONE01 home', onPress: onOne01 } : null,
     { k: 'settings', label: 'Settings', onPress: onSettings },
@@ -260,10 +261,14 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={[`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cover} />
         <View style={styles.avatarRow}>
-          <Pressable onPress={changeAvatar} style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}>
-            {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.bigAvatarImg} /> : <UserIcon size={40} color="#fff" />}
-            <View style={[styles.avatarCam, { backgroundColor: th.accent, borderColor: th.bg }]}><Text style={{ fontSize: 12 }}>📷</Text></View>
-          </Pressable>
+          <View style={styles.bigAvatarRing}>
+            {/* level-up gauge framing the avatar — fills toward the next level */}
+            <View style={StyleSheet.absoluteFill} pointerEvents="none"><LevelRing size={100} progress={progress} track={th.mode === 'dark' ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)'} accent={th.accent} /></View>
+            <Pressable onPress={changeAvatar} style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}>
+              {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.bigAvatarImg} /> : <UserIcon size={40} color="#fff" />}
+              <View style={[styles.avatarCam, { backgroundColor: th.accent, borderColor: th.bg }]}><Text style={{ fontSize: 12 }}>📷</Text></View>
+            </Pressable>
+          </View>
           <View style={styles.flex} />
           <Pressable onPress={changeAvatar} style={[styles.editBtn, { backgroundColor: th.accent }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{t('Edit profile')}</Text></Pressable>
         </View>
@@ -746,7 +751,8 @@ const styles = StyleSheet.create({
 
   /* profile */
   cover: { height: 120 },
-  avatarRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 18, marginTop: -40 },
+  avatarRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 18, marginTop: -44 },
+  bigAvatarRing: { width: 100, height: 100, alignItems: 'center', justifyContent: 'center' },
   bigAvatar: { width: 92, height: 92, borderRadius: 46, borderWidth: 4, alignItems: 'center', justifyContent: 'center' },
   bigAvatarImg: { width: 84, height: 84, borderRadius: 42 },
   avatarCam: { position: 'absolute', right: 0, bottom: 0, width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },

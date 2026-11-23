@@ -16,6 +16,25 @@ export interface BrandProps {
   color?: string;
 }
 
+/** A thin circular level-up gauge: a faint full track + an accent arc that sweeps
+ *  clockwise from 12 o'clock by `progress` (0–1). Sits around an avatar. */
+export function LevelRing({ size, progress, track, accent }: { size: number; progress: number; track: string; accent: string }) {
+  const sw = size >= 70 ? 4 : 3;
+  const r = (size - sw) / 2;
+  const c = 2 * Math.PI * r;
+  const half = size / 2;
+  const p = Math.max(0.001, Math.min(1, progress));
+  return (
+    <Svg width={size} height={size}>
+      <Circle cx={half} cy={half} r={r} stroke={track} strokeWidth={sw} fill="none" />
+      <Circle
+        cx={half} cy={half} r={r} stroke={accent} strokeWidth={sw} fill="none" strokeLinecap="round"
+        strokeDasharray={`${c}`} strokeDashoffset={c * (1 - p)} transform={`rotate(-90 ${half} ${half})`}
+      />
+    </Svg>
+  );
+}
+
 /* ─────────────────────────── Auth / provider icons ─────────────────────────── */
 
 /** Google "G" — full-color. */

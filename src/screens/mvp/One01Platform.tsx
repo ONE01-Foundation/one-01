@@ -57,6 +57,7 @@ import {
   GamesIcon,
   ShowsIcon,
   ProcessesIcon,
+  LevelRing,
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
@@ -92,6 +93,7 @@ import {
   type ShellHero,
   type SurfacePillar,
   type HomeCategory,
+  levelFor,
 } from '../../data/one01/platform';
 
 type HomeId = 'one01' | ProductId;
@@ -451,21 +453,25 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   const unread = useMemo(() => buildNotifs(transactions).filter((n) => n.ts > seenAt).length, [transactions, seenAt]);
   const avatarUri = useOne01PlatformStore((s) => s.avatarUri);
   const onAccent = th.accent === '#F9D800' ? '#000' : '#fff';
+  const { level, progress } = levelFor(transactions.length);
   return (
     <Pressable onPress={onPress} style={styles.profileBtn} hitSlop={8}>
       <View style={styles.avatarWrap}>
-        {/* the accent ring frames the avatar (kept full); photo fills it when set */}
-        <View style={[styles.avatar, { borderColor: th.accent, backgroundColor: th.surface2 }]}>
-          {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.avatarImg} /> : <UserIcon size={22} color={th.muted} />}
-          {unread > 0 && (
-            <View style={[styles.profileBadge, { borderColor: th.bg }]}>
-              <Text style={styles.profileBadgeTxt}>{unread > 9 ? '9+' : unread}</Text>
-            </View>
-          )}
+        {/* a real level-up gauge: the ring fills toward the next level */}
+        <View style={styles.avatarRing}>
+          <View style={StyleSheet.absoluteFill} pointerEvents="none"><LevelRing size={48} progress={progress} track={th.mode === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)'} accent={th.accent} /></View>
+          <View style={[styles.avatar, { backgroundColor: th.surface2 }]}>
+            {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.avatarImg} /> : <UserIcon size={20} color={th.muted} />}
+            {unread > 0 && (
+              <View style={[styles.profileBadge, { borderColor: th.bg }]}>
+                <Text style={styles.profileBadgeTxt}>{unread > 9 ? '9+' : unread}</Text>
+              </View>
+            )}
+          </View>
         </View>
         {/* level reads as a badge pinned under the avatar, not a chip beside it */}
         <View style={[styles.lvlPill, { backgroundColor: th.accent, borderColor: th.bg }]}>
-          <Text style={[styles.lvlTxt, { color: onAccent }]}>LVL 13</Text>
+          <Text style={[styles.lvlTxt, { color: onAccent }]}>LVL {level}</Text>
         </View>
       </View>
     </Pressable>
@@ -2224,7 +2230,8 @@ const styles = StyleSheet.create({
   lvlPill: { marginTop: -9, borderWidth: 2, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1.5, zIndex: 2 },
   lvlTxt: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.3, fontVariant: ['tabular-nums'] },
   avatarWrap: { alignItems: 'center' },
-  avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  avatarRing: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   avBadge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   avBadgeTxt: { fontSize: 11, fontWeight: '800' },
 
