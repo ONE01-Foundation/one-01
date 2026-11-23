@@ -329,7 +329,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       )}
 
       {wide ? (
-        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={openProfile} onSwitch={() => setSheet('switch')} lang={lang} />
+        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={openProfile} onPickApp={pickApp} onSettings={() => setSheet('settings')} onExit={onExit} lang={lang} />
       ) : (
         <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={openProfile} topInset={insets.top} />
       )}
@@ -340,7 +340,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         </View>
       )}
 
-      <SheetWindow visible={sheet === 'profile'} wide={wide} th={th} dock onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'profile'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => (
           <ProfilePage
             th={th}
@@ -357,13 +357,13 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
           />
         )}
       </SheetWindow>
-      <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} dock onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
-      <SheetWindow visible={sheet === 'network'} wide={wide} th={th} dock onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'network'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <NetworkPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
-      <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} dock onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
       <SheetWindow visible={!!bannerSlide} wide={wide} th={th} onClose={() => setBannerSlide(null)}>
@@ -492,25 +492,32 @@ function MobileBottomBar({ th, tab, setTab, onSwitch, bottomInset }: { th: Shell
 
 /* ─────────────────────────────── desktop nav ─────────────────────────────── */
 
-function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onWallet: () => void; onProfile: () => void; onSwitch: () => void; lang: Lang }) {
+function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSettings, onExit, lang }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onWallet: () => void; onProfile: () => void; onPickApp: (id: string) => void; onSettings: () => void; onExit: () => void; lang: Lang }) {
+  const [menu, setMenu] = useState<null | 'apps' | 'wallet' | 'profile'>(null);
   const links: { k: Tab; label: string }[] = [
     { k: 'home', label: tr(lang, 'Home') },
     { k: 'market', label: tr(lang, 'Market') },
     { k: 'create', label: tr(lang, 'Creator') },
   ];
+  const close = () => setMenu(null);
   return (
     <LinearGradient colors={[th.bg, `${th.bg}00`]} style={styles.desktopNav} pointerEvents="box-none">
       <View style={styles.desktopRow}>
-        <Pressable onPress={() => { haptic.select(); onSwitch(); }} style={styles.desktopLogo}>
-          {th.homeId === 'one01' ? (
-            <One01Wordmark height={38} color={th.text} />
-          ) : (
-            <View style={styles.row}>
-              <Mark mark={th.mark} size={34} accent={th.accent} />
-              <Text style={[styles.navWordmark, { color: th.text }]}>{th.name}</Text>
-            </View>
-          )}
+        {/* logo → apps menu on hover */}
+        <Pressable onHoverIn={() => setMenu('apps')} onHoverOut={close} style={styles.navHover}>
+          <Pressable onPress={() => setMenu((m) => (m === 'apps' ? null : 'apps'))} style={styles.desktopLogo}>
+            {th.homeId === 'one01' ? (
+              <One01Wordmark height={38} color={th.text} />
+            ) : (
+              <View style={styles.row}>
+                <Mark mark={th.mark} size={34} accent={th.accent} />
+                <Text style={[styles.navWordmark, { color: th.text }]}>{th.name}</Text>
+              </View>
+            )}
+          </Pressable>
+          {menu === 'apps' && <AppsDrop th={th} current={th.homeId} onPick={(id) => { close(); onPickApp(id); }} />}
         </Pressable>
+
         <View style={styles.desktopLinks}>
           {links.map((l) => (
             <Pressable key={l.k} onPress={() => setTab(l.k)}>
@@ -519,11 +526,115 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onSwitch, lang }: { 
           ))}
         </View>
         <View style={styles.flex} />
-        <WalletChip th={th} onPress={onWallet} />
+
+        {/* wallet → quick menu on hover, full window on click */}
+        <Pressable onHoverIn={() => setMenu('wallet')} onHoverOut={close} style={styles.navHover}>
+          <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
+          {menu === 'wallet' && <WalletDrop th={th} lang={lang} onOpenFull={() => { close(); onWallet(); }} />}
+        </Pressable>
+
         <View style={{ width: 16 }} />
-        <ProfileBtn th={th} onPress={onProfile} />
+
+        {/* profile → account menu on hover, full window on click */}
+        <Pressable onHoverIn={() => setMenu('profile')} onHoverOut={close} style={styles.navHover}>
+          <ProfileBtn th={th} onPress={() => { close(); onProfile(); }} />
+          {menu === 'profile' && <ProfileDrop th={th} lang={lang} onSettings={() => { close(); onSettings(); }} onExit={() => { close(); onExit(); }} onOpenFull={() => { close(); onProfile(); }} />}
+        </Pressable>
       </View>
     </LinearGradient>
+  );
+}
+
+/* ─────────────────────────────── desktop hover dropdowns ─────────────────────────────── */
+
+const APP_ROWS: { id: HomeId; label: string; mark: MarkId }[] = [
+  { id: 'one01', label: 'ONE01', mark: 'one01' },
+  { id: 'one', label: 'One', mark: 'one' },
+  { id: 'winzi', label: 'Winzi', mark: 'winzi' },
+  { id: 'mixstar', label: 'MixStar', mark: 'mixstar' },
+];
+
+function AppsDrop({ th, current, onPick }: { th: ShellTheme; current: HomeId; onPick: (id: string) => void }) {
+  return (
+    <View style={[styles.navDrop, styles.navDropLeft]}>
+      <View style={[styles.appsDropdown, { backgroundColor: th.surface, borderColor: th.border }]}>
+        <View style={styles.appsHead}><Text style={[styles.menuSmall, { color: th.muted }]}>APPS</Text><View style={styles.flex} /><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></View>
+        {APP_ROWS.map((a) => (
+          <Pressable key={a.id} onPress={() => onPick(a.id)} style={styles.appsRow}>
+            <View style={[styles.appsTile, { backgroundColor: a.mark === 'one01' ? (th.mode === 'dark' ? '#fff' : DARK_TILE) : DARK_TILE }]}>
+              <Mark mark={a.mark} size={22} accent={a.mark === 'one01' ? (th.mode === 'dark' ? '#111318' : '#fff') : markAccent(a.mark)} eye={DARK_TILE} />
+            </View>
+            <Text style={[styles.appsRowTxt, { color: th.text }]}>{a.label}</Text>
+            <View style={styles.flex} />
+            {current === a.id ? <Text style={{ color: '#22c55e', fontWeight: '800' }}>✓</Text> : null}
+          </Pressable>
+        ))}
+        <View style={[styles.menuDivider, { backgroundColor: th.border }]} />
+        <Pressable style={styles.appsRow}><Text style={[styles.appsRowTxt, { color: th.muted }]}>+ Add to favorites</Text></Pressable>
+      </View>
+    </View>
+  );
+}
+
+function WalletDrop({ th, lang, onOpenFull }: { th: ShellTheme; lang: Lang; onOpenFull: () => void }) {
+  const t = (en: string) => tr(lang, en);
+  const balance = useOne01PlatformStore((s) => s.balance);
+  const creations = useOne01PlatformStore((s) => s.creations);
+  const credit = useOne01PlatformStore((s) => s.credit);
+  const earned = creations.reduce((a, c) => a + c.collected, 0);
+  return (
+    <View style={[styles.navDrop, styles.navDropRight]}>
+      <View style={[styles.menuPanel, { backgroundColor: th.surface, borderColor: th.border }]}>
+        <View style={styles.appsHead}><Text style={[styles.menuSmall, { color: th.muted }]}>{t('Wallet')}</Text><View style={styles.flex} /><Pressable onPress={onOpenFull}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable></View>
+        <Text style={[styles.menuBal, { color: th.text }]}>${balance.toLocaleString()}</Text>
+        <Text style={[styles.menuSmall, { color: th.muted, marginTop: 2 }]}>USD</Text>
+        <View style={{ gap: 12, marginTop: 14 }}>
+          <View style={styles.menuHold}>
+            <View style={[styles.appsTile, { backgroundColor: DARK_TILE }]}><Mark mark="one01" size={16} accent={th.mode === 'dark' ? '#111318' : '#fff'} /></View>
+            <Text style={[styles.appsRowTxt, { color: th.text }]} numberOfLines={1}>ONE01 Credits</Text><View style={styles.flex} /><Text style={[styles.appsRowTxt, { color: th.text }]}>⟡{balance.toLocaleString()}</Text>
+          </View>
+          {earned > 0 && (
+            <View style={styles.menuHold}>
+              <View style={[styles.appsTile, { backgroundColor: DARK_TILE }]}><Text style={{ fontSize: 14 }}>🧱</Text></View>
+              <Text style={[styles.appsRowTxt, { color: th.text }]} numberOfLines={1}>Creator earnings</Text><View style={styles.flex} /><Text style={[styles.appsRowTxt, { color: '#22c55e' }]}>⟡{earned.toLocaleString()}</Text>
+            </View>
+          )}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+          <Pressable onPress={() => { haptic.success(); credit(1000, 'Deposit · virtual rails'); }} style={[styles.menuBtn, { backgroundColor: th.surface2, borderColor: th.border }]}><Text style={[styles.menuBtnTxt, { color: th.text }]}>↓ {t('Deposit')}</Text></Pressable>
+          <Pressable onPress={onOpenFull} style={[styles.menuBtn, { backgroundColor: th.surface2, borderColor: th.border }]}><Text style={[styles.menuBtnTxt, { color: th.text }]}>↑ {t('Withdraw')}</Text></Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ProfileDrop({ th, lang, onSettings, onExit, onOpenFull }: { th: ShellTheme; lang: Lang; onSettings: () => void; onExit: () => void; onOpenFull: () => void }) {
+  const t = (en: string) => tr(lang, en);
+  const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  return (
+    <View style={[styles.navDrop, styles.navDropRight]}>
+      <View style={[styles.menuPanel, { backgroundColor: th.surface, borderColor: th.border }]}>
+        <View style={styles.appsHead}><Text style={[styles.menuSmall, { color: th.muted }]}>{t('Account')}</Text><View style={styles.flex} /><Pressable onPress={onSettings}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable></View>
+        <Pressable onPress={onOpenFull} style={styles.menuAcct}>
+          <View style={[styles.avatarSm, { backgroundColor: th.surface2, borderColor: th.accent }]}><UserIcon size={16} color={th.muted} /></View>
+          <Text style={[styles.appsRowTxt, { color: th.text }]}>Nobody</Text><View style={styles.flex} /><Text style={{ color: '#22c55e', fontWeight: '800' }}>✓</Text>
+        </Pressable>
+        <View style={styles.menuUpgrade}>
+          <View style={[styles.upPill, { backgroundColor: th.accent }]}><Text style={[styles.upPillTxt, { color: ctaFg }]}>{t('Upgrade')}</Text></View>
+          <View style={[styles.upBar, { backgroundColor: th.surface2 }]}><View style={[styles.upBarFill, { backgroundColor: th.accent, width: '62%' }]} /></View>
+          <Text style={[styles.menuSmall, { color: th.muted }]}>Level 13</Text>
+        </View>
+        <View style={[styles.menuDivider, { backgroundColor: th.border }]} />
+        <Pressable onPress={onOpenFull} style={styles.menuRow}><Text style={[styles.menuRowTxt, { color: th.muted }]}>＋  {t('Create Organization')}</Text></Pressable>
+        <Pressable onPress={onSettings} style={styles.menuRow}><Text style={[styles.menuRowTxt, { color: th.text }]}>⚙  {t('Settings')}</Text></Pressable>
+        <Pressable onPress={onOpenFull} style={styles.menuRow}><Text style={[styles.menuRowTxt, { color: th.text }]}>⚖  {t('Legal')}</Text></Pressable>
+        <Pressable onPress={onOpenFull} style={styles.menuRow}><Text style={[styles.menuRowTxt, { color: th.text }]}>?  {t('Support')}</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.menuRow}><Text style={[styles.menuRowTxt, { color: th.muted }]}>⤷  {t('Log out')}</Text></Pressable>
+        <View style={[styles.menuDivider, { backgroundColor: th.border }]} />
+        <View style={styles.menuFoot}><Text style={[styles.menuSmall, { color: th.muted }]}>V1.3</Text><View style={styles.flex} /><Text style={{ color: th.muted }}>☀  EN</Text></View>
+      </View>
+    </View>
   );
 }
 
@@ -1991,6 +2102,25 @@ const styles = StyleSheet.create({
   navWordmark: { fontSize: 20, fontWeight: '900', letterSpacing: 1 },
   desktopLinks: { flexDirection: 'row', gap: 26 },
   navLink: { fontSize: 15, fontWeight: '600' },
+
+  /* desktop hover dropdowns */
+  navHover: { position: 'relative', zIndex: 60 },
+  navDrop: { position: 'absolute', top: '100%', paddingTop: 10, zIndex: 100 },
+  navDropLeft: { left: 0 },
+  navDropRight: { right: 0 },
+  menuPanel: { width: 258, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
+  menuBal: { fontSize: 26, fontWeight: '800', marginTop: 10 },
+  menuHold: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  menuBtn: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  menuBtnTxt: { fontSize: 13, fontWeight: '700' },
+  menuAcct: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  avatarSm: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  menuUpgrade: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  upPill: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  upPillTxt: { fontSize: 11, fontWeight: '800' },
+  upBar: { flex: 1, height: 6, borderRadius: 999, overflow: 'hidden' },
+  upBarFill: { height: '100%', borderRadius: 999 },
+  menuFoot: { flexDirection: 'row', alignItems: 'center', paddingTop: 8 },
 
   /* horizontal shelf + right-edge fade mask */
   shelf: { position: 'relative' },

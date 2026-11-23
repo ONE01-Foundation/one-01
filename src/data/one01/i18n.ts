@@ -29,6 +29,8 @@ const HE: Record<string, string> = {
   // profile
   Profile: 'פרופיל', 'Edit profile': 'ערוך פרופיל', Friends: 'חברים', Posts: 'פוסטים', Level: 'דרגה',
   About: 'אודות', 'Log out': 'התנתק', '← ONE01 home': '← בית ONE01',
+  // desktop nav dropdowns ('Account' already defined in the settings section)
+  Deposit: 'הפקד', Withdraw: 'משוך', Upgrade: 'שדרג', 'Create Organization': 'צור ארגון',
   // network
   Network: 'רשת', Followers: 'עוקבים', Following: 'נעקבים', Follow: 'עקוב', 'Follow back': 'עקוב בחזרה',
   'No one here yet': 'אין כאן אף אחד עדיין',
