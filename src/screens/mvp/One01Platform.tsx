@@ -61,7 +61,7 @@ import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
 import { SheetWindow, ProfilePage, WalletPage, SettingsPage, NetworkPage } from '../../components/one01/Panels';
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
-import { useOne01PlatformStore, pendingEarnings, buildNotifs, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, pendingEarnings, buildNotifs, VENTURE_LADDER, type UserCreation, type Venture, type NotifNav } from '../../stores/one01PlatformStore';
 import { onboardingFor } from '../../data/one01/onboarding';
 import { tr, type Lang } from '../../data/one01/i18n';
 import {
@@ -69,9 +69,11 @@ import {
   ECOSYSTEM_APPS,
   FEATURED_SLIDES,
   MARKET,
+  MARKET_ONE01,
   CREATOR,
   FRESH_LISTINGS,
   CREATABLES,
+  CREATABLES_ONE01,
   RARITIES,
   RARITY_COLOR,
   type Creatable,
@@ -181,6 +183,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
   const [play, setPlay] = useState<{ kind: PlayKind; item: HomeItem } | null>(null);
   const [drawer, setDrawer] = useState<{ kind: DrawerKind } | null>(null);
+  const [ventureId, setVentureId] = useState<string | null>(null);
   const [bannerSlide, setBannerSlide] = useState<ShellHero | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -190,6 +193,15 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   };
+
+  // web mobile: tint the browser status bar (theme-color) to the current product
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const bg = shellTheme(homeId, appearance).bg;
+    let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+    if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name', 'theme-color'); document.head.appendChild(meta); }
+    meta.setAttribute('content', bg);
+  }, [homeId, appearance]);
 
   // tapping a notification / feed post jumps to whatever it's about
   const onNotifNav = (nav: NotifNav) => {
@@ -295,9 +307,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       <TopGlow th={th} w={width} h={Math.round(height * 0.5)} />
 
       <View style={styles.flex}>
-        {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} onOpenBanner={(s) => setBannerSlide(s)} onOpenSearch={() => setSearchOpen(true)} lang={lang} />}
+        {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} onOpenBanner={(s) => setBannerSlide(s)} onOpenSearch={() => setSearchOpen(true)} onOpenVenture={(id) => setVentureId(id)} lang={lang} />}
         {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} onGoCreate={() => setTab('create')} />}
-        {tab === 'create' && <CreatorChat th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onToast={showToast} onOpenWallet={() => setSheet('wallet')} lang={lang} />}
+        {tab === 'create' && <CreatorChat th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onToast={showToast} onOpenWallet={() => setSheet('wallet')} onOpenVenture={(id) => setVentureId(id)} lang={lang} />}
       </View>
 
       {/* concave "VR" curve — soft edge vignette over the content (desktop only) */}
@@ -359,6 +371,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       </SheetWindow>
       <SheetWindow visible={searchOpen} wide={wide} th={th} onClose={() => setSearchOpen(false)}>
         {(close) => <SearchSheet th={th} homeId={homeId} lang={lang} close={close} onResult={onSearchResult} />}
+      </SheetWindow>
+      <SheetWindow visible={!!ventureId} wide={wide} th={th} onClose={() => setVentureId(null)}>
+        {(close, onScroll) => <VentureSheet ventureId={ventureId} th={th} lang={lang} close={close} onScroll={onScroll} onToast={showToast} onOpenMarket={() => { close(); setTab('market'); }} />}
       </SheetWindow>
       <AppSwitcher visible={sheet === 'switch'} wide={wide} th={th} current={homeId} onClose={() => setSheet(null)} onPick={pickApp} />
       <ExternalModal app={externalApp} onClose={() => setExternalApp(null)} />
@@ -526,14 +541,20 @@ function Shelf({ th, gap = 12, children }: { th: ShellTheme; gap?: number; child
   );
 }
 
-function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpenBanner, onOpenSearch, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void; onOpenBanner: (s: ShellHero) => void; onOpenSearch: () => void; lang: Lang }) {
+function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpenBanner, onOpenSearch, onOpenVenture, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onOpen: (kind: DetailKind, item: HomeItem) => void; onOpenDrawer: (k: DrawerKind) => void; onOpenBanner: (s: ShellHero) => void; onOpenSearch: () => void; onOpenVenture?: (id: string) => void; lang: Lang }) {
   const home = HOME[th.homeId];
   const extras = HOME_EXTRAS[th.homeId];
   const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
   const { width } = useWindowDimensions();
   const colW = wide ? CW : Math.min(width, 600) - 36;
   const [cat, setCat] = useState('all');
-  const items = cat === 'all' ? home.items : home.items.filter((it) => it.cat === cat);
+  const ventures = useOne01PlatformStore((s) => s.ventures);
+  const baseItems = cat === 'all' ? home.items : home.items.filter((it) => it.cat === cat);
+  // your ONE01 ventures lead the Projects list, with a stage badge
+  const ventureItems: HomeItem[] = th.homeId === 'one01'
+    ? ventures.map((v) => ({ id: v.id, title: v.name, subtitle: `${v.kind[0].toUpperCase()}${v.kind.slice(1)} · ${v.sector}`, emoji: v.emoji, cta: 'Open', status: v.status, ventureId: v.id }))
+    : [];
+  const items = [...ventureItems, ...baseItems];
   const cardKind: DetailKind = th.homeId === 'winzi' ? 'game' : th.homeId === 'mixstar' ? 'show' : th.homeId === 'one' ? 'process' : 'project';
 
   // auto-rotating featured banner
@@ -623,17 +644,23 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
         {home.layout === 'rows' ? (
           <View style={[styles.rowsWrap, wide && styles.rowsWrapWide]}>
             {items.map((it) => (
-              <Pressable key={it.id} onPress={() => onOpen('project', it)} style={({ pressed }) => [styles.projRow, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
-                <LinearGradient colors={it.bg ?? [DARK_TILE, '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.projTile}>
-                  {it.mark ? <Mark mark={it.mark} size={38} accent={markAccent(it.mark)} eye={DARK_TILE} /> : <Text style={{ fontSize: 30 }}>{it.emoji}</Text>}
-                </LinearGradient>
+              <Pressable key={it.id} onPress={() => (it.ventureId ? onOpenVenture?.(it.ventureId) : onOpen('project', it))} style={({ pressed }) => [styles.projRow, wide && styles.projRowWide, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
+                {it.ventureId ? (
+                  <CreationArt emoji={it.emoji ?? '🚀'} seed={it.title} size={54} />
+                ) : (
+                  <LinearGradient colors={it.bg ?? [DARK_TILE, '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.projTile}>
+                    {it.mark ? <Mark mark={it.mark} size={38} accent={markAccent(it.mark)} eye={DARK_TILE} /> : <Text style={{ fontSize: 30 }}>{it.emoji}</Text>}
+                  </LinearGradient>
+                )}
                 <View style={styles.flex}>
                   <Text style={[styles.projName, { color: th.text }]}>{it.title}</Text>
                   <Text style={[styles.projSub, { color: th.muted }]}>{it.subtitle}</Text>
                 </View>
-                <View style={[styles.getPill, { backgroundColor: th.surface2 }]}>
-                  <Text style={[styles.getPillTxt, { color: th.accent }]}>{tr(lang, it.cta ?? 'Open')}</Text>
-                </View>
+                {it.status ? <View style={[styles.statusChip, { backgroundColor: th.surface2, borderColor: th.border }]}><Text style={[styles.statusChipTxt, { color: th.text }]}>{it.status}</Text></View> : (
+                  <View style={[styles.getPill, { backgroundColor: th.surface2 }]}>
+                    <Text style={[styles.getPillTxt, { color: th.accent }]}>{tr(lang, it.cta ?? 'Open')}</Text>
+                  </View>
+                )}
               </Pressable>
             ))}
           </View>
@@ -986,7 +1013,7 @@ function FeedDrawer({ th, lines }: { th: ShellTheme; lines: FeedLineLite[] }) {
 
 function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, onBuild, onToast, lang, onGoCreate }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void; onBuild: (p: SurfacePillar, surface: string) => void; onToast: (m: string) => void; lang: Lang; onGoCreate?: () => void }) {
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
-  const s = kind === 'market' ? MARKET[pid] : CREATOR[pid];
+  const s = kind === 'market' ? (th.homeId === 'one01' ? MARKET_ONE01 : MARKET[pid]) : CREATOR[pid];
   const sectionTitle = kind === 'market' ? tr(lang, 'Market') : tr(lang, CREATOR[pid].title);
   const cats = HOME[th.homeId].categories;
   const { width } = useWindowDimensions();
@@ -1138,10 +1165,12 @@ function CreationArt({ emoji, seed, rarity, size = 46 }: { emoji: string; seed: 
  *  thread (below each message), with a persistent input box at the bottom. Minting costs credits. */
 function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWallet, lang, close, onScroll }: { th: ShellTheme; pid: ProductId; surface: string; initial: Creatable | null; seed: string; onToast: (m: string) => void; onOpenWallet: () => void; lang: Lang; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void }) {
   const insets = useSafeAreaInsets();
-  const creatables = CREATABLES[pid];
+  const isVenture = th.homeId === 'one01';
+  const creatables = isVenture ? CREATABLES_ONE01 : CREATABLES[pid];
   const balance = useOne01PlatformStore((s) => s.balance);
   const debit = useOne01PlatformStore((s) => s.debit);
   const publishCreation = useOne01PlatformStore((s) => s.publishCreation);
+  const createVenture = useOne01PlatformStore((s) => s.createVenture);
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
 
   const [phase, setPhase] = useState<Exclude<CCPhase, 'home'>>(initial ? 'style' : 'type');
@@ -1156,6 +1185,7 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
       : [{ id: 'u0', role: 'you', text: seed || 'Make something' }, { id: 'a0', role: 'ai', text: `Love it. What are we making on ${surface}?` }],
   );
   const [made, setMade] = useState<UserCreation | null>(null);
+  const [madeV, setMadeV] = useState<Venture | null>(null);
   const scRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
   const price = sel ? Math.round(sel.basePrice * (rarity?.mult ?? 1)) : 0;
@@ -1179,15 +1209,29 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
     setPhase('name'); haptic.select(); scrollDown();
   };
   const genName = () => `${CC_ADJ[Math.floor(Math.random() * CC_ADJ.length)]} ${style || sel?.title || 'One'}`;
+  const genStage = () => (VENTURE_LADDER[sel?.id ?? '']?.[0] ?? 'Live');
   const confirmName = (raw: string) => {
     const nm = raw.trim() || genName();
     setName(nm); setCompose(''); push('you', nm);
-    const ed = rarity ? ` · ${rarity.editions.toLocaleString()} editions` : '';
-    push('ai', `Ready to mint “${nm}”${ed}. Publishing costs ⟡${price} and it lists on the ${surface} Market right away.`);
+    if (isVenture) {
+      push('ai', `Ready to launch “${nm}” — ${ccArt(style)} ${style} ${sel?.noun}. Costs ⟡${price} and it lands in Projects at ${genStage()}.`);
+    } else {
+      const ed = rarity ? ` · ${rarity.editions.toLocaleString()} editions` : '';
+      push('ai', `Ready to mint “${nm}”${ed}. Publishing costs ⟡${price} and it lists on the ${surface} Market right away.`);
+    }
     setPhase('confirm'); scrollDown();
   };
   const doCreate = () => {
     if (balance < price) { push('ai', 'You are a little short on credits — top up in your Wallet and we will finish here.'); haptic.warning(); scrollDown(); return; }
+    if (isVenture) {
+      debit(price, `Launched · ${name}`);
+      createVenture({ name, emoji: sel!.emoji, kind: sel!.id, sector: style });
+      const v = useOne01PlatformStore.getState().ventures[0];
+      setMadeV(v ?? null);
+      push('ai', `🚀 “${name}” is live in Projects at ${v?.status ?? genStage()}. Open it to advance stages and raise — or grab a pitch deck in the Market.`);
+      setPhase('done'); onToast(`Launched “${name}” · −⟡${price}`); haptic.success(); scrollDown();
+      return;
+    }
     debit(price, `Created · ${name}`);
     publishCreation({ title: name, emoji: sel!.emoji, kind: sel!.id, surface, rarity: rarity?.id, editions: rarity?.editions, rateMult: rarity?.mult });
     const c = useOne01PlatformStore.getState().creations[0];
@@ -1264,6 +1308,18 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
             <Pressable onPress={close} style={({ pressed }) => [styles.ccCreate, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.ccCreateTxt, { color: ctaFg }]}>{tr(lang, 'Done')}</Text></Pressable>
           </View>
         )}
+        {phase === 'done' && madeV && (
+          <View style={{ gap: 10, marginTop: 2 }}>
+            <View style={[styles.ccResult, { backgroundColor: th.surface, borderColor: th.accent }]}>
+              <CreationArt emoji={madeV.emoji} seed={madeV.name} size={48} />
+              <View style={styles.flex}>
+                <Text style={[styles.ccCardTitle, { color: th.text }]} numberOfLines={1}>{madeV.name}</Text>
+                <Text style={[styles.ccCardSub, { color: th.muted }]}>{madeV.sector} {madeV.kind} · {madeV.status}</Text>
+              </View>
+            </View>
+            <Pressable onPress={close} style={({ pressed }) => [styles.ccCreate, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.ccCreateTxt, { color: ctaFg }]}>{tr(lang, 'View in Projects')}</Text></Pressable>
+          </View>
+        )}
       </ScrollView>
 
       {/* persistent input box at the bottom */}
@@ -1279,12 +1335,15 @@ function CreateFlowSheet({ th, pid, surface, initial, seed, onToast, onOpenWalle
 
 /** The Create tab: greeting + input and two sections — New (what you can make) and
  *  Mine (your creations). Picking something opens the guided chat in a sheet. */
-function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onToast: (m: string) => void; onOpenWallet: () => void; lang: Lang }) {
+function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, onOpenVenture, lang }: { th: ShellTheme; wide: boolean; topPad: number; bottomPad: number; onToast: (m: string) => void; onOpenWallet: () => void; onOpenVenture?: (id: string) => void; lang: Lang }) {
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
-  const creatables = CREATABLES[pid];
+  const isOne01 = th.homeId === 'one01';
+  const creatables = isOne01 ? CREATABLES_ONE01 : CREATABLES[pid];
   const creations = useOne01PlatformStore((s) => s.creations);
+  const ventures = useOne01PlatformStore((s) => s.ventures);
   const collect = useOne01PlatformStore((s) => s.collectEarnings);
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  const mineCount = isOne01 ? ventures.length : creations.length;
 
   const [seg, setSeg] = useState<'new' | 'mine'>('new');
   const [draft, setDraft] = useState('');
@@ -1319,7 +1378,7 @@ function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang 
           <View style={[styles.ccSeg, { backgroundColor: th.surface2, borderColor: th.border }]}>
             {(['new', 'mine'] as const).map((k) => (
               <Pressable key={k} onPress={() => setSeg(k)} style={[styles.ccSegBtn, seg === k && { backgroundColor: th.accent }]}>
-                <Text style={[styles.ccSegTxt, { color: seg === k ? ctaFg : th.muted }]}>{k === 'new' ? tr(lang, 'New') : `${tr(lang, 'Mine')}${creations.length ? ` · ${creations.length}` : ''}`}</Text>
+                <Text style={[styles.ccSegTxt, { color: seg === k ? ctaFg : th.muted }]}>{k === 'new' ? tr(lang, 'New') : `${tr(lang, 'Mine')}${mineCount ? ` · ${mineCount}` : ''}`}</Text>
               </Pressable>
             ))}
           </View>
@@ -1339,7 +1398,22 @@ function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang 
             </View>
           )}
 
-          {seg === 'mine' && (
+          {seg === 'mine' && isOne01 && (
+            <View style={styles.ccSugWrap}>
+              {ventures.length === 0 && <Text style={[styles.ccMineEmpty, { color: th.muted }]}>{tr(lang, 'No ventures yet — launch one above.')}</Text>}
+              {ventures.map((v) => (
+                <Pressable key={v.id} onPress={() => onOpenVenture?.(v.id)} style={({ pressed }) => [styles.ccCard, { backgroundColor: th.surface, borderColor: th.border }, pressed && { opacity: 0.85 }]}>
+                  <CreationArt emoji={v.emoji} seed={v.name} size={46} />
+                  <View style={styles.flex}>
+                    <Text style={[styles.ccCardTitle, { color: th.text }]} numberOfLines={1}>{v.name}</Text>
+                    <Text style={[styles.ccCardSub, { color: th.muted }]} numberOfLines={1}>{v.sector} {v.kind}</Text>
+                  </View>
+                  <View style={[styles.statusChip, { backgroundColor: th.surface2, borderColor: th.border }]}><Text style={[styles.statusChipTxt, { color: th.text }]}>{v.status}</Text></View>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {seg === 'mine' && !isOne01 && (
             <View style={styles.ccSugWrap}>
               {creations.length === 0 && <Text style={[styles.ccMineEmpty, { color: th.muted }]}>{tr(lang, 'Nothing yet — make your first creation above.')}</Text>}
               {creations.map((c) => {
@@ -1364,6 +1438,73 @@ function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, lang 
         {(close, onScroll) => (flow ? <CreateFlowSheet key={flowKey} th={th} pid={pid} surface={th.name} initial={flow.initial} seed={flow.seed} onToast={onToast} onOpenWallet={() => { close(); onOpenWallet(); }} lang={lang} close={close} onScroll={onScroll} /> : null)}
       </SheetWindow>
     </>
+  );
+}
+
+/* ─────────────────────────────── venture page (ONE01 project) ─────────────────────────────── */
+
+/** A project page for a venture you spun up on ONE01 — stage ladder, funding, and actions. */
+function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMarket }: { ventureId: string | null; th: ShellTheme; lang: Lang; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void; onToast: (m: string) => void; onOpenMarket: () => void }) {
+  const insets = useSafeAreaInsets();
+  const ventures = useOne01PlatformStore((s) => s.ventures);
+  const advance = useOne01PlatformStore((s) => s.advanceVenture);
+  const v = ventures.find((x) => x.id === ventureId);
+
+  if (!v) return <View style={styles.flex} />;
+  const ladder = VENTURE_LADDER[v.kind] ?? ['Live'];
+  const stageIdx = Math.max(0, ladder.indexOf(v.status));
+  const atEnd = stageIdx >= ladder.length - 1;
+  const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  const pct = v.goal > 0 ? Math.min(1, v.raised / v.goal) : (stageIdx + 1) / ladder.length;
+  const kindCap = v.kind[0].toUpperCase() + v.kind.slice(1);
+  const doAdvance = () => { if (atEnd) return; advance(v.id); haptic.success(); onToast(`${v.name} → ${ladder[stageIdx + 1]}`); };
+
+  return (
+    <View style={styles.flex}>
+      <View style={styles.ccTopRow}>
+        <Text style={[styles.ccTopTitle, { color: th.text }]}>✦ {kindCap}</Text>
+        <View style={styles.flex} />
+        <Pressable onPress={close} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={[styles.xmark, { color: th.text }]}>✕</Text></Pressable>
+      </View>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
+        <View style={{ alignItems: 'center', gap: 12, marginTop: 6 }}>
+          <CreationArt emoji={v.emoji} seed={v.name} size={88} />
+          <View style={{ alignItems: 'center', gap: 6 }}>
+            <Text style={[styles.vName, { color: th.text }]}>{v.name}</Text>
+            <Text style={[styles.ccCardSub, { color: th.muted }]}>{v.sector} {v.kind} · {tr(lang, 'on ONE01')}</Text>
+            <View style={[styles.statusChip, { backgroundColor: th.accent, borderColor: th.accent }]}><Text style={[styles.statusChipTxt, { color: ctaFg }]}>{v.status}</Text></View>
+          </View>
+        </View>
+
+        <Text style={[styles.vSecTitle, { color: th.muted }]}>{tr(lang, 'Stage')}</Text>
+        <View style={styles.vStageRow}>
+          {ladder.map((st, i) => (
+            <View key={st} style={[styles.vStage, i <= stageIdx ? { backgroundColor: th.accent, borderColor: th.accent } : { backgroundColor: th.surface, borderColor: th.border }]}>
+              <Text style={[styles.vStageTxt, { color: i <= stageIdx ? ctaFg : th.muted }]}>{st}</Text>
+            </View>
+          ))}
+        </View>
+
+        {v.goal > 0 && (
+          <>
+            <Text style={[styles.vSecTitle, { color: th.muted }]}>{tr(lang, 'Funding')}</Text>
+            <View style={[styles.vBar, { backgroundColor: th.surface2 }]}><View style={[styles.vBarFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: th.accent }]} /></View>
+            <Text style={[styles.ccCardSub, { color: th.muted, marginTop: 8 }]}>⟡{v.raised.toLocaleString()} {tr(lang, 'raised of')} ⟡{v.goal.toLocaleString()} ({Math.round(pct * 100)}%)</Text>
+          </>
+        )}
+
+        <View style={{ gap: 10, marginTop: 26 }}>
+          <Pressable onPress={doAdvance} disabled={atEnd} style={({ pressed }) => [styles.ccCreate, { backgroundColor: atEnd ? th.surface2 : th.accent }, pressed && { opacity: 0.85 }]}>
+            <Text style={[styles.ccCreateTxt, { color: atEnd ? th.muted : ctaFg }]}>{atEnd ? tr(lang, 'At final stage') : `${tr(lang, 'Advance to')} ${ladder[stageIdx + 1]}`}</Text>
+          </Pressable>
+          <Pressable onPress={onOpenMarket} style={[styles.ccCard, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 22 }}>📊</Text></View>
+            <View style={styles.flex}><Text style={[styles.ccCardTitle, { color: th.text }]}>{tr(lang, 'Pitch deck kit')}</Text><Text style={[styles.ccCardSub, { color: th.muted }]}>{tr(lang, 'Buy in the Market')}</Text></View>
+            <Text style={[styles.ccCardPlus, { color: th.accent }]}>›</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1988,6 +2129,15 @@ const styles = StyleSheet.create({
   ccCreateTxt: { fontSize: 15.5, fontWeight: '800' },
   ccGhost: { alignItems: 'center', paddingVertical: 4 },
   ccGhostTxt: { fontSize: 13.5, fontWeight: '700' },
+  statusChip: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 6 },
+  statusChipTxt: { fontSize: 12.5, fontWeight: '800' },
+  vName: { fontSize: 22, fontWeight: '800' },
+  vSecTitle: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 24, marginBottom: 12 },
+  vStageRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  vStage: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  vStageTxt: { fontSize: 12.5, fontWeight: '700' },
+  vBar: { height: 12, borderRadius: 999, overflow: 'hidden', marginTop: 4 },
+  vBarFill: { height: '100%', borderRadius: 999 },
   ccSeg: { flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, padding: 3, marginTop: 24, marginBottom: 14, alignSelf: 'stretch' },
   ccSegBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 999 },
   ccSegTxt: { fontSize: 13.5, fontWeight: '700' },

@@ -59,6 +59,10 @@ const HE: Record<string, string> = {
   'Nothing yet — make your first creation above.': 'עדיין כלום — צור את היצירה הראשונה שלך למעלה.',
   'Pick above, or type…': 'בחר למעלה, או הקלד…', 'Tap a button above': 'הקש על כפתור למעלה',
   'Sure — change it.': 'בטח — בוא נשנה.',
+  // ventures (ONE01 factory)
+  Stage: 'שלב', Funding: 'גיוס', 'raised of': 'גויס מתוך', 'At final stage': 'בשלב האחרון',
+  'Advance to': 'קדם ל-', 'Pitch deck kit': 'ערכת מצגת', 'Buy in the Market': 'קנה בשוק',
+  'View in Projects': 'צפה בפרויקטים', 'No ventures yet — launch one above.': 'אין עדיין מיזמים — השק אחד למעלה.',
   // search
   Search: 'חיפוש', Cancel: 'ביטול', 'No results': 'אין תוצאות',
   'Search games, projects, listings…': 'חיפוש משחקים, פרויקטים, פריטים…',

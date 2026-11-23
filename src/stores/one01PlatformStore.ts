@@ -60,6 +60,31 @@ export function pendingEarnings(c: UserCreation, now = Date.now()): number {
   return Math.floor(((now - c.lastCollected) / 60000) * c.rate);
 }
 
+/** A venture you spun up on ONE01 (the factory) — shows in Projects with a status + page. */
+export interface Venture {
+  id: string;
+  name: string;
+  emoji: string;
+  /** venture | product | role | site */
+  kind: string;
+  /** Style step choice (sector / function / type / look). */
+  sector: string;
+  /** Current stage (from the kind's ladder). */
+  status: string;
+  /** Credits raised so far / funding goal (ventures only; 0 otherwise). */
+  raised: number;
+  goal: number;
+  ts: number;
+}
+
+/** Stage ladder per venture kind — advancing walks along it. */
+export const VENTURE_LADDER: Record<string, string[]> = {
+  venture: ['Pre-seed', 'Seed', 'Series A', 'Scaling', 'Live'],
+  product: ['Alpha', 'Beta', 'Launched', 'Scaling'],
+  role: ['Hiring', 'Interviewing', 'Offer', 'Filled'],
+  site: ['Draft', 'Live'],
+};
+
 /* ───────────────────────── notifications ───────────────────────── */
 
 /** Where tapping a notification or feed post takes you. */
@@ -170,6 +195,8 @@ interface One01PlatformState {
   positions: Record<string, Position>;
   /** Things you published from Creator. */
   creations: UserCreation[];
+  /** Ventures you spun up on ONE01 (the factory). */
+  ventures: Venture[];
   /** ONE01 shell appearance (products keep their own dark theme). */
   appearance: 'light' | 'dark';
   /** UI language. */
@@ -198,6 +225,10 @@ interface One01PlatformState {
   publishCreation: (input: { title: string; emoji: string; kind: string; surface: string; rarity?: string; editions?: number; rateMult?: number }) => void;
   /** Collect a creation's pending earnings into the balance; returns the amount. */
   collectEarnings: (id: string) => number;
+  /** Spin up a venture on ONE01 — it lands in Projects with a starting stage. */
+  createVenture: (input: { name: string; emoji: string; kind: string; sector: string }) => void;
+  /** Advance a venture to the next stage (and raise funds, for ventures). */
+  advanceVenture: (id: string) => void;
   resetDemo: () => void;
 }
 
@@ -210,6 +241,7 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       transactions: [],
       positions: {},
       creations: [],
+      ventures: [],
       appearance: 'light',
       lang: 'en',
       notifsSeenAt: 0,
@@ -301,7 +333,33 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
         return pending;
       },
 
-      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], notifsSeenAt: 0, follows: {} }),
+      createVenture: (input) =>
+        set((s) => {
+          const now = Date.now();
+          const ladder = VENTURE_LADDER[input.kind] ?? ['Live'];
+          const goal = input.kind === 'venture' ? 4000 + (hashStr(input.name) % 6000) : 0;
+          const v: Venture = {
+            id: `vt_${now}_${Math.floor(Math.random() * 1e4)}`,
+            name: input.name, emoji: input.emoji, kind: input.kind, sector: input.sector,
+            status: ladder[0], raised: 0, goal, ts: now,
+          };
+          return { ventures: [v, ...s.ventures].slice(0, 30) };
+        }),
+
+      advanceVenture: (id) =>
+        set((s) => ({
+          ventures: s.ventures.map((v) => {
+            if (v.id !== id) return v;
+            const ladder = VENTURE_LADDER[v.kind] ?? ['Live'];
+            const i = ladder.indexOf(v.status);
+            const next = i >= 0 && i < ladder.length - 1 ? ladder[i + 1] : v.status;
+            const step = ladder.length > 1 ? Math.round(v.goal / (ladder.length - 1)) : v.goal;
+            const raised = v.goal > 0 ? Math.min(v.goal, v.raised + step) : v.raised;
+            return { ...v, status: next, raised };
+          }),
+        })),
+
+      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], notifsSeenAt: 0, follows: {} }),
     }),
     { name: 'one01_platform_v1', version: 1, storage: createJSONStorage(() => platStorage) },
   ),

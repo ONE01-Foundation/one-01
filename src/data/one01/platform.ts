@@ -379,6 +379,27 @@ export const CREATABLES: Record<ProductId, Creatable[]> = {
   ],
 };
 
+/** ONE01 (the factory) makes its own things — ventures, not ONE's agents. */
+export const CREATABLES_ONE01: Creatable[] = [
+  { id: 'venture', title: 'Venture', emoji: '🚀', noun: 'venture', basePrice: 200, styleQ: 'Which sector?', styles: [{ label: 'Fintech', emoji: '💳' }, { label: 'AI', emoji: '🧠' }, { label: 'Consumer', emoji: '🛍️' }, { label: 'Climate', emoji: '🌱' }] },
+  { id: 'product', title: 'Product', emoji: '📦', noun: 'product', basePrice: 120, styleQ: 'What kind of product?', styles: [{ label: 'App', emoji: '📱' }, { label: 'Platform', emoji: '🧩' }, { label: 'Marketplace', emoji: '🛒' }, { label: 'Tool', emoji: '🔧' }] },
+  { id: 'role', title: 'Role', emoji: '🧑‍💼', noun: 'role', basePrice: 60, styleQ: 'What function?', styles: [{ label: 'Engineering', emoji: '🛠️' }, { label: 'Design', emoji: '🎨' }, { label: 'Growth', emoji: '📈' }, { label: 'Ops', emoji: '⚙️' }] },
+  { id: 'site', title: 'Landing site', emoji: '🌐', noun: 'landing site', basePrice: 40, styleQ: 'What look?', styles: [{ label: 'Minimal', emoji: '⬜' }, { label: 'Bold', emoji: '🔶' }, { label: 'Playful', emoji: '🎈' }, { label: 'Editorial', emoji: '📰' }] },
+];
+
+/** ONE01 Market — what a venture needs to go from idea to launch (buyable). */
+export const MARKET_ONE01: MarketSurface = {
+  headline: 'ONE01 Market',
+  subtitle: 'Everything to take a venture from idea to launch — decks, sites, cap tables, intros.',
+  structureLine: 'Spin up ventures in the studio; buy what they need here.',
+  pillars: [
+    { id: 'deck', title: 'Pitch deck kit', emoji: '📊', tagline: '12-slide investor deck', detail: 'A structured pitch-deck template — problem, market, traction, ask — ready to fill and present to your round.', category: 'business', price: '◎ 120' },
+    { id: 'landing', title: 'Landing page template', emoji: '🌐', tagline: 'Launch-ready one-pager', detail: 'A responsive landing template with waitlist capture, wired to your venture in minutes.', category: 'business', price: '◎ 80' },
+    { id: 'captable', title: 'Cap table', emoji: '📈', tagline: 'Equity & SAFE tracker', detail: 'Model ownership, SAFEs and option pools; export a clean cap table for your raise.', category: 'finance', price: '◎ 60' },
+    { id: 'intros', title: 'Investor intro list', emoji: '🤝', tagline: 'Warm-intro targets', detail: 'A curated, filterable list of investors matched to your sector and stage.', category: 'business', price: '◎ 150' },
+  ],
+};
+
 /* ───────────────────────────── Home skeleton content (per product) ───────────────────────────── */
 
 export interface HomeCategory {
@@ -410,6 +431,10 @@ export interface HomeItem {
   blurb?: string;
   /** Price label for a Market listing, e.g. "◎ 40". */
   priceLabel?: string;
+  /** Venture stage badge on an ONE01 project row (e.g. "Seed"). */
+  status?: string;
+  /** If set, this project row is a user venture — tapping opens its venture page. */
+  ventureId?: string;
 }
 
 /** App switcher grid (long-press the logo). ONE01 is shown separately on top. */
