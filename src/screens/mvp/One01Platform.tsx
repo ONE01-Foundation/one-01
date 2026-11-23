@@ -504,7 +504,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSetting
     <LinearGradient colors={[th.bg, `${th.bg}00`]} style={styles.desktopNav} pointerEvents="box-none">
       <View style={styles.desktopRow}>
         {/* logo → apps menu on hover */}
-        <Pressable onHoverIn={() => setMenu('apps')} onHoverOut={close} style={styles.navHover}>
+        <View onPointerEnter={() => setMenu('apps')} onPointerLeave={close} style={styles.navHover}>
           <Pressable onPress={() => setMenu((m) => (m === 'apps' ? null : 'apps'))} style={styles.desktopLogo}>
             {th.homeId === 'one01' ? (
               <One01Wordmark height={38} color={th.text} />
@@ -516,7 +516,7 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSetting
             )}
           </Pressable>
           {menu === 'apps' && <AppsDrop th={th} current={th.homeId} onPick={(id) => { close(); onPickApp(id); }} />}
-        </Pressable>
+        </View>
 
         <View style={styles.desktopLinks}>
           {links.map((l) => (
@@ -528,18 +528,18 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSetting
         <View style={styles.flex} />
 
         {/* wallet → quick menu on hover, full window on click */}
-        <Pressable onHoverIn={() => setMenu('wallet')} onHoverOut={close} style={styles.navHover}>
+        <View onPointerEnter={() => setMenu('wallet')} onPointerLeave={close} style={styles.navHover}>
           <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
           {menu === 'wallet' && <WalletDrop th={th} lang={lang} onOpenFull={() => { close(); onWallet(); }} />}
-        </Pressable>
+        </View>
 
         <View style={{ width: 16 }} />
 
         {/* profile → account menu on hover, full window on click */}
-        <Pressable onHoverIn={() => setMenu('profile')} onHoverOut={close} style={styles.navHover}>
+        <View onPointerEnter={() => setMenu('profile')} onPointerLeave={close} style={styles.navHover}>
           <ProfileBtn th={th} onPress={() => { close(); onProfile(); }} />
           {menu === 'profile' && <ProfileDrop th={th} lang={lang} onSettings={() => { close(); onSettings(); }} onExit={() => { close(); onExit(); }} onOpenFull={() => { close(); onProfile(); }} />}
-        </Pressable>
+        </View>
       </View>
     </LinearGradient>
   );
