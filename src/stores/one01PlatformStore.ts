@@ -49,6 +49,10 @@ export interface UserCreation {
   collected: number;
   /** Credits earned per minute (deterministic per creation). */
   rate: number;
+  /** Rarity tier (cosmetics only: common/rare/epic/legendary). */
+  rarity?: string;
+  /** Edition count minted (cosmetics). */
+  editions?: number;
 }
 
 /** Uncollected earnings a creation has accrued since it was last collected. */
@@ -191,7 +195,7 @@ interface One01PlatformState {
   /** Sell `shares` of a project at `price` each; false if not enough held. */
   divest: (id: string, shares: number, price: number, label: string) => boolean;
   /** Publish a creation from Creator (starts earning). */
-  publishCreation: (input: { title: string; emoji: string; kind: string; surface: string }) => void;
+  publishCreation: (input: { title: string; emoji: string; kind: string; surface: string; rarity?: string; editions?: number; rateMult?: number }) => void;
   /** Collect a creation's pending earnings into the balance; returns the amount. */
   collectEarnings: (id: string) => number;
   resetDemo: () => void;
@@ -272,11 +276,13 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       publishCreation: (input) =>
         set((s) => {
           const now = Date.now();
-          const rate = 30 + (hashStr(input.title + now) % 60); // 30–89 credits/min
+          const mult = input.rateMult ?? 1;
+          const rate = Math.round((30 + (hashStr(input.title + now) % 60)) * mult); // base 30–89 ×rarity
           const c: UserCreation = {
             id: `cr_${now}_${Math.floor(Math.random() * 1e4)}`,
             title: input.title, emoji: input.emoji, kind: input.kind, surface: input.surface,
             ts: now, lastCollected: now, collected: 0, rate,
+            rarity: input.rarity, editions: input.editions,
           };
           return { creations: [c, ...s.creations].slice(0, 30) };
         }),

@@ -23,7 +23,7 @@ import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
 import { type ShellTheme, type MarkId, NETWORK, type Person } from '../../data/one01/platform';
-import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, pendingEarnings, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
 
 const PROJ_META: Record<string, { name: string; mark: MarkId }> = {
@@ -183,12 +183,15 @@ function PanelHead({ th, title, onClose, right, back }: { th: ShellTheme; title:
 
 /* ─────────────────────────────── ProfilePage ─────────────────────────────── */
 
-export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang, initialTab = 'posts', onNavigate, onOpenNetwork }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'posts' | 'notifs' | 'about'; onNavigate?: (nav: NotifNav) => void; onOpenNetwork?: () => void }) {
+export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, onScroll, lang, initialTab = 'posts', onNavigate, onOpenNetwork }: { th: ShellTheme; close: () => void; onExit: () => void; onCreate: () => void; onOne01?: () => void; onSettings: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'posts' | 'notifs' | 'about' | 'creations'; onNavigate?: (nav: NotifNav) => void; onOpenNetwork?: () => void }) {
   const insets = useSafeAreaInsets();
   const t = (en: string) => tr(lang, en);
-  const [tab, setTab] = useState<'posts' | 'notifs' | 'about'>(initialTab);
+  const [tab, setTab] = useState<'posts' | 'notifs' | 'about' | 'creations'>(initialTab);
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const creations = useOne01PlatformStore((s) => s.creations);
+  const collect = useOne01PlatformStore((s) => s.collectEarnings);
+  const [, setTick] = useState(0);
+  useEffect(() => { if (!creations.length || tab !== 'creations') return; const id = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(id); }, [creations.length, tab]);
   const activity = useMemo(() => buildPosts(transactions, creations, th.accent), [transactions, creations, th.accent]);
   const notifs = useMemo(() => buildNotifs(transactions), [transactions]);
   const seedPosts: Post[] = [
@@ -230,13 +233,42 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
 
           {/* tabs */}
           <View style={[styles.tabBar, { borderColor: th.border }]}>
-            {(['posts', 'notifs', 'about'] as const).map((tk) => (
+            {(['posts', 'creations', 'notifs', 'about'] as const).map((tk) => (
               <Pressable key={tk} onPress={() => setTab(tk)} style={styles.tabBtn}>
-                <Text style={[styles.tabTxt, { color: tk === tab ? th.text : th.muted }]}>{tk === 'posts' ? t('Posts') : tk === 'notifs' ? t('Notifications') : t('About')}</Text>
+                <Text style={[styles.tabTxt, { color: tk === tab ? th.text : th.muted }]}>{tk === 'posts' ? t('Posts') : tk === 'creations' ? t('Creations') : tk === 'notifs' ? t('Notifications') : t('About')}</Text>
                 {tk === tab ? <View style={[styles.tabUnderline, { backgroundColor: th.text }]} /> : null}
               </Pressable>
             ))}
           </View>
+
+          {tab === 'creations' && (
+            <View style={{ gap: 10, marginTop: 14 }}>
+              {creations.length === 0 && (
+                <Pressable onPress={onCreate} style={[styles.actionRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <CreateIcon size={18} color={th.text} />
+                  <Text style={[styles.actionTxt, { color: th.text }]}>{t('Make your first creation')}</Text>
+                  <View style={styles.flex} />
+                  <Text style={{ color: th.muted }}>›</Text>
+                </Pressable>
+              )}
+              {creations.map((c) => {
+                const pending = pendingEarnings(c);
+                const fg = th.accent === '#F9D800' ? '#000' : '#fff';
+                return (
+                  <View key={c.id} style={[styles.notifRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                    <View style={[styles.notifTile, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 19 }}>{c.emoji}</Text></View>
+                    <View style={styles.flex}>
+                      <Text style={[styles.notifRowTitle, { color: th.text }]} numberOfLines={1}>{c.title}</Text>
+                      <Text style={[styles.notifRowBody, { color: th.muted }]} numberOfLines={1}>{c.rarity ? `${c.rarity} · ${(c.editions ?? 0).toLocaleString()} ed · ` : `on ${c.surface} · `}⟡{c.collected.toLocaleString()} {t('earned')}</Text>
+                    </View>
+                    <Pressable onPress={() => { const got = collect(c.id); if (got > 0) haptic.success(); }} style={({ pressed }) => [styles.followBtn, { backgroundColor: pending > 0 ? th.accent : th.surface2, borderColor: pending > 0 ? th.accent : th.border }, pressed && { opacity: 0.8 }]}>
+                      <Text style={[styles.followTxt, { color: pending > 0 ? fg : th.muted }]}>{t('Collect')} ⟡{pending}</Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           {tab === 'notifs' && (
             <View style={{ gap: 10, marginTop: 14 }}>
@@ -553,6 +585,7 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const positions = useOne01PlatformStore((s) => s.positions);
   const credit = useOne01PlatformStore((s) => s.credit);
+  const creations = useOne01PlatformStore((s) => s.creations);
   const [topped, setTopped] = useState(false);
   const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
   const topUp = () => { haptic.success(); credit(1000, 'Top up · virtual rails'); setTopped(true); setTimeout(() => setTopped(false), 1600); };
@@ -632,6 +665,25 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
         </View>
         {holdings.length === 1 && (
           <Text style={[styles.holdHint, { color: th.muted }]}>Invest in a project from its page to build positions.</Text>
+        )}
+
+        {/* creations — what you minted, earning on the Market */}
+        {creations.length > 0 && (
+          <>
+            <Text style={[styles.secTitle, { color: th.text }]}>{t('Creations')}</Text>
+            <View style={{ gap: 10 }}>
+              {creations.slice(0, 6).map((c) => (
+                <View key={c.id} style={[styles.holdRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+                  <View style={[styles.holdTile, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 18 }}>{c.emoji}</Text></View>
+                  <View style={styles.flex}>
+                    <Text style={[styles.holdName, { color: th.text }]} numberOfLines={1}>{c.title}</Text>
+                    <Text style={[styles.holdChg, { color: th.muted }]} numberOfLines={1}>{c.rarity ? `${c.rarity} · ` : `${c.surface} · `}⟡{c.rate}/min</Text>
+                  </View>
+                  <Text style={[styles.holdAmt, { color: '#22c55e' }]}>⟡ {c.collected.toLocaleString()}</Text>
+                </View>
+              ))}
+            </View>
+          </>
         )}
 
         {/* activity */}

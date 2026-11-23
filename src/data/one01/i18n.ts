@@ -51,6 +51,10 @@ const HE: Record<string, string> = {
   'Fresh from creators': 'חדש מהיוצרים', You: 'אתה', 'Listed · live': 'מפורסם · פעיל', earned: 'הורווח',
   Owned: 'ברשותך', 'Nothing to collect yet': 'אין מה לאסוף עדיין',
   'Publish in Creator — your work lists here': 'פרסם ב-Creator — העבודה שלך תופיע כאן',
+  // creation studio (chat-style Creator) — 'Creations' already defined in the network section
+  'Make on': 'צור ב-', From: 'מ-', 'Rarity · editions': 'נדירות · מהדורות',
+  'Name it…': 'תן שם…', 'Surprise me': 'הפתע אותי', 'Not enough credits': 'אין מספיק קרדיטים',
+  Change: 'שנה', 'Make another': 'צור עוד', 'Make your first creation': 'צור את היצירה הראשונה שלך',
   // search
   Search: 'חיפוש', Cancel: 'ביטול', 'No results': 'אין תוצאות',
   'Search games, projects, listings…': 'חיפוש משחקים, פרויקטים, פריטים…',

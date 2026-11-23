@@ -326,6 +326,54 @@ export const FRESH_LISTINGS: Record<ProductId, FreshListing[]> = {
   ],
 };
 
+/* ───────────────────────────── Creation studio (chat-style Creator) ───────────────────────────── */
+
+/** Rarity tier for cosmetics — drives edition count, price multiplier, and earn rate. */
+export interface Rarity { id: string; label: string; emoji: string; mult: number; editions: number; }
+export const RARITIES: Rarity[] = [
+  { id: 'common', label: 'Common', emoji: '⚪', mult: 1, editions: 1000 },
+  { id: 'rare', label: 'Rare', emoji: '🔵', mult: 2, editions: 250 },
+  { id: 'epic', label: 'Epic', emoji: '🟣', mult: 4, editions: 50 },
+  { id: 'legendary', label: 'Legendary', emoji: '🟡', mult: 8, editions: 10 },
+];
+
+/** Something you can make in a product's studio, with a one-question style step. */
+export interface Creatable {
+  id: string;
+  title: string;
+  emoji: string;
+  /** Lowercase noun for chat phrasing ("a skin"). */
+  noun: string;
+  /** Base cost in credits (before rarity multiplier). */
+  basePrice: number;
+  /** Cosmetic — gets a rarity + editions step. */
+  hasRarity?: boolean;
+  /** The style question the AI asks. */
+  styleQ: string;
+  styles: { label: string; emoji: string }[];
+}
+
+export const CREATABLES: Record<ProductId, Creatable[]> = {
+  one: [
+    { id: 'agent', title: 'Agent', emoji: '🤖', noun: 'agent', basePrice: 120, styleQ: 'What should it handle?', styles: [{ label: 'Inbox', emoji: '📥' }, { label: 'Research', emoji: '🔎' }, { label: 'Ops', emoji: '⚙️' }, { label: 'Trading', emoji: '📈' }] },
+    { id: 'process', title: 'Process', emoji: '◎', noun: 'process', basePrice: 80, styleQ: 'What kind of run?', styles: [{ label: 'Onboarding', emoji: '🚪' }, { label: 'Launch', emoji: '🚀' }, { label: 'Compliance', emoji: '✅' }, { label: 'Custom', emoji: '✨' }] },
+    { id: 'protocol', title: 'Protocol', emoji: '📜', noun: 'protocol', basePrice: 100, styleQ: 'Encode which policy?', styles: [{ label: 'Payments', emoji: '💳' }, { label: 'Access', emoji: '🔑' }, { label: 'Review', emoji: '🧐' }, { label: 'Custom', emoji: '✨' }] },
+    { id: 'org', title: 'Organization', emoji: '🏢', noun: 'organization', basePrice: 150, styleQ: 'What type of org?', styles: [{ label: 'Team', emoji: '👥' }, { label: 'DAO', emoji: '🗳️' }, { label: 'Brand', emoji: '🏷️' }, { label: 'Studio', emoji: '🎛️' }] },
+  ],
+  winzi: [
+    { id: 'skin', title: 'Skin', emoji: '🎨', noun: 'skin', basePrice: 30, hasRarity: true, styleQ: "What's the vibe?", styles: [{ label: 'Neon', emoji: '🌈' }, { label: 'Phantom', emoji: '👻' }, { label: 'Retro', emoji: '🕹️' }, { label: 'Chrome', emoji: '🪩' }] },
+    { id: 'map', title: 'Map', emoji: '🗺️', noun: 'map', basePrice: 45, styleQ: 'What setting?', styles: [{ label: 'Rooftops', emoji: '🏙️' }, { label: 'Desert', emoji: '🏜️' }, { label: 'Station', emoji: '🛰️' }, { label: 'Void', emoji: '🌌' }] },
+    { id: 'mode', title: 'Game mode', emoji: '🎮', noun: 'game mode', basePrice: 40, styleQ: 'What rules?', styles: [{ label: 'Blitz', emoji: '⚡' }, { label: 'Survival', emoji: '🔥' }, { label: 'Draft', emoji: '📝' }, { label: 'Ranked', emoji: '🏅' }] },
+    { id: 'tournament', title: 'Tournament', emoji: '🏆', noun: 'tournament', basePrice: 50, styleQ: 'What format?', styles: [{ label: 'Solo', emoji: '🧍' }, { label: 'Duo', emoji: '👥' }, { label: 'Squad', emoji: '🛡️' }, { label: 'Open', emoji: '🌍' }] },
+  ],
+  mixstar: [
+    { id: 'format', title: 'Vote format', emoji: '🗳️', noun: 'vote format', basePrice: 20, styleQ: 'How do votes land?', styles: [{ label: 'Ranked', emoji: '🔢' }, { label: 'Duel', emoji: '⚔️' }, { label: 'Team save', emoji: '🛟' }, { label: 'Immunity', emoji: '🛡️' }] },
+    { id: 'promo', title: 'Promo', emoji: '📣', noun: 'promo', basePrice: 25, styleQ: 'What drop?', styles: [{ label: 'Double-vote', emoji: '✖️' }, { label: 'Sponsor', emoji: '🤝' }, { label: 'Social', emoji: '📱' }, { label: 'Flash', emoji: '⚡' }] },
+    { id: 'asset', title: 'Show asset', emoji: '🎬', noun: 'asset', basePrice: 35, hasRarity: true, styleQ: 'What kind of asset?', styles: [{ label: 'AR overlay', emoji: '🪄' }, { label: 'Clip pack', emoji: '🎞️' }, { label: 'Badge', emoji: '🏷️' }, { label: 'Stinger', emoji: '🔊' }] },
+    { id: 'story', title: 'Story branch', emoji: '✦', noun: 'story branch', basePrice: 30, styleQ: 'What fork?', styles: [{ label: 'Twist', emoji: '🌀' }, { label: 'Redemption', emoji: '🕊️' }, { label: 'Rivalry', emoji: '⚔️' }, { label: 'Mystery', emoji: '🔍' }] },
+  ],
+};
+
 /* ───────────────────────────── Home skeleton content (per product) ───────────────────────────── */
 
 export interface HomeCategory {
