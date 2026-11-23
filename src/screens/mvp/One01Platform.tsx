@@ -110,8 +110,8 @@ function shellTheme(homeId: HomeId, appearance: 'light' | 'dark' = 'light'): She
   if (homeId === 'one01') {
     if (appearance === 'dark') {
       return {
-        homeId, mode: 'dark', mark: 'one01', name: 'ONE01', accent: '#10B981', glow: GLOWS.one01,
-        bg: '#0B0D10', surface: '#15181C', surface2: '#1D2126', text: '#F3F6F4', muted: '#8A938E', border: '#262B30',
+        homeId, mode: 'dark', mark: 'one01', name: 'ONE01', accent: '#2DD4A7', glow: '#1E9E8A',
+        bg: '#0A0C12', surface: '#161A24', surface2: '#212736', text: '#EEF1F7', muted: '#8C93A6', border: '#2A3040',
       };
     }
     return {
@@ -119,14 +119,8 @@ function shellTheme(homeId: HomeId, appearance: 'light' | 'dark' = 'light'): She
       bg: '#F6F7F9', surface: '#FFFFFF', surface2: '#EDEFF3', text: '#0E1116', muted: '#6B7280', border: '#E4E7EC',
     };
   }
+  // products keep their own dark brand canvas (the appearance toggle is ONE01-only)
   const p = PRODUCTS[homeId];
-  if (appearance === 'light') {
-    // light variant of a product shell — keeps its accent + glow, light canvas
-    return {
-      homeId, mode: 'light', mark: p.mark, name: p.name, accent: p.accent, glow: GLOWS[homeId],
-      bg: '#F6F7F9', surface: '#FFFFFF', surface2: '#EDEFF3', text: '#0E1116', muted: '#6B7280', border: '#E4E7EC',
-    };
-  }
   return { homeId, mode: 'dark', mark: p.mark, name: p.name, accent: p.accent, glow: GLOWS[homeId], ...p.canvas };
 }
 
@@ -1626,6 +1620,7 @@ function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMar
   const advance = useOne01PlatformStore((s) => s.advanceVenture);
   const buyKit = useOne01PlatformStore((s) => s.buyVentureKit);
   const debit = useOne01PlatformStore((s) => s.debit);
+  const credit = useOne01PlatformStore((s) => s.credit);
   const v = ventures.find((x) => x.id === ventureId);
 
   if (!v) return <View style={styles.flex} />;
@@ -1637,10 +1632,14 @@ function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMar
   const kindCap = v.kind[0].toUpperCase() + v.kind.slice(1);
   const owned = ventureKits[v.id] ?? [];
   const advanceCost = Math.max(20, Math.round(70 * (stageIdx + 1) * (1 - 0.12 * owned.length)));
+  const nextIsFinal = stageIdx + 1 >= ladder.length - 1;
+  const exitReward = v.goal > 0 ? Math.round(v.goal * 1.8) : 400;
   const doAdvance = () => {
     if (atEnd) return;
     if (!debit(advanceCost, `${v.name} · ${ladder[stageIdx + 1]} round`)) { haptic.warning(); onToast(tr(lang, 'Not enough credits')); return; }
-    advance(v.id); haptic.success(); onToast(`${v.name} → ${ladder[stageIdx + 1]}`);
+    advance(v.id); haptic.success();
+    if (nextIsFinal) { credit(exitReward, `Exit · ${v.name}`); onToast(`🎉 ${v.name} · +⟡${exitReward.toLocaleString()}`); }
+    else onToast(`${v.name} → ${ladder[stageIdx + 1]}`);
   };
   const doBuyKit = (k: (typeof VENTURE_KIT)[number]) => {
     if (owned.includes(k.id)) return;
@@ -1684,9 +1683,11 @@ function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMar
 
         <View style={{ marginTop: 22 }}>
           <Pressable onPress={doAdvance} disabled={atEnd} style={({ pressed }) => [styles.ccCreate, { backgroundColor: atEnd ? th.surface2 : th.accent }, pressed && { opacity: 0.85 }]}>
-            <Text style={[styles.ccCreateTxt, { color: atEnd ? th.muted : ctaFg }]}>{atEnd ? tr(lang, 'At final stage') : `${tr(lang, 'Advance to')} ${ladder[stageIdx + 1]} · ⟡${advanceCost}`}</Text>
+            <Text style={[styles.ccCreateTxt, { color: atEnd ? th.muted : ctaFg }]}>{atEnd ? `🦄 ${tr(lang, 'Graduated')}` : nextIsFinal ? `${tr(lang, 'Graduate')} · ⟡${advanceCost}` : `${tr(lang, 'Advance to')} ${ladder[stageIdx + 1]} · ⟡${advanceCost}`}</Text>
           </Pressable>
-          {!atEnd && owned.length > 0 && <Text style={[styles.ccCardSub, { color: th.muted, textAlign: 'center', marginTop: 6 }]}>{owned.length} {tr(lang, 'kit · cheaper rounds')}</Text>}
+          {atEnd
+            ? <Text style={[styles.ccCardSub, { color: th.muted, textAlign: 'center', marginTop: 6 }]}>{tr(lang, 'Live in the home')}</Text>
+            : <Text style={[styles.ccCardSub, { color: th.muted, textAlign: 'center', marginTop: 6 }]}>{nextIsFinal ? `${tr(lang, 'Exit pays')} +⟡${exitReward.toLocaleString()}` : owned.length > 0 ? `${owned.length} ${tr(lang, 'kit · cheaper rounds')}` : `${tr(lang, 'Exit pays')} +⟡${exitReward.toLocaleString()}`}</Text>}
         </View>
 
         {/* kit — buy for this venture: adds funding + cheaper rounds */}

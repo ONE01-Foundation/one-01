@@ -64,6 +64,7 @@ const HE: Record<string, string> = {
   // ventures (ONE01 factory)
   Stage: 'שלב', Funding: 'גיוס', 'raised of': 'גויס מתוך', 'At final stage': 'בשלב האחרון',
   Kit: 'ערכה', raised: 'גויס', 'kit · cheaper rounds': 'ערכות · סבבים זולים יותר', 'Helps your venture': 'עוזר למיזם שלך',
+  Graduate: 'סיים', Graduated: 'בוגר', 'Live in the home': 'חי בבית', 'Exit pays': 'אקזיט משלם',
   'Advance to': 'קדם ל-', 'Pitch deck kit': 'ערכת מצגת', 'Buy in the Market': 'קנה בשוק',
   'View in Projects': 'צפה בפרויקטים', 'No ventures yet — launch one above.': 'אין עדיין מיזמים — השק אחד למעלה.',
   'Your ventures': 'המיזמים שלך', 'View venture': 'צפה במיזם',
