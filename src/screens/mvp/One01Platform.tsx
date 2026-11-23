@@ -91,13 +91,14 @@ import {
   type ShellTheme,
   type ShellHero,
   type SurfacePillar,
+  type HomeCategory,
 } from '../../data/one01/platform';
 
 type HomeId = 'one01' | ProductId;
 type Tab = 'home' | 'market' | 'create';
 type DrawerKind = 'main' | 'people' | 'events' | 'stats' | 'feed';
 /** Descriptor for the main-section ("Projects"/"Games"/…) focused drawer page. */
-type MainDrawer = { label: string; homeId: HomeId; items: HomeItem[]; layout: 'rows' | 'cards'; onOpenItem: (item: HomeItem) => void };
+type MainDrawer = { label: string; homeId: HomeId; items: HomeItem[]; layout: 'rows' | 'cards'; categories: HomeCategory[]; cardKind: DetailKind; onOpenItem: (item: HomeItem) => void };
 /** A platform search result (a home item or a Market listing). */
 type SearchResult = { type: 'item'; item: HomeItem } | { type: 'market'; pillar: SurfacePillar };
 type ProfileTab = 'posts' | 'notifs' | 'about';
@@ -300,6 +301,8 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     homeId,
     items: homeCfg.items,
     layout: homeCfg.layout,
+    categories: homeCfg.categories,
+    cardKind: mainCardKind,
     onOpenItem: (item) => { setDrawer(null); openDetail(homeCfg.layout === 'rows' ? 'project' : mainCardKind, item); },
   };
 
@@ -543,18 +546,20 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSetting
         </View>
         <View style={styles.flex} />
 
-        {/* wallet → quick menu on hover, full window on click */}
-        <View onPointerEnter={() => setMenu('wallet')} onPointerLeave={close} style={styles.navHover}>
-          <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
-          {menu === 'wallet' && <WalletDrop th={th} lang={lang} onOpenFull={() => { close(); onWallet(); }} />}
-        </View>
+        {/* wallet + profile grouped with a tight gap (separate chips, no pill) so the
+            row's wide gap doesn't open a big space between them */}
+        <View style={styles.navAccount}>
+          {/* wallet → quick menu on hover, full window on click */}
+          <View onPointerEnter={() => setMenu('wallet')} onPointerLeave={close} style={styles.navHover}>
+            <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
+            {menu === 'wallet' && <WalletDrop th={th} lang={lang} onOpenFull={() => { close(); onWallet(); }} />}
+          </View>
 
-        <View style={{ width: 22 }} />
-
-        {/* profile → account menu on hover, full window on click */}
-        <View onPointerEnter={() => setMenu('profile')} onPointerLeave={close} style={styles.navHover}>
-          <ProfileBtn th={th} onPress={() => { close(); onProfile(); }} />
-          {menu === 'profile' && <ProfileDrop th={th} lang={lang} onSettings={() => { close(); onSettings(); }} onExit={() => { close(); onExit(); }} onOpenFull={() => { close(); onProfile(); }} />}
+          {/* profile → account menu on hover, full window on click */}
+          <View onPointerEnter={() => setMenu('profile')} onPointerLeave={close} style={styles.navHover}>
+            <ProfileBtn th={th} onPress={() => { close(); onProfile(); }} />
+            {menu === 'profile' && <ProfileDrop th={th} lang={lang} onSettings={() => { close(); onSettings(); }} onExit={() => { close(); onExit(); }} onOpenFull={() => { close(); onProfile(); }} />}
+          </View>
         </View>
       </View>
     </LinearGradient>
@@ -690,7 +695,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
   const extras = HOME_EXTRAS[th.homeId];
   const slides = th.homeId === 'one01' ? FEATURED_SLIDES.one : FEATURED_SLIDES[th.homeId];
   const { width } = useWindowDimensions();
-  const colW = wide ? CW : Math.min(width, 600) - 36;
+  const colW = wide ? Math.min(width - 88, 980) : Math.min(width, 600) - 36;
   const [cat, setCat] = useState('all');
   const ventures = useOne01PlatformStore((s) => s.ventures);
   const baseItems = cat === 'all' ? home.items : home.items.filter((it) => it.cat === cat);
@@ -739,11 +744,11 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
             // background fades from a brand-tinted colour (bottom-left, under the text)
             // to transparent (top-right, under the art) — reveals the page behind it
             const colors: [string, string, string] = th.mode === 'dark'
-              ? [`${th.glow}F2`, `${th.glow}59`, `${th.glow}00`]
-              : ['#E6EAF1', '#E6EAF1AA', '#E6EAF100'];
+              ? [`${th.glow}E6`, `${th.glow}2E`, `${th.glow}00`]
+              : ['#E6EAF1', '#E6EAF144', '#E6EAF100'];
             return (
               <Pressable key={i} onPress={() => onOpenBanner(s)}>
-                <LinearGradient colors={colors} locations={[0, 0.52, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={[styles.banner, { width: colW }]}>
+                <LinearGradient colors={colors} locations={[0, 0.44, 0.9]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={[styles.banner, { width: colW }]}>
                   {s.art ? <Text style={styles.bannerArt} allowFontScaling={false}>{s.art}</Text> : null}
                   <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{s.badge}</Text></View>
                   <View style={styles.bannerFooter}>
@@ -835,9 +840,9 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
                   <View style={styles.showCard}>
                     <Text style={styles.showArt} allowFontScaling={false}>{it.emoji}</Text>
                     <LinearGradient colors={['transparent', `${it.bg?.[0] ?? '#3B5BDB'}F2`]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+                    {it.metric ? <View style={styles.viewersBadge}><View style={styles.liveDot} /><Text style={styles.viewersTxt}>{it.metric}</Text></View> : null}
                     <View style={styles.showFooter}>
                       <Text style={styles.showName} numberOfLines={1}>{it.title}</Text>
-                      {it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : null}
                     </View>
                   </View>
                 </Pressable>
@@ -884,7 +889,7 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
 
 function drawerIcon(kind: DrawerKind, color: string, size = 17) {
   switch (kind) {
-    case 'people': return <PeopleIcon size={size} color={color} />;
+    case 'people': return <UserIcon size={size} color={color} />;
     case 'events': return <CalendarIcon size={size} color={color} />;
     case 'stats': return <ChartIcon size={size} color={color} />;
     case 'feed': default: return <BoltIcon size={size} color={color} />;
@@ -957,6 +962,9 @@ function HomeDrawers({ th, extras, wide, onOpenDrawer, lang }: { th: ShellTheme;
 
 function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBack, onScroll, lang }: { th: ShellTheme; kind: DrawerKind; extras: HomeExtras; main?: MainDrawer; wide?: boolean; topPad?: number; onBack: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void; lang: Lang }) {
   const insets = useSafeAreaInsets();
+  const { width: winW } = useWindowDimensions();
+  const bodyW = Math.min(winW - 88, 980);
+  const [cat, setCat] = useState('all');
   const rawTitle = kind === 'main' ? (main?.label ?? '') : kind === 'people' ? extras.people.label : kind === 'events' ? extras.events.label : kind === 'stats' ? extras.stats.label : extras.feed.label;
   const title = tr(lang, rawTitle);
 
@@ -966,7 +974,7 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
     <View style={styles.flex}>
       {/* pinned header — title stays while the body scrolls; ✕ on the right */}
       <View style={[styles.drawerHeader, { paddingTop: wide ? topPad + 44 : 8, borderBottomColor: th.border }]}>
-        <View style={[styles.drawerHeaderRow, wide && styles.drawerBodyWide]}>
+        <View style={[styles.drawerHeaderRow, wide && { width: bodyW }]}>
           <View style={styles.drawerHeadIcon}>{headIcon}</View>
           <Text style={[styles.drawerBigTitle, { color: th.text }]} numberOfLines={1}>{title}</Text>
           <View style={styles.flex} />
@@ -977,7 +985,7 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
       </View>
 
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 10, paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }}>
-        <View style={[styles.drawerBody, wide && styles.drawerBodyWide]}>
+        <View style={[styles.drawerBody, wide && { width: bodyW }]}>
           {kind === 'main' && main && (
             main.layout === 'rows' ? (
               <View style={styles.drawerList}>
@@ -997,20 +1005,63 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
                 ))}
               </View>
             ) : (
-              <View style={styles.drawerCardGrid}>
-                {main.items.map((it) => (
-                  <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={styles.drawerCardWrap}>
-                    <LinearGradient colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.drawerArtCard}>
-                      {it.live && <View style={styles.liveBadge}><View style={styles.liveDot} /><Text style={styles.liveTxt}>{it.metric}</Text></View>}
-                      {it.mark ? <View style={styles.artMark}><Mark mark={it.mark} size={46} accent={markAccent(it.mark)} eye={DARK_TILE} /></View> : <Text style={styles.artEmoji}>{it.emoji}</Text>}
-                      <View style={styles.artFooter}>
-                        <Text style={styles.artTitle}>{it.title}</Text>
-                        {!it.live && it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : it.cta ? <View style={styles.artCta}><Text style={styles.artCtaTxt}>{tr(lang, it.cta)}</Text></View> : null}
-                      </View>
-                    </LinearGradient>
-                  </Pressable>
-                ))}
-              </View>
+              <>
+                {main.categories.length > 1 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.drawerCatRow}>
+                    {main.categories.map((c) => {
+                      const on = c.id === cat;
+                      return (
+                        <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: 'transparent' }]}>
+                          {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
+                          <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{tr(lang, c.label)}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+                <View style={styles.drawerCardGrid}>
+                  {main.items.filter((it) => cat === 'all' || it.cat === cat).map((it) => {
+                    const tint = it.bg?.[0] ?? '#3B5BDB';
+                    if (main.cardKind === 'show') {
+                      return (
+                        <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={[styles.drawerCardWrap, wide && styles.drawerCardWrapWide]}>
+                          <View style={styles.drawerShowCard}>
+                            <Text style={styles.drawerShowArt} allowFontScaling={false}>{it.emoji}</Text>
+                            <LinearGradient colors={['transparent', `${tint}F2`]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+                            {it.metric ? <View style={styles.viewersBadge}><View style={styles.liveDot} /><Text style={styles.viewersTxt}>{it.metric}</Text></View> : null}
+                            <View style={styles.showFooter}><Text style={styles.showName} numberOfLines={1}>{it.title}</Text></View>
+                          </View>
+                        </Pressable>
+                      );
+                    }
+                    if (main.cardKind === 'game') {
+                      return (
+                        <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={[styles.drawerCardWrap, wide && styles.drawerCardWrapWide]}>
+                          <View style={styles.drawerGameCard}>
+                            <LinearGradient colors={['transparent', `${tint}E6`]} locations={[0.4, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
+                            <Text style={styles.drawerGameArt} allowFontScaling={false}>{it.emoji}</Text>
+                            <View style={styles.gameFooter}>
+                              <Text style={styles.gameName} numberOfLines={1}>{it.title}</Text>
+                              {it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : null}
+                            </View>
+                          </View>
+                        </Pressable>
+                      );
+                    }
+                    return (
+                      <Pressable key={it.id} onPress={() => main.onOpenItem(it)} style={[styles.drawerCardWrap, wide && styles.drawerCardWrapWide]}>
+                        <LinearGradient colors={it.bg ?? ['#333', '#111']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.drawerArtCard}>
+                          {it.mark ? <View style={styles.artMark}><Mark mark={it.mark} size={46} accent={markAccent(it.mark)} eye={DARK_TILE} /></View> : <Text style={styles.artEmoji}>{it.emoji}</Text>}
+                          <View style={styles.artFooter}>
+                            <Text style={styles.artTitle}>{it.title}</Text>
+                            {it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : it.cta ? <View style={styles.artCta}><Text style={styles.artCtaTxt}>{tr(lang, it.cta)}</Text></View> : null}
+                          </View>
+                        </LinearGradient>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
             )
           )}
 
@@ -1194,7 +1245,7 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
   const sectionTitle = kind === 'market' ? tr(lang, 'Market') : tr(lang, CREATOR[pid].title);
   const cats = HOME[th.homeId].categories;
   const { width } = useWindowDimensions();
-  const colW = wide ? CW : Math.min(width, 600) - 36;
+  const colW = wide ? Math.min(width - 88, 980) : Math.min(width, 600) - 36;
   const [cat, setCat] = useState('all');
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
 
@@ -2053,8 +2104,8 @@ function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary, onTo
 function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; slide: ShellHero; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void; onCta: () => void }) {
   const insets = useSafeAreaInsets();
   const colors: [string, string, string] = th.mode === 'dark'
-    ? [`${th.glow}F2`, `${th.glow}59`, `${th.glow}00`]
-    : ['#E6EAF1', '#E6EAF1AA', '#E6EAF100'];
+    ? [`${th.glow}E6`, `${th.glow}2E`, `${th.glow}00`]
+    : ['#E6EAF1', '#E6EAF144', '#E6EAF100'];
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
   return (
     <View style={styles.flex}>
@@ -2065,7 +2116,7 @@ function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; sli
         </Pressable>
       </View>
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }}>
-        <LinearGradient colors={colors} locations={[0, 0.52, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.bannerHero}>
+        <LinearGradient colors={colors} locations={[0, 0.44, 0.9]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.bannerHero}>
           {slide.art ? <Text style={styles.bannerArt} allowFontScaling={false}>{slide.art}</Text> : null}
           <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{slide.badge}</Text></View>
           <Text style={[styles.bannerHeroTitle, { color: th.text }]}>{slide.title}</Text>
@@ -2191,6 +2242,9 @@ const styles = StyleSheet.create({
   desktopLinks: { flexDirection: 'row', gap: 26 },
   navLink: { fontSize: 15, fontWeight: '600' },
 
+  /* desktop account group — wallet + profile kept close (no pill) */
+  navAccount: { flexDirection: 'row', alignItems: 'center', gap: 16, zIndex: 60 },
+
   /* desktop hover dropdowns */
   navHover: { position: 'relative', zIndex: 60 },
   navDrop: { position: 'absolute', top: '100%', paddingTop: 10, zIndex: 100 },
@@ -2290,6 +2344,8 @@ const styles = StyleSheet.create({
   showArt: { position: 'absolute', right: 8, top: 2, fontSize: 118, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 16 },
   showFooter: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   showName: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  viewersBadge: { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.42)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  viewersTxt: { fontSize: 12, fontWeight: '800', color: '#fff' },
   artMark: { alignItems: 'center', justifyContent: 'center', marginTop: 24 },
   artCta: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
   artCtaTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },
@@ -2350,7 +2406,6 @@ const styles = StyleSheet.create({
   drawerHeader: { paddingHorizontal: 18, paddingBottom: 14, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
   drawerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' },
   drawerBody: { width: '100%', paddingHorizontal: 18 },
-  drawerBodyWide: { width: 640, maxWidth: '100%' },
   drawerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: 18 },
   drawerBigTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3 },
   drawerList: { gap: 10 },
@@ -2359,7 +2414,13 @@ const styles = StyleSheet.create({
   drawerEventCard: { borderRadius: 18, padding: 16, height: 118, justifyContent: 'space-between', overflow: 'hidden' },
   drawerCardGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   drawerCardWrap: { width: '48%' },
+  drawerCardWrapWide: { width: '31.5%' },
   drawerArtCard: { width: '100%', height: 180, borderRadius: 18, padding: 14, justifyContent: 'space-between', overflow: 'hidden' },
+  drawerCatRow: { gap: 8, paddingBottom: 14 },
+  drawerGameCard: { width: '100%', height: 180, borderRadius: 18, overflow: 'hidden', justifyContent: 'flex-end', padding: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.06)' },
+  drawerGameArt: { position: 'absolute', top: 14, left: 0, right: 0, textAlign: 'center', fontSize: 76, transform: [{ rotate: '-10deg' }], textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 15 },
+  drawerShowCard: { width: '100%', height: 150, borderRadius: 18, overflow: 'hidden', justifyContent: 'flex-end', padding: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.06)' },
+  drawerShowArt: { position: 'absolute', right: 2, top: 2, fontSize: 100, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 16 },
 
   /* surface view */
   surfaceHead: { fontSize: 22, fontWeight: '800' },
