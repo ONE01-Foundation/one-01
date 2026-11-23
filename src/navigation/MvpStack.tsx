@@ -287,6 +287,14 @@ function HomeWithOverlays() {
   // space, and opens your first process. Gated on `metOne` (auth-proof — anon
   // auth flips hasCompletedOnboarding too early to use here). completeMeetOne
   // flips metOne in-store, which re-renders into the real home below.
+  // ONE01 Platform — an Expo port of the ONE Platform (the shared layer: ONE /
+  // Winzi / MixStar apps on one set of rails). It is the DEFAULT on web
+  // (app.one01.io) and has its own onboarding, so it runs BEFORE the ONE
+  // first-run conversation; exiting returns to the classic ONE home.
+  if (homeMode === 'platform') {
+    return <One01Platform onExit={() => useMvpStore.getState().setHomeMode('classic')} />;
+  }
+
   if (!metOne) {
     return <MeetOne onDone={() => { /* flags flip in-store → home shows */ }} />;
   }
@@ -296,13 +304,6 @@ function HomeWithOverlays() {
   // to the classic home.
   if (homeMode === 'one01') {
     return <One01Studio onExit={() => useMvpStore.getState().setHomeMode('classic')} />;
-  }
-
-  // ONE01 Platform — an Expo port of the ONE Platform (the shared layer: ONE /
-  // Winzi / MixStar apps on one set of rails). Separate full-surface mode;
-  // exit returns to the classic home.
-  if (homeMode === 'platform') {
-    return <One01Platform onExit={() => useMvpStore.getState().setHomeMode('classic')} />;
   }
 
   return (

@@ -120,6 +120,13 @@ function shellTheme(homeId: HomeId, appearance: 'light' | 'dark' = 'light'): She
     };
   }
   const p = PRODUCTS[homeId];
+  if (appearance === 'light') {
+    // light variant of a product shell — keeps its accent + glow, light canvas
+    return {
+      homeId, mode: 'light', mark: p.mark, name: p.name, accent: p.accent, glow: GLOWS[homeId],
+      bg: '#F6F7F9', surface: '#FFFFFF', surface2: '#EDEFF3', text: '#0E1116', muted: '#6B7280', border: '#E4E7EC',
+    };
+  }
   return { homeId, mode: 'dark', mark: p.mark, name: p.name, accent: p.accent, glow: GLOWS[homeId], ...p.canvas };
 }
 
@@ -195,13 +202,21 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   };
 
-  // web mobile: tint the browser status bar (theme-color) to the current product
+  // web mobile: tint the browser chrome (status bar / toolbar) + the root paint to
+  // the current product, so the safe-area regions match instead of the ONE app's light
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
     const bg = shellTheme(homeId, appearance).bg;
-    let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
-    if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name', 'theme-color'); document.head.appendChild(meta); }
+    // replace any existing theme-color metas (the base build ships light ones)
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.parentNode && m.parentNode.removeChild(m));
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'theme-color');
     meta.setAttribute('content', bg);
+    document.head.appendChild(meta);
+    try {
+      document.documentElement.style.backgroundColor = bg;
+      if (document.body) document.body.style.backgroundColor = bg;
+    } catch { /* no DOM */ }
   }, [homeId, appearance]);
 
   // tapping a notification / feed post jumps to whatever it's about

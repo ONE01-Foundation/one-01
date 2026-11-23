@@ -6,6 +6,7 @@
  */
 
 import { useMemo } from 'react';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -461,7 +462,8 @@ export const useMvpStore = create<MvpStore>()(
       pendingHomeInput: null,
       celebration: null,
       plan: 'free',
-      homeMode: 'classic',
+      // app.one01.io (web) opens straight into the ONE01 Platform; the native ONE app keeps its classic home
+      homeMode: Platform.OS === 'web' ? 'platform' : 'classic',
       connections: {},
       enabledTools: {},
       memories: [],
