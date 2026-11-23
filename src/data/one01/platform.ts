@@ -290,6 +290,42 @@ export const CREATOR: Record<ProductId, CreatorSurface> = {
   },
 };
 
+/* ───────────────────────────── Fresh creator listings (Creator → Market loop) ───────────────────────────── */
+
+/** A creation someone published from Creator, now listed for sale on the Market.
+ *  Your own published creations join this shelf alongside these seeded ones. */
+export interface FreshListing {
+  id: string;
+  title: string;
+  emoji: string;
+  /** Who published it (a name from the community / NETWORK). */
+  by: string;
+  byEmoji: string;
+  tagline: string;
+  /** Credits to buy it. */
+  price: number;
+  /** Buyers so far (seed figure). */
+  sales: number;
+}
+
+export const FRESH_LISTINGS: Record<ProductId, FreshListing[]> = {
+  one: [
+    { id: 'fl_one_1', title: 'KYC fast-track protocol', emoji: '📜', by: 'bolt', byEmoji: '🧑‍🔧', tagline: 'Clears onboarding in 3 steps', price: 180, sales: 212 },
+    { id: 'fl_one_2', title: 'Inbox triage agent', emoji: '🤖', by: 'orbit', byEmoji: '🧑‍🚀', tagline: 'Sorts & drafts while you sleep', price: 140, sales: 489 },
+    { id: 'fl_one_3', title: 'Launch checklist process', emoji: '◎', by: 'devk', byEmoji: '🧑‍💻', tagline: 'Ship day, nothing missed', price: 90, sales: 97 },
+  ],
+  winzi: [
+    { id: 'fl_wz_1', title: 'Neon Rooftops map', emoji: '🗺️', by: 'Kofi', byEmoji: '🏓', tagline: 'Fast vertical arena', price: 25, sales: 1340 },
+    { id: 'fl_wz_2', title: 'Phantom skin pack', emoji: '🎨', by: 'pulse', byEmoji: '⚡', tagline: '6 wraps + a VFX trail', price: 40, sales: 820 },
+    { id: 'fl_wz_3', title: 'Low-grav mutator', emoji: '🎮', by: 'Vex', byEmoji: '🔥', tagline: 'Ranked twist weekend', price: 15, sales: 560 },
+  ],
+  mixstar: [
+    { id: 'fl_ms_1', title: 'Duel vote format', emoji: '🗳️', by: 'Remy', byEmoji: '🎭', tagline: 'Head-to-head saves', price: 20, sales: 430 },
+    { id: 'fl_ms_2', title: 'Finale AR overlay', emoji: '🎬', by: 'lune', byEmoji: '👩‍🎨', tagline: 'Live confetti + lower-thirds', price: 35, sales: 275 },
+    { id: 'fl_ms_3', title: 'Backstage pass drop', emoji: '🎫', by: 'Zara', byEmoji: '🎤', tagline: 'Rehearsal feed access', price: 30, sales: 168 },
+  ],
+};
+
 /* ───────────────────────────── Home skeleton content (per product) ───────────────────────────── */
 
 export interface HomeCategory {

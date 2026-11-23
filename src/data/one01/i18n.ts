@@ -47,6 +47,10 @@ const HE: Record<string, string> = {
   'Interface language': 'שפת הממשק',
   'In‑app · virtual': 'באפליקציה · וירטואלי',
   'virtual credits · 30d': 'קרדיטים וירטואליים · 30 ימים',
+  // fresh creator listings (Creator → Market loop)
+  'Fresh from creators': 'חדש מהיוצרים', You: 'אתה', 'Listed · live': 'מפורסם · פעיל', earned: 'הורווח',
+  Owned: 'ברשותך', 'Nothing to collect yet': 'אין מה לאסוף עדיין',
+  'Publish in Creator — your work lists here': 'פרסם ב-Creator — העבודה שלך תופיע כאן',
   // search
   Search: 'חיפוש', Cancel: 'ביטול', 'No results': 'אין תוצאות',
   'Search games, projects, listings…': 'חיפוש משחקים, פרויקטים, פריטים…',

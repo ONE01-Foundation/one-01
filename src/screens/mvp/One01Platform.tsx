@@ -68,6 +68,7 @@ import {
   FEATURED_SLIDES,
   MARKET,
   CREATOR,
+  FRESH_LISTINGS,
   HOME,
   HOME_EXTRAS,
   SWITCHER_APPS,
@@ -219,7 +220,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const buildPillar = (p: SurfacePillar, surface: string) => {
     publishCreation({ title: p.title, emoji: p.emoji, kind: p.id, surface });
     haptic.success();
-    showToast(`Published “${p.title}” — now earning`);
+    showToast(`Published “${p.title}” — now live on the Market`);
   };
   const onSearchResult = (res: SearchResult) => {
     setSearchOpen(false);
@@ -288,7 +289,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
 
       <View style={styles.flex}>
         {tab === 'home' && <HomeContent key={homeId} th={th} wide={wide} topPad={topPad} bottomPad={bottomPad} onOpen={openDetail} onOpenDrawer={(k) => setDrawer({ kind: k })} onOpenBanner={(s) => setBannerSlide(s)} onOpenSearch={() => setSearchOpen(true)} lang={lang} />}
-        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
+        {tab === 'market' && <SurfaceView th={th} wide={wide} kind="market" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} onGoCreate={() => setTab('create')} />}
         {tab === 'create' && <SurfaceView th={th} wide={wide} kind="create" topPad={topPad} bottomPad={bottomPad} onBuy={buyPillar} onOpenMarket={openMarketDetail} onBuild={buildPillar} onToast={showToast} lang={lang} />}
       </View>
 
@@ -976,7 +977,7 @@ function FeedDrawer({ th, lines }: { th: ShellTheme; lines: FeedLineLite[] }) {
 
 /* ─────────────────────────────── market / create ─────────────────────────────── */
 
-function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, onBuild, onToast, lang }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void; onBuild: (p: SurfacePillar, surface: string) => void; onToast: (m: string) => void; lang: Lang }) {
+function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, onBuild, onToast, lang, onGoCreate }: { th: ShellTheme; wide: boolean; kind: 'market' | 'create'; topPad: number; bottomPad: number; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onOpenMarket: (p: SurfacePillar) => void; onBuild: (p: SurfacePillar, surface: string) => void; onToast: (m: string) => void; lang: Lang; onGoCreate?: () => void }) {
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
   const s = kind === 'market' ? MARKET[pid] : CREATOR[pid];
   const sectionTitle = kind === 'market' ? tr(lang, 'Market') : tr(lang, CREATOR[pid].title);
@@ -1007,6 +1008,9 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
             );
           })}
         </ScrollView>
+
+        {/* fresh creator listings — the Creator → Market loop (Market tab only) */}
+        {kind === 'market' && <FreshMarket th={th} pid={pid} onBuy={onBuy} onToast={onToast} lang={lang} onGoCreate={onGoCreate} />}
 
         {/* section header */}
         <View style={styles.sectionHead}>
@@ -1087,6 +1091,80 @@ function CreatorCreations({ th, onToast, lang }: { th: ShellTheme; onToast: (m: 
           );
         })}
       </View>
+    </>
+  );
+}
+
+/* ─────────────────────────────── fresh creator listings (Creator → Market loop) ─────────────────────────────── */
+
+/** Published creations on sale on the Market — your own listings first, then the community's. */
+function FreshMarket({ th, pid, onBuy, onToast, lang, onGoCreate }: { th: ShellTheme; pid: ProductId; onBuy: (price: string, title: string, kind: 'market' | 'create') => boolean; onToast: (m: string) => void; lang: Lang; onGoCreate?: () => void }) {
+  const creations = useOne01PlatformStore((s) => s.creations);
+  const transactions = useOne01PlatformStore((s) => s.transactions);
+  const collect = useOne01PlatformStore((s) => s.collectEarnings);
+  const mine = useMemo(() => creations.filter((c) => c.surface === th.name), [creations, th.name]);
+  const fresh = FRESH_LISTINGS[pid];
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!mine.length) return;
+    const t = setInterval(() => setTick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [mine.length]);
+
+  const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  const owned = (title: string) => transactions.some((t) => t.label === `Market · ${title}`);
+
+  return (
+    <>
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionIcon}>🧑‍🎨</Text>
+        <Text style={[styles.sectionTitle, { color: th.text }]}>{tr(lang, 'Fresh from creators')}</Text>
+        <Text style={[styles.sectionCount, { color: th.muted }]}>({mine.length + fresh.length})</Text>
+      </View>
+      <View style={styles.rowsWrap}>
+        {/* your own published creations, now listed on the Market */}
+        {mine.map((c) => {
+          const pending = pendingEarnings(c);
+          return (
+            <View key={c.id} style={[styles.projRow, { backgroundColor: th.surface, borderColor: th.accent }]}>
+              <View style={[styles.pillarEmoji, { backgroundColor: th.surface2, width: 48, height: 48, borderRadius: 14 }]}><Text style={{ fontSize: 22 }}>{c.emoji}</Text></View>
+              <View style={styles.flex}>
+                <View style={styles.row}>
+                  <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{c.title}</Text>
+                  <View style={[styles.youChip, { backgroundColor: th.accent }]}><Text style={[styles.youChipTxt, { color: ctaFg }]}>{tr(lang, 'You')}</Text></View>
+                </View>
+                <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{tr(lang, 'Listed · live')} · ⟡{c.collected.toLocaleString()} {tr(lang, 'earned')}</Text>
+              </View>
+              <Pressable onPress={() => { const got = collect(c.id); onToast(got > 0 ? `+⟡${got}` : tr(lang, 'Nothing to collect yet')); }} style={({ pressed }) => [styles.ctaPill, { backgroundColor: pending > 0 ? th.accent : th.surface2 }, pressed && { opacity: 0.8 }]}>
+                <Text style={[styles.ctaPillTxt, { color: pending > 0 ? ctaFg : th.muted }]}>{tr(lang, 'Collect')} ⟡{pending}</Text>
+              </Pressable>
+            </View>
+          );
+        })}
+
+        {/* community creations you can buy */}
+        {fresh.map((f) => {
+          const have = owned(f.title);
+          return (
+            <View key={f.id} style={[styles.projRow, { backgroundColor: th.surface, borderColor: th.border }]}>
+              <View style={[styles.pillarEmoji, { backgroundColor: th.surface2, width: 48, height: 48, borderRadius: 14 }]}><Text style={{ fontSize: 22 }}>{f.emoji}</Text></View>
+              <View style={styles.flex}>
+                <Text style={[styles.projName, { color: th.text }]} numberOfLines={1}>{f.title}</Text>
+                <Text style={[styles.projSub, { color: th.muted }]} numberOfLines={1}>{f.byEmoji} {f.by} · {f.tagline}</Text>
+              </View>
+              <Pressable disabled={have} onPress={() => onBuy(`⟡${f.price}`, f.title, 'market')} style={({ pressed }) => [styles.ctaPill, { backgroundColor: have ? th.surface2 : th.accent }, pressed && !have && { opacity: 0.8 }]}>
+                <Text style={[styles.ctaPillTxt, { color: have ? th.muted : ctaFg }]}>{have ? `✓ ${tr(lang, 'Owned')}` : `${tr(lang, 'Get')} ⟡${f.price}`}</Text>
+              </Pressable>
+            </View>
+          );
+        })}
+      </View>
+
+      {!mine.length && onGoCreate && (
+        <Pressable onPress={onGoCreate} style={({ pressed }) => [styles.freshHint, { borderColor: th.border }, pressed && { opacity: 0.7 }]}>
+          <Text style={[styles.freshHintTxt, { color: th.muted }]}>{tr(lang, 'Publish in Creator — your work lists here')} ›</Text>
+        </Pressable>
+      )}
     </>
   );
 }
@@ -1602,6 +1680,12 @@ const styles = StyleSheet.create({
   pillarDetail: { fontSize: 13, lineHeight: 19 },
   price: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 5 },
   priceTxt: { fontSize: 13, fontWeight: '700' },
+
+  /* fresh creator listings */
+  youChip: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 8 },
+  youChipTxt: { fontSize: 10.5, fontWeight: '800' },
+  freshHint: { borderWidth: StyleSheet.hairlineWidth, borderStyle: 'dashed', borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginTop: 10 },
+  freshHintTxt: { fontSize: 13, fontWeight: '600' },
 
   /* sheets */
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 26 },
