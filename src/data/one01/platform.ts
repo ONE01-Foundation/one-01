@@ -400,6 +400,15 @@ export const MARKET_ONE01: MarketSurface = {
   ],
 };
 
+/** Kit a venture can buy from its page — each adds funding and makes rounds cheaper. */
+export interface VentureKit { id: string; title: string; emoji: string; price: number; boost: number; }
+export const VENTURE_KIT: VentureKit[] = [
+  { id: 'deck', title: 'Pitch deck kit', emoji: '📊', price: 120, boost: 1500 },
+  { id: 'landing', title: 'Landing page', emoji: '🌐', price: 80, boost: 900 },
+  { id: 'captable', title: 'Cap table', emoji: '📈', price: 60, boost: 700 },
+  { id: 'intros', title: 'Investor intros', emoji: '🤝', price: 150, boost: 2200 },
+];
+
 /* ───────────────────────────── Home skeleton content (per product) ───────────────────────────── */
 
 export interface HomeCategory {

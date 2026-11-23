@@ -63,6 +63,7 @@ const HE: Record<string, string> = {
   'Sure — change it.': 'בטח — בוא נשנה.',
   // ventures (ONE01 factory)
   Stage: 'שלב', Funding: 'גיוס', 'raised of': 'גויס מתוך', 'At final stage': 'בשלב האחרון',
+  Kit: 'ערכה', raised: 'גויס', 'kit · cheaper rounds': 'ערכות · סבבים זולים יותר', 'Helps your venture': 'עוזר למיזם שלך',
   'Advance to': 'קדם ל-', 'Pitch deck kit': 'ערכת מצגת', 'Buy in the Market': 'קנה בשוק',
   'View in Projects': 'צפה בפרויקטים', 'No ventures yet — launch one above.': 'אין עדיין מיזמים — השק אחד למעלה.',
   'Your ventures': 'המיזמים שלך', 'View venture': 'צפה במיזם',

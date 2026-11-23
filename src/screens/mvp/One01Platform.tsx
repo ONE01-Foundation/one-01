@@ -70,6 +70,7 @@ import {
   FEATURED_SLIDES,
   MARKET,
   MARKET_ONE01,
+  VENTURE_KIT,
   CREATOR,
   FRESH_LISTINGS,
   CREATABLES,
@@ -1606,7 +1607,10 @@ function CreatorChat({ th, wide, topPad, bottomPad, onToast, onOpenWallet, onOpe
 function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMarket }: { ventureId: string | null; th: ShellTheme; lang: Lang; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void; onToast: (m: string) => void; onOpenMarket: () => void }) {
   const insets = useSafeAreaInsets();
   const ventures = useOne01PlatformStore((s) => s.ventures);
+  const ventureKits = useOne01PlatformStore((s) => s.ventureKits);
   const advance = useOne01PlatformStore((s) => s.advanceVenture);
+  const buyKit = useOne01PlatformStore((s) => s.buyVentureKit);
+  const debit = useOne01PlatformStore((s) => s.debit);
   const v = ventures.find((x) => x.id === ventureId);
 
   if (!v) return <View style={styles.flex} />;
@@ -1616,7 +1620,18 @@ function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMar
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
   const pct = v.goal > 0 ? Math.min(1, v.raised / v.goal) : (stageIdx + 1) / ladder.length;
   const kindCap = v.kind[0].toUpperCase() + v.kind.slice(1);
-  const doAdvance = () => { if (atEnd) return; advance(v.id); haptic.success(); onToast(`${v.name} → ${ladder[stageIdx + 1]}`); };
+  const owned = ventureKits[v.id] ?? [];
+  const advanceCost = Math.max(20, Math.round(70 * (stageIdx + 1) * (1 - 0.12 * owned.length)));
+  const doAdvance = () => {
+    if (atEnd) return;
+    if (!debit(advanceCost, `${v.name} · ${ladder[stageIdx + 1]} round`)) { haptic.warning(); onToast(tr(lang, 'Not enough credits')); return; }
+    advance(v.id); haptic.success(); onToast(`${v.name} → ${ladder[stageIdx + 1]}`);
+  };
+  const doBuyKit = (k: (typeof VENTURE_KIT)[number]) => {
+    if (owned.includes(k.id)) return;
+    if (!debit(k.price, `Kit · ${k.title}`)) { haptic.warning(); onToast(tr(lang, 'Not enough credits')); return; }
+    buyKit(v.id, k.id, k.boost); haptic.success(); onToast(v.goal > 0 ? `+⟡${k.boost.toLocaleString()} raised` : `${k.title} ✓`);
+  };
 
   return (
     <View style={styles.flex}>
@@ -1652,15 +1667,31 @@ function VentureSheet({ ventureId, th, lang, close, onScroll, onToast, onOpenMar
           </>
         )}
 
-        <View style={{ gap: 10, marginTop: 26 }}>
+        <View style={{ marginTop: 22 }}>
           <Pressable onPress={doAdvance} disabled={atEnd} style={({ pressed }) => [styles.ccCreate, { backgroundColor: atEnd ? th.surface2 : th.accent }, pressed && { opacity: 0.85 }]}>
-            <Text style={[styles.ccCreateTxt, { color: atEnd ? th.muted : ctaFg }]}>{atEnd ? tr(lang, 'At final stage') : `${tr(lang, 'Advance to')} ${ladder[stageIdx + 1]}`}</Text>
+            <Text style={[styles.ccCreateTxt, { color: atEnd ? th.muted : ctaFg }]}>{atEnd ? tr(lang, 'At final stage') : `${tr(lang, 'Advance to')} ${ladder[stageIdx + 1]} · ⟡${advanceCost}`}</Text>
           </Pressable>
-          <Pressable onPress={onOpenMarket} style={[styles.ccCard, { backgroundColor: th.surface, borderColor: th.border }]}>
-            <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 22 }}>📊</Text></View>
-            <View style={styles.flex}><Text style={[styles.ccCardTitle, { color: th.text }]}>{tr(lang, 'Pitch deck kit')}</Text><Text style={[styles.ccCardSub, { color: th.muted }]}>{tr(lang, 'Buy in the Market')}</Text></View>
-            <Text style={[styles.ccCardPlus, { color: th.accent }]}>›</Text>
-          </Pressable>
+          {!atEnd && owned.length > 0 && <Text style={[styles.ccCardSub, { color: th.muted, textAlign: 'center', marginTop: 6 }]}>{owned.length} {tr(lang, 'kit · cheaper rounds')}</Text>}
+        </View>
+
+        {/* kit — buy for this venture: adds funding + cheaper rounds */}
+        <Text style={[styles.vSecTitle, { color: th.muted }]}>{tr(lang, 'Kit')}</Text>
+        <View style={{ gap: 10 }}>
+          {VENTURE_KIT.map((k) => {
+            const have = owned.includes(k.id);
+            return (
+              <Pressable key={k.id} disabled={have} onPress={() => doBuyKit(k)} style={({ pressed }) => [styles.ccCard, { backgroundColor: th.surface, borderColor: have ? th.accent : th.border }, pressed && !have && { opacity: 0.85 }]}>
+                <View style={[styles.ccCardEmoji, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 20 }}>{k.emoji}</Text></View>
+                <View style={styles.flex}>
+                  <Text style={[styles.ccCardTitle, { color: th.text }]}>{k.title}</Text>
+                  <Text style={[styles.ccCardSub, { color: th.muted }]}>{v.goal > 0 ? `+⟡${k.boost.toLocaleString()} ${tr(lang, 'raised')}` : tr(lang, 'Helps your venture')}</Text>
+                </View>
+                {have
+                  ? <View style={[styles.statusChip, { backgroundColor: th.surface2, borderColor: th.border }]}><Text style={[styles.statusChipTxt, { color: th.muted }]}>✓ {tr(lang, 'Owned')}</Text></View>
+                  : <View style={[styles.getPill, { backgroundColor: th.accent }]}><Text style={[styles.getPillTxt, { color: ctaFg }]}>⟡{k.price}</Text></View>}
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
     </View>

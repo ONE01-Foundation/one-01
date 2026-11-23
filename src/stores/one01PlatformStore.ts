@@ -197,6 +197,8 @@ interface One01PlatformState {
   creations: UserCreation[];
   /** Ventures you spun up on ONE01 (the factory). */
   ventures: Venture[];
+  /** Kit items a venture owns (ventureId → kit ids), bought from its page. */
+  ventureKits: Record<string, string[]>;
   /** ONE01 shell appearance (products keep their own dark theme). */
   appearance: 'light' | 'dark';
   /** UI language. */
@@ -229,6 +231,8 @@ interface One01PlatformState {
   createVenture: (input: { name: string; emoji: string; kind: string; sector: string }) => void;
   /** Advance a venture to the next stage (and raise funds, for ventures). */
   advanceVenture: (id: string) => void;
+  /** Attach a bought kit item to a venture and add its funding boost. */
+  buyVentureKit: (ventureId: string, kitId: string, boost: number) => void;
   resetDemo: () => void;
 }
 
@@ -242,6 +246,7 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       positions: {},
       creations: [],
       ventures: [],
+      ventureKits: {},
       appearance: 'light',
       lang: 'en',
       notifsSeenAt: 0,
@@ -359,7 +364,17 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
           }),
         })),
 
-      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], notifsSeenAt: 0, follows: {} }),
+      buyVentureKit: (ventureId, kitId, boost) =>
+        set((s) => {
+          const owned = s.ventureKits[ventureId] ?? [];
+          if (owned.includes(kitId)) return {};
+          return {
+            ventureKits: { ...s.ventureKits, [ventureId]: [...owned, kitId] },
+            ventures: s.ventures.map((v) => (v.id === ventureId && v.goal > 0 ? { ...v, raised: Math.min(v.goal, v.raised + boost) } : v)),
+          };
+        }),
+
+      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], ventureKits: {}, notifsSeenAt: 0, follows: {} }),
     }),
     { name: 'one01_platform_v1', version: 1, storage: createJSONStorage(() => platStorage) },
   ),
