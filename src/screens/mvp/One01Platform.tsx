@@ -26,6 +26,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -445,15 +446,17 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const seenAt = useOne01PlatformStore((s) => s.notifsSeenAt);
   const unread = useMemo(() => buildNotifs(transactions).filter((n) => n.ts > seenAt).length, [transactions, seenAt]);
+  const avatarUri = useOne01PlatformStore((s) => s.avatarUri);
   const onAccent = th.accent === '#F9D800' ? '#000' : '#fff';
   return (
     <Pressable onPress={onPress} style={styles.profileBtn} hitSlop={8}>
       <View style={styles.avatarWrap}>
+        {/* the accent ring frames the avatar (kept full); photo fills it when set */}
         <View style={[styles.avatar, { borderColor: th.accent, backgroundColor: th.surface2 }]}>
-          <UserIcon size={22} color={th.muted} />
+          {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.avatarImg} /> : <UserIcon size={22} color={th.muted} />}
           {unread > 0 && (
-            <View style={[styles.profileBadge, { backgroundColor: th.accent, borderColor: th.bg }]}>
-              <Text style={[styles.profileBadgeTxt, { color: onAccent }]}>{unread > 9 ? '9+' : unread}</Text>
+            <View style={[styles.profileBadge, { borderColor: th.bg }]}>
+              <Text style={styles.profileBadgeTxt}>{unread > 9 ? '9+' : unread}</Text>
             </View>
           )}
         </View>
@@ -540,21 +543,18 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSetting
         </View>
         <View style={styles.flex} />
 
-        {/* wallet + profile docked together as one account cluster */}
-        <View style={[styles.navCluster, { backgroundColor: th.surface, borderColor: th.border }]}>
-          {/* wallet → quick menu on hover, full window on click */}
-          <View onPointerEnter={() => setMenu('wallet')} onPointerLeave={close} style={styles.navHover}>
-            <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
-            {menu === 'wallet' && <WalletDrop th={th} lang={lang} onOpenFull={() => { close(); onWallet(); }} />}
-          </View>
+        {/* wallet → quick menu on hover, full window on click */}
+        <View onPointerEnter={() => setMenu('wallet')} onPointerLeave={close} style={styles.navHover}>
+          <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
+          {menu === 'wallet' && <WalletDrop th={th} lang={lang} onOpenFull={() => { close(); onWallet(); }} />}
+        </View>
 
-          <View style={[styles.clusterDivider, { backgroundColor: th.border }]} />
+        <View style={{ width: 22 }} />
 
-          {/* profile → account menu on hover, full window on click */}
-          <View onPointerEnter={() => setMenu('profile')} onPointerLeave={close} style={styles.navHover}>
-            <ProfileBtn th={th} onPress={() => { close(); onProfile(); }} />
-            {menu === 'profile' && <ProfileDrop th={th} lang={lang} onSettings={() => { close(); onSettings(); }} onExit={() => { close(); onExit(); }} onOpenFull={() => { close(); onProfile(); }} />}
-          </View>
+        {/* profile → account menu on hover, full window on click */}
+        <View onPointerEnter={() => setMenu('profile')} onPointerLeave={close} style={styles.navHover}>
+          <ProfileBtn th={th} onPress={() => { close(); onProfile(); }} />
+          {menu === 'profile' && <ProfileDrop th={th} lang={lang} onSettings={() => { close(); onSettings(); }} onExit={() => { close(); onExit(); }} onOpenFull={() => { close(); onProfile(); }} />}
         </View>
       </View>
     </LinearGradient>
@@ -828,6 +828,30 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
                   </LinearGradient>
                   <Text style={[styles.projCubeName, { color: th.text }]} numberOfLines={1}>{it.title}</Text>
                   <Text style={[styles.projCubeSub, { color: th.muted }]} numberOfLines={1}>{it.subtitle}</Text>
+                </Pressable>
+              ) : cardKind === 'show' ? (
+                /* show "card" — wide rectangle: big art backdrop + transparent→colour scrim */
+                <Pressable key={it.id} onPress={() => onOpen(cardKind, it)}>
+                  <View style={styles.showCard}>
+                    <Text style={styles.showArt} allowFontScaling={false}>{it.emoji}</Text>
+                    <LinearGradient colors={['transparent', `${it.bg?.[0] ?? '#3B5BDB'}F2`]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+                    <View style={styles.showFooter}>
+                      <Text style={styles.showName} numberOfLines={1}>{it.title}</Text>
+                      {it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : null}
+                    </View>
+                  </View>
+                </Pressable>
+              ) : cardKind === 'game' ? (
+                /* game "cube" — square: transparent→colour gradient with a big centred cut-out */
+                <Pressable key={it.id} onPress={() => onOpen(cardKind, it)}>
+                  <View style={styles.gameCard}>
+                    <LinearGradient colors={['transparent', `${it.bg?.[0] ?? '#3B5BDB'}E6`]} locations={[0.4, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
+                    <Text style={styles.gameArt} allowFontScaling={false}>{it.emoji}</Text>
+                    <View style={styles.gameFooter}>
+                      <Text style={styles.gameName} numberOfLines={1}>{it.title}</Text>
+                      {it.metric ? <View style={styles.artMetric}><View style={styles.artDot} /><Text style={styles.artMetricTxt}>{it.metric}</Text></View> : null}
+                    </View>
+                  </View>
                 </Pressable>
               ) : (
                 <Pressable key={it.id} onPress={() => onOpen(cardKind, it)}>
@@ -2137,8 +2161,9 @@ const styles = StyleSheet.create({
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   profileBtn: { alignItems: 'center', justifyContent: 'center' },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  profileBadge: { position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3, zIndex: 3 },
-  profileBadgeTxt: { fontSize: 10, fontWeight: '800' },
+  avatarImg: { width: 40, height: 40, borderRadius: 20 },
+  profileBadge: { position: 'absolute', top: -6, right: -6, minWidth: 21, height: 21, borderRadius: 10.5, borderWidth: 2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, zIndex: 3, backgroundColor: '#FF3B30' },
+  profileBadgeTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },
   notifTitle: { fontSize: 20, fontWeight: '800' },
   notifRow: { flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, padding: 12 },
   notifTile: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -2165,10 +2190,6 @@ const styles = StyleSheet.create({
   navWordmark: { fontSize: 20, fontWeight: '900', letterSpacing: 1 },
   desktopLinks: { flexDirection: 'row', gap: 26 },
   navLink: { fontSize: 15, fontWeight: '600' },
-
-  /* desktop account cluster (wallet docked to profile) */
-  navCluster: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 16, paddingRight: 10, paddingVertical: 7, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, zIndex: 60 },
-  clusterDivider: { width: 1, height: 26, borderRadius: 1, alignSelf: 'center' },
 
   /* desktop hover dropdowns */
   navHover: { position: 'relative', zIndex: 60 },
@@ -2257,6 +2278,18 @@ const styles = StyleSheet.create({
   /* artwork cards */
   artCard: { width: 168, height: 196, borderRadius: 18, padding: 14, justifyContent: 'space-between', overflow: 'hidden' },
   artEmoji: { fontSize: 54, textAlign: 'center', marginTop: 16 },
+
+  /* game cube — transparent→colour gradient, big centred cut-out art */
+  gameCard: { width: 158, height: 182, borderRadius: 22, overflow: 'hidden', justifyContent: 'flex-end', padding: 15, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.06)' },
+  gameArt: { position: 'absolute', top: 18, left: 0, right: 0, textAlign: 'center', fontSize: 82, transform: [{ rotate: '-10deg' }], textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 15 },
+  gameFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  gameName: { fontSize: 17, fontWeight: '800', color: '#fff', textTransform: 'uppercase', letterSpacing: 0.3 },
+
+  /* show card — wide rectangle, big art backdrop + colour scrim */
+  showCard: { width: 272, height: 152, borderRadius: 18, overflow: 'hidden', justifyContent: 'flex-end', padding: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.06)' },
+  showArt: { position: 'absolute', right: 8, top: 2, fontSize: 118, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 16 },
+  showFooter: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  showName: { fontSize: 18, fontWeight: '800', color: '#fff' },
   artMark: { alignItems: 'center', justifyContent: 'center', marginTop: 24 },
   artCta: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
   artCtaTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },

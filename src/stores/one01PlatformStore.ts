@@ -209,8 +209,12 @@ interface One01PlatformState {
   notifsSeenAt: number;
   /** Per-person follow overrides (id → following?). Absent = use the seed default. */
   follows: Record<string, boolean>;
+  /** User-set profile photo (data URI or file URI); null = default icon. */
+  avatarUri: string | null;
 
   setEntered: (v: boolean) => void;
+  /** Set (or clear) the profile photo. */
+  setAvatar: (uri: string | null) => void;
   setAppearance: (v: 'light' | 'dark') => void;
   setLang: (v: 'en' | 'he') => void;
   markNotifsSeen: () => void;
@@ -253,8 +257,10 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       lang: 'en',
       notifsSeenAt: 0,
       follows: {},
+      avatarUri: null,
 
       setEntered: (v) => set({ entered: v }),
+      setAvatar: (uri) => set({ avatarUri: uri }),
       setAppearance: (v) => set({ appearance: v }),
       setLang: (v) => set({ lang: v }),
       markNotifsSeen: () => set({ notifsSeenAt: Date.now() }),
@@ -376,7 +382,7 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
           };
         }),
 
-      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], ventureKits: {}, notifsSeenAt: 0, follows: {} }),
+      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], ventureKits: {}, notifsSeenAt: 0, follows: {}, avatarUri: null }),
     }),
     { name: 'one01_platform_v1', version: 1, storage: createJSONStorage(() => platStorage) },
   ),

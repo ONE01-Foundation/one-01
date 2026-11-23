@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, Modal, Animated, PanResponder, Switch,
+  View, Text, StyleSheet, Pressable, ScrollView, Modal, Animated, PanResponder, Switch, Image, Platform,
   useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 
@@ -35,6 +35,51 @@ const PROJ_META: Record<string, { name: string; mark: MarkId }> = {
 };
 
 const DARK_TILE = '#131317';
+
+/** Pick a profile photo. On web: a file input, downscaled to a small JPEG data
+ *  URI so it survives in persisted storage. On native: the OS image library. */
+function pickAvatar(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = () => {
+        const file = input.files && input.files[0];
+        if (!file) return resolve(null);
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = document.createElement('img');
+          img.onload = () => {
+            const max = 256;
+            const scale = Math.min(1, max / Math.max(img.width, img.height));
+            const w = Math.round(img.width * scale) || max;
+            const h = Math.round(img.height * scale) || max;
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return resolve(typeof reader.result === 'string' ? reader.result : null);
+            ctx.drawImage(img, 0, 0, w, h);
+            try { resolve(canvas.toDataURL('image/jpeg', 0.82)); } catch { resolve(typeof reader.result === 'string' ? reader.result : null); }
+          };
+          img.onerror = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+          img.src = reader.result as string;
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    });
+  }
+  return (async () => {
+    try {
+      const ImagePicker = require('expo-image-picker');
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7, allowsEditing: true, aspect: [1, 1] });
+      if (res.canceled || !res.assets || !res.assets[0]) return null;
+      return res.assets[0].uri as string;
+    } catch { return null; }
+  })();
+}
 
 function ago(ts: number): string {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
@@ -189,6 +234,9 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
   const [tab, setTab] = useState<'posts' | 'notifs' | 'about'>(initialTab);
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const creations = useOne01PlatformStore((s) => s.creations);
+  const avatarUri = useOne01PlatformStore((s) => s.avatarUri);
+  const setAvatar = useOne01PlatformStore((s) => s.setAvatar);
+  const changeAvatar = async () => { const uri = await pickAvatar(); if (uri) { haptic.success(); setAvatar(uri); } };
   const activity = useMemo(() => buildPosts(transactions, creations, th.accent), [transactions, creations, th.accent]);
   const notifs = useMemo(() => buildNotifs(transactions), [transactions]);
   const seedPosts: Post[] = [
@@ -212,9 +260,12 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={[`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cover} />
         <View style={styles.avatarRow}>
-          <View style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}><UserIcon size={40} color="#fff" /></View>
+          <Pressable onPress={changeAvatar} style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}>
+            {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.bigAvatarImg} /> : <UserIcon size={40} color="#fff" />}
+            <View style={[styles.avatarCam, { backgroundColor: th.accent, borderColor: th.bg }]}><Text style={{ fontSize: 12 }}>📷</Text></View>
+          </Pressable>
           <View style={styles.flex} />
-          <Pressable style={[styles.editBtn, { backgroundColor: th.accent }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{t('Edit profile')}</Text></Pressable>
+          <Pressable onPress={changeAvatar} style={[styles.editBtn, { backgroundColor: th.accent }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{t('Edit profile')}</Text></Pressable>
         </View>
         <View style={styles.pad}>
           <Text style={[styles.pName, { color: th.text }]}>Nobody</Text>
@@ -697,6 +748,8 @@ const styles = StyleSheet.create({
   cover: { height: 120 },
   avatarRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 18, marginTop: -40 },
   bigAvatar: { width: 92, height: 92, borderRadius: 46, borderWidth: 4, alignItems: 'center', justifyContent: 'center' },
+  bigAvatarImg: { width: 84, height: 84, borderRadius: 42 },
+  avatarCam: { position: 'absolute', right: 0, bottom: 0, width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   editBtn: { borderRadius: 999, paddingHorizontal: 20, paddingVertical: 9, marginBottom: 6 },
   editTxt: { fontSize: 14, fontWeight: '700' },
   pad: { paddingHorizontal: 18, paddingTop: 12 },

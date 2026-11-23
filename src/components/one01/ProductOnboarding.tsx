@@ -131,9 +131,10 @@ export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig;
 
   return (
     <View style={[styles.root, { backgroundColor: p.bg, paddingTop: insets.top }]}>
+      {/* glow spans the FULL window (behind the centered phone column) so on desktop
+          it reads as an ambient backdrop instead of a cut mobile-width dome */}
+      <Glow color={config.glow} mode={config.mode} w={winW} h={glowH} id={config.id} />
       <View style={[styles.frame, { width: frameW }]}>
-        <Glow color={config.glow} mode={config.mode} w={frameW} h={glowH} id={config.id} />
-
         {step === 'splash' && (
           <Pressable style={styles.splash} onPress={() => setStep('welcome')}>
             <View style={styles.splashMark}>
