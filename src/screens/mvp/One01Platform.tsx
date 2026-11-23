@@ -445,19 +445,22 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const seenAt = useOne01PlatformStore((s) => s.notifsSeenAt);
   const unread = useMemo(() => buildNotifs(transactions).filter((n) => n.ts > seenAt).length, [transactions, seenAt]);
-  const badgeFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  const onAccent = th.accent === '#F9D800' ? '#000' : '#fff';
   return (
     <Pressable onPress={onPress} style={styles.profileBtn} hitSlop={8}>
-      <View style={[styles.lvlPill, { backgroundColor: th.surface, borderColor: th.border }]}>
-        <Text style={[styles.lvlTxt, { color: th.text }]}>LVL 13</Text>
-      </View>
-      <View style={[styles.avatar, { borderColor: th.accent, backgroundColor: th.surface2 }]}>
-        <UserIcon size={22} color={th.muted} />
-        {unread > 0 && (
-          <View style={[styles.profileBadge, { backgroundColor: th.accent, borderColor: th.bg }]}>
-            <Text style={[styles.profileBadgeTxt, { color: badgeFg }]}>{unread > 9 ? '9+' : unread}</Text>
-          </View>
-        )}
+      <View style={styles.avatarWrap}>
+        <View style={[styles.avatar, { borderColor: th.accent, backgroundColor: th.surface2 }]}>
+          <UserIcon size={22} color={th.muted} />
+          {unread > 0 && (
+            <View style={[styles.profileBadge, { backgroundColor: th.accent, borderColor: th.bg }]}>
+              <Text style={[styles.profileBadgeTxt, { color: onAccent }]}>{unread > 9 ? '9+' : unread}</Text>
+            </View>
+          )}
+        </View>
+        {/* level reads as a badge pinned under the avatar, not a chip beside it */}
+        <View style={[styles.lvlPill, { backgroundColor: th.accent, borderColor: th.bg }]}>
+          <Text style={[styles.lvlTxt, { color: onAccent }]}>LVL 13</Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -537,18 +540,21 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSetting
         </View>
         <View style={styles.flex} />
 
-        {/* wallet → quick menu on hover, full window on click */}
-        <View onPointerEnter={() => setMenu('wallet')} onPointerLeave={close} style={styles.navHover}>
-          <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
-          {menu === 'wallet' && <WalletDrop th={th} lang={lang} onOpenFull={() => { close(); onWallet(); }} />}
-        </View>
+        {/* wallet + profile docked together as one account cluster */}
+        <View style={[styles.navCluster, { backgroundColor: th.surface, borderColor: th.border }]}>
+          {/* wallet → quick menu on hover, full window on click */}
+          <View onPointerEnter={() => setMenu('wallet')} onPointerLeave={close} style={styles.navHover}>
+            <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
+            {menu === 'wallet' && <WalletDrop th={th} lang={lang} onOpenFull={() => { close(); onWallet(); }} />}
+          </View>
 
-        <View style={{ width: 16 }} />
+          <View style={[styles.clusterDivider, { backgroundColor: th.border }]} />
 
-        {/* profile → account menu on hover, full window on click */}
-        <View onPointerEnter={() => setMenu('profile')} onPointerLeave={close} style={styles.navHover}>
-          <ProfileBtn th={th} onPress={() => { close(); onProfile(); }} />
-          {menu === 'profile' && <ProfileDrop th={th} lang={lang} onSettings={() => { close(); onSettings(); }} onExit={() => { close(); onExit(); }} onOpenFull={() => { close(); onProfile(); }} />}
+          {/* profile → account menu on hover, full window on click */}
+          <View onPointerEnter={() => setMenu('profile')} onPointerLeave={close} style={styles.navHover}>
+            <ProfileBtn th={th} onPress={() => { close(); onProfile(); }} />
+            {menu === 'profile' && <ProfileDrop th={th} lang={lang} onSettings={() => { close(); onSettings(); }} onExit={() => { close(); onExit(); }} onOpenFull={() => { close(); onProfile(); }} />}
+          </View>
         </View>
       </View>
     </LinearGradient>
@@ -730,10 +736,15 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
           style={{ overflow: wide ? 'hidden' : 'visible', width: colW, borderRadius: 22 }}
         >
           {slides.map((s, i) => {
-            const colors: [string, string] = th.mode === 'dark' ? [`${th.glow}CC`, th.surface] : ['#EDEFF3', '#DCE1E8'];
+            // background fades from a brand-tinted colour (bottom-left, under the text)
+            // to transparent (top-right, under the art) — reveals the page behind it
+            const colors: [string, string, string] = th.mode === 'dark'
+              ? [`${th.glow}F2`, `${th.glow}59`, `${th.glow}00`]
+              : ['#E6EAF1', '#E6EAF1AA', '#E6EAF100'];
             return (
               <Pressable key={i} onPress={() => onOpenBanner(s)}>
-                <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.banner, { width: colW }]}>
+                <LinearGradient colors={colors} locations={[0, 0.52, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={[styles.banner, { width: colW }]}>
+                  {s.art ? <Text style={styles.bannerArt} allowFontScaling={false}>{s.art}</Text> : null}
                   <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{s.badge}</Text></View>
                   <View style={styles.bannerFooter}>
                     <View style={styles.flex}>
@@ -2017,7 +2028,9 @@ function DetailOverlay({ th, wide, kind, item, topInset, onBack, onPrimary, onTo
 
 function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; slide: ShellHero; close: () => void; onScroll?: (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void; onCta: () => void }) {
   const insets = useSafeAreaInsets();
-  const colors: [string, string] = th.mode === 'dark' ? [`${th.glow}CC`, th.surface] : ['#EDEFF3', '#DCE1E8'];
+  const colors: [string, string, string] = th.mode === 'dark'
+    ? [`${th.glow}F2`, `${th.glow}59`, `${th.glow}00`]
+    : ['#E6EAF1', '#E6EAF1AA', '#E6EAF100'];
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
   return (
     <View style={styles.flex}>
@@ -2028,7 +2041,8 @@ function BannerPage({ th, slide, close, onScroll, onCta }: { th: ShellTheme; sli
         </Pressable>
       </View>
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }}>
-        <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bannerHero}>
+        <LinearGradient colors={colors} locations={[0, 0.52, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.bannerHero}>
+          {slide.art ? <Text style={styles.bannerArt} allowFontScaling={false}>{slide.art}</Text> : null}
           <View style={styles.bannerBadge}><Text style={styles.bannerBadgeTxt}>{slide.badge}</Text></View>
           <Text style={[styles.bannerHeroTitle, { color: th.text }]}>{slide.title}</Text>
         </LinearGradient>
@@ -2121,9 +2135,9 @@ const styles = StyleSheet.create({
   surfaceHeadline: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3, marginTop: 2 },
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  profileBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  profileBtn: { alignItems: 'center', justifyContent: 'center' },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  profileBadge: { position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  profileBadge: { position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3, zIndex: 3 },
   profileBadgeTxt: { fontSize: 10, fontWeight: '800' },
   notifTitle: { fontSize: 20, fontWeight: '800' },
   notifRow: { flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, padding: 12 },
@@ -2131,9 +2145,9 @@ const styles = StyleSheet.create({
   notifRowTitle: { fontSize: 14.5, fontWeight: '700' },
   notifRowBody: { fontSize: 12.5, marginTop: 2 },
   notifTime: { fontSize: 11.5, fontWeight: '600' },
-  lvlPill: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  lvlTxt: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3, fontVariant: ['tabular-nums'] },
-  avatarWrap: { width: 44, height: 44 },
+  lvlPill: { marginTop: -9, borderWidth: 2, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1.5, zIndex: 2 },
+  lvlTxt: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.3, fontVariant: ['tabular-nums'] },
+  avatarWrap: { alignItems: 'center' },
   avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   avBadge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   avBadgeTxt: { fontSize: 11, fontWeight: '800' },
@@ -2151,6 +2165,10 @@ const styles = StyleSheet.create({
   navWordmark: { fontSize: 20, fontWeight: '900', letterSpacing: 1 },
   desktopLinks: { flexDirection: 'row', gap: 26 },
   navLink: { fontSize: 15, fontWeight: '600' },
+
+  /* desktop account cluster (wallet docked to profile) */
+  navCluster: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 16, paddingRight: 10, paddingVertical: 7, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, zIndex: 60 },
+  clusterDivider: { width: 1, height: 26, borderRadius: 1, alignSelf: 'center' },
 
   /* desktop hover dropdowns */
   navHover: { position: 'relative', zIndex: 60 },
@@ -2180,7 +2198,8 @@ const styles = StyleSheet.create({
   curveEdge: { position: 'absolute', top: 0, bottom: 0, width: '15%', maxWidth: 220 },
 
   /* banner */
-  banner: { height: 240, borderRadius: 22, padding: 22, marginRight: 12, justifyContent: 'space-between' },
+  banner: { height: 240, borderRadius: 22, padding: 22, marginRight: 12, justifyContent: 'space-between', overflow: 'hidden' },
+  bannerArt: { position: 'absolute', right: 14, top: 10, fontSize: 96, lineHeight: 112, opacity: 0.97, transform: [{ rotate: '-7deg' }], textShadowColor: 'rgba(0,0,0,0.33)', textShadowOffset: { width: 0, height: 7 }, textShadowRadius: 16 },
   bannerBadge: { alignSelf: 'flex-start', backgroundColor: '#33E17A', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 3 },
   bannerBadgeTxt: { fontSize: 12, fontWeight: '800', color: '#05331c' },
   bannerFooter: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },

@@ -132,23 +132,25 @@ export interface ShellHero {
   title: string;
   subtitle: string;
   ctaLabel: string;
+  /** cut-out art that floats on the transparent side of the banner */
+  art?: string;
 }
 
 export const FEATURED_SLIDES: Record<ProductId, ShellHero[]> = {
   one: [
-    { badge: 'ONE01', title: 'Open digital square for makers & fans', subtitle: 'ONE01 is the shared layer: brands, landing pages, and live products meet in one automated marketplace — produce, list, and spend without splitting your stack.', ctaLabel: 'Explore Market' },
-    { badge: 'News', title: 'Faster settlement on fiat rails', subtitle: 'Deposits and withdrawals clear with fewer steps. Wallet limits and corridors apply per product on the same ONE01 identity.', ctaLabel: 'Open wallet' },
-    { badge: 'Featured', title: 'Creator — publish in one flow', subtitle: 'Ship drops and workflows from ONE; reach audiences across apps born on ONE01. Early access for verified accounts.', ctaLabel: 'Try Creator' },
+    { badge: 'ONE01', title: 'Open digital square for makers & fans', subtitle: 'ONE01 is the shared layer: brands, landing pages, and live products meet in one automated marketplace — produce, list, and spend without splitting your stack.', ctaLabel: 'Explore Market', art: '🏛️' },
+    { badge: 'News', title: 'Faster settlement on fiat rails', subtitle: 'Deposits and withdrawals clear with fewer steps. Wallet limits and corridors apply per product on the same ONE01 identity.', ctaLabel: 'Open wallet', art: '⚡' },
+    { badge: 'Featured', title: 'Creator — publish in one flow', subtitle: 'Ship drops and workflows from ONE; reach audiences across apps born on ONE01. Early access for verified accounts.', ctaLabel: 'Try Creator', art: '🎨' },
   ],
   winzi: [
-    { badge: 'Live', title: 'Winzi — skill matches, real stakes', subtitle: 'Built on ONE01: queue into battles, climb ranks, and cash out to your product wallet with the same rails as the rest of the ecosystem.', ctaLabel: 'Browse battles' },
-    { badge: 'News', title: 'Ranked season reset', subtitle: 'Leaderboards refresh Monday UTC. Placement matches determine your starting tier — play three to lock in.', ctaLabel: 'View ranks' },
-    { badge: 'Featured', title: 'Battle rooms — new pools', subtitle: 'Higher buy-ins this week on duel and bracket formats. Spectate live before you jump in.', ctaLabel: 'Enter lobby' },
+    { badge: 'Live', title: 'Winzi — skill matches, real stakes', subtitle: 'Built on ONE01: queue into battles, climb ranks, and cash out to your product wallet with the same rails as the rest of the ecosystem.', ctaLabel: 'Browse battles', art: '🎮' },
+    { badge: 'News', title: 'Ranked season reset', subtitle: 'Leaderboards refresh Monday UTC. Placement matches determine your starting tier — play three to lock in.', ctaLabel: 'View ranks', art: '🏅' },
+    { badge: 'Featured', title: 'Battle rooms — new pools', subtitle: 'Higher buy-ins this week on duel and bracket formats. Spectate live before you jump in.', ctaLabel: 'Enter lobby', art: '🏆' },
   ],
   mixstar: [
-    { badge: 'S1', title: 'MixStar — votes that change the show', subtitle: 'A ONE01 show product: follow contestants, place calls, and watch odds move live as episodes air.', ctaLabel: 'Open market' },
-    { badge: 'News', title: 'Episode 6 — voting closes tonight', subtitle: 'Odds shift after the immunity round. Lock your picks before the window ends in your timezone.', ctaLabel: 'See contestants' },
-    { badge: 'Featured', title: 'Wildcard drop — limited calls', subtitle: 'Double your vote weight on a single contestant this week. One use per account.', ctaLabel: 'Go to market' },
+    { badge: 'S1', title: 'MixStar — votes that change the show', subtitle: 'A ONE01 show product: follow contestants, place calls, and watch odds move live as episodes air.', ctaLabel: 'Open market', art: '⭐' },
+    { badge: 'News', title: 'Episode 6 — voting closes tonight', subtitle: 'Odds shift after the immunity round. Lock your picks before the window ends in your timezone.', ctaLabel: 'See contestants', art: '🗳️' },
+    { badge: 'Featured', title: 'Wildcard drop — limited calls', subtitle: 'Double your vote weight on a single contestant this week. One use per account.', ctaLabel: 'Go to market', art: '🎟️' },
   ],
 };
 
