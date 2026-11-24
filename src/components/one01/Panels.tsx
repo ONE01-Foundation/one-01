@@ -171,15 +171,17 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }
   };
   const onScroll: ScrollHandler = (e) => { scrollY.current = e.nativeEvent.contentOffset.y; };
 
-  // drag down to dismiss from anywhere on the sheet, once the content is at the top.
-  // (The sheet now animates a single `ty` value — the old composed transform was what
-  // swallowed the first swipe; this matches the detail sheet, which closes on one swipe.)
+  // drag down to dismiss. A child ScrollView wins the responder by default, so a plain
+  // onMoveShouldSetPanResponder loses the FIRST downward swipe to it (it scrolls/bounces
+  // instead of closing). We CAPTURE the gesture in the capture phase — but only once it's
+  // a clear downward drag (dy>8, mostly vertical) while the content is at the very top —
+  // so taps and upward scrolls still reach the content, and the sheet closes on one swipe.
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && g.dy > Math.abs(g.dx) * 1.4 && scrollY.current <= 2,
+      onMoveShouldSetPanResponderCapture: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 2 && scrollY.current <= 1,
       onPanResponderMove: (_, g) => { if (g.dy > 0) ty.setValue(g.dy); },
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 100 || g.vy > 0.6) requestClose();
+        if (g.dy > 90 || g.vy > 0.5) requestClose();
         else Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
       },
       onPanResponderTerminate: () => Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start(),
@@ -750,7 +752,7 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
 const styles = StyleSheet.create({
   flex: { flex: 1 },
 
-  sheet: { position: 'absolute', left: 0, right: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  sheet: { position: 'absolute', left: 0, right: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', userSelect: 'none' },
   drag: { paddingTop: 10, paddingBottom: 4, alignItems: 'center' },
   grab: { width: 44, height: 5, borderRadius: 3 },
   winCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
