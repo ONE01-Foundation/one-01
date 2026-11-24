@@ -147,34 +147,42 @@ function Mark({ mark, size }: { mark: MarkId; size: number }) {
 
 /* ─────────────────────────────── SheetWindow ─────────────────────────────── */
 
-export function SheetWindow({ visible, wide, th, onClose, children, dock }: { visible: boolean; wide: boolean; th: ShellTheme; onClose: () => void; children: (close: () => void, onScroll: ScrollHandler) => React.ReactNode; dock?: boolean }) {
+export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }: { visible: boolean; wide: boolean; th: ShellTheme; onClose: () => void; children: (close: () => void, onScroll: ScrollHandler) => React.ReactNode; dock?: boolean; tall?: boolean }) {
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const prog = useRef(new Animated.Value(0)).current;
-  const drag = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(0);
+
+  // tall sheets (profile / wallet) open right up to the status bar
+  const sheetTop = insets.top + (tall ? 8 : 54);
+  const sheetH = winH - sheetTop;
+  const ty = useRef(new Animated.Value(sheetH)).current;
 
   useEffect(() => {
     if (!visible) return;
-    prog.setValue(0); drag.setValue(0); scrollY.current = 0;
+    prog.setValue(0); ty.setValue(sheetH); scrollY.current = 0;
     Animated.spring(prog, { toValue: 1, useNativeDriver: true, bounciness: 4, speed: 12 }).start();
-  }, [visible, prog, drag]);
+    Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 3, speed: 13 }).start();
+  }, [visible, prog, ty, sheetH]);
 
-  const requestClose = () => Animated.timing(prog, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => onClose());
+  const requestClose = () => {
+    Animated.timing(prog, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    Animated.timing(ty, { toValue: sheetH, duration: 220, useNativeDriver: true }).start(() => onClose());
+  };
   const onScroll: ScrollHandler = (e) => { scrollY.current = e.nativeEvent.contentOffset.y; };
 
-  const sheetTop = insets.top + 54;
-  const sheetH = winH - sheetTop;
-
-  // drag down to dismiss from anywhere on the sheet — once the content is scrolled to the top
+  // drag down to dismiss from anywhere on the sheet, once the content is at the top.
+  // (The sheet now animates a single `ty` value — the old composed transform was what
+  // swallowed the first swipe; this matches the detail sheet, which closes on one swipe.)
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5 && scrollY.current <= 2,
-      onPanResponderMove: (_, g) => { if (g.dy > 0) drag.setValue(g.dy); },
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && g.dy > Math.abs(g.dx) * 1.4 && scrollY.current <= 2,
+      onPanResponderMove: (_, g) => { if (g.dy > 0) ty.setValue(g.dy); },
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 120 || g.vy > 0.8) requestClose();
-        else Animated.spring(drag, { toValue: 0, useNativeDriver: true }).start();
+        if (g.dy > 100 || g.vy > 0.6) requestClose();
+        else Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
       },
+      onPanResponderTerminate: () => Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start(),
     }),
   ).current;
 
@@ -203,7 +211,7 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock }: { vi
           </View>
           )
         ) : (
-          <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: Animated.add(prog.interpolate({ inputRange: [0, 1], outputRange: [sheetH, 0] }), drag) }] }]}>
+          <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
             <View style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
             {children(requestClose, onScroll)}
           </Animated.View>
@@ -257,24 +265,23 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
 
   return (
     <View style={styles.flex}>
-      <PanelHead th={th} title={t('Profile')} onClose={close} right={<Pressable onPress={onSettings} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable>} />
+      <PanelHead th={th} title="" onClose={close} right={<Pressable onPress={onSettings} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable>} />
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={[`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cover} />
-        <View style={styles.avatarRow}>
+        {/* centred identity: avatar (with level gauge), name, handle, edit */}
+        <View style={styles.profileHead}>
           <View style={styles.bigAvatarRing}>
-            {/* level-up gauge framing the avatar — fills toward the next level */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none"><LevelRing size={100} progress={progress} track={th.mode === 'dark' ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)'} accent={th.accent} /></View>
             <Pressable onPress={changeAvatar} style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}>
               {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.bigAvatarImg} /> : <UserIcon size={40} color="#fff" />}
               <View style={[styles.avatarCam, { backgroundColor: th.accent, borderColor: th.bg }]}><Text style={{ fontSize: 12 }}>📷</Text></View>
             </Pressable>
           </View>
-          <View style={styles.flex} />
-          <Pressable onPress={changeAvatar} style={[styles.editBtn, { backgroundColor: th.accent }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{t('Edit profile')}</Text></Pressable>
-        </View>
-        <View style={styles.pad}>
           <Text style={[styles.pName, { color: th.text }]}>Nobody</Text>
           <Text style={[styles.pHandle, { color: th.muted }]}>@nobody · on ONE01</Text>
+          <Pressable onPress={changeAvatar} style={({ pressed }) => [styles.editBtn, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{t('Edit profile')}</Text></Pressable>
+        </View>
+        <View style={styles.pad}>
           <View style={[styles.statRow, { borderColor: th.border }]}>
             {stats.map((s, i) => (
               <Pressable key={s.l} disabled={s.l !== 'Friends' || !onOpenNetwork} onPress={onOpenNetwork} style={({ pressed }) => [styles.stat, i < stats.length - 1 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: th.border }, { opacity: pressed ? 0.6 : 1 }]}>
@@ -609,10 +616,14 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const positions = useOne01PlatformStore((s) => s.positions);
   const credit = useOne01PlatformStore((s) => s.credit);
+  const debit = useOne01PlatformStore((s) => s.debit);
   const creations = useOne01PlatformStore((s) => s.creations);
   const [topped, setTopped] = useState(false);
+  const [drew, setDrew] = useState(false);
+  const [section, setSection] = useState<'assets' | 'history'>('assets');
   const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
-  const topUp = () => { haptic.success(); credit(1000, 'Top up · virtual rails'); setTopped(true); setTimeout(() => setTopped(false), 1600); };
+  const topUp = () => { haptic.success(); credit(1000, 'Deposit · virtual rails'); setTopped(true); setTimeout(() => setTopped(false), 1600); };
+  const withdraw = () => { const amt = Math.min(500, balance); if (amt > 0 && debit(amt, 'Withdraw · to fiat rails')) { haptic.success(); setDrew(true); setTimeout(() => setDrew(false), 1600); } else haptic.warning(); };
   // Holdings = your cash credits + real share positions in projects (live-priced)
   const holdings: { id: string; mark: MarkId; name: string; amt: string; sub: string; pl: number | null }[] = [
     { id: 'one01', mark: 'one01', name: 'ONE01 Credits', amt: balance.toLocaleString(), sub: 'Cash balance', pl: null },
@@ -633,46 +644,48 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
 
   return (
     <View style={styles.flex}>
-      <PanelHead th={th} title={t('Wallet')} onClose={close} />
+      <PanelHead th={th} title="" onClose={close} />
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
-        {/* balance card */}
-        <LinearGradient colors={[th.accent, `${th.accent}C0`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balCard}>
+        {/* balance card — a calm, credit-card-style surface (not the bright accent) */}
+        <LinearGradient colors={['#262933', '#14151A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.balCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.08)' }]}>
           <View style={styles.balTop}>
             <View>
-              <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85 }]}>{t('Total balance')}</Text>
-              <Text style={[styles.balAmt, { color: accentFg }]}>⟡ {balance.toLocaleString()}</Text>
+              <Text style={[styles.balLbl, { color: '#C7CBD6' }]}>{t('Total balance')}</Text>
+              <Text style={styles.balAmt}><Text style={{ color: th.accent }}>⟡ </Text><Text style={{ color: '#fff' }}>{balance.toLocaleString()}</Text></Text>
             </View>
             <View style={styles.flex} />
-            <View style={styles.balChg}><Text style={[styles.balChgTxt, { color: accentFg }]}>▲ 6.2%</Text></View>
+            <View style={styles.balChg}><Text style={[styles.balChgTxt, { color: '#34d399' }]}>▲ 6.2%</Text></View>
           </View>
-          <View style={{ marginTop: 6 }}><Sparkline color={accentFg} /></View>
-          <Text style={[styles.balLbl, { color: accentFg, opacity: 0.85, marginTop: 4 }]}>≈ ${balance.toLocaleString()} · {t('virtual credits · 30d')}</Text>
+          <View style={{ marginTop: 6 }}><Sparkline color="#8A8F9C" /></View>
+          <Text style={[styles.balLbl, { color: '#9A9FAC', marginTop: 4 }]}>≈ ${balance.toLocaleString()} · {t('virtual credits · 30d')}</Text>
         </LinearGradient>
 
-        {/* actions — Top up adds virtual credits */}
-        <View style={styles.walletActions}>
-          {([
-            { a: 'Send', icon: '↑' },
-            { a: 'Receive', icon: '↓' },
-            { a: 'Top up', icon: '+' },
-            { a: 'Swap', icon: '⇄' },
-          ] as const).map(({ a, icon }) => {
-            const isTop = a === 'Top up';
-            const label = isTop && topped ? '+⟡1,000' : a;
+        {/* two primary actions: deposit + withdraw */}
+        <View style={styles.wBtnRow}>
+          <Pressable onPress={topUp} style={({ pressed }) => [styles.wBtn, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}>
+            <Text style={[styles.wBtnTxt, { color: accentFg }]}>{topped ? '+⟡1,000' : t('Deposit')}</Text>
+          </Pressable>
+          <Pressable onPress={withdraw} style={({ pressed }) => [styles.wBtn, styles.wBtnAlt, { borderColor: th.border }, pressed && { opacity: 0.7 }]}>
+            <Text style={[styles.wBtnTxt, { color: th.text }]}>{drew ? '−⟡500' : t('Withdraw')}</Text>
+          </Pressable>
+        </View>
+
+        {/* section chips — like the home categories, for wallet sections */}
+        <View style={styles.wTabs}>
+          {([['assets', 'Assets'], ['history', 'History']] as const).map(([k, label]) => {
+            const on = section === k;
             return (
-              <Pressable key={a} onPress={isTop ? topUp : undefined} style={({ pressed }) => [styles.walletAction, pressed && isTop && { opacity: 0.7 }]}>
-                <View style={[styles.walletActionIcon, { backgroundColor: isTop && topped ? th.accent : th.surface, borderColor: isTop && topped ? th.accent : th.border }]}>
-                  <Text style={{ color: isTop && topped ? accentFg : th.text, fontSize: 16 }}>{icon}</Text>
-                </View>
-                <Text style={[styles.walletActionTxt, { color: isTop && topped ? th.accent : th.muted }]}>{isTop && topped ? label : t(label)}</Text>
+              <Pressable key={k} onPress={() => { haptic.select(); setSection(k); }} style={[styles.wTab, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent' }]}>
+                <Text style={[styles.wTabTxt, { color: on ? th.text : th.muted }]}>{t(label)}</Text>
               </Pressable>
             );
           })}
         </View>
 
+        {section === 'assets' ? (
+        <>
         {/* holdings — cash + live-priced project shares */}
-        <Text style={[styles.secTitle, { color: th.text }]}>{t('Holdings')}</Text>
-        <View style={{ gap: 10 }}>
+        <View style={{ gap: 10, marginTop: 6 }}>
           {holdings.map((h) => (
             <View key={h.id} style={[styles.holdRow, { backgroundColor: th.surface, borderColor: th.border }]}>
               <View style={[styles.holdTile, { backgroundColor: DARK_TILE }]}><Mark mark={h.mark} size={24} /></View>
@@ -712,10 +725,9 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
             </View>
           </>
         )}
-
-        {/* activity */}
-        <Text style={[styles.secTitle, { color: th.text }]}>{t('Activity')}</Text>
-        <View style={{ gap: 10 }}>
+        </>
+        ) : (
+        <View style={{ gap: 10, marginTop: 6 }}>
           {tx.map((t) => (
             <View key={t.k} style={[styles.holdRow, { backgroundColor: th.surface, borderColor: th.border }]}>
               <View style={[styles.holdTile, { backgroundColor: th.surface2 }]}><Text style={{ fontSize: 16, color: t.up ? '#22c55e' : '#ef4444' }}>{t.up ? '↓' : '↑'}</Text></View>
@@ -727,6 +739,7 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
             </View>
           ))}
         </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -750,17 +763,17 @@ const styles = StyleSheet.create({
   headTitle: { fontSize: 18, fontWeight: '800' },
 
   /* profile */
-  cover: { height: 120 },
-  avatarRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 18, marginTop: -44 },
+  cover: { height: 110 },
+  profileHead: { alignItems: 'center', paddingHorizontal: 18, marginTop: -50 },
   bigAvatarRing: { width: 100, height: 100, alignItems: 'center', justifyContent: 'center' },
   bigAvatar: { width: 92, height: 92, borderRadius: 46, borderWidth: 4, alignItems: 'center', justifyContent: 'center' },
   bigAvatarImg: { width: 84, height: 84, borderRadius: 42 },
   avatarCam: { position: 'absolute', right: 0, bottom: 0, width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  editBtn: { borderRadius: 999, paddingHorizontal: 20, paddingVertical: 9, marginBottom: 6 },
+  editBtn: { borderRadius: 999, paddingHorizontal: 24, paddingVertical: 9, marginTop: 14 },
   editTxt: { fontSize: 14, fontWeight: '700' },
-  pad: { paddingHorizontal: 18, paddingTop: 12 },
-  pName: { fontSize: 22, fontWeight: '800' },
-  pHandle: { fontSize: 14, marginTop: 2 },
+  pad: { paddingHorizontal: 18, paddingTop: 6 },
+  pName: { fontSize: 22, fontWeight: '800', textAlign: 'center', marginTop: 12 },
+  pHandle: { fontSize: 14, marginTop: 3, textAlign: 'center' },
   statRow: { flexDirection: 'row', marginTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 14 },
   stat: { flex: 1, alignItems: 'center', gap: 3 },
   statV: { fontSize: 16, fontWeight: '800' },
@@ -820,10 +833,13 @@ const styles = StyleSheet.create({
   balChgTxt: { fontSize: 12, fontWeight: '800' },
   balLbl: { fontSize: 13, fontWeight: '600' },
   balAmt: { fontSize: 38, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  walletActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 18 },
-  walletAction: { alignItems: 'center', gap: 7 },
-  walletActionIcon: { width: 48, height: 48, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  walletActionTxt: { fontSize: 12, fontWeight: '600' },
+  wBtnRow: { flexDirection: 'row', gap: 12, marginTop: 18 },
+  wBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  wBtnAlt: { borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'transparent' },
+  wBtnTxt: { fontSize: 15, fontWeight: '800' },
+  wTabs: { flexDirection: 'row', gap: 8, marginTop: 22, marginBottom: 2 },
+  wTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999 },
+  wTabTxt: { fontSize: 13.5, fontWeight: '700' },
   secTitle: { fontSize: 17, fontWeight: '800', marginTop: 26, marginBottom: 12 },
   holdRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12 },
   holdTile: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },

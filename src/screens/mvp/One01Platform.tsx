@@ -356,7 +356,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         </View>
       )}
 
-      <SheetWindow visible={sheet === 'profile'} wide={wide} th={th} onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'profile'} wide={wide} tall th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => (
           <ProfilePage
             th={th}
@@ -373,7 +373,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
           />
         )}
       </SheetWindow>
-      <SheetWindow visible={sheet === 'wallet'} wide={wide} th={th} onClose={() => setSheet(null)}>
+      <SheetWindow visible={sheet === 'wallet'} wide={wide} tall th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
       <SheetWindow visible={sheet === 'network'} wide={wide} th={th} onClose={() => setSheet(null)}>
