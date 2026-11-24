@@ -21,10 +21,10 @@ import Svg, { Path } from 'react-native-svg';
 import { haptic } from '../../utils/haptics';
 import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
-  DepositIcon, WithdrawIcon,
+  DepositIcon, WithdrawIcon, GiftIcon,
 } from './brand';
 import { type ShellTheme, type MarkId, NETWORK, type Person, RARITY_COLOR, levelFor } from '../../data/one01/platform';
-import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, QUESTS, dailyClaimable, nextDailyAmount, dailyRewardFor, nextStreak, rewardsAvailable, DAILY_MAX_DAY, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
 import { supabaseService } from '../../services/supabaseService';
 
@@ -500,6 +500,93 @@ function PersonDetail({ th, person, lang, onBack }: { th: ShellTheme; person: Pe
   );
 }
 
+/** Rewards — a daily streak + one-off quests that pay virtual credits. The daily
+ *  reward escalates with the streak; quests auto-complete from real activity across
+ *  the surfaces (play, create, invest, follow, deposit, profile). */
+export function RewardsPage({ th, close, onScroll, lang }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang }) {
+  const insets = useSafeAreaInsets();
+  const t = (en: string) => tr(lang, en);
+  const state = useOne01PlatformStore();
+  const claimDaily = state.claimDaily;
+  const claimQuest = state.claimQuest;
+  const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
+
+  const claimable = dailyClaimable(state);
+  const todayAmt = nextDailyAmount(state);
+  const upcomingDay = nextStreak(state);
+  const filledDays = state.rewardStreak; // days already claimed
+
+  const onDaily = () => { if (claimDaily() > 0) haptic.success(); else haptic.warning(); };
+  const onQuest = (id: string, reward: number) => { if (claimQuest(id, reward)) haptic.success(); };
+
+  const questRows = QUESTS.map((q) => ({ q, done: q.done(state), claimed: state.claimedQuests.includes(q.id) }));
+  const doneCount = questRows.filter((r) => r.done).length;
+
+  return (
+    <View style={styles.flex}>
+      <PanelHead th={th} title="" onClose={close} />
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
+        <View style={styles.rwHeader}>
+          <GiftIcon size={26} color={th.text} />
+          <View style={styles.flex}>
+            <Text style={[styles.rwTitle, { color: th.text }]}>{t('Rewards')}</Text>
+            <Text style={[styles.rwSub, { color: th.muted }]}>{t('Earn credits every day — no deposit needed')}</Text>
+          </View>
+        </View>
+
+        {/* daily streak card */}
+        <LinearGradient colors={[`${th.glow}`, th.mode === 'dark' ? '#14151A' : '#20222B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.rwCard}>
+          <View style={styles.rwCardTop}>
+            <Text style={styles.rwStreakTxt}>🔥 {filledDays > 0 ? `${filledDays}-${t('day streak')}` : t('Start your streak')}</Text>
+            <View style={styles.flex} />
+            <Text style={styles.rwDayLbl}>{t('Day')} {upcomingDay}</Text>
+          </View>
+          <View style={styles.rwPips}>
+            {Array.from({ length: DAILY_MAX_DAY }).map((_, i) => {
+              const claimedPip = i < filledDays;
+              const nextPip = i === upcomingDay - 1 && claimable;
+              return <View key={i} style={[styles.rwPip, claimedPip ? { backgroundColor: '#fff' } : nextPip ? { backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1.5, borderColor: '#fff' } : { backgroundColor: 'rgba(255,255,255,0.22)' }]} />;
+            })}
+          </View>
+          <Pressable onPress={onDaily} disabled={!claimable} style={({ pressed }) => [styles.rwClaim, { backgroundColor: claimable ? '#fff' : 'rgba(255,255,255,0.18)' }, pressed && claimable && { opacity: 0.85 }]}>
+            <Text style={[styles.rwClaimTxt, { color: claimable ? '#101114' : 'rgba(255,255,255,0.85)' }]}>
+              {claimable ? `${t('Claim')}  ⟡${todayAmt}` : `${t('Claimed today')}  ✓`}
+            </Text>
+          </Pressable>
+          {!claimable && <Text style={styles.rwBack}>{t('Come back tomorrow for')} ⟡{dailyRewardFor(filledDays + 1)}</Text>}
+        </LinearGradient>
+
+        {/* quests */}
+        <View style={styles.rwQuestHead}>
+          <Text style={[styles.secTitle, { color: th.text, marginTop: 4 }]}>{t('Quests')}</Text>
+          <View style={styles.flex} />
+          <Text style={[styles.rwProgress, { color: th.muted }]}>{doneCount}/{QUESTS.length}</Text>
+        </View>
+        <View style={{ gap: 10 }}>
+          {questRows.map(({ q, done, claimed }) => (
+            <View key={q.id} style={[styles.holdRow, { backgroundColor: th.surface, borderColor: th.border }, claimed && { opacity: 0.6 }]}>
+              <View style={[styles.holdTile, { backgroundColor: DARK_TILE }]}><Text style={{ fontSize: 20 }}>{q.emoji}</Text></View>
+              <View style={styles.flex}>
+                <Text style={[styles.holdName, { color: th.text }]}>{t(q.title)}</Text>
+                <Text style={[styles.holdChg, { color: th.muted }]}>{claimed ? t('Claimed') : done ? t('Ready to claim') : t(q.hint)}</Text>
+              </View>
+              {claimed ? (
+                <Text style={{ color: '#22c55e', fontWeight: '800', fontSize: 16 }}>✓</Text>
+              ) : done ? (
+                <Pressable onPress={() => onQuest(q.id, q.reward)} style={({ pressed }) => [styles.rwQuestClaim, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}>
+                  <Text style={[styles.rwQuestClaimTxt, { color: accentFg }]}>⟡{q.reward}</Text>
+                </Pressable>
+              ) : (
+                <Text style={[styles.rwQuestLocked, { color: th.muted }]}>⟡{q.reward}</Text>
+              )}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 /** Followers / Following lists around your ONE — real follow/unfollow toggles. */
 export function NetworkPage({ th, close, onScroll, lang, initialTab = 'followers' }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang; initialTab?: 'followers' | 'following' }) {
   const insets = useSafeAreaInsets();
@@ -728,10 +815,11 @@ function AmountPad({ th, kind, balance, onClose, onConfirm }: {
   );
 }
 
-export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang }) {
+export function WalletPage({ th, close, onScroll, lang, onRewards }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang; onRewards?: () => void }) {
   const insets = useSafeAreaInsets();
   const t = (en: string) => tr(lang, en);
   const balance = useOne01PlatformStore((s) => s.balance);
+  const rewardsOn = useOne01PlatformStore(rewardsAvailable);
   const transactions = useOne01PlatformStore((s) => s.transactions);
   const positions = useOne01PlatformStore((s) => s.positions);
   const credit = useOne01PlatformStore((s) => s.credit);
@@ -793,6 +881,19 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
             <Text style={[styles.wBtnTxt, { color: th.text }]}>{t('Withdraw')}</Text>
           </Pressable>
         </View>
+
+        {/* rewards entry — earn credits without a deposit */}
+        {onRewards && (
+          <Pressable onPress={onRewards} style={({ pressed }) => [styles.rewardsLink, { backgroundColor: th.surface, borderColor: rewardsOn ? th.accent : th.border }, pressed && { opacity: 0.8 }]}>
+            <View style={[styles.holdTile, { backgroundColor: DARK_TILE }]}><GiftIcon size={22} color="#fff" /></View>
+            <View style={styles.flex}>
+              <Text style={[styles.holdName, { color: th.text }]}>{t('Rewards & quests')}</Text>
+              <Text style={[styles.holdChg, { color: th.muted }]}>{rewardsOn ? t('A reward is ready to claim') : t('Earn credits every day')}</Text>
+            </View>
+            {rewardsOn && <View style={[styles.rewardsLinkDot, { backgroundColor: th.accent }]} />}
+            <Text style={{ color: th.muted, fontSize: 18 }}>›</Text>
+          </Pressable>
+        )}
 
         {/* section chips — like the home categories, for wallet sections */}
         <View style={styles.wTabs}>
@@ -988,6 +1089,26 @@ const styles = StyleSheet.create({
   padCta: { borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
   padCtaTxt: { fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
   secTitle: { fontSize: 17, fontWeight: '800', marginTop: 26, marginBottom: 12 },
+  /* rewards */
+  rwHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  rwTitle: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
+  rwSub: { fontSize: 13, marginTop: 1 },
+  rwCard: { borderRadius: 20, padding: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.1)' },
+  rwCardTop: { flexDirection: 'row', alignItems: 'center' },
+  rwStreakTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  rwDayLbl: { color: 'rgba(255,255,255,0.8)', fontSize: 12.5, fontWeight: '700' },
+  rwPips: { flexDirection: 'row', gap: 7, marginTop: 14, marginBottom: 16 },
+  rwPip: { flex: 1, height: 8, borderRadius: 4 },
+  rwClaim: { borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  rwClaimTxt: { fontSize: 15.5, fontWeight: '800' },
+  rwBack: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '600', textAlign: 'center', marginTop: 10 },
+  rwQuestHead: { flexDirection: 'row', alignItems: 'center' },
+  rwProgress: { fontSize: 13, fontWeight: '700', marginTop: 4 },
+  rwQuestClaim: { borderRadius: 12, paddingVertical: 9, paddingHorizontal: 14 },
+  rwQuestClaimTxt: { fontSize: 14, fontWeight: '800' },
+  rwQuestLocked: { fontSize: 14, fontWeight: '700', opacity: 0.6 },
+  rewardsLink: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12, marginTop: 12 },
+  rewardsLinkDot: { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
   holdRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12 },
   holdTile: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   holdName: { fontSize: 15, fontWeight: '700' },

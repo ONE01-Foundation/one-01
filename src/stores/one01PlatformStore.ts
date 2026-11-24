@@ -219,12 +219,22 @@ interface One01PlatformState {
   email: string | null;
   /** How the user signed in: 'google' | 'email' | 'whatsapp' | 'wallet' | 'guest'. */
   authMethod: string | null;
+  /** Rewards: consecutive days the daily reward was claimed. */
+  rewardStreak: number;
+  /** Local 'YYYY-MM-DD' of the last daily claim (null = never). */
+  lastClaimDay: string | null;
+  /** Quest ids already claimed. */
+  claimedQuests: string[];
 
   setEntered: (v: boolean) => void;
   /** Set (or clear) the profile photo. */
   setAvatar: (uri: string | null) => void;
   /** Merge identity fields (name/handle/email/method) set at first sign-in. */
   setProfile: (p: { displayName?: string | null; handle?: string | null; email?: string | null; authMethod?: string | null }) => void;
+  /** Claim today's daily reward; returns the credited amount (0 if already claimed today). */
+  claimDaily: () => number;
+  /** Claim a completed quest's reward once; false if already claimed. */
+  claimQuest: (id: string, amount: number) => boolean;
   setAppearance: (v: 'light' | 'dark') => void;
   setLang: (v: 'en' | 'he') => void;
   markNotifsSeen: () => void;
@@ -252,6 +262,70 @@ interface One01PlatformState {
   resetDemo: () => void;
 }
 
+/* ───────────────────────── rewards (daily streak + quests) ─────────────────────────
+ * A light engagement loop that also bootstraps the economy: a new user starts at 0
+ * credits, and the daily reward + one-off quests give them a way to earn without a
+ * deposit, tying every surface together (play, create, invest, follow, deposit). */
+
+/** Local calendar day key 'YYYY-MM-DD' for a timestamp (defaults to now). */
+function dayKey(ts: number = Date.now()): string {
+  const d = new Date(ts);
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Escalating daily reward by streak day (caps at day 7). */
+const DAILY_LADDER = [25, 40, 60, 90, 120, 160, 250];
+/** Number of days in the streak ladder (for the UI pip row). */
+export const DAILY_MAX_DAY = DAILY_LADDER.length;
+/** Reward amount for a given streak day (caps at the last ladder day). */
+export function dailyRewardFor(streak: number): number {
+  return DAILY_LADDER[Math.min(Math.max(streak, 1), DAILY_LADDER.length) - 1];
+}
+
+/** Is today's daily reward unclaimed? */
+export function dailyClaimable(s: Pick<One01PlatformState, 'lastClaimDay'>): boolean {
+  return s.lastClaimDay !== dayKey();
+}
+
+/** The streak the NEXT claim will land on (continues yesterday's, else resets to 1). */
+export function nextStreak(s: Pick<One01PlatformState, 'lastClaimDay' | 'rewardStreak'>): number {
+  if (s.lastClaimDay === dayKey()) return s.rewardStreak; // already claimed today
+  return s.lastClaimDay === dayKey(Date.now() - 864e5) ? s.rewardStreak + 1 : 1;
+}
+
+/** Amount the next daily claim would grant. */
+export function nextDailyAmount(s: Pick<One01PlatformState, 'lastClaimDay' | 'rewardStreak'>): number {
+  return dailyRewardFor(nextStreak(s));
+}
+
+export interface Quest {
+  id: string;
+  emoji: string;
+  title: string;
+  hint: string;
+  reward: number;
+  done: (s: One01PlatformState) => boolean;
+}
+
+/** One-off quests — progress is derived from existing state, so they auto-complete. */
+export const QUESTS: Quest[] = [
+  { id: 'q_profile', emoji: '🪪', title: 'Complete your profile', hint: 'Add a name and a photo', reward: 50, done: (s) => !!s.displayName && !!s.avatarUri },
+  { id: 'q_deposit', emoji: '💰', title: 'Make your first deposit', hint: 'Top up your wallet', reward: 100, done: (s) => s.transactions.some((t) => /deposit/i.test(t.label)) },
+  { id: 'q_match', emoji: '🏓', title: 'Play a match', hint: 'Win or play any game', reward: 40, done: (s) => s.transactions.some((t) => /match|practice|pong|winzi|game/i.test(t.label)) },
+  { id: 'q_create', emoji: '🎨', title: 'Publish a creation', hint: 'Mint something in Creator', reward: 75, done: (s) => s.creations.length > 0 },
+  { id: 'q_invest', emoji: '📈', title: 'Invest in a project', hint: 'Buy shares from a project page', reward: 60, done: (s) => Object.keys(s.positions).length > 0 },
+  { id: 'q_follow', emoji: '🤝', title: 'Follow 3 people', hint: 'Build your network', reward: 50, done: (s) => Object.values(s.follows).filter(Boolean).length >= 3 },
+  { id: 'q_venture', emoji: '🚀', title: 'Launch a venture', hint: 'Spin one up on ONE01', reward: 120, done: (s) => s.ventures.length > 0 },
+];
+
+/** Any reward to collect? (daily unclaimed, or a completed-but-unclaimed quest.) */
+export function rewardsAvailable(s: One01PlatformState): boolean {
+  if (dailyClaimable(s)) return true;
+  return QUESTS.some((q) => q.done(s) && !s.claimedQuests.includes(q.id));
+}
+
 export const useOne01PlatformStore = create<One01PlatformState>()(
   persist(
     (set, get) => ({
@@ -272,6 +346,9 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       handle: null,
       email: null,
       authMethod: null,
+      rewardStreak: 0,
+      lastClaimDay: null,
+      claimedQuests: [],
 
       setEntered: (v) => set({ entered: v }),
       setAvatar: (uri) => set({ avatarUri: uri }),
@@ -282,6 +359,31 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
           email: p.email !== undefined ? p.email : s.email,
           authMethod: p.authMethod !== undefined ? p.authMethod : s.authMethod,
         })),
+
+      claimDaily: () => {
+        const today = dayKey();
+        const { lastClaimDay, rewardStreak } = get();
+        if (lastClaimDay === today) return 0; // already claimed today
+        const streak = lastClaimDay === dayKey(Date.now() - 864e5) ? rewardStreak + 1 : 1; // continue or reset
+        const amount = dailyRewardFor(streak);
+        set((s) => ({
+          rewardStreak: streak,
+          lastClaimDay: today,
+          balance: s.balance + amount,
+          transactions: [{ id: rid(), label: `Daily reward · day ${streak}`, amount, ts: Date.now() }, ...s.transactions].slice(0, 40),
+        }));
+        return amount;
+      },
+
+      claimQuest: (id, amount) => {
+        if (get().claimedQuests.includes(id)) return false;
+        set((s) => ({
+          claimedQuests: [...s.claimedQuests, id],
+          balance: s.balance + amount,
+          transactions: [{ id: rid(), label: `Quest reward · ${id}`, amount, ts: Date.now() }, ...s.transactions].slice(0, 40),
+        }));
+        return true;
+      },
       setAppearance: (v) => set({ appearance: v }),
       setLang: (v) => set({ lang: v }),
       markNotifsSeen: () => set({ notifsSeenAt: Date.now() }),
@@ -403,7 +505,7 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
           };
         }),
 
-      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], ventureKits: {}, notifsSeenAt: 0, follows: {}, avatarUri: null, displayName: null, handle: null, email: null, authMethod: null }),
+      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], ventureKits: {}, notifsSeenAt: 0, follows: {}, avatarUri: null, displayName: null, handle: null, email: null, authMethod: null, rewardStreak: 0, lastClaimDay: null, claimedQuests: [] }),
     }),
     { name: 'one01_platform_v1', version: 1, storage: createJSONStorage(() => platStorage) },
   ),

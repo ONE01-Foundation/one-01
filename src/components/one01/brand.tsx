@@ -151,6 +151,19 @@ export function BoltIcon({ size = 18, color = '#000000' }: BrandProps) {
   );
 }
 
+/** Gift — rewards / daily streak. */
+export function GiftIcon({ size = 22, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M4 8 H20 V12 H4 Z" stroke={color} strokeWidth={1.7} strokeLinejoin="round" />
+      <Path d="M5.2 12 V19.6 A0.9 0.9 0 0 0 6.1 20.5 H17.9 A0.9 0.9 0 0 0 18.8 19.6 V12" stroke={color} strokeWidth={1.7} strokeLinejoin="round" />
+      <Path d="M12 8 V20.5" stroke={color} strokeWidth={1.7} />
+      <Path d="M12 8 C10.6 4.8, 6.8 5.2, 7.4 7.2 C7.8 8.4, 10 8.1, 12 8 Z" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+      <Path d="M12 8 C13.4 4.8, 17.2 5.2, 16.6 7.2 C16.2 8.4, 14 8.1, 12 8 Z" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 /* ── main section icons (per-home headers) ── */
 
 /** Projects section. */

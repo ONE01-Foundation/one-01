@@ -56,6 +56,7 @@ import {
   StatsIcon,
   DepositIcon,
   WithdrawIcon,
+  GiftIcon,
   BoltIcon,
   ProjectsIcon,
   GamesIcon,
@@ -67,9 +68,9 @@ import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
 import { ProfileSetup, type AuthPrefill } from '../../components/one01/ProfileSetup';
 import { supabaseService, type AuthedUser } from '../../services/supabaseService';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
-import { SheetWindow, ProfilePage, WalletPage, SettingsPage, NetworkPage } from '../../components/one01/Panels';
+import { SheetWindow, ProfilePage, WalletPage, SettingsPage, NetworkPage, RewardsPage } from '../../components/one01/Panels';
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
-import { useOne01PlatformStore, pendingEarnings, buildNotifs, VENTURE_LADDER, type UserCreation, type Venture, type NotifNav } from '../../stores/one01PlatformStore';
+import { useOne01PlatformStore, pendingEarnings, buildNotifs, rewardsAvailable, VENTURE_LADDER, type UserCreation, type Venture, type NotifNav } from '../../stores/one01PlatformStore';
 import { onboardingFor } from '../../data/one01/onboarding';
 import { tr, type Lang } from '../../data/one01/i18n';
 import {
@@ -190,7 +191,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [homeId, setHomeId] = useState<HomeId>('one01');
   const [tab, setTab] = useState<Tab>('home');
   const [onboardFor, setOnboardFor] = useState<ProductId | null>(null);
-  const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings' | 'network'>(null);
+  const [sheet, setSheet] = useState<null | 'wallet' | 'profile' | 'switch' | 'settings' | 'network' | 'rewards'>(null);
   const [profileTab, setProfileTab] = useState<ProfileTab>('posts');
   const [externalApp, setExternalApp] = useState<EcosystemApp | null>(null);
   const [detail, setDetail] = useState<{ kind: DetailKind; item: HomeItem } | null>(null);
@@ -390,9 +391,9 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
       )}
 
       {wide ? (
-        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={openProfile} onPickApp={pickApp} onSettings={() => setSheet('settings')} onExit={onExit} lang={lang} />
+        <DesktopNav th={th} tab={tab} setTab={setTab} onWallet={() => setSheet('wallet')} onProfile={openProfile} onRewards={() => setSheet('rewards')} onPickApp={pickApp} onSettings={() => setSheet('settings')} onExit={onExit} lang={lang} />
       ) : (
-        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={openProfile} topInset={insets.top} />
+        <MobileTopBar th={th} onWallet={() => setSheet('wallet')} onProfile={openProfile} onRewards={() => setSheet('rewards')} topInset={insets.top} />
       )}
 
       {toast && (
@@ -419,10 +420,13 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
         )}
       </SheetWindow>
       <SheetWindow visible={sheet === 'wallet'} wide={wide} tall th={th} onClose={() => setSheet(null)}>
-        {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} lang={lang} />}
+        {(close, onScroll) => <WalletPage th={th} close={close} onScroll={onScroll} lang={lang} onRewards={() => setSheet('rewards')} />}
       </SheetWindow>
       <SheetWindow visible={sheet === 'network'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <NetworkPage th={th} close={close} onScroll={onScroll} lang={lang} />}
+      </SheetWindow>
+      <SheetWindow visible={sheet === 'rewards'} wide={wide} tall th={th} onClose={() => setSheet(null)}>
+        {(close, onScroll) => <RewardsPage th={th} close={close} onScroll={onScroll} lang={lang} />}
       </SheetWindow>
       <SheetWindow visible={sheet === 'settings'} wide={wide} th={th} onClose={() => setSheet(null)}>
         {(close, onScroll) => <SettingsPage th={th} close={close} onScroll={onScroll} lang={lang} />}
@@ -491,6 +495,17 @@ function WalletChip({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   );
 }
 
+/** Rewards button — a gift with a dot when a daily reward or quest is claimable. */
+function RewardsChip({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
+  const avail = useOne01PlatformStore(rewardsAvailable);
+  return (
+    <Pressable onPress={onPress} style={styles.rewardsBtn} hitSlop={8}>
+      <GiftIcon size={23} color={th.text} />
+      {avail && <View style={[styles.rewardsDot, { borderColor: th.bg }]} />}
+    </Pressable>
+  );
+}
+
 /** Profile button — its avatar carries the unread-notifications dot. */
 function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   const transactions = useOne01PlatformStore((s) => s.transactions);
@@ -523,13 +538,14 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   );
 }
 
-function MobileTopBar({ th, onWallet, onProfile, topInset }: { th: ShellTheme; onWallet: () => void; onProfile: () => void; topInset: number }) {
+function MobileTopBar({ th, onWallet, onProfile, onRewards, topInset }: { th: ShellTheme; onWallet: () => void; onProfile: () => void; onRewards: () => void; topInset: number }) {
   return (
     // the absolute bar must clear the status bar itself (root padding doesn't offset absolute children)
     <LinearGradient colors={[th.bg, th.bg, `${th.bg}00`]} locations={[0, 0.5, 1]} style={[styles.topBar, { paddingTop: topInset }]} pointerEvents="box-none">
       <View style={styles.topRow}>
         <WalletChip th={th} onPress={onWallet} />
         <View style={styles.topRight}>
+          <RewardsChip th={th} onPress={onRewards} />
           <ProfileBtn th={th} onPress={onProfile} />
         </View>
       </View>
@@ -562,7 +578,7 @@ function MobileBottomBar({ th, tab, setTab, onSwitch, bottomInset }: { th: Shell
 
 /* ─────────────────────────────── desktop nav ─────────────────────────────── */
 
-function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSettings, onExit, lang }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onWallet: () => void; onProfile: () => void; onPickApp: (id: string) => void; onSettings: () => void; onExit: () => void; lang: Lang }) {
+function DesktopNav({ th, tab, setTab, onWallet, onProfile, onRewards, onPickApp, onSettings, onExit, lang }: { th: ShellTheme; tab: Tab; setTab: (t: Tab) => void; onWallet: () => void; onProfile: () => void; onRewards: () => void; onPickApp: (id: string) => void; onSettings: () => void; onExit: () => void; lang: Lang }) {
   const [menu, setMenu] = useState<null | 'apps' | 'wallet' | 'profile'>(null);
   const links: { k: Tab; label: string }[] = [
     { k: 'home', label: tr(lang, 'Home') },
@@ -600,6 +616,9 @@ function DesktopNav({ th, tab, setTab, onWallet, onProfile, onPickApp, onSetting
         {/* wallet + profile grouped with a tight gap (separate chips, no pill) so the
             row's wide gap doesn't open a big space between them */}
         <View style={styles.navAccount}>
+          {/* rewards → opens the rewards sheet */}
+          <RewardsChip th={th} onPress={() => { close(); onRewards(); }} />
+
           {/* wallet → quick menu on hover, full window on click */}
           <View onPointerEnter={() => setMenu('wallet')} onPointerLeave={close} style={styles.navHover}>
             <WalletChip th={th} onPress={() => { close(); onWallet(); }} />
@@ -2280,6 +2299,8 @@ const styles = StyleSheet.create({
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   walletAmt: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   profileBtn: { alignItems: 'center', justifyContent: 'center' },
+  rewardsBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  rewardsDot: { position: 'absolute', top: 4, right: 4, width: 9, height: 9, borderRadius: 5, backgroundColor: '#ef4444', borderWidth: 1.5 },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatarImg: { width: 40, height: 40, borderRadius: 20 },
   profileBadge: { position: 'absolute', top: -6, right: -6, minWidth: 21, height: 21, borderRadius: 10.5, borderWidth: 2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, zIndex: 3, backgroundColor: '#FF3B30' },
