@@ -21,6 +21,7 @@ import Svg, { Path } from 'react-native-svg';
 import { haptic } from '../../utils/haptics';
 import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
+  DepositIcon, WithdrawIcon,
 } from './brand';
 import { type ShellTheme, type MarkId, NETWORK, type Person, RARITY_COLOR, levelFor } from '../../data/one01/platform';
 import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
@@ -158,8 +159,9 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }
   const prog = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(0);
 
-  // sheets open right up to the clock bar (rounded top just below it); a theme-coloured
-  // strip fills the status-bar region so the clock never sits on a dark scrim.
+  // sheets open right up to the clock bar (rounded top just below it). The clock-bar
+  // background keeps its own colour — the full-screen dim scrim simply extends over it,
+  // so the status region darkens with the rest of the page instead of turning solid black.
   const sheetTop = insets.top;
   const sheetH = winH - sheetTop;
   const ty = useRef(new Animated.Value(sheetH)).current;
@@ -231,7 +233,6 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }
         ) : (
           <>
             <StatusBar barStyle="light-content" />
-            <Animated.View pointerEvents="none" style={[styles.statusStrip, { height: insets.top, backgroundColor: '#000', opacity: prog }]} />
             <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
               <View style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
               {children(requestClose, onScroll)}
@@ -771,9 +772,11 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
         {/* two primary actions: deposit + withdraw */}
         <View style={styles.wBtnRow}>
           <Pressable onPress={() => setPad('deposit')} style={({ pressed }) => [styles.wBtn, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}>
+            <DepositIcon size={18} color={accentFg} />
             <Text style={[styles.wBtnTxt, { color: accentFg }]}>{t('Deposit')}</Text>
           </Pressable>
           <Pressable onPress={() => setPad('withdraw')} style={({ pressed }) => [styles.wBtn, styles.wBtnAlt, { borderColor: th.border }, pressed && { opacity: 0.7 }]}>
+            <WithdrawIcon size={18} color={th.text} />
             <Text style={[styles.wBtnTxt, { color: th.text }]}>{t('Withdraw')}</Text>
           </Pressable>
         </View>
@@ -860,7 +863,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   sheet: { position: 'absolute', left: 0, right: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', userSelect: 'none' },
-  statusStrip: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2 },
   drag: { paddingTop: 10, paddingBottom: 4, alignItems: 'center' },
   grab: { width: 44, height: 5, borderRadius: 3 },
   winCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
@@ -950,7 +952,7 @@ const styles = StyleSheet.create({
   balLbl: { fontSize: 13, fontWeight: '600' },
   balAmt: { fontSize: 38, fontWeight: '800', fontVariant: ['tabular-nums'] },
   wBtnRow: { flexDirection: 'row', gap: 12, marginTop: 18 },
-  wBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  wBtn: { flex: 1, flexDirection: 'row', gap: 8, borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
   wBtnAlt: { borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'transparent' },
   wBtnTxt: { fontSize: 15, fontWeight: '800' },
   wTabs: { flexDirection: 'row', gap: 8, marginTop: 22, marginBottom: 2 },

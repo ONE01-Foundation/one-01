@@ -54,6 +54,8 @@ import {
   ChartIcon,
   EventIcon,
   StatsIcon,
+  DepositIcon,
+  WithdrawIcon,
   BoltIcon,
   ProjectsIcon,
   GamesIcon,
@@ -630,8 +632,8 @@ function WalletDrop({ th, lang, onOpenFull }: { th: ShellTheme; lang: Lang; onOp
           )}
         </View>
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-          <Pressable onPress={() => { haptic.success(); credit(1000, 'Deposit · virtual rails'); }} style={[styles.menuBtn, { backgroundColor: th.surface2, borderColor: th.border }]}><Text style={[styles.menuBtnTxt, { color: th.text }]}>↓ {t('Deposit')}</Text></Pressable>
-          <Pressable onPress={onOpenFull} style={[styles.menuBtn, { backgroundColor: th.surface2, borderColor: th.border }]}><Text style={[styles.menuBtnTxt, { color: th.text }]}>↑ {t('Withdraw')}</Text></Pressable>
+          <Pressable onPress={() => { haptic.success(); credit(1000, 'Deposit · virtual rails'); }} style={[styles.menuBtn, { backgroundColor: th.surface2, borderColor: th.border }]}><DepositIcon size={15} color={th.text} /><Text style={[styles.menuBtnTxt, { color: th.text }]}>{t('Deposit')}</Text></Pressable>
+          <Pressable onPress={onOpenFull} style={[styles.menuBtn, { backgroundColor: th.surface2, borderColor: th.border }]}><WithdrawIcon size={15} color={th.text} /><Text style={[styles.menuBtnTxt, { color: th.text }]}>{t('Withdraw')}</Text></Pressable>
         </View>
       </View>
     </View>
@@ -1195,15 +1197,15 @@ function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack, lang }:
     );
   }
 
+  // one full-screen dim scrim that also covers the clock-bar region, so the status bar
+  // darkens with the page instead of being painted solid black over its own colour.
   const scrimOpacity = ty.interpolate({ inputRange: [0, sheetH], outputRange: [0.42, 0], extrapolate: 'clamp' });
-  const stripOpacity = ty.interpolate({ inputRange: [0, sheetH], outputRange: [1, 0], extrapolate: 'clamp' });
   return (
     <View style={StyleSheet.absoluteFill}>
       <StatusBar barStyle="light-content" />
       <Pressable style={StyleSheet.absoluteFill} onPress={close}>
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: scrimOpacity }]} pointerEvents="none" />
       </Pressable>
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: topInset, backgroundColor: '#000', opacity: stripOpacity, zIndex: 2 }} />
       <Animated.View {...pan.panHandlers} style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
         <View style={styles.detailDrag}><View style={[styles.detailGrab, { backgroundColor: th.border }]} /></View>
         <DrawerContent th={th} kind={kind} extras={extras} main={main} onBack={close} onScroll={onDrawerScroll} lang={lang} />
@@ -2276,7 +2278,7 @@ const styles = StyleSheet.create({
   menuPanel: { width: 258, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
   menuBal: { fontSize: 26, fontWeight: '800', marginTop: 10 },
   menuHold: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  menuBtn: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  menuBtn: { flex: 1, flexDirection: 'row', gap: 7, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
   menuBtnTxt: { fontSize: 13, fontWeight: '700' },
   menuAcct: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
   avatarSm: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
