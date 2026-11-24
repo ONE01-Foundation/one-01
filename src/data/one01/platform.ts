@@ -129,8 +129,8 @@ export const PRODUCT_ORDER: ProductId[] = ['one', 'winzi', 'mixstar'];
  *  profile ring actually fills as you use the app. Deterministic, no extra state. */
 export const XP_PER_LEVEL = 500;
 export function levelFor(txCount: number): { level: number; progress: number } {
-  const xp = 6660 + txCount * 30; // starts ~a third of the way into Level 13
-  return { level: Math.floor(xp / XP_PER_LEVEL), progress: (xp % XP_PER_LEVEL) / XP_PER_LEVEL };
+  const xp = txCount * 65; // new accounts start at Level 1 and climb with activity
+  return { level: 1 + Math.floor(xp / XP_PER_LEVEL), progress: (xp % XP_PER_LEVEL) / XP_PER_LEVEL };
 }
 
 /* ───────────────────────────── Featured slides (per product) ───────────────────────────── */

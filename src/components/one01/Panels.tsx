@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { haptic } from '../../utils/haptics';
 import {
-  One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon, LevelRing,
+  One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
 } from './brand';
 import { type ShellTheme, type MarkId, NETWORK, type Person, RARITY_COLOR, levelFor } from '../../data/one01/platform';
 import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
@@ -230,8 +230,8 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }
           )
         ) : (
           <>
-            <StatusBar barStyle={th.mode === 'dark' ? 'light-content' : 'dark-content'} />
-            <Animated.View pointerEvents="none" style={[styles.statusStrip, { height: insets.top, backgroundColor: th.bg, opacity: prog }]} />
+            <StatusBar barStyle="light-content" />
+            <Animated.View pointerEvents="none" style={[styles.statusStrip, { height: insets.top, backgroundColor: '#000', opacity: prog }]} />
             <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
               <View style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
               {children(requestClose, onScroll)}
@@ -290,20 +290,28 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
       <PanelHead th={th} title="" onClose={close} right={<Pressable onPress={onSettings} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable>} />
       <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={[`${th.glow}CC`, th.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cover} />
-        {/* centred identity: avatar (with level gauge), name, handle, edit */}
+        {/* centred identity: avatar, name, handle, edit */}
         <View style={styles.profileHead}>
-          <View style={styles.bigAvatarRing}>
-            <View style={StyleSheet.absoluteFill} pointerEvents="none"><LevelRing size={100} progress={progress} track={th.mode === 'dark' ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)'} accent={th.accent} /></View>
-            <Pressable onPress={changeAvatar} style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.bg }]}>
-              {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.bigAvatarImg} /> : <UserIcon size={40} color="#fff" />}
-              <View style={[styles.avatarCam, { backgroundColor: th.accent, borderColor: th.bg }]}><Text style={{ fontSize: 12 }}>📷</Text></View>
-            </Pressable>
-          </View>
+          <Pressable onPress={changeAvatar} style={[styles.bigAvatar, { backgroundColor: DARK_TILE, borderColor: th.accent }]}>
+            {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.bigAvatarImg} /> : <UserIcon size={40} color="#fff" />}
+            <View style={[styles.avatarCam, { backgroundColor: th.accent, borderColor: th.bg }]}><Text style={{ fontSize: 12 }}>📷</Text></View>
+          </Pressable>
           <Text style={[styles.pName, { color: th.text }]}>Nobody</Text>
           <Text style={[styles.pHandle, { color: th.muted }]}>@nobody · on ONE01</Text>
           <Pressable onPress={changeAvatar} style={({ pressed }) => [styles.editBtn, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{t('Edit profile')}</Text></Pressable>
         </View>
         <View style={styles.pad}>
+          {/* level progress as a slider bar (was a ring around the avatar) */}
+          <View style={[styles.levelCard, { backgroundColor: th.surface, borderColor: th.border }]}>
+            <View style={styles.levelRow}>
+              <Text style={[styles.levelLvl, { color: th.text }]}>{t('Level')} {level}</Text>
+              <View style={styles.flex} />
+              <Text style={[styles.levelNext, { color: th.muted }]}>{Math.round(progress * 100)}% → {t('Level')} {level + 1}</Text>
+            </View>
+            <View style={[styles.levelTrack, { backgroundColor: th.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }]}>
+              <View style={[styles.levelFill, { width: `${Math.max(3, Math.round(progress * 100))}%`, backgroundColor: th.accent }]} />
+            </View>
+          </View>
           <View style={[styles.statRow, { borderColor: th.border }]}>
             {stats.map((s, i) => (
               <Pressable key={s.l} disabled={s.l !== 'Friends' || !onOpenNetwork} onPress={onOpenNetwork} style={({ pressed }) => [styles.stat, i < stats.length - 1 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: th.border }, { opacity: pressed ? 0.6 : 1 }]}>
@@ -876,6 +884,12 @@ const styles = StyleSheet.create({
   pad: { paddingHorizontal: 18, paddingTop: 6 },
   pName: { fontSize: 22, fontWeight: '800', textAlign: 'center', marginTop: 12 },
   pHandle: { fontSize: 14, marginTop: 3, textAlign: 'center' },
+  levelCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginTop: 14 },
+  levelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
+  levelLvl: { fontSize: 14, fontWeight: '800' },
+  levelNext: { fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  levelTrack: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  levelFill: { height: 8, borderRadius: 4 },
   statRow: { flexDirection: 'row', marginTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 14 },
   stat: { flex: 1, alignItems: 'center', gap: 3 },
   statV: { fontSize: 16, fontWeight: '800' },

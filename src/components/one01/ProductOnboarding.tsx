@@ -25,6 +25,8 @@ import {
   ScrollView,
   Animated,
   TextInput,
+  Keyboard,
+  Platform,
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -298,6 +300,16 @@ function Connect({
   const [val, setVal] = useState('');
   const methodBg = config.mode === 'dark' ? '#1C1C20' : '#0A0A0A';
 
+  // lift the bottom sheet above the on-screen keyboard (email / phone inputs)
+  const [kb, setKb] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow';
+    const hideEvt = Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide';
+    const s = Keyboard.addListener(showEvt, (e) => setKb(e.endCoordinates?.height ?? 0));
+    const h = Keyboard.addListener(hideEvt, () => setKb(0));
+    return () => { s.remove(); h.remove(); };
+  }, []);
+
   const LogoInner = (
     <View style={styles.logoInner}>
       {config.logo === 'horizontal' ? (
@@ -374,7 +386,7 @@ function Connect({
           <Animated.View
             style={[
               styles.sheet,
-              { borderColor: p.sheetBorder, paddingBottom: Math.max(bottomInset, 18) + 14, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }] },
+              { borderColor: p.sheetBorder, paddingBottom: Math.max(bottomInset, 18) + 14, marginBottom: kb, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }] },
             ]}
           >
             {/* frosted glass so the glow shows through the sheet */}

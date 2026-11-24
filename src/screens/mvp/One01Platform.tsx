@@ -1199,11 +1199,11 @@ function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack, lang }:
   const stripOpacity = ty.interpolate({ inputRange: [0, sheetH], outputRange: [1, 0], extrapolate: 'clamp' });
   return (
     <View style={StyleSheet.absoluteFill}>
-      <StatusBar barStyle={th.mode === 'dark' ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle="light-content" />
       <Pressable style={StyleSheet.absoluteFill} onPress={close}>
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: scrimOpacity }]} pointerEvents="none" />
       </Pressable>
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: topInset, backgroundColor: th.bg, opacity: stripOpacity, zIndex: 2 }} />
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: topInset, backgroundColor: '#000', opacity: stripOpacity, zIndex: 2 }} />
       <Animated.View {...pan.panHandlers} style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
         <View style={styles.detailDrag}><View style={[styles.detailGrab, { backgroundColor: th.border }]} /></View>
         <DrawerContent th={th} kind={kind} extras={extras} main={main} onBack={close} onScroll={onDrawerScroll} lang={lang} />
