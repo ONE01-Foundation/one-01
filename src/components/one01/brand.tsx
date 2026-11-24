@@ -235,6 +235,15 @@ export function MailIcon({ size = 20, color = '#000000' }: BrandProps) {
   );
 }
 
+/** Phone handset — stroke-based, takes a color. */
+export function PhoneIcon({ size = 20, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M6.8 3.5H9.4L10.7 7.1 8.7 8.4a11.5 11.5 0 0 0 5.2 5.2l1.3-2 3.6 1.3v2.6a2 2 0 0 1-2.2 2A15.8 15.8 0 0 1 4.8 5.7 2 2 0 0 1 6.8 3.5Z" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 /* ─────────────────────────── Product marks (62×62) ─────────────────────────── */
 
 /** ONE01 parent mark — a single disc (white on dark, ink on light). */

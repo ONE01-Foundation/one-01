@@ -24,6 +24,7 @@ import {
   Pressable,
   ScrollView,
   Animated,
+  TextInput,
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -41,6 +42,8 @@ import {
   GoogleIcon,
   AppleIcon,
   MailIcon,
+  PhoneIcon,
+  WalletIcon,
 } from './brand';
 import type { OnboardConfig, OnboardMode } from '../../data/one01/onboarding';
 import type { MarkId } from '../../data/one01/platform';
@@ -290,6 +293,11 @@ function Connect({
     Animated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, [anim]);
 
+  // which secondary method the user tapped (opens an inline input / wallet picker)
+  const [method, setMethod] = useState<null | 'email' | 'phone' | 'wallet'>(null);
+  const [val, setVal] = useState('');
+  const methodBg = config.mode === 'dark' ? '#1C1C20' : '#0A0A0A';
+
   const LogoInner = (
     <View style={styles.logoInner}>
       {config.logo === 'horizontal' ? (
@@ -306,11 +314,32 @@ function Connect({
     </View>
   );
 
-  const authButtons = (
+  const authButtons = method ? (
+    <MethodPanel
+      method={method}
+      val={val}
+      setVal={setVal}
+      p={p}
+      onBack={() => { haptic.tap(); setMethod(null); setVal(''); }}
+      onSubmit={onFinish}
+    />
+  ) : (
     <>
       <AuthButton provider="google" mode={config.mode} onPress={onFinish} />
       <AuthButton provider="apple" mode={config.mode} onPress={onFinish} />
-      <AuthButton provider="email" mode={config.mode} onPress={onFinish} />
+      {/* email / phone / wallet — each opens its own input or picker */}
+      <View style={[styles.methodRow, { backgroundColor: methodBg }]}>
+        {(['email', 'phone', 'wallet'] as const).map((m, i) => (
+          <React.Fragment key={m}>
+            {i > 0 && <View style={[styles.methodDiv, { backgroundColor: 'rgba(255,255,255,0.14)' }]} />}
+            <Pressable onPress={() => { haptic.tap(); setMethod(m); setVal(''); }} style={({ pressed }) => [styles.methodBtn, pressed && { opacity: 0.6 }]}>
+              {m === 'email' && <MailIcon size={22} color="#fff" />}
+              {m === 'phone' && <PhoneIcon size={22} color="#fff" />}
+              {m === 'wallet' && <WalletIcon size={24} color="#fff" />}
+            </Pressable>
+          </React.Fragment>
+        ))}
+      </View>
       <Text style={[styles.legal, { color: p.muted }]}>
         By continuing, you acknowledge ONE01{' '}
         <Text style={{ textDecorationLine: 'underline' }}>Privacy Policy</Text> and agree to get occasional promotional emails and notifications.
@@ -354,6 +383,69 @@ function Connect({
             <View style={[styles.grabber, { backgroundColor: p.grabber }]} />
             {authButtons}
           </Animated.View>
+        </>
+      )}
+    </View>
+  );
+}
+
+const WALLETS = [
+  { k: 'metamask', name: 'MetaMask', emoji: '🦊' },
+  { k: 'coinbase', name: 'Coinbase Wallet', emoji: '🔵' },
+  { k: 'walletconnect', name: 'WalletConnect', emoji: '🔗' },
+  { k: 'rainbow', name: 'Rainbow', emoji: '🌈' },
+  { k: 'phantom', name: 'Phantom', emoji: '👻' },
+];
+
+/** The panel that replaces the auth buttons once a secondary method is tapped:
+ *  an email/phone text field (opens the right keyboard) or a wallet picker. */
+function MethodPanel({ method, val, setVal, p, onBack, onSubmit }: {
+  method: 'email' | 'phone' | 'wallet';
+  val: string;
+  setVal: (s: string) => void;
+  p: ReturnType<typeof palette>;
+  onBack: () => void;
+  onSubmit: () => void;
+}) {
+  const title = method === 'email' ? 'Continue with email' : method === 'phone' ? 'Continue with phone' : 'Connect a wallet';
+  const fieldBg = p.dark ? 'rgba(255,255,255,0.05)' : 'rgba(10,10,10,0.04)';
+  return (
+    <View style={{ gap: 12 }}>
+      <View style={styles.methodHead}>
+        <Pressable onPress={onBack} hitSlop={10} style={styles.methodBack}><Text style={[styles.backChevron, { color: p.muted, fontSize: 24 }]}>‹</Text></Pressable>
+        <Text style={[styles.methodTitle, { color: p.text }]}>{title}</Text>
+      </View>
+
+      {method === 'wallet' ? (
+        <View style={{ gap: 8 }}>
+          {WALLETS.map((w) => (
+            <Pressable key={w.k} onPress={onSubmit} style={({ pressed }) => [styles.walletRow, { borderColor: p.sheetBorder, backgroundColor: fieldBg }, pressed && { opacity: 0.65 }]}>
+              <Text style={{ fontSize: 22 }}>{w.emoji}</Text>
+              <Text style={[styles.walletName, { color: p.text }]}>{w.name}</Text>
+              <View style={styles.flex} />
+              <Text style={{ color: p.muted, fontSize: 18 }}>›</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <>
+          <TextInput
+            value={val}
+            onChangeText={setVal}
+            autoFocus
+            keyboardType={method === 'phone' ? 'phone-pad' : 'email-address'}
+            inputMode={method === 'phone' ? 'tel' : 'email'}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder={method === 'phone' ? '+1 (555) 000-0000' : 'you@email.com'}
+            placeholderTextColor={p.muted}
+            onSubmitEditing={() => { if (val.trim()) onSubmit(); }}
+            returnKeyType="go"
+            style={[styles.methodInput, { color: p.text, borderColor: p.sheetBorder, backgroundColor: fieldBg }]}
+          />
+          <Pressable onPress={() => { if (val.trim()) onSubmit(); }} disabled={!val.trim()} style={({ pressed }) => [styles.methodCta, { backgroundColor: p.ink }, !val.trim() && { opacity: 0.4 }, pressed && val.trim() && { opacity: 0.85 }]}>
+            <Text style={[styles.methodCtaTxt, { color: p.inkText }]}>Continue</Text>
+          </Pressable>
         </>
       )}
     </View>
@@ -448,4 +540,19 @@ const styles = StyleSheet.create({
   authIcon: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   authTxt: { fontSize: 15.5, fontWeight: '600' },
   legal: { fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 6, paddingHorizontal: 10 },
+
+  /* email / phone / wallet method row */
+  methodRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, height: 58, overflow: 'hidden' },
+  methodBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 17 },
+  methodDiv: { width: StyleSheet.hairlineWidth, height: 26 },
+
+  /* method panel (email / phone input, wallet picker) */
+  methodHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  methodBack: { padding: 4, marginLeft: -4 },
+  methodTitle: { fontSize: 17, fontWeight: '800' },
+  methodInput: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 15, fontSize: 16 },
+  methodCta: { borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  methodCtaTxt: { fontSize: 15.5, fontWeight: '700' },
+  walletRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13 },
+  walletName: { fontSize: 15, fontWeight: '700' },
 });

@@ -132,7 +132,7 @@ export function buildNotifs(transactions: PlatformTx[]): Notif[] {
   return [...txn, ...NOTIF_SEED].sort((a, b) => b.ts - a.ts).slice(0, 40);
 }
 
-const START_BALANCE = 3500;
+const START_BALANCE = 0; // new users start empty and must deposit (credits are 1:1 with USD)
 const rid = () => `tx_${Date.now()}_${Math.floor(Math.random() * 1e4)}`;
 
 /* ───────────────────────── live price model (deterministic) ─────────────────────────

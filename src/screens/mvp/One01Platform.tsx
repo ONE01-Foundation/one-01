@@ -481,7 +481,7 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
 function MobileTopBar({ th, onWallet, onProfile, topInset }: { th: ShellTheme; onWallet: () => void; onProfile: () => void; topInset: number }) {
   return (
     // the absolute bar must clear the status bar itself (root padding doesn't offset absolute children)
-    <LinearGradient colors={[th.bg, th.bg, `${th.bg}00`]} locations={[0, 0.58, 1]} style={[styles.topBar, { paddingTop: topInset }]} pointerEvents="box-none">
+    <LinearGradient colors={[th.bg, `${th.bg}00`]} style={[styles.topBar, { paddingTop: topInset }]} pointerEvents="box-none">
       <View style={styles.topRow}>
         <WalletChip th={th} onPress={onWallet} />
         <View style={styles.topRight}>
@@ -2211,7 +2211,7 @@ const styles = StyleSheet.create({
   toastTxt: { fontSize: 13.5, fontWeight: '700' },
 
   /* mobile top bar */
-  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 26 },
+  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 40 },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12 },
   surfaceHeadline: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3, marginTop: 2 },
   walletBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },

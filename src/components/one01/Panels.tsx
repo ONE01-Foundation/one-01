@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, Modal, Animated, PanResponder, Switch, Image, Platform,
+  View, Text, StyleSheet, Pressable, ScrollView, Modal, Animated, PanResponder, Switch, Image, Platform, StatusBar,
   useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 
@@ -158,29 +158,40 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }
   const prog = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(0);
 
-  // tall sheets (profile / wallet) open right up to the status bar
-  const sheetTop = insets.top + (tall ? 8 : 54);
+  // tall sheets (profile / wallet) are full-height so their own theme bg fills the
+  // status-bar region (no dark scrim behind the clock); others hang below the top.
+  const sheetTop = tall ? 0 : insets.top + 54;
   const sheetH = winH - sheetTop;
   const ty = useRef(new Animated.Value(sheetH)).current;
+  const closing = useRef(false);
 
   useEffect(() => {
     if (!visible) return;
+    closing.current = false;
     prog.setValue(0); ty.setValue(sheetH); scrollY.current = 0;
     Animated.spring(prog, { toValue: 1, useNativeDriver: true, bounciness: 4, speed: 12 }).start();
     Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 3, speed: 13 }).start();
   }, [visible, prog, ty, sheetH]);
 
   const requestClose = () => {
+    if (closing.current) return;
+    closing.current = true;
     Animated.timing(prog, { toValue: 0, duration: 200, useNativeDriver: true }).start();
     Animated.timing(ty, { toValue: sheetH, duration: 220, useNativeDriver: true }).start(() => onClose());
   };
-  const onScroll: ScrollHandler = (e) => { scrollY.current = e.nativeEvent.contentOffset.y; };
+  // Track scroll offset AND use the native over-scroll (pull-down past the top) as a
+  // dismiss trigger — on native the UIScrollView keeps the responder for touches that
+  // start on empty content, so the PanResponder alone can't catch them; the bounce can.
+  const onScroll: ScrollHandler = (e) => {
+    const y = e.nativeEvent.contentOffset.y;
+    scrollY.current = y;
+    if (y < -82) requestClose();
+  };
 
   // drag down to dismiss. A child ScrollView wins the responder by default, so a plain
-  // onMoveShouldSetPanResponder loses the FIRST downward swipe to it (it scrolls/bounces
-  // instead of closing). We CAPTURE the gesture in the capture phase — but only once it's
-  // a clear downward drag (dy>8, mostly vertical) while the content is at the very top —
-  // so taps and upward scrolls still reach the content, and the sheet closes on one swipe.
+  // onMoveShouldSetPanResponder loses the FIRST downward swipe to it. We CAPTURE the
+  // gesture — but only once it's a clear downward drag (dy>8, mostly vertical) while the
+  // content is at the very top — so taps and upward scrolls still reach the content.
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponderCapture: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 2 && scrollY.current <= 1,
@@ -218,7 +229,8 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }
           </View>
           )
         ) : (
-          <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
+          <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }, tall && { paddingTop: insets.top, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
+            {tall && <StatusBar barStyle={th.mode === 'dark' ? 'light-content' : 'dark-content'} />}
             <View style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
             {children(requestClose, onScroll)}
           </Animated.View>
@@ -616,6 +628,81 @@ export function SettingsPage({ th, close, onScroll, lang }: { th: ShellTheme; cl
 
 /* ─────────────────────────────── WalletPage ─────────────────────────────── */
 
+const DEPOSIT_METHODS = [
+  { k: 'card', name: 'Visa •••• 4242', emoji: '💳' },
+  { k: 'apple', name: 'Apple Pay', emoji: '🍎' },
+  { k: 'bank', name: 'Bank transfer', emoji: '🏦' },
+];
+const WITHDRAW_METHODS = [
+  { k: 'bank', name: 'Bank account', emoji: '🏦' },
+  { k: 'card', name: 'Visa •••• 4242', emoji: '💳' },
+];
+
+/** Full-sheet amount entry: a $ display (credits are 1:1 with USD), a payment-method
+ *  / destination picker, and a numeric keypad. Used for both deposit and withdraw. */
+function AmountPad({ th, kind, balance, onClose, onConfirm }: {
+  th: ShellTheme; kind: 'deposit' | 'withdraw'; balance: number;
+  onClose: () => void; onConfirm: (amount: number, methodName: string) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [amt, setAmt] = useState('');
+  const methods = kind === 'deposit' ? DEPOSIT_METHODS : WITHDRAW_METHODS;
+  const [method, setMethod] = useState(methods[0].k);
+  const n = parseInt(amt || '0', 10);
+  const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  const tooMuch = kind === 'withdraw' && n > balance;
+  const valid = n > 0 && !tooMuch;
+  const press = (d: string) => {
+    haptic.select();
+    if (d === '⌫') setAmt((a) => a.slice(0, -1));
+    else if (amt.length < 7) setAmt((a) => (a === '' && d === '0' ? '' : a + d));
+  };
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+  return (
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: th.bg }]}>
+      <View style={styles.head}>
+        <Pressable onPress={onClose} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
+          <Text style={[styles.x, { color: th.text }]}>✕</Text>
+        </Pressable>
+        <Text style={[styles.headTitle, { color: th.text }]}>{kind === 'deposit' ? 'Deposit' : 'Withdraw'}</Text>
+        <View style={styles.flex} />
+      </View>
+      <View style={styles.padBody}>
+        <View style={styles.amtWrap}>
+          <Text style={[styles.amtBig, { color: tooMuch ? '#ef4444' : th.text }]}>${n.toLocaleString()}</Text>
+          <Text style={[styles.amtHint, { color: th.muted }]}>{tooMuch ? `Max ⟡${balance.toLocaleString()}` : `⟡ ${n.toLocaleString()} credits · 1 credit = $1`}</Text>
+        </View>
+        <Text style={[styles.padLabel, { color: th.muted }]}>{kind === 'deposit' ? 'PAY WITH' : 'WITHDRAW TO'}</Text>
+        <View style={{ gap: 8 }}>
+          {methods.map((m) => {
+            const on = method === m.k;
+            return (
+              <Pressable key={m.k} onPress={() => { haptic.select(); setMethod(m.k); }} style={[styles.payRow, { borderColor: on ? th.accent : th.border, backgroundColor: th.surface }]}>
+                <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
+                <Text style={[styles.payName, { color: th.text }]}>{m.name}</Text>
+                <View style={styles.flex} />
+                <View style={[styles.radio, { borderColor: on ? th.accent : th.border }]}>{on ? <View style={[styles.radioDot, { backgroundColor: th.accent }]} /> : null}</View>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={styles.flex} />
+        <View style={styles.keypad}>
+          {keys.map((k, i) => (
+            <Pressable key={i} disabled={k === ''} onPress={() => k && press(k)} style={({ pressed }) => [styles.key, pressed && k !== '' && { backgroundColor: th.surface }]}>
+              <Text style={[styles.keyTxt, { color: th.text }]}>{k}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable onPress={() => { if (valid) onConfirm(n, methods.find((m) => m.k === method)?.name ?? ''); }} disabled={!valid} style={({ pressed }) => [styles.padCta, { backgroundColor: th.accent }, !valid && { opacity: 0.4 }, pressed && valid && { opacity: 0.85 }]}>
+          <Text style={[styles.padCtaTxt, { color: accentFg }]}>{kind === 'deposit' ? `Deposit $${n.toLocaleString()}` : `Withdraw $${n.toLocaleString()}`}</Text>
+        </Pressable>
+        <View style={{ height: insets.bottom + 8 }} />
+      </View>
+    </View>
+  );
+}
+
 export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; close: () => void; onScroll?: ScrollHandler; lang: Lang }) {
   const insets = useSafeAreaInsets();
   const t = (en: string) => tr(lang, en);
@@ -625,12 +712,15 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
   const credit = useOne01PlatformStore((s) => s.credit);
   const debit = useOne01PlatformStore((s) => s.debit);
   const creations = useOne01PlatformStore((s) => s.creations);
-  const [topped, setTopped] = useState(false);
-  const [drew, setDrew] = useState(false);
   const [section, setSection] = useState<'assets' | 'history'>('assets');
+  const [pad, setPad] = useState<null | 'deposit' | 'withdraw'>(null);
   const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
-  const topUp = () => { haptic.success(); credit(1000, 'Deposit · virtual rails'); setTopped(true); setTimeout(() => setTopped(false), 1600); };
-  const withdraw = () => { const amt = Math.min(500, balance); if (amt > 0 && debit(amt, 'Withdraw · to fiat rails')) { haptic.success(); setDrew(true); setTimeout(() => setDrew(false), 1600); } else haptic.warning(); };
+  const confirmPad = (amount: number, mname: string) => {
+    if (pad === 'deposit') { credit(amount, `Deposit · ${mname}`); haptic.success(); }
+    else if (debit(amount, `Withdraw · ${mname}`)) haptic.success();
+    else haptic.warning();
+    setPad(null);
+  };
   // Holdings = your cash credits + real share positions in projects (live-priced)
   const holdings: { id: string; mark: MarkId; name: string; amt: string; sub: string; pl: number | null }[] = [
     { id: 'one01', mark: 'one01', name: 'ONE01 Credits', amt: balance.toLocaleString(), sub: 'Cash balance', pl: null },
@@ -669,11 +759,11 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
 
         {/* two primary actions: deposit + withdraw */}
         <View style={styles.wBtnRow}>
-          <Pressable onPress={topUp} style={({ pressed }) => [styles.wBtn, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}>
-            <Text style={[styles.wBtnTxt, { color: accentFg }]}>{topped ? '+⟡1,000' : t('Deposit')}</Text>
+          <Pressable onPress={() => setPad('deposit')} style={({ pressed }) => [styles.wBtn, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}>
+            <Text style={[styles.wBtnTxt, { color: accentFg }]}>{t('Deposit')}</Text>
           </Pressable>
-          <Pressable onPress={withdraw} style={({ pressed }) => [styles.wBtn, styles.wBtnAlt, { borderColor: th.border }, pressed && { opacity: 0.7 }]}>
-            <Text style={[styles.wBtnTxt, { color: th.text }]}>{drew ? '−⟡500' : t('Withdraw')}</Text>
+          <Pressable onPress={() => setPad('withdraw')} style={({ pressed }) => [styles.wBtn, styles.wBtnAlt, { borderColor: th.border }, pressed && { opacity: 0.7 }]}>
+            <Text style={[styles.wBtnTxt, { color: th.text }]}>{t('Withdraw')}</Text>
           </Pressable>
         </View>
 
@@ -748,6 +838,7 @@ export function WalletPage({ th, close, onScroll, lang }: { th: ShellTheme; clos
         </View>
         )}
       </ScrollView>
+      {pad && <AmountPad th={th} kind={pad} balance={balance} onClose={() => setPad(null)} onConfirm={confirmPad} />}
     </View>
   );
 }
@@ -847,6 +938,22 @@ const styles = StyleSheet.create({
   wTabs: { flexDirection: 'row', gap: 8, marginTop: 22, marginBottom: 2 },
   wTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999 },
   wTabTxt: { fontSize: 13.5, fontWeight: '700' },
+
+  /* amount pad (deposit / withdraw) */
+  padBody: { flex: 1, paddingHorizontal: 18 },
+  amtWrap: { alignItems: 'center', paddingVertical: 20 },
+  amtBig: { fontSize: 54, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  amtHint: { fontSize: 13, marginTop: 6, fontWeight: '600' },
+  padLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginBottom: 10, marginTop: 4 },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  payName: { fontSize: 15, fontWeight: '700' },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  keypad: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6 },
+  key: { width: '33.33%', alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 14 },
+  keyTxt: { fontSize: 26, fontWeight: '600' },
+  padCta: { borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
+  padCtaTxt: { fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
   secTitle: { fontSize: 17, fontWeight: '800', marginTop: 26, marginBottom: 12 },
   holdRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12 },
   holdTile: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
