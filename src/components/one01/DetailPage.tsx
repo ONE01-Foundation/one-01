@@ -202,6 +202,10 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
   const rating = ratingFor(item.id);
   const grad: [string, string] = item.bg ?? [`${th.glow}CC`, th.surface];
   const priceN = item.priceLabel ? parseInt(item.priceLabel.replace(/[^0-9]/g, ''), 10) || 0 : 0;
+  // games + shows use the App-Store "big hero" layout: a full-bleed scene at the
+  // top, the app icon overlapping it, a centred name, and a docked primary button.
+  const bigHero = kind === 'game' || kind === 'show';
+  const heroTagline = item.subtitle ?? (kind === 'game' ? 'Play Games, Win Money' : 'Live interactive TV');
 
   const primaryLabel =
     kind === 'project' ? (item.cta ?? 'Open')
@@ -253,8 +257,8 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
 
   return (
     <View style={styles.root}>
-      {/* controls — pinned to the screen corners on desktop, a header row on mobile */}
-      {wide ? (
+      {/* controls — big-hero kinds overlay their own ✕/↗ on the hero (below) */}
+      {bigHero ? null : wide ? (
         <>
           <Pressable onPress={onBack} hitSlop={10} style={[styles.corner, { top: topPad, left: 24, backgroundColor: th.surface, borderColor: th.border }]}>
             <Text style={[styles.chev, { color: th.text }]}>‹</Text>
@@ -275,9 +279,34 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
         </View>
       )}
 
-      <ScrollView contentContainerStyle={{ paddingTop: wide ? topPad + 52 : 0, paddingBottom: insets.bottom + 40, alignItems: wide ? 'center' : 'stretch' }} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
+      <ScrollView contentContainerStyle={{ paddingTop: bigHero ? 0 : wide ? topPad + 52 : 0, paddingBottom: (bigHero ? insets.bottom + 96 : insets.bottom + 40), alignItems: wide ? 'center' : 'stretch' }} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
         <View style={wide ? styles.colWide : styles.flex}>
-        {/* hero */}
+        {bigHero ? (
+          /* App-Store "big hero": full-bleed scene + overlapping icon + centred name */
+          <>
+            <View style={styles.bigHero}>
+              <LinearGradient colors={grad} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Text style={styles.bigHeroArt} allowFontScaling={false}>{item.emoji}</Text>
+              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.0)', `${grad[1]}CC`]} locations={[0, 0.6, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+              {item.live ? <View style={styles.heroLive}><View style={styles.heroLiveDot} /><Text style={styles.heroLiveTxt}>LIVE · {item.metric}</Text></View> : null}
+              <Pressable onPress={onBack} hitSlop={10} style={[styles.heroCtl, { top: topPad + 10, left: 16 }]}>
+                <Text style={styles.heroCtlTxt}>✕</Text>
+              </Pressable>
+              <Pressable hitSlop={10} style={[styles.heroCtl, { top: topPad + 10, right: 16 }]}>
+                <Text style={styles.heroCtlTxt}>↗</Text>
+              </Pressable>
+            </View>
+            <View style={styles.heroIconRow}>
+              <View style={[styles.appIcon, { backgroundColor: grad[0] }]}>
+                <LinearGradient colors={grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                {item.mark ? <Mark mark={item.mark} size={52} /> : <Text style={styles.appIconArt} allowFontScaling={false}>{item.emoji}</Text>}
+              </View>
+            </View>
+            <Text style={[styles.nameC, { color: th.text }]} numberOfLines={1}>{item.title}</Text>
+            <Text style={[styles.devC, { color: th.muted }]} numberOfLines={1}>{heroTagline}</Text>
+          </>
+        ) : (
+        /* hero */
         <View style={styles.hero}>
           <View style={[styles.icon, { backgroundColor: kind === 'project' && item.mark ? DARK_TILE : grad[0] }]}>
             {kind === 'project' && item.mark ? <Mark mark={item.mark} size={56} /> : <Text style={{ fontSize: 52 }}>{item.emoji}</Text>}
@@ -293,12 +322,14 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
             </View>
           </View>
         </View>
+        )}
 
         {/* stat strip */}
         <View style={[styles.stats, { borderColor: th.border }]}>
           {stats.map((s, i) => (
             <View key={s.l} style={[styles.stat, i < stats.length - 1 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: th.border }]}>
-              {s.stars ? <Stars value={rating} color={th.muted} /> : <Text style={[styles.statV, { color: th.text }]} numberOfLines={1}>{s.v}</Text>}
+              <Text style={[styles.statV, { color: th.text }]} numberOfLines={1}>{s.v}</Text>
+              {s.stars ? <Stars value={rating} color={th.muted} /> : null}
               <Text style={[styles.statL, { color: th.muted }]}>{s.l}</Text>
             </View>
           ))}
@@ -311,16 +342,21 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
           </View>
         )}
 
-        {/* gallery — App-Store-style previews that feather into the page */}
-        <Text style={[styles.secTitle, { color: th.text }]}>Preview</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 14 }}>
-          {[0, 1, 2].map((n) => (
-            <View key={n} style={styles.shotCol}>
-              <PreviewShot grad={grad} emoji={kind === 'project' && item.mark ? undefined : item.emoji} mark={kind === 'project' && item.mark ? item.mark : undefined} />
-              <Text style={[styles.shotCap, { color: th.muted }]}>{kind === 'show' ? `Scene ${n + 1}` : kind === 'game' ? `Match ${n + 1}` : kind === 'market' ? `Detail ${n + 1}` : `Screen ${n + 1}`}</Text>
-            </View>
-          ))}
-        </ScrollView>
+        {/* gallery — App-Store-style previews that feather into the page.
+            Games/shows lead with the big hero instead, so skip the duplicate strip. */}
+        {!bigHero && (
+          <>
+            <Text style={[styles.secTitle, { color: th.text }]}>Preview</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 14 }}>
+              {[0, 1, 2].map((n) => (
+                <View key={n} style={styles.shotCol}>
+                  <PreviewShot grad={grad} emoji={kind === 'project' && item.mark ? undefined : item.emoji} mark={kind === 'project' && item.mark ? item.mark : undefined} />
+                  <Text style={[styles.shotCap, { color: th.muted }]}>{kind === 'market' ? `Detail ${n + 1}` : `Screen ${n + 1}`}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </>
+        )}
 
         {/* about */}
         <Text style={[styles.secTitle, { color: th.text }]}>About</Text>
@@ -375,6 +411,16 @@ export function DetailPage({ th, kind, item, onBack, onPrimary, wide = false, to
         )}
         </View>
       </ScrollView>
+
+      {/* docked primary action (games/shows) */}
+      {bigHero && (
+        <View style={[styles.dock, { paddingBottom: insets.bottom + 14, backgroundColor: th.bg, borderTopColor: th.border }]} pointerEvents="box-none">
+          <Pressable onPress={onPrimary} style={({ pressed }) => [styles.dockBtn, { backgroundColor: accent }, pressed && { opacity: 0.88 }]}>
+            <Text style={[styles.dockTxt, { color: accentFg }]}>{primaryLabel}</Text>
+          </Pressable>
+          <Text style={[styles.dockSub, { color: th.muted }]}>In‑app · virtual</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -399,6 +445,26 @@ const styles = StyleSheet.create({
   cta: { borderRadius: 999, paddingHorizontal: 26, paddingVertical: 9 },
   ctaTxt: { fontSize: 15, fontWeight: '800' },
   inApp: { fontSize: 11.5 },
+
+  /* big hero (games / shows) */
+  bigHero: { width: '100%', aspectRatio: 1.32, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  bigHeroArt: { fontSize: 150, opacity: 0.96, transform: [{ rotate: '-6deg' }], textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 10 }, textShadowRadius: 22 },
+  heroCtl: { position: 'absolute', zIndex: 6, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center' },
+  heroCtlTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  heroLive: { position: 'absolute', bottom: 16, left: 16, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  heroLiveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#ff3b30' },
+  heroLiveTxt: { color: '#fff', fontSize: 11.5, fontWeight: '800', letterSpacing: 0.3 },
+  heroIconRow: { alignItems: 'center', marginTop: -46 },
+  appIcon: { width: 92, height: 92, borderRadius: 22, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'rgba(0,0,0,0.25)' },
+  appIconArt: { fontSize: 46 },
+  nameC: { fontSize: 24, fontWeight: '800', letterSpacing: -0.4, textAlign: 'center', marginTop: 12, paddingHorizontal: 24 },
+  devC: { fontSize: 14, textAlign: 'center', marginTop: 4, paddingHorizontal: 24 },
+
+  /* docked primary action */
+  dock: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingTop: 12, paddingHorizontal: 18, borderTopWidth: StyleSheet.hairlineWidth },
+  dockBtn: { width: '100%', maxWidth: 420, borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
+  dockTxt: { fontSize: 17, fontWeight: '800' },
+  dockSub: { fontSize: 11.5, marginTop: 7 },
 
   stats: { flexDirection: 'row', marginHorizontal: 18, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 14 },
   stat: { flex: 1, alignItems: 'center', gap: 4, paddingHorizontal: 4 },
