@@ -138,3 +138,50 @@ export function hostRoom(code: string, h: PongHandlers): Promise<PongRoom | null
 export function guestJoin(code: string, h: PongHandlers): Promise<PongRoom | null> {
   return connect(code, 'guest', h);
 }
+
+export interface QuickResult { room: PongRoom; role: Role }
+
+/**
+ * Quick match — no code. Players wait in a shared lobby channel; when two meet,
+ * they pair DETERMINISTICALLY (sorted ids → same derived room code + stable
+ * roles, lower id hosts) so no negotiation is needed, then connect to the game
+ * channel. Resolves null on timeout (no opponent in ~35s) or if offline.
+ */
+export async function quickMatch(h: PongHandlers, onSearching?: () => void): Promise<QuickResult | null> {
+  const c = client();
+  if (!c) return null;
+  const myId = Math.random().toString(36).slice(2, 10);
+  const lobby: RealtimeChannel = c.channel('pong:lobby', { config: { presence: { key: myId } } });
+
+  const paired = await new Promise<{ code: string; role: Role } | null>((resolve) => {
+    let settled = false;
+    const finish = (v: { code: string; role: Role } | null) => { if (!settled) { settled = true; resolve(v); } };
+    const timer = setTimeout(() => finish(null), 35000);
+
+    const tryPair = () => {
+      const ids = Object.keys(lobby.presenceState()).sort();
+      const idx = ids.indexOf(myId);
+      if (idx < 0) return;
+      const pairId = idx % 2 === 0 ? ids[idx + 1] : ids[idx - 1];
+      if (!pairId) return; // odd one out → keep waiting
+      const [lo, hi] = [myId, pairId].sort();
+      const code = (lo.slice(0, 4) + hi.slice(0, 4)).toUpperCase();
+      clearTimeout(timer);
+      finish({ code, role: myId === lo ? 'host' : 'guest' });
+    };
+
+    lobby.on('presence', { event: 'sync' }, tryPair);
+    lobby.on('presence', { event: 'join' }, tryPair);
+    lobby.subscribe((status) => {
+      if (status === 'SUBSCRIBED') { onSearching?.(); lobby.track({ id: myId, at: Date.now() }).catch(() => {}); }
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { clearTimeout(timer); finish(null); }
+    });
+  });
+
+  try { await c.removeChannel(lobby); } catch { /* ignore */ }
+  if (!paired) return null;
+
+  const room = paired.role === 'host' ? await hostRoom(paired.code, h) : await guestJoin(paired.code, h);
+  if (!room) return null;
+  return { room, role: paired.role };
+}
