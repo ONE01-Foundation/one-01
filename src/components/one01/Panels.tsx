@@ -158,9 +158,9 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }
   const prog = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(0);
 
-  // tall sheets (profile / wallet) are full-height so their own theme bg fills the
-  // status-bar region (no dark scrim behind the clock); others hang below the top.
-  const sheetTop = tall ? 0 : insets.top + 54;
+  // sheets open right up to the clock bar (rounded top just below it); a theme-coloured
+  // strip fills the status-bar region so the clock never sits on a dark scrim.
+  const sheetTop = insets.top;
   const sheetH = winH - sheetTop;
   const ty = useRef(new Animated.Value(sheetH)).current;
   const closing = useRef(false);
@@ -229,11 +229,14 @@ export function SheetWindow({ visible, wide, th, onClose, children, dock, tall }
           </View>
           )
         ) : (
-          <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }, tall && { paddingTop: insets.top, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
-            {tall && <StatusBar barStyle={th.mode === 'dark' ? 'light-content' : 'dark-content'} />}
-            <View style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
-            {children(requestClose, onScroll)}
-          </Animated.View>
+          <>
+            <StatusBar barStyle={th.mode === 'dark' ? 'light-content' : 'dark-content'} />
+            <Animated.View pointerEvents="none" style={[styles.statusStrip, { height: insets.top, backgroundColor: th.bg, opacity: prog }]} />
+            <Animated.View {...pan.panHandlers} style={[styles.sheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
+              <View style={styles.drag}><View style={[styles.grab, { backgroundColor: th.border }]} /></View>
+              {children(requestClose, onScroll)}
+            </Animated.View>
+          </>
         )}
       </View>
     </Modal>
@@ -849,6 +852,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   sheet: { position: 'absolute', left: 0, right: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', userSelect: 'none' },
+  statusStrip: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2 },
   drag: { paddingTop: 10, paddingBottom: 4, alignItems: 'center' },
   grab: { width: 44, height: 5, borderRadius: 3 },
   winCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },

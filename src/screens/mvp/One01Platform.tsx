@@ -52,6 +52,8 @@ import {
   PeopleIcon,
   CalendarIcon,
   ChartIcon,
+  EventIcon,
+  StatsIcon,
   BoltIcon,
   ProjectsIcon,
   GamesIcon,
@@ -481,7 +483,7 @@ function ProfileBtn({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
 function MobileTopBar({ th, onWallet, onProfile, topInset }: { th: ShellTheme; onWallet: () => void; onProfile: () => void; topInset: number }) {
   return (
     // the absolute bar must clear the status bar itself (root padding doesn't offset absolute children)
-    <LinearGradient colors={[th.bg, `${th.bg}00`]} style={[styles.topBar, { paddingTop: topInset }]} pointerEvents="box-none">
+    <LinearGradient colors={[th.bg, th.bg, `${th.bg}00`]} locations={[0, 0.5, 1]} style={[styles.topBar, { paddingTop: topInset }]} pointerEvents="box-none">
       <View style={styles.topRow}>
         <WalletChip th={th} onPress={onWallet} />
         <View style={styles.topRight}>
@@ -893,11 +895,11 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
 
 /* ─────────────────────────────── home drawers (shelves) ─────────────────────────────── */
 
-function drawerIcon(kind: DrawerKind, color: string, size = 17) {
+function drawerIcon(kind: DrawerKind, color: string, size = 23) {
   switch (kind) {
     case 'people': return <UserIcon size={size} color={color} />;
-    case 'events': return <CalendarIcon size={size} color={color} />;
-    case 'stats': return <ChartIcon size={size} color={color} />;
+    case 'events': return <EventIcon size={size - 1} color={color} />;
+    case 'stats': return <StatsIcon size={size} color={color} />;
     case 'feed': default: return <BoltIcon size={size} color={color} />;
   }
 }
@@ -1151,26 +1153,37 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
 
 function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack, lang }: { th: ShellTheme; wide: boolean; kind: DrawerKind; extras: HomeExtras; main?: MainDrawer; topInset: number; onBack: () => void; lang: Lang }) {
   const { height: winH } = useWindowDimensions();
-  const sheetTop = topInset + 74;
+  const sheetTop = topInset; // open up to the clock bar, like profile/wallet
   const sheetH = winH - sheetTop;
   const ty = useRef(new Animated.Value(sheetH)).current;
   const scrollY = useRef(0);
+  const closing = useRef(false);
 
   useEffect(() => {
     if (wide) return;
     Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 3, speed: 13 }).start();
   }, [wide, ty]);
 
-  const close = () => Animated.timing(ty, { toValue: sheetH, duration: 220, useNativeDriver: true }).start(() => onBack());
+  const close = () => {
+    if (closing.current) return;
+    closing.current = true;
+    Animated.timing(ty, { toValue: sheetH, duration: 220, useNativeDriver: true }).start(() => onBack());
+  };
+  const onDrawerScroll = (e: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y;
+    scrollY.current = y;
+    if (y < -82) close(); // iOS pull-down-past-top to dismiss
+  };
 
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5 && scrollY.current <= 2,
+      onMoveShouldSetPanResponderCapture: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 2 && scrollY.current <= 1,
       onPanResponderMove: (_, g) => { if (g.dy > 0) ty.setValue(g.dy); },
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 130 || g.vy > 0.8) close();
-        else Animated.spring(ty, { toValue: 0, useNativeDriver: true }).start();
+        if (g.dy > 90 || g.vy > 0.5) close();
+        else Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
       },
+      onPanResponderTerminate: () => Animated.spring(ty, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start(),
     }),
   ).current;
 
@@ -1183,14 +1196,17 @@ function DrawerOverlay({ th, wide, kind, extras, main, topInset, onBack, lang }:
   }
 
   const scrimOpacity = ty.interpolate({ inputRange: [0, sheetH], outputRange: [0.42, 0], extrapolate: 'clamp' });
+  const stripOpacity = ty.interpolate({ inputRange: [0, sheetH], outputRange: [1, 0], extrapolate: 'clamp' });
   return (
     <View style={StyleSheet.absoluteFill}>
+      <StatusBar barStyle={th.mode === 'dark' ? 'light-content' : 'dark-content'} />
       <Pressable style={StyleSheet.absoluteFill} onPress={close}>
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: scrimOpacity }]} pointerEvents="none" />
       </Pressable>
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: topInset, backgroundColor: th.bg, opacity: stripOpacity, zIndex: 2 }} />
       <Animated.View {...pan.panHandlers} style={[styles.detailSheet, { top: sheetTop, height: sheetH, backgroundColor: th.bg, transform: [{ translateY: ty }] }]}>
         <View style={styles.detailDrag}><View style={[styles.detailGrab, { backgroundColor: th.border }]} /></View>
-        <DrawerContent th={th} kind={kind} extras={extras} main={main} onBack={close} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} lang={lang} />
+        <DrawerContent th={th} kind={kind} extras={extras} main={main} onBack={close} onScroll={onDrawerScroll} lang={lang} />
       </Animated.View>
     </View>
   );
@@ -2402,7 +2418,7 @@ const styles = StyleSheet.create({
 
   /* drawer header (shelf) — more space above each */
   drawerHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 42, marginBottom: 16 },
-  drawerHeadIcon: { width: 22, alignItems: 'center', justifyContent: 'center' },
+  drawerHeadIcon: { width: 26, alignItems: 'center', justifyContent: 'center' },
 
   /* drawer detail (focused page / sheet) */
   corner: { position: 'absolute', zIndex: 5, width: 42, height: 42, borderRadius: 21, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
