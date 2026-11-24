@@ -99,6 +99,8 @@ function buildPosts(transactions: PlatformTx[], creations: UserCreation[], accen
   const raw: (Post & { ts: number })[] = [];
   transactions.forEach((t) => {
     const L = t.label, amt = Math.abs(t.amount);
+    // private wallet movements (deposit / withdraw / top up) belong in the wallet, not the social feed
+    if (/^(Deposit|Withdraw|Top ?up|Cash ?out)\b/i.test(L)) return;
     let text = L, chip = 'ONE', col = ONE;
     if (L.startsWith('Market · ')) { text = `Picked up ${L.slice(9)} on the Market`; chip = 'Market'; col = accent; }
     else if (L.startsWith('Invested · ')) { text = `Invested in ${L.slice(11)} 📈`; chip = 'Invest'; col = GREEN; }
@@ -112,6 +114,9 @@ function buildPosts(transactions: PlatformTx[], creations: UserCreation[], accen
     else if (L.includes('free vote')) { text = `Voted on ${L.replace(' free vote', '')}`; chip = 'MixStar'; col = PURPLE; }
     else if (L.includes('practice')) { text = `Practised ${L.replace(' practice', '')} 🏓`; chip = 'Winzi'; col = GOLD; }
     else if (L.includes('earnings')) { text = `Collected earnings from ${L.replace(' earnings', '')} 🧱`; chip = 'Creator'; col = accent; }
+    else if (L.startsWith('Exit · ')) { text = `Exited ${L.slice(7)} 💸 +⟡${amt.toLocaleString()}`; chip = 'Invest'; col = GREEN; }
+    else if (L.startsWith('Launched · ')) { text = `Backed the launch of ${L.slice(11)} 🚀`; chip = 'Invest'; col = GREEN; }
+    else if (/ · .+ round$/.test(L)) { const [name, round] = L.split(' · '); text = `Backed ${name} — ${round} 📈`; chip = 'Invest'; col = GREEN; }
     raw.push({ id: t.id, ts: t.ts, time: ago(t.ts), text, chip, accent: col, nav: labelNav(t.label) });
   });
   creations.forEach((c) => raw.push({ id: c.id, ts: c.ts, time: ago(c.ts), text: `Published ${c.title} on ${c.surface} 🧱`, chip: 'Creator', accent: ONE, nav: { kind: 'create' } }));
