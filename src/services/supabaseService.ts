@@ -29,10 +29,32 @@ function isValidSupabaseUrl(url: string): boolean {
   }
 }
 
+/** A signed-in user flattened to just what the ONE01 UI needs. */
+export interface AuthedUser {
+  id: string;
+  email: string | null;
+  /** Provider-supplied display name (Google full name, etc.) if any. */
+  name: string | null;
+  /** Provider-supplied avatar URL if any. */
+  avatarUrl: string | null;
+}
+
+function toAuthedUser(u: { id: string; email?: string | null; user_metadata?: Record<string, unknown> | null }): AuthedUser {
+  const m = (u.user_metadata ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return {
+    id: u.id,
+    email: u.email ?? null,
+    name: str(m.full_name) ?? str(m.name) ?? null,
+    avatarUrl: str(m.avatar_url) ?? str(m.picture) ?? null,
+  };
+}
+
 class SupabaseService {
   private client: SupabaseClient | null = null;
 
   initialize(): void {
+    if (this.client) return; // idempotent — one GoTrue client for the whole app
     if (!isValidSupabaseUrl(SUPABASE_URL) || !SUPABASE_ANON_KEY) {
       this.client = null;
       if (SUPABASE_URL || SUPABASE_ANON_KEY) {
@@ -175,6 +197,70 @@ class SupabaseService {
       return setErr ? { ok: false, error: setErr.message } : { ok: true };
     }
     return { ok: false, error: 'no_tokens' };
+  }
+
+  /** Where an OAuth / magic-link flow should return. Web: the current page URL
+   *  (origin + path, no hash) so the reloaded app re-opens where we left off and
+   *  supabase-js (detectSessionInUrl) picks up the session. Native: the app's
+   *  deep link. Both exact values must be in Supabase → Auth → URL Configuration
+   *  → Redirect URLs. */
+  private authRedirectUrl(): string {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      return window.location.origin + window.location.pathname;
+    }
+    return Linking.createURL('/');
+  }
+
+  /**
+   * Sign in with Google / Apple. On native this runs the in-app-browser PKCE
+   * flow (see signInWithProviderNative). On web it asks Supabase for the provider
+   * URL and lets the browser do a full-page redirect; the session is picked up on
+   * reload, so a resolved `{ ok: true }` here just means "redirecting".
+   */
+  async signInWithProvider(provider: 'google' | 'apple'): Promise<{ ok: boolean; error?: string }> {
+    if (Platform.OS !== 'web') return this.signInWithProviderNative(provider);
+    if (!this.client) return { ok: false, error: 'no_client' };
+    const { error } = await this.client.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: this.authRedirectUrl() },
+    });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  }
+
+  /**
+   * Passwordless email: send a magic link (works on the Supabase free tier with
+   * the built-in mailer, rate-limited). Clicking the link returns to the app and
+   * the session is detected automatically (web: detectSessionInUrl; native: the
+   * deep-link listener). `shouldCreateUser` lets first-time emails in too.
+   */
+  async sendMagicLink(email: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.client) return { ok: false, error: 'no_client' };
+    const clean = email.trim();
+    if (!clean) return { ok: false, error: 'empty' };
+    const { error } = await this.client.auth.signInWithOtp({
+      email: clean,
+      options: { emailRedirectTo: this.authRedirectUrl(), shouldCreateUser: true },
+    });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  }
+
+  /** The currently signed-in user (flattened), or null. */
+  async currentUser(): Promise<AuthedUser | null> {
+    if (!this.client) return null;
+    const { data } = await this.client.auth.getSession();
+    const u = data.session?.user;
+    return u ? toAuthedUser(u) : null;
+  }
+
+  /** Subscribe to sign-in / sign-out. Returns an unsubscribe fn. */
+  onAuthChange(cb: (user: AuthedUser | null) => void): () => void {
+    if (!this.client) return () => {};
+    const { data } = this.client.auth.onAuthStateChange((_event, session) => {
+      cb(session?.user ? toAuthedUser(session.user) : null);
+    });
+    return () => data.subscription.unsubscribe();
   }
 
   /**

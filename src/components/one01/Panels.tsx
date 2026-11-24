@@ -26,6 +26,7 @@ import {
 import { type ShellTheme, type MarkId, NETWORK, type Person, RARITY_COLOR, levelFor } from '../../data/one01/platform';
 import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
 import { tr, type Lang } from '../../data/one01/i18n';
+import { supabaseService } from '../../services/supabaseService';
 
 const PROJ_META: Record<string, { name: string; mark: MarkId }> = {
   winzi: { name: 'Winzi', mark: 'winzi' },
@@ -39,7 +40,7 @@ const DARK_TILE = '#131317';
 
 /** Pick a profile photo. On web: a file input, downscaled to a small JPEG data
  *  URI so it survives in persisted storage. On native: the OS image library. */
-function pickAvatar(): Promise<string | null> {
+export function pickAvatar(): Promise<string | null> {
   if (Platform.OS === 'web') {
     return new Promise((resolve) => {
       const input = document.createElement('input');
@@ -267,7 +268,11 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
   const creations = useOne01PlatformStore((s) => s.creations);
   const avatarUri = useOne01PlatformStore((s) => s.avatarUri);
   const setAvatar = useOne01PlatformStore((s) => s.setAvatar);
+  const displayName = useOne01PlatformStore((s) => s.displayName);
+  const handle = useOne01PlatformStore((s) => s.handle);
   const changeAvatar = async () => { const uri = await pickAvatar(); if (uri) { haptic.success(); setAvatar(uri); } };
+  const nameLabel = displayName?.trim() || 'Nobody';
+  const handleLabel = handle?.trim() ? `@${handle.trim()} · on ONE01` : '@nobody · on ONE01';
   const { level, progress } = levelFor(transactions.length);
   const activity = useMemo(() => buildPosts(transactions, creations, th.accent), [transactions, creations, th.accent]);
   const notifs = useMemo(() => buildNotifs(transactions), [transactions]);
@@ -279,11 +284,19 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
   const go = (nav?: NotifNav) => { if (nav && onNavigate) onNavigate(nav); };
   const posts = activity.length ? activity : seedPosts;
   const stats = [{ v: '128', l: 'Friends' }, { v: `${posts.length}`, l: 'Posts' }, { v: `LVL ${level}`, l: 'Level' }];
+  const logout = async () => {
+    haptic.tap();
+    try { await supabaseService.signOut(); } catch { /* no session / no client */ }
+    const st = useOne01PlatformStore.getState();
+    st.setProfile({ displayName: null, handle: null, email: null, authMethod: null });
+    st.setEntered(false); // back to the sign-in screen (keeps balance & data)
+  };
   const actions = [
     onOne01 ? { k: 'one01', label: '← ONE01 home', onPress: onOne01 } : null,
     { k: 'settings', label: 'Settings', onPress: onSettings },
     { k: 'legal', label: 'Legal', onPress: close },
     { k: 'support', label: 'Support', onPress: close },
+    { k: 'logout', label: 'Log out', onPress: logout },
   ].filter(Boolean) as { k: string; label: string; onPress: () => void }[];
 
   return (
@@ -297,8 +310,8 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
             {avatarUri ? <Image source={{ uri: avatarUri }} style={styles.bigAvatarImg} /> : <UserIcon size={40} color="#fff" />}
             <View style={[styles.avatarCam, { backgroundColor: th.accent, borderColor: th.bg }]}><Text style={{ fontSize: 12 }}>📷</Text></View>
           </Pressable>
-          <Text style={[styles.pName, { color: th.text }]}>Nobody</Text>
-          <Text style={[styles.pHandle, { color: th.muted }]}>@nobody · on ONE01</Text>
+          <Text style={[styles.pName, { color: th.text }]}>{nameLabel}</Text>
+          <Text style={[styles.pHandle, { color: th.muted }]}>{handleLabel}</Text>
           <Pressable onPress={changeAvatar} style={({ pressed }) => [styles.editBtn, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}><Text style={[styles.editTxt, { color: th.accent === '#F9D800' ? '#000' : '#fff' }]}>{t('Edit profile')}</Text></Pressable>
         </View>
         <View style={styles.pad}>

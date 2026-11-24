@@ -27,6 +27,7 @@ import {
   TextInput,
   Keyboard,
   Platform,
+  ActivityIndicator,
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -49,6 +50,8 @@ import {
 } from './brand';
 import type { OnboardConfig, OnboardMode } from '../../data/one01/onboarding';
 import type { MarkId } from '../../data/one01/platform';
+import { supabaseService } from '../../services/supabaseService';
+import type { AuthPrefill } from './ProfileSetup';
 
 const FRAME_MAX = 440; // phone-width column on wide screens
 const WIDE_AT = 600;
@@ -112,7 +115,7 @@ function Glow({ color, mode, w, h, id }: { color: string; mode: OnboardMode; w: 
 
 type Step = 'splash' | 'welcome' | 'connect';
 
-export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig; onFinish: () => void }) {
+export function ProductOnboarding({ config, onFinish, account = false }: { config: OnboardConfig; onFinish: (prefill?: AuthPrefill) => void; account?: boolean }) {
   const [step, setStep] = useState<Step>('splash');
   const [slide, setSlide] = useState(0);
   const p = palette(config.mode);
@@ -129,9 +132,9 @@ export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig;
     return () => clearTimeout(t);
   }, [step]);
 
-  const finish = () => {
+  const finish = (prefill?: AuthPrefill) => {
     haptic.success();
-    onFinish();
+    onFinish(prefill);
   };
 
   return (
@@ -156,7 +159,7 @@ export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig;
             slide={slide}
             setSlide={setSlide}
             onConnect={() => setStep('connect')}
-            onSkip={finish}
+            onSkip={() => finish(account ? { method: 'guest' } : undefined)}
             bottomInset={insets.bottom}
           />
         )}
@@ -166,6 +169,7 @@ export function ProductOnboarding({ config, onFinish }: { config: OnboardConfig;
             config={config}
             p={p}
             wide={wide}
+            account={account}
             onBack={() => setStep('welcome')}
             onFinish={finish}
             bottomInset={insets.bottom}
@@ -278,6 +282,7 @@ function Connect({
   config,
   p,
   wide,
+  account,
   onBack,
   onFinish,
   bottomInset,
@@ -285,8 +290,9 @@ function Connect({
   config: OnboardConfig;
   p: ReturnType<typeof palette>;
   wide: boolean;
+  account: boolean;
   onBack: () => void;
-  onFinish: () => void;
+  onFinish: (prefill?: AuthPrefill) => void;
   bottomInset: number;
 }) {
   // Rise-up / fade-in on mount.
@@ -298,7 +304,36 @@ function Connect({
   // which secondary method the user tapped (opens an inline input / wallet picker)
   const [method, setMethod] = useState<null | 'email' | 'phone' | 'wallet'>(null);
   const [val, setVal] = useState('');
+  // real-auth UI state (account flow only)
+  const [busy, setBusy] = useState<null | 'google' | 'apple'>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const methodBg = config.mode === 'dark' ? '#1C1C20' : '#0A0A0A';
+
+  // Google / Apple. Account flow = real Supabase OAuth; otherwise mocked.
+  const onProvider = async (provider: 'google' | 'apple') => {
+    if (!account) { onFinish(); return; }
+    setNotice(null);
+    setBusy(provider);
+    const r = await supabaseService.signInWithProvider(provider);
+    // Web redirects away on success, so reaching here with ok=true only happens
+    // natively (or when there's no client); the session listener handles web.
+    if (!r.ok) {
+      setBusy(null);
+      if (r.error === 'cancelled') return;
+      const nice =
+        r.error === 'no_client'
+          ? 'Sign-in is offline right now.'
+          : `${provider === 'google' ? 'Google' : 'Apple'} sign-in isn’t enabled yet.`;
+      setNotice(nice);
+      return;
+    }
+    if (Platform.OS !== 'web') {
+      const u = await supabaseService.currentUser();
+      setBusy(null);
+      onFinish({ name: u?.name, email: u?.email, avatarUrl: u?.avatarUrl, method: provider });
+    }
+    // web: navigating away — leave the spinner up until the page unloads
+  };
 
   // lift the bottom sheet above the on-screen keyboard (email / phone inputs)
   const [kb, setKb] = useState(0);
@@ -332,19 +367,22 @@ function Connect({
       val={val}
       setVal={setVal}
       p={p}
-      onBack={() => { haptic.tap(); setMethod(null); setVal(''); }}
-      onSubmit={onFinish}
+      account={account}
+      accent={config.accent}
+      onBack={() => { haptic.tap(); setMethod(null); setVal(''); setNotice(null); }}
+      onAuthed={(pf) => onFinish(pf)}
+      onMock={() => onFinish()}
     />
   ) : (
     <>
-      <AuthButton provider="google" mode={config.mode} onPress={onFinish} />
-      <AuthButton provider="apple" mode={config.mode} onPress={onFinish} />
+      <AuthButton provider="google" mode={config.mode} busy={busy === 'google'} disabled={!!busy} onPress={() => onProvider('google')} />
+      <AuthButton provider="apple" mode={config.mode} busy={busy === 'apple'} disabled={!!busy} onPress={() => onProvider('apple')} />
       {/* email / phone / wallet — each opens its own input or picker */}
       <View style={[styles.methodRow, { backgroundColor: methodBg }]}>
         {(['email', 'phone', 'wallet'] as const).map((m, i) => (
           <React.Fragment key={m}>
             {i > 0 && <View style={[styles.methodDiv, { backgroundColor: 'rgba(255,255,255,0.14)' }]} />}
-            <Pressable onPress={() => { haptic.tap(); setMethod(m); setVal(''); }} style={({ pressed }) => [styles.methodBtn, pressed && { opacity: 0.6 }]}>
+            <Pressable onPress={() => { haptic.tap(); setMethod(m); setVal(''); setNotice(null); }} style={({ pressed }) => [styles.methodBtn, pressed && { opacity: 0.6 }]}>
               {m === 'email' && <MailIcon size={22} color="#fff" />}
               {m === 'phone' && <PhoneIcon size={22} color="#fff" />}
               {m === 'wallet' && <WalletIcon size={24} color="#fff" />}
@@ -352,6 +390,7 @@ function Connect({
           </React.Fragment>
         ))}
       </View>
+      {notice ? <Text style={[styles.notice, { color: config.accent }]}>{notice}</Text> : null}
       <Text style={[styles.legal, { color: p.muted }]}>
         By continuing, you acknowledge ONE01{' '}
         <Text style={{ textDecorationLine: 'underline' }}>Privacy Policy</Text> and agree to get occasional promotional emails and notifications.
@@ -409,18 +448,43 @@ const WALLETS = [
   { k: 'phantom', name: 'Phantom', emoji: '👻' },
 ];
 
-/** The panel that replaces the auth buttons once a secondary method is tapped:
- *  an email/phone text field (opens the right keyboard) or a wallet picker. */
-function MethodPanel({ method, val, setVal, p, onBack, onSubmit }: {
+const WA_GREEN = '#25D366';
+
+/** The panel that replaces the auth buttons once a secondary method is tapped.
+ *  In the account flow: email sends a real magic link, phone runs a WhatsApp OTP
+ *  DEMO (any 6 digits), wallet is a demo connect. Otherwise everything is mocked. */
+function MethodPanel({ method, val, setVal, p, account, accent, onBack, onAuthed, onMock }: {
   method: 'email' | 'phone' | 'wallet';
   val: string;
   setVal: (s: string) => void;
   p: ReturnType<typeof palette>;
+  account: boolean;
+  accent: string;
   onBack: () => void;
-  onSubmit: () => void;
+  onAuthed: (prefill: AuthPrefill) => void;
+  onMock: () => void;
 }) {
-  const title = method === 'email' ? 'Continue with email' : method === 'phone' ? 'Continue with phone' : 'Connect a wallet';
+  const title = method === 'email' ? 'Continue with email' : method === 'phone' ? 'Continue with WhatsApp' : 'Connect a wallet';
   const fieldBg = p.dark ? 'rgba(255,255,255,0.05)' : 'rgba(10,10,10,0.04)';
+
+  // email (account) → magic link
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  // phone (account) → WhatsApp OTP demo
+  const [stage, setStage] = useState<'enter' | 'code'>('enter');
+  const [code, setCode] = useState('');
+
+  const sendLink = async () => {
+    const email = val.trim();
+    if (!email) return;
+    setErr(null); setSending(true);
+    const r = await supabaseService.sendMagicLink(email);
+    setSending(false);
+    if (r.ok) { haptic.success(); setSent(true); }
+    else setErr(r.error === 'no_client' ? 'Email sign-in is offline right now.' : 'Could not send the link — check the address and try again.');
+  };
+
   return (
     <View style={{ gap: 12 }}>
       <View style={styles.methodHead}>
@@ -431,7 +495,7 @@ function MethodPanel({ method, val, setVal, p, onBack, onSubmit }: {
       {method === 'wallet' ? (
         <View style={{ gap: 8 }}>
           {WALLETS.map((w) => (
-            <Pressable key={w.k} onPress={onSubmit} style={({ pressed }) => [styles.walletRow, { borderColor: p.sheetBorder, backgroundColor: fieldBg }, pressed && { opacity: 0.65 }]}>
+            <Pressable key={w.k} onPress={() => (account ? onAuthed({ method: 'wallet' }) : onMock())} style={({ pressed }) => [styles.walletRow, { borderColor: p.sheetBorder, backgroundColor: fieldBg }, pressed && { opacity: 0.65 }]}>
               <Text style={{ fontSize: 22 }}>{w.emoji}</Text>
               <Text style={[styles.walletName, { color: p.text }]}>{w.name}</Text>
               <View style={styles.flex} />
@@ -439,32 +503,97 @@ function MethodPanel({ method, val, setVal, p, onBack, onSubmit }: {
             </Pressable>
           ))}
         </View>
+      ) : method === 'email' ? (
+        account && sent ? (
+          <View style={{ gap: 10 }}>
+            <Text style={[styles.methodBody, { color: p.text }]}>Check your inbox ✉️</Text>
+            <Text style={[styles.methodBody, { color: p.muted, fontWeight: '500' }]}>
+              We sent a magic link to <Text style={{ color: p.text, fontWeight: '700' }}>{val.trim()}</Text>. Open it on this device to finish signing in.
+            </Text>
+            <Pressable onPress={sendLink} disabled={sending} style={({ pressed }) => [styles.methodCta, { backgroundColor: p.ink }, pressed && { opacity: 0.85 }]}>
+              <Text style={[styles.methodCtaTxt, { color: p.inkText }]}>{sending ? 'Sending…' : 'Resend link'}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <TextInput
+              value={val}
+              onChangeText={setVal}
+              autoFocus
+              keyboardType="email-address"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="you@email.com"
+              placeholderTextColor={p.muted}
+              onSubmitEditing={() => { if (val.trim()) { account ? sendLink() : onMock(); } }}
+              returnKeyType="go"
+              style={[styles.methodInput, { color: p.text, borderColor: p.sheetBorder, backgroundColor: fieldBg }]}
+            />
+            {err ? <Text style={[styles.notice, { color: accent }]}>{err}</Text> : null}
+            <Pressable
+              onPress={() => { if (val.trim()) { account ? sendLink() : onMock(); } }}
+              disabled={!val.trim() || sending}
+              style={({ pressed }) => [styles.methodCta, { backgroundColor: p.ink }, (!val.trim() || sending) && { opacity: 0.4 }, pressed && val.trim() && { opacity: 0.85 }]}
+            >
+              <Text style={[styles.methodCtaTxt, { color: p.inkText }]}>{sending ? 'Sending…' : account ? 'Email me a magic link' : 'Continue'}</Text>
+            </Pressable>
+          </>
+        )
       ) : (
-        <>
-          <TextInput
-            value={val}
-            onChangeText={setVal}
-            autoFocus
-            keyboardType={method === 'phone' ? 'phone-pad' : 'email-address'}
-            inputMode={method === 'phone' ? 'tel' : 'email'}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder={method === 'phone' ? '+1 (555) 000-0000' : 'you@email.com'}
-            placeholderTextColor={p.muted}
-            onSubmitEditing={() => { if (val.trim()) onSubmit(); }}
-            returnKeyType="go"
-            style={[styles.methodInput, { color: p.text, borderColor: p.sheetBorder, backgroundColor: fieldBg }]}
-          />
-          <Pressable onPress={() => { if (val.trim()) onSubmit(); }} disabled={!val.trim()} style={({ pressed }) => [styles.methodCta, { backgroundColor: p.ink }, !val.trim() && { opacity: 0.4 }, pressed && val.trim() && { opacity: 0.85 }]}>
-            <Text style={[styles.methodCtaTxt, { color: p.inkText }]}>Continue</Text>
-          </Pressable>
-        </>
+        // phone → WhatsApp (account = demo OTP; non-account = mock)
+        account && stage === 'code' ? (
+          <View style={{ gap: 10 }}>
+            <Text style={[styles.methodBody, { color: p.muted, fontWeight: '500' }]}>
+              Enter the 6-digit code we “sent” on WhatsApp to <Text style={{ color: p.text, fontWeight: '700' }}>{val.trim()}</Text>.
+            </Text>
+            <TextInput
+              value={code}
+              onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
+              autoFocus
+              keyboardType="number-pad"
+              inputMode="numeric"
+              placeholder="● ● ● ● ● ●"
+              placeholderTextColor={p.muted}
+              style={[styles.methodInput, styles.codeInput, { color: p.text, borderColor: p.sheetBorder, backgroundColor: fieldBg }]}
+            />
+            <Text style={[styles.demoTag, { color: p.muted }]}>Demo — enter any 6 digits</Text>
+            <Pressable onPress={() => { if (code.length === 6) onAuthed({ method: 'whatsapp' }); }} disabled={code.length !== 6} style={({ pressed }) => [styles.methodCta, { backgroundColor: WA_GREEN }, code.length !== 6 && { opacity: 0.4 }, pressed && code.length === 6 && { opacity: 0.85 }]}>
+              <Text style={[styles.methodCtaTxt, { color: '#fff' }]}>Verify & continue</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <TextInput
+              value={val}
+              onChangeText={setVal}
+              autoFocus
+              keyboardType="phone-pad"
+              inputMode="tel"
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="+1 (555) 000-0000"
+              placeholderTextColor={p.muted}
+              onSubmitEditing={() => { if (val.trim()) { account ? setStage('code') : onMock(); } }}
+              returnKeyType="go"
+              style={[styles.methodInput, { color: p.text, borderColor: p.sheetBorder, backgroundColor: fieldBg }]}
+            />
+            {account ? <Text style={[styles.demoTag, { color: p.muted }]}>We’ll message a code on WhatsApp · demo for now</Text> : null}
+            <Pressable
+              onPress={() => { if (val.trim()) { account ? setStage('code') : onMock(); } }}
+              disabled={!val.trim()}
+              style={({ pressed }) => [styles.methodCta, { backgroundColor: account ? WA_GREEN : p.ink }, !val.trim() && { opacity: 0.4 }, pressed && val.trim() && { opacity: 0.85 }]}
+            >
+              <Text style={[styles.methodCtaTxt, { color: '#fff' }]}>{account ? 'Send code on WhatsApp' : 'Continue'}</Text>
+            </Pressable>
+          </>
+        )
       )}
     </View>
   );
 }
 
-function AuthButton({ provider, mode, onPress }: { provider: 'google' | 'apple' | 'email'; mode: OnboardMode; onPress: () => void }) {
+function AuthButton({ provider, mode, onPress, busy = false, disabled = false }: { provider: 'google' | 'apple' | 'email'; mode: OnboardMode; onPress: () => void; busy?: boolean; disabled?: boolean }) {
   const dark = mode === 'dark';
   let bg = '#FFFFFF';
   let fg = '#1F1F23';
@@ -484,18 +613,26 @@ function AuthButton({ provider, mode, onPress }: { provider: 'google' | 'apple' 
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.authBtn,
         { backgroundColor: bg, borderColor: border ?? 'transparent', borderWidth: border ? 1 : 0 },
+        disabled && !busy && { opacity: 0.5 },
         pressed && { opacity: 0.85 },
       ]}
     >
       <View style={styles.authIcon}>
-        {provider === 'google' && <GoogleIcon size={20} />}
-        {provider === 'apple' && <AppleIcon size={20} color={fg} />}
-        {provider === 'email' && <MailIcon size={20} color={fg} />}
+        {busy ? (
+          <ActivityIndicator size="small" color={fg} />
+        ) : (
+          <>
+            {provider === 'google' && <GoogleIcon size={20} />}
+            {provider === 'apple' && <AppleIcon size={20} color={fg} />}
+            {provider === 'email' && <MailIcon size={20} color={fg} />}
+          </>
+        )}
       </View>
-      <Text style={[styles.authTxt, { color: fg }]}>{label}</Text>
+      <Text style={[styles.authTxt, { color: fg }]}>{busy ? 'Connecting…' : label}</Text>
     </Pressable>
   );
 }
@@ -552,6 +689,10 @@ const styles = StyleSheet.create({
   authIcon: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   authTxt: { fontSize: 15.5, fontWeight: '600' },
   legal: { fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 6, paddingHorizontal: 10 },
+  notice: { fontSize: 12.5, lineHeight: 17, fontWeight: '600', textAlign: 'center', marginTop: 2 },
+  methodBody: { fontSize: 14.5, lineHeight: 20, fontWeight: '700' },
+  demoTag: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  codeInput: { textAlign: 'center', fontSize: 22, letterSpacing: 6, fontWeight: '700' },
 
   /* email / phone / wallet method row */
   methodRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, height: 58, overflow: 'hidden' },

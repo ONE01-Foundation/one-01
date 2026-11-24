@@ -211,10 +211,20 @@ interface One01PlatformState {
   follows: Record<string, boolean>;
   /** User-set profile photo (data URI or file URI); null = default icon. */
   avatarUri: string | null;
+  /** Chosen display name (from the name/photo step after first sign-in). */
+  displayName: string | null;
+  /** @handle derived from the name/email (no leading @). */
+  handle: string | null;
+  /** Email of the signed-in account (if any). */
+  email: string | null;
+  /** How the user signed in: 'google' | 'email' | 'whatsapp' | 'wallet' | 'guest'. */
+  authMethod: string | null;
 
   setEntered: (v: boolean) => void;
   /** Set (or clear) the profile photo. */
   setAvatar: (uri: string | null) => void;
+  /** Merge identity fields (name/handle/email/method) set at first sign-in. */
+  setProfile: (p: { displayName?: string | null; handle?: string | null; email?: string | null; authMethod?: string | null }) => void;
   setAppearance: (v: 'light' | 'dark') => void;
   setLang: (v: 'en' | 'he') => void;
   markNotifsSeen: () => void;
@@ -258,9 +268,20 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
       notifsSeenAt: 0,
       follows: {},
       avatarUri: null,
+      displayName: null,
+      handle: null,
+      email: null,
+      authMethod: null,
 
       setEntered: (v) => set({ entered: v }),
       setAvatar: (uri) => set({ avatarUri: uri }),
+      setProfile: (p) =>
+        set((s) => ({
+          displayName: p.displayName !== undefined ? p.displayName : s.displayName,
+          handle: p.handle !== undefined ? p.handle : s.handle,
+          email: p.email !== undefined ? p.email : s.email,
+          authMethod: p.authMethod !== undefined ? p.authMethod : s.authMethod,
+        })),
       setAppearance: (v) => set({ appearance: v }),
       setLang: (v) => set({ lang: v }),
       markNotifsSeen: () => set({ notifsSeenAt: Date.now() }),
@@ -382,7 +403,7 @@ export const useOne01PlatformStore = create<One01PlatformState>()(
           };
         }),
 
-      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], ventureKits: {}, notifsSeenAt: 0, follows: {}, avatarUri: null }),
+      resetDemo: () => set({ entered: false, onboarded: [], balance: START_BALANCE, transactions: [], positions: {}, creations: [], ventures: [], ventureKits: {}, notifsSeenAt: 0, follows: {}, avatarUri: null, displayName: null, handle: null, email: null, authMethod: null }),
     }),
     { name: 'one01_platform_v1', version: 1, storage: createJSONStorage(() => platStorage) },
   ),

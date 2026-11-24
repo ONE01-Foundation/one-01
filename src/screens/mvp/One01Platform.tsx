@@ -64,6 +64,8 @@ import {
   LevelRing,
 } from '../../components/one01/brand';
 import { ProductOnboarding } from '../../components/one01/ProductOnboarding';
+import { ProfileSetup, type AuthPrefill } from '../../components/one01/ProfileSetup';
+import { supabaseService, type AuthedUser } from '../../services/supabaseService';
 import { DetailPage, type DetailKind } from '../../components/one01/DetailPage';
 import { SheetWindow, ProfilePage, WalletPage, SettingsPage, NetworkPage } from '../../components/one01/Panels';
 import { MiniPlayer, type PlayKind } from '../../components/one01/MiniPlay';
@@ -170,6 +172,7 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const lang = useOne01PlatformStore((s) => s.lang);
   const entered = useOne01PlatformStore((s) => s.entered);
   const setEntered = useOne01PlatformStore((s) => s.setEntered);
+  const displayName = useOne01PlatformStore((s) => s.displayName);
   const onboarded = useOne01PlatformStore((s) => s.onboarded);
   const markOnboarded = useOne01PlatformStore((s) => s.markOnboarded);
   const debit = useOne01PlatformStore((s) => s.debit);
@@ -196,6 +199,10 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
   const [ventureId, setVentureId] = useState<string | null>(null);
   const [bannerSlide, setBannerSlide] = useState<ShellHero | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  // auth: the signed-in Supabase user (web redirect / native), or a demo prefill
+  // (WhatsApp / wallet / guest). Either one drives the one-time profile setup.
+  const [authUser, setAuthUser] = useState<AuthedUser | null>(null);
+  const [demoAuthed, setDemoAuthed] = useState<AuthPrefill | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (msg: string) => {
@@ -230,6 +237,21 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     else if (nav.kind === 'market') { setTab('market'); }
     else if (nav.kind === 'create') { setTab('create'); }
   };
+
+  // detect a real sign-in: on mount (web picks up the OAuth/magic-link redirect
+  // via detectSessionInUrl) and on any later auth change. A returning user (name
+  // already chosen) goes straight in; a new one falls through to profile setup.
+  useEffect(() => {
+    let unsub = () => {};
+    (async () => {
+      supabaseService.initialize();
+      const enterIfReturning = () => { if (useOne01PlatformStore.getState().displayName) useOne01PlatformStore.getState().setEntered(true); };
+      const u = await supabaseService.currentUser();
+      if (u) { setAuthUser(u); enterIfReturning(); }
+      unsub = supabaseService.onAuthChange((user) => { setAuthUser(user); if (user) enterIfReturning(); });
+    })();
+    return () => unsub();
+  }, []);
 
   // a focused drawer view belongs to the current home/tab — drop it on any switch
   useEffect(() => { setDrawer(null); }, [tab, homeId]);
@@ -292,7 +314,26 @@ export function One01Platform({ onExit }: { onExit: () => void }) {
     else { const app = ECOSYSTEM_APPS.find((e) => e.id === id); if (app) setExternalApp(app); }
   };
 
-  if (!entered) return <ProductOnboarding config={onboardingFor('one01')} onFinish={() => setEntered(true)} />;
+  if (!entered) {
+    // a signed-in session or a demo sign-in → prefill for the one-time name/photo step
+    const prefill: AuthPrefill | null =
+      demoAuthed ??
+      (authUser ? { name: authUser.name, email: authUser.email, avatarUrl: authUser.avatarUrl, method: authUser.avatarUrl ? 'google' : 'email' } : null);
+    if (prefill && !displayName) return <ProfileSetup prefill={prefill} onDone={() => setDemoAuthed(null)} />;
+    return (
+      <ProductOnboarding
+        config={onboardingFor('one01')}
+        account
+        onFinish={(pf) => {
+          // real web OAuth / magic link return via the session listener; here we
+          // get the synchronous paths (WhatsApp demo, wallet, guest, native OAuth)
+          if (!pf) { setEntered(true); return; }
+          if (useOne01PlatformStore.getState().displayName) setEntered(true); // returning
+          else setDemoAuthed(pf); // new → profile setup
+        }}
+      />
+    );
+  }
   if (onboardFor) return <ProductOnboarding config={onboardingFor(onboardFor)} onFinish={() => enterProduct(onboardFor)} />;
 
   const th = shellTheme(homeId, appearance);
@@ -643,13 +684,17 @@ function WalletDrop({ th, lang, onOpenFull }: { th: ShellTheme; lang: Lang; onOp
 function ProfileDrop({ th, lang, onSettings, onExit, onOpenFull }: { th: ShellTheme; lang: Lang; onSettings: () => void; onExit: () => void; onOpenFull: () => void }) {
   const t = (en: string) => tr(lang, en);
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  const displayName = useOne01PlatformStore((s) => s.displayName);
+  const avatarUri = useOne01PlatformStore((s) => s.avatarUri);
   return (
     <View style={[styles.navDrop, styles.navDropRight]}>
       <View style={[styles.menuPanel, { backgroundColor: th.surface, borderColor: th.border }]}>
         <View style={styles.appsHead}><Text style={[styles.menuSmall, { color: th.muted }]}>{t('Account')}</Text><View style={styles.flex} /><Pressable onPress={onSettings}><Text style={{ color: th.muted, fontSize: 15 }}>⚙</Text></Pressable></View>
         <Pressable onPress={onOpenFull} style={styles.menuAcct}>
-          <View style={[styles.avatarSm, { backgroundColor: th.surface2, borderColor: th.accent }]}><UserIcon size={16} color={th.muted} /></View>
-          <Text style={[styles.appsRowTxt, { color: th.text }]}>Nobody</Text><View style={styles.flex} /><Text style={{ color: '#22c55e', fontWeight: '800' }}>✓</Text>
+          <View style={[styles.avatarSm, { backgroundColor: th.surface2, borderColor: th.accent, overflow: 'hidden' }]}>
+            {avatarUri ? <Image source={{ uri: avatarUri }} style={{ width: 28, height: 28, borderRadius: 14 }} /> : <UserIcon size={16} color={th.muted} />}
+          </View>
+          <Text style={[styles.appsRowTxt, { color: th.text }]}>{displayName?.trim() || 'Nobody'}</Text><View style={styles.flex} /><Text style={{ color: '#22c55e', fontWeight: '800' }}>✓</Text>
         </Pressable>
         <View style={styles.menuUpgrade}>
           <View style={[styles.upPill, { backgroundColor: th.accent }]}><Text style={[styles.upPillTxt, { color: ctaFg }]}>{t('Upgrade')}</Text></View>
