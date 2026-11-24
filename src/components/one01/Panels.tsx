@@ -337,8 +337,8 @@ export function ProfilePage({ th, close, onExit, onCreate, onOne01, onSettings, 
                   </View>
                   <Text style={[styles.postText, { color: th.text }]}>{p.text}</Text>
                   <View style={styles.postFoot}>
-                    <Text style={[styles.postAction, { color: th.muted }]}>♡  24</Text>
-                    <Text style={[styles.postAction, { color: th.muted }]}>↩  3</Text>
+                    <Text style={[styles.postAction, { color: th.muted }]}>♡  {3 + (phash(p.id) % 140)}</Text>
+                    <Text style={[styles.postAction, { color: th.muted }]}>↩  {phash(`${p.id}c`) % 18}</Text>
                     <Text style={[styles.postAction, { color: th.muted }]}>↗</Text>
                   </View>
                 </Pressable>
