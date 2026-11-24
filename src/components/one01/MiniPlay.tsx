@@ -15,10 +15,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { haptic } from '../../utils/haptics';
 import { type ShellTheme, type HomeItem } from '../../data/one01/platform';
 import { useOne01PlatformStore } from '../../stores/one01PlatformStore';
+import { PongGame } from './PongGame';
 
 export type PlayKind = 'game' | 'show';
 
 export function MiniPlayer({ kind, th, item, onClose }: { kind: PlayKind; th: ShellTheme; item: HomeItem; onClose: () => void }) {
+  // Pong is a REAL two-computer match (Supabase Realtime) — not the reaction mock.
+  if (kind === 'game' && item.id === 'pong') return <PongGame th={th} item={item} onClose={onClose} />;
   return kind === 'game' ? <MiniGame th={th} item={item} onClose={onClose} /> : <MiniShow th={th} item={item} onClose={onClose} />;
 }
 

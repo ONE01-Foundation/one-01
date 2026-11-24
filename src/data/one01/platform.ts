@@ -549,7 +549,7 @@ export const HOME: Record<'one01' | ProductId, HomeConfig> = {
     sectionTitle: 'Games',
     layout: 'cards',
     items: [
-      { id: 'pong', title: 'Pong', emoji: '🏓', bg: ['#1E3A8A', '#0F1F4D'], metric: '48', cat: 'arcade' },
+      { id: 'pong', title: 'Pong', emoji: '🏓', bg: ['#1E3A8A', '#0F1F4D'], metric: '2P', cat: 'arcade', live: true, blurb: 'Real 1-v-1 across two computers. Create a match, share the code, and the winner takes the pot. Drag or use the arrow keys.' },
       { id: 'sniper', title: 'Sniper', emoji: '🎯', bg: ['#14532D', '#0A2A17'], metric: '85', cat: 'action' },
       { id: 'jets', title: 'Jets', emoji: '✈️', bg: ['#3730A3', '#1E1B4B'], metric: '62', cat: 'action' },
       { id: 'racer', title: 'Racer', emoji: '🏎️', bg: ['#7C2D12', '#3B1206'], metric: '30', cat: 'racing' },
