@@ -151,6 +151,16 @@ export function BoltIcon({ size = 18, color = '#000000' }: BrandProps) {
   );
 }
 
+/** Send — a paper plane for P2P credit transfers. */
+export function SendIcon({ size = 22, color = '#000000' }: BrandProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M21.5 2.5 L11 13" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M21.5 2.5 L15 21.5 L11 13 L2.5 9 Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 /** Gift — rewards / daily streak. */
 export function GiftIcon({ size = 22, color = '#000000' }: BrandProps) {
   return (
