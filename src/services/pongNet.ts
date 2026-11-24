@@ -178,10 +178,15 @@ export async function quickMatch(h: PongHandlers, onSearching?: () => void): Pro
     });
   });
 
-  try { await c.removeChannel(lobby); } catch { /* ignore */ }
-  if (!paired) return null;
+  if (!paired) { try { await c.removeChannel(lobby); } catch { /* ignore */ } return null; }
 
+  // Connect to the game channel BEFORE tearing down the lobby — removing the last
+  // channel drops the socket, and a game-channel subscribe racing that reconnect fails.
   const room = paired.role === 'host' ? await hostRoom(paired.code, h) : await guestJoin(paired.code, h);
-  if (!room) return null;
+  if (!room) { try { await c.removeChannel(lobby); } catch { /* ignore */ } return null; }
+  // Linger in the lobby a few seconds so the PEER still sees our presence and pairs to the
+  // same room before we vanish (otherwise the faster client leaves first and the slower one
+  // never sees both present → can't pair). Fire-and-forget; the game channel is already up.
+  setTimeout(() => { c.removeChannel(lobby).catch(() => {}); }, 6000);
   return { room, role: paired.role };
 }
