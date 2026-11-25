@@ -21,7 +21,7 @@ import Svg, { Path } from 'react-native-svg';
 import { haptic } from '../../utils/haptics';
 import {
   One01Mark, OneMark, WinziMark, MixStarMark, XitMark, SodexMark, UserIcon, CreateIcon,
-  DepositIcon, WithdrawIcon, GiftIcon, SendIcon,
+  DepositIcon, WithdrawIcon, GiftIcon,
 } from './brand';
 import { type ShellTheme, type MarkId, NETWORK, type Person, RARITY_COLOR, levelFor } from '../../data/one01/platform';
 import { useOne01PlatformStore, livePrice, buildNotifs, labelNav, QUESTS, dailyClaimable, nextDailyAmount, dailyRewardFor, nextStreak, rewardsAvailable, DAILY_MAX_DAY, type PlatformTx, type UserCreation, type NotifNav } from '../../stores/one01PlatformStore';
@@ -752,24 +752,38 @@ const WITHDRAW_METHODS = [
 
 /** Full-sheet amount entry: a $ display (credits are 1:1 with USD), a payment-method
  *  / destination picker, and a numeric keypad. Used for both deposit and withdraw. */
-function AmountPad({ th, kind, balance, onClose, onConfirm }: {
-  th: ShellTheme; kind: 'deposit' | 'withdraw'; balance: number;
-  onClose: () => void; onConfirm: (amount: number, methodName: string) => void;
+function AmountPad({ th, kind, balance, people = [], onClose, onConfirm }: {
+  th: ShellTheme; kind: 'deposit' | 'withdraw'; balance: number; people?: Person[];
+  onClose: () => void; onConfirm: (amount: number, targetName: string, isPerson?: boolean) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [amt, setAmt] = useState('');
   const methods = kind === 'deposit' ? DEPOSIT_METHODS : WITHDRAW_METHODS;
   const [method, setMethod] = useState(methods[0].k);
+  // withdraw can go to an account (bank/card) OR to a person on ONE01 (a send)
+  const [dest, setDest] = useState<'account' | 'person'>('account');
+  const [recipient, setRecipient] = useState(people[0]?.id ?? '');
+  const canSend = kind === 'withdraw' && people.length > 0;
+  const isSend = canSend && dest === 'person';
+  const person = people.find((p) => p.id === recipient);
   const n = parseInt(amt || '0', 10);
   const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
   const tooMuch = kind === 'withdraw' && n > balance;
-  const valid = n > 0 && !tooMuch;
+  const valid = n > 0 && !tooMuch && (!isSend || !!person);
   const press = (d: string) => {
     haptic.select();
     if (d === '⌫') setAmt((a) => a.slice(0, -1));
     else if (amt.length < 7) setAmt((a) => (a === '' && d === '0' ? '' : a + d));
   };
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+  const submit = () => {
+    if (!valid) return;
+    if (isSend && person) onConfirm(n, person.name, true);
+    else onConfirm(n, methods.find((m) => m.k === method)?.name ?? '', false);
+  };
+  const cta = isSend
+    ? (person ? `Send ⟡${n.toLocaleString()} to ${person.name}` : `Send ⟡${n.toLocaleString()}`)
+    : kind === 'deposit' ? `Deposit $${n.toLocaleString()}` : `Withdraw $${n.toLocaleString()}`;
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: th.bg }]}>
       <View style={styles.head}>
@@ -781,88 +795,59 @@ function AmountPad({ th, kind, balance, onClose, onConfirm }: {
       </View>
       <View style={styles.padBody}>
         <View style={styles.amtWrap}>
-          <Text style={[styles.amtBig, { color: tooMuch ? '#ef4444' : th.text }]}>${n.toLocaleString()}</Text>
-          <Text style={[styles.amtHint, { color: th.muted }]}>{tooMuch ? `Max ⟡${balance.toLocaleString()}` : `⟡ ${n.toLocaleString()} credits · 1 credit = $1`}</Text>
+          <Text style={[styles.amtBig, { color: tooMuch ? '#ef4444' : th.text }]}>{isSend ? `⟡${n.toLocaleString()}` : `$${n.toLocaleString()}`}</Text>
+          <Text style={[styles.amtHint, { color: th.muted }]}>{tooMuch ? `Max ⟡${balance.toLocaleString()}` : isSend ? (person ? `to ${person.name} · balance ⟡${balance.toLocaleString()}` : 'Pick someone') : `⟡ ${n.toLocaleString()} credits · 1 credit = $1`}</Text>
         </View>
-        <Text style={[styles.padLabel, { color: th.muted }]}>{kind === 'deposit' ? 'PAY WITH' : 'WITHDRAW TO'}</Text>
-        <View style={{ gap: 8 }}>
-          {methods.map((m) => {
-            const on = method === m.k;
-            return (
-              <Pressable key={m.k} onPress={() => { haptic.select(); setMethod(m.k); }} style={[styles.payRow, { borderColor: on ? th.accent : th.border, backgroundColor: th.surface }]}>
-                <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
-                <Text style={[styles.payName, { color: th.text }]}>{m.name}</Text>
-                <View style={styles.flex} />
-                <View style={[styles.radio, { borderColor: on ? th.accent : th.border }]}>{on ? <View style={[styles.radioDot, { backgroundColor: th.accent }]} /> : null}</View>
-              </Pressable>
-            );
-          })}
-        </View>
-        <View style={styles.flex} />
-        <View style={styles.keypad}>
-          {keys.map((k, i) => (
-            <Pressable key={i} disabled={k === ''} onPress={() => k && press(k)} style={({ pressed }) => [styles.key, pressed && k !== '' && { backgroundColor: th.surface }]}>
-              <Text style={[styles.keyTxt, { color: th.text }]}>{k}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <Pressable onPress={() => { if (valid) onConfirm(n, methods.find((m) => m.k === method)?.name ?? ''); }} disabled={!valid} style={({ pressed }) => [styles.padCta, { backgroundColor: th.accent }, !valid && { opacity: 0.4 }, pressed && valid && { opacity: 0.85 }]}>
-          <Text style={[styles.padCtaTxt, { color: accentFg }]}>{kind === 'deposit' ? `Deposit $${n.toLocaleString()}` : `Withdraw $${n.toLocaleString()}`}</Text>
-        </Pressable>
-        <View style={{ height: insets.bottom + 8 }} />
-      </View>
-    </View>
-  );
-}
 
-/** Send credits to someone in your network (ONE Pay). Mirrors the amount pad but
- *  picks a recipient instead of a payment method; debits your balance. */
-function SendPad({ th, balance, people, onClose, onConfirm }: {
-  th: ShellTheme; balance: number; people: Person[];
-  onClose: () => void; onConfirm: (amount: number, recipientName: string) => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const [amt, setAmt] = useState('');
-  const [sel, setSel] = useState(people[0]?.id ?? '');
-  const n = parseInt(amt || '0', 10);
-  const person = people.find((p) => p.id === sel);
-  const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
-  const tooMuch = n > balance;
-  const valid = n > 0 && !tooMuch && !!person;
-  const press = (d: string) => {
-    haptic.select();
-    if (d === '⌫') setAmt((a) => a.slice(0, -1));
-    else if (amt.length < 7) setAmt((a) => (a === '' && d === '0' ? '' : a + d));
-  };
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
-  return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: th.bg }]}>
-      <View style={styles.head}>
-        <Pressable onPress={onClose} hitSlop={10} style={[styles.round, { backgroundColor: th.surface, borderColor: th.border }]}>
-          <Text style={[styles.x, { color: th.text }]}>✕</Text>
-        </Pressable>
-        <Text style={[styles.headTitle, { color: th.text }]}>Send</Text>
-        <View style={styles.flex} />
-      </View>
-      <View style={styles.padBody}>
-        <View style={styles.amtWrap}>
-          <Text style={[styles.amtBig, { color: tooMuch ? '#ef4444' : th.text }]}>⟡{n.toLocaleString()}</Text>
-          <Text style={[styles.amtHint, { color: th.muted }]}>{tooMuch ? `Max ⟡${balance.toLocaleString()}` : person ? `to ${person.name} · balance ⟡${balance.toLocaleString()}` : 'Pick someone'}</Text>
-        </View>
-        <Text style={[styles.padLabel, { color: th.muted }]}>SEND TO</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sendRow}>
-          {people.map((p) => {
-            const on = p.id === sel;
-            return (
-              <Pressable key={p.id} onPress={() => { haptic.select(); setSel(p.id); }} style={styles.sendPerson}>
-                <View style={[styles.sendAvatar, { backgroundColor: `${p.accent}22`, borderColor: on ? th.accent : 'transparent' }]}>
-                  <Text style={{ fontSize: 22 }}>{p.emoji}</Text>
-                </View>
-                <Text numberOfLines={1} style={[styles.sendName, { color: on ? th.text : th.muted }]}>{p.name}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {/* withdraw destination: to an account, or send to a person */}
+        {canSend && (
+          <View style={[styles.destToggle, { backgroundColor: th.surface2 }]}>
+            {([['account', 'To account'], ['person', 'To a person']] as const).map(([d, label]) => {
+              const on = dest === d;
+              return (
+                <Pressable key={d} onPress={() => { haptic.select(); setDest(d); }} style={[styles.destBtn, on && { backgroundColor: th.accent }]}>
+                  <Text style={[styles.destTxt, { color: on ? accentFg : th.muted }]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {isSend ? (
+          <>
+            <Text style={[styles.padLabel, { color: th.muted }]}>SEND TO</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sendRow}>
+              {people.map((p) => {
+                const on = p.id === recipient;
+                return (
+                  <Pressable key={p.id} onPress={() => { haptic.select(); setRecipient(p.id); }} style={styles.sendPerson}>
+                    <View style={[styles.sendAvatar, { backgroundColor: `${p.accent}22`, borderColor: on ? th.accent : 'transparent' }]}>
+                      <Text style={{ fontSize: 22 }}>{p.emoji}</Text>
+                    </View>
+                    <Text numberOfLines={1} style={[styles.sendName, { color: on ? th.text : th.muted }]}>{p.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.padLabel, { color: th.muted }]}>{kind === 'deposit' ? 'PAY WITH' : 'WITHDRAW TO'}</Text>
+            <View style={{ gap: 8 }}>
+              {methods.map((m) => {
+                const on = method === m.k;
+                return (
+                  <Pressable key={m.k} onPress={() => { haptic.select(); setMethod(m.k); }} style={[styles.payRow, { borderColor: on ? th.accent : th.border, backgroundColor: th.surface }]}>
+                    <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
+                    <Text style={[styles.payName, { color: th.text }]}>{m.name}</Text>
+                    <View style={styles.flex} />
+                    <View style={[styles.radio, { borderColor: on ? th.accent : th.border }]}>{on ? <View style={[styles.radioDot, { backgroundColor: th.accent }]} /> : null}</View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
         <View style={styles.flex} />
         <View style={styles.keypad}>
           {keys.map((k, i) => (
@@ -871,8 +856,8 @@ function SendPad({ th, balance, people, onClose, onConfirm }: {
             </Pressable>
           ))}
         </View>
-        <Pressable onPress={() => { if (valid && person) onConfirm(n, person.name); }} disabled={!valid} style={({ pressed }) => [styles.padCta, { backgroundColor: th.accent }, !valid && { opacity: 0.4 }, pressed && valid && { opacity: 0.85 }]}>
-          <Text style={[styles.padCtaTxt, { color: accentFg }]}>{person ? `Send ⟡${n.toLocaleString()} to ${person.name}` : `Send ⟡${n.toLocaleString()}`}</Text>
+        <Pressable onPress={submit} disabled={!valid} style={({ pressed }) => [styles.padCta, { backgroundColor: th.accent }, !valid && { opacity: 0.4 }, pressed && valid && { opacity: 0.85 }]}>
+          <Text style={[styles.padCtaTxt, { color: accentFg }]}>{cta}</Text>
         </Pressable>
         <View style={{ height: insets.bottom + 8 }} />
       </View>
@@ -892,17 +877,17 @@ export function WalletPage({ th, close, onScroll, lang, onRewards }: { th: Shell
   const creations = useOne01PlatformStore((s) => s.creations);
   const follows = useOne01PlatformStore((s) => s.follows);
   const [section, setSection] = useState<'assets' | 'history'>('assets');
-  const [pad, setPad] = useState<null | 'deposit' | 'withdraw' | 'send'>(null);
+  const [pad, setPad] = useState<null | 'deposit' | 'withdraw'>(null);
   const accentFg = th.accent === '#F9D800' ? '#000' : '#fff';
-  // recipients for Send: people you follow first, then the rest of the network
+  // recipients for a send (inside Withdraw): people you follow first, then the rest
   const recipients = useMemo(() => {
     const followed = (id: string, seed: boolean) => (follows[id] !== undefined ? follows[id] : seed);
     return [...NETWORK].sort((a, b) => Number(followed(b.id, b.followsBack)) - Number(followed(a.id, a.followsBack))).slice(0, 12);
   }, [follows]);
-  const confirmPad = (amount: number, mname: string) => {
-    if (pad === 'deposit') { credit(amount, `Deposit · ${mname}`); haptic.success(); }
-    else if (pad === 'send') { if (debit(amount, `Sent · ${mname}`)) haptic.success(); else haptic.warning(); }
-    else if (debit(amount, `Withdraw · ${mname}`)) haptic.success();
+  const confirmPad = (amount: number, name: string, isPerson?: boolean) => {
+    if (pad === 'deposit') { credit(amount, `Deposit · ${name}`); haptic.success(); }
+    else if (isPerson) { if (debit(amount, `Sent · ${name}`)) haptic.success(); else haptic.warning(); }
+    else if (debit(amount, `Withdraw · ${name}`)) haptic.success();
     else haptic.warning();
     setPad(null);
   };
@@ -947,10 +932,6 @@ export function WalletPage({ th, close, onScroll, lang, onRewards }: { th: Shell
           <Pressable onPress={() => setPad('deposit')} style={({ pressed }) => [styles.wBtn, { backgroundColor: th.accent }, pressed && { opacity: 0.85 }]}>
             <DepositIcon size={18} color={accentFg} />
             <Text style={[styles.wBtnTxt, { color: accentFg }]}>{t('Deposit')}</Text>
-          </Pressable>
-          <Pressable onPress={() => setPad('send')} style={({ pressed }) => [styles.wBtn, styles.wBtnAlt, { borderColor: th.border }, pressed && { opacity: 0.7 }]}>
-            <SendIcon size={17} color={th.text} />
-            <Text style={[styles.wBtnTxt, { color: th.text }]}>{t('Send')}</Text>
           </Pressable>
           <Pressable onPress={() => setPad('withdraw')} style={({ pressed }) => [styles.wBtn, styles.wBtnAlt, { borderColor: th.border }, pressed && { opacity: 0.7 }]}>
             <WithdrawIcon size={18} color={th.text} />
@@ -1042,11 +1023,7 @@ export function WalletPage({ th, close, onScroll, lang, onRewards }: { th: Shell
         </View>
         )}
       </ScrollView>
-      {pad === 'send'
-        ? <SendPad th={th} balance={balance} people={recipients} onClose={() => setPad(null)} onConfirm={confirmPad} />
-        : pad
-          ? <AmountPad th={th} kind={pad} balance={balance} onClose={() => setPad(null)} onConfirm={confirmPad} />
-          : null}
+      {pad && <AmountPad th={th} kind={pad} balance={balance} people={pad === 'withdraw' ? recipients : undefined} onClose={() => setPad(null)} onConfirm={confirmPad} />}
     </View>
   );
 }
@@ -1189,6 +1166,10 @@ const styles = StyleSheet.create({
   rwQuestLocked: { fontSize: 14, fontWeight: '700', opacity: 0.6 },
   rewardsLink: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12, marginTop: 12 },
   rewardsLinkDot: { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
+  /* withdraw: account / person toggle */
+  destToggle: { flexDirection: 'row', borderRadius: 12, padding: 3, marginBottom: 14 },
+  destBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, borderRadius: 9 },
+  destTxt: { fontSize: 13, fontWeight: '700' },
   /* send pad — recipient picker */
   sendRow: { gap: 14, paddingVertical: 4, paddingHorizontal: 2 },
   sendPerson: { alignItems: 'center', width: 60 },

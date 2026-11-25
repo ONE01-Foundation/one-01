@@ -100,6 +100,7 @@ import {
   type ShellHero,
   type SurfacePillar,
   type HomeCategory,
+  CATEGORY_FILTERS,
   levelFor,
 } from '../../data/one01/platform';
 
@@ -495,13 +496,16 @@ function WalletChip({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   );
 }
 
-/** Rewards button — a gift with a dot when a daily reward or quest is claimable. */
+/** Rewards button — appears in the top bar ONLY while a daily reward or quest is
+ *  waiting to be claimed; it disappears once everything is claimed. The always-on
+ *  entry to Rewards lives in the wallet. */
 function RewardsChip({ th, onPress }: { th: ShellTheme; onPress: () => void }) {
   const avail = useOne01PlatformStore(rewardsAvailable);
+  if (!avail) return null;
   return (
     <Pressable onPress={onPress} style={styles.rewardsBtn} hitSlop={8}>
       <GiftIcon size={23} color={th.text} />
-      {avail && <View style={[styles.rewardsDot, { borderColor: th.bg }]} />}
+      <View style={[styles.rewardsDot, { borderColor: th.bg }]} />
     </Pressable>
   );
 }
@@ -852,9 +856,9 @@ function HomeContent({ th, wide, topPad, bottomPad, onOpen, onOpenDrawer, onOpen
             {home.categories.map((c) => {
               const on = c.id === cat;
               return (
-                <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: 'transparent' }]}>
+                <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? th.accent : 'transparent', borderColor: on ? 'transparent' : th.border }]}>
                   {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
-                  <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{tr(lang, c.label)}</Text>
+                  <Text style={[styles.pillTxt, { color: on ? (th.accent === '#F9D800' ? '#000' : '#fff') : th.muted }]}>{tr(lang, c.label)}</Text>
                 </Pressable>
               );
             })}
@@ -1085,9 +1089,9 @@ function DrawerContent({ th, kind, extras, main, wide = false, topPad = 0, onBac
                     {main.categories.map((c) => {
                       const on = c.id === cat;
                       return (
-                        <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: 'transparent' }]}>
+                        <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? th.accent : 'transparent', borderColor: on ? 'transparent' : th.border }]}>
                           {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
-                          <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{tr(lang, c.label)}</Text>
+                          <Text style={[styles.pillTxt, { color: on ? (th.accent === '#F9D800' ? '#000' : '#fff') : th.muted }]}>{tr(lang, c.label)}</Text>
                         </Pressable>
                       );
                     })}
@@ -1331,29 +1335,39 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
   const pid: ProductId = th.homeId === 'one01' ? 'one' : th.homeId;
   const s = kind === 'market' ? (th.homeId === 'one01' ? MARKET_ONE01 : MARKET[pid]) : CREATOR[pid];
   const sectionTitle = kind === 'market' ? tr(lang, 'Market') : tr(lang, CREATOR[pid].title);
-  const cats = HOME[th.homeId].categories;
   const { width } = useWindowDimensions();
   const colW = wide ? Math.min(width - 88, 980) : Math.min(width, 600) - 36;
   const [cat, setCat] = useState('all');
   const ctaFg = th.accent === '#F9D800' ? '#000' : '#fff';
+  // categories fit each app: only the ones its listings actually use (+ All), and
+  // they really filter the list below.
+  const cats = useMemo(() => {
+    const present = new Set(s.pillars.map((p) => p.category));
+    return [{ id: 'all', label: 'All' } as { id: string; label: string }, ...CATEGORY_FILTERS.filter((c) => c.id !== 'all' && present.has(c.id))];
+  }, [s.pillars]);
+  const activeCat = cats.some((c) => c.id === cat) ? cat : 'all';
+  const shownPillars = activeCat === 'all' ? s.pillars : s.pillars.filter((p) => p.category === activeCat);
 
   return (
     <ScrollView contentContainerStyle={{ paddingTop: topPad, paddingBottom: bottomPad, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
       <View style={{ width: colW }}>
-        {/* headline + structure line (banner removed) */}
-        <Text style={[styles.surfaceHeadline, { color: th.text }]}>{s.headline}</Text>
-        <View style={[styles.structure, { borderColor: th.border, backgroundColor: th.surface }]}>
-          <Text style={[styles.structureTxt, { color: th.muted }]}>{s.structureLine}</Text>
-        </View>
+        {/* Creator keeps its headline + structure line; the Market goes straight to content */}
+        {kind === 'create' && (
+          <>
+            <Text style={[styles.surfaceHeadline, { color: th.text }]}>{s.headline}</Text>
+            <View style={[styles.structure, { borderColor: th.border, backgroundColor: th.surface }]}>
+              <Text style={[styles.structureTxt, { color: th.muted }]}>{s.structureLine}</Text>
+            </View>
+          </>
+        )}
 
         {/* categories */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 16 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: kind === 'market' ? 4 : 16 }}>
           {cats.map((c) => {
-            const on = c.id === cat;
+            const on = c.id === activeCat;
             return (
-              <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? (th.mode === 'dark' ? '#2A2A30' : '#E7E9ED') : 'transparent', borderColor: 'transparent' }]}>
-                {c.emoji ? <Text style={{ fontSize: 14 }}>{c.emoji}</Text> : null}
-                <Text style={[styles.pillTxt, { color: on ? th.text : th.muted }]}>{tr(lang, c.label)}</Text>
+              <Pressable key={c.id} onPress={() => { haptic.select(); setCat(c.id); }} style={[styles.pill, { backgroundColor: on ? th.accent : 'transparent', borderColor: on ? 'transparent' : th.border }]}>
+                <Text style={[styles.pillTxt, { color: on ? ctaFg : th.muted }]}>{tr(lang, c.label)}</Text>
               </Pressable>
             );
           })}
@@ -1393,12 +1407,12 @@ function SurfaceView({ th, wide, kind, topPad, bottomPad, onBuy, onOpenMarket, o
         <View style={styles.sectionHead}>
           <Text style={styles.sectionIcon}>{kind === 'market' ? '🛍️' : '✦'}</Text>
           <Text style={[styles.sectionTitle, { color: th.text }]}>{sectionTitle}</Text>
-          <Text style={[styles.sectionCount, { color: th.muted }]}>({s.pillars.length})</Text>
+          <Text style={[styles.sectionCount, { color: th.muted }]}>({shownPillars.length})</Text>
         </View>
 
         {/* pillars as cards — a Market listing opens its detail page; Creator builds */}
         <View style={[styles.rowsWrap, wide && styles.rowsWrapWide]}>
-          {s.pillars.map((p) => {
+          {shownPillars.map((p) => {
             const isMarket = kind === 'market';
             const onCta = () => (isMarket ? onOpenMarket(p) : onBuild(p, th.name));
             return (
